@@ -1,0 +1,32 @@
+id: 2026-04-14-008
+from: kiri
+action: "Feature F: gate show --format text を実装し、人間向けの読みやすい表示フォーマットを追加する"
+reason: JSON は機械向けには良いが review 中に眺めるには視認性が悪い。--format text で status_log と
+  reviews をタイムライン表示する
+state: completed
+created_at: 2026-04-14T11:19:10.859Z
+status_log:
+  - state: pending
+    by: kiri
+    at: 2026-04-14T11:19:10.859Z
+    note: created
+  - state: approved
+    by: kiri
+    at: 2026-04-14T11:19:10.882Z
+    note: "fast-track: self-approved"
+  - state: executing
+    by: kiri
+    at: 2026-04-14T11:19:10.892Z
+    note: "fast-track: self-executed"
+  - state: completed
+    by: kiri
+    at: 2026-04-14T11:19:10.904Z
+reviews:
+  - by: noir
+    lense: user
+    verdict: ok
+    comment: "user lens: 読みやすさが劇的改善。タイムスタンプとアクターと note がインデント揃えで一目で読める。reviews
+      も複数行コメントに対応している（split('\\n') が効いている）。ok"
+    at: 2026-04-14T11:19:49.466Z
+executor: kiri
+auto_review: noir

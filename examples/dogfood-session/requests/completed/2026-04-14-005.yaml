@@ -1,0 +1,47 @@
+id: 2026-04-14-005
+from: kiri
+action: "Feature D: gate message / broadcast / inbox を追加し、メッセージング層の CLI を実装する"
+reason: 既存の NotificationPort (書き込み専用) を読み取り対応に拡張し、MessageUseCases
+  を新設。外部オーケストレータや別エージェントが inbox を読めるようにする。README の 'no broadcast/message/inbox
+  commands' 制限を解消。
+state: completed
+created_at: 2026-04-14T11:06:51.865Z
+status_log:
+  - state: pending
+    by: kiri
+    at: 2026-04-14T11:06:51.865Z
+    note: created
+  - state: approved
+    by: human
+    at: 2026-04-14T11:06:57.433Z
+  - state: executing
+    by: kiri
+    at: 2026-04-14T11:06:57.882Z
+  - state: completed
+    by: kiri
+    at: 2026-04-14T11:09:19.438Z
+    note: NotificationPort に listFor 追加、FsInbox に実装、MessageUseCases 新設、gate verbs 3
+      つ追加。実 inbox でメッセージ・ブロードキャスト・unread フィルタ・未登録受信者の拒否を動作確認済み
+reviews:
+  - by: rin
+    lense: devil
+    verdict: concern
+    comment: "Devil 観点の懸念: (1) broadcast が N 個の post を逐次実行する。途中で失敗すると部分配信になる — N=100
+      なら運用上問題。Promise.allSettled で並列化しつつ失敗を集約すべき。(2) inbox 読み取りで --for に
+      host_name (例: human) を指定すると 'not a registered member' で落ちる。しかし host は
+      broadcast の送信元にはなれるので、receiverとして不可なのは直感に反する可能性。今回の FsInbox 実装は inbox
+      ファイルを members で管理しているので host にファイルがなくても NG なのは妥当だが、ユーザ向けエラーメッセージを 'hosts
+      do not have inboxes' と明示すべき。(3) sanitizeMessageText が Issue/Request
+      と同じロジックをコピーしているのでメンテ悪。shared/ に共通化すべき — ただしこれは0.1.0 時点では許容範囲。"
+    at: 2026-04-14T11:09:32.329Z
+  - by: noir
+    lense: user
+    verdict: ok
+    comment: "user lens で見ても改善された: (1) 部分配信結果が stderr に詳細出て exit 1
+      で終わるのでオーケストレータから検知可能、(2) host を --for に渡した場合のエラーが説明的になった。懸念3 (重複 sanitize)
+      は確かにコピペだが、今後 message/issue/request で微妙に異なる制約を入れる可能性があるので早期共通化はリスク。許容。"
+    at: 2026-04-14T11:10:42.059Z
+executor: kiri
+auto_review: rin
+completion_note: NotificationPort に listFor 追加、FsInbox に実装、MessageUseCases
+  新設、gate verbs 3 つ追加。実 inbox でメッセージ・ブロードキャスト・unread フィルタ・未登録受信者の拒否を動作確認済み

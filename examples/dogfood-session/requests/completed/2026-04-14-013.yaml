@@ -1,0 +1,43 @@
+id: 2026-04-14-013
+from: kiri
+action: "Feature K: Issue domain に state transition ルールを追加。resolved→open のみ
+  reopen 許容、それ以外の resolved→ は拒否。open/in_progress/deferred 間は自由"
+reason: 現状 setState が無制約で、例えば resolved→deferred が通ってしまう。Request と同じく domain に
+  transition table を置き、不正遷移を DomainError で拒否する
+state: completed
+created_at: 2026-04-14T11:22:31.772Z
+status_log:
+  - state: pending
+    by: kiri
+    at: 2026-04-14T11:22:31.772Z
+    note: created
+  - state: approved
+    by: kiri
+    at: 2026-04-14T11:22:31.796Z
+    note: "fast-track: self-approved"
+  - state: executing
+    by: kiri
+    at: 2026-04-14T11:22:31.806Z
+    note: "fast-track: self-executed"
+  - state: completed
+    by: kiri
+    at: 2026-04-14T11:22:31.818Z
+reviews:
+  - by: rin
+    lense: devil
+    verdict: concern
+    comment: "domain rule 追加自体は正しいが、懸念2つ: (1) restore() path では transition
+      validation が走らない (constructor を介さないため)、これは意図通りか？ 既存の YAML に
+      resolved→deferred のような無効状態が保存されていた場合どうなる？ → 'restore は既存状態を信頼する'
+      という不変項を明示すべき。(2) gate issues promote 内部で setState('resolved') を呼んでいるが、元
+      issue が既に resolved だったら Feature C の事前チェックで弾かれるはずだが、同時に setState の
+      transition rule でも弾かれる二重ガードになる。意図通りなら良いがコメントが無い。"
+    at: 2026-04-14T11:23:29.663Z
+  - by: noir
+    lense: layer
+    verdict: ok
+    comment: restore() の不変項がドキュメント化され、promote の early-exit
+      も意図がコメントで明示された。domain-layer の規則が実際に強制されるのは良い設計。layer ok
+    at: 2026-04-14T11:24:07.925Z
+executor: kiri
+auto_review: rin

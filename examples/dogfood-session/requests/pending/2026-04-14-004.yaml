@@ -1,0 +1,17 @@
+id: 2026-04-14-004
+from: noir
+action: "Fix issue i-2026-04-14-002: Request の state transition
+  に排他制御がなく、二つのプロセスが同時に approve を..."
+reason: "Promoted from i-2026-04-14-002 (med/core): Request の state transition
+  に排他制御がなく、二つのプロセスが同時に approve を呼ぶと last-writer-wins になる。README
+  にも明記されている既知の制限だが、トラッキングとして残す。"
+state: pending
+created_at: 2026-04-14T11:04:25.938Z
+status_log:
+  - state: pending
+    by: noir
+    at: 2026-04-14T11:04:25.938Z
+    note: created
+reviews: []
+executor: kiri
+auto_review: rin
