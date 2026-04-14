@@ -41,18 +41,27 @@ export function requireOption(
   args: ParsedArgs,
   key: string,
   usage: string,
+  envFallback?: string,
 ): string {
   const v = args.options[key];
-  if (typeof v !== 'string' || !v) {
-    throw new Error(`Missing --${key}. ${usage}`);
+  if (typeof v === 'string' && v) return v;
+  if (envFallback) {
+    const envVal = process.env[envFallback];
+    if (envVal && envVal.length > 0) return envVal;
   }
-  return v;
+  throw new Error(`Missing --${key}. ${usage}`);
 }
 
 export function optionalOption(
   args: ParsedArgs,
   key: string,
+  envFallback?: string,
 ): string | undefined {
   const v = args.options[key];
-  return typeof v === 'string' ? v : undefined;
+  if (typeof v === 'string') return v;
+  if (envFallback) {
+    const envVal = process.env[envFallback];
+    if (envVal && envVal.length > 0) return envVal;
+  }
+  return undefined;
 }
