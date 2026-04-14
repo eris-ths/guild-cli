@@ -98,6 +98,35 @@ domain/application boundary as stable and the infrastructure layer as
 replaceable — write a new `Repository` implementation rather than
 touching the use cases.
 
+### What this tool does NOT do (yet)
+
+Being honest about the 0.1.0 surface area so you can plan around it:
+
+- **`--auto-review <member>` is persistence only.** The value is stored
+  on the request and visible via `gate show`, but nothing in this
+  package automatically dispatches the reviewer when `gate complete`
+  runs. You (or your outer automation) still have to invoke the critic.
+- **No broadcast / direct-message / inbox commands.** The inbox
+  notification port exists in the architecture but there is no CLI
+  verb for "send a message to a member" or "read my inbox." Today this
+  package is a request/review machine, not a chat layer.
+- **No issue state transition CLI.** `gate issues add` / `gate issues
+  list` are wired; moving an issue from `open` to `resolved` is only
+  available at the use-case level, not as a `gate issues resolve`
+  verb yet.
+- **No auto-generated dashboard** (`DASHBOARD.md` etc.). The raw YAML
+  files are the UI. A generator will come with the next layer.
+- **No locking on state transitions.** `saveNew` for creation is
+  race-safe (O_EXCL), but two processes calling `gate approve` on the
+  same request in the same millisecond have last-writer-wins semantics.
+  Serialize at the caller if you run multiple concurrent operators.
+- **Sequence ceiling is 999 per day.** Request IDs are `YYYY-MM-DD-NNN`.
+  The 1000th request in a single UTC day throws.
+
+These are scope choices for 0.1.0, not accidents. If any of them
+blocks your use case, open an issue describing the workflow — the
+domain/application boundary is stable enough to add these cleanly.
+
 ---
 
 ## Install

@@ -7,7 +7,10 @@ import {
   parseIssueState,
 } from '../../domain/issue/Issue.js';
 import { MemberName } from '../../domain/member/MemberName.js';
-import { IssueRepository } from '../../application/ports/IssueRepository.js';
+import {
+  IssueRepository,
+  IssueIdCollision,
+} from '../../application/ports/IssueRepository.js';
 import {
   existsSafe,
   listDirSafe,
@@ -45,6 +48,24 @@ export class YamlIssueRepository implements IssueRepository {
     const rel = `${issue.id.value}.yaml`;
     const text = YAML.stringify(issue.toJSON());
     writeTextSafe(this.config.paths.issues, rel, text);
+  }
+
+  async saveNew(issue: Issue): Promise<void> {
+    const rel = `${issue.id.value}.yaml`;
+    if (existsSafe(this.config.paths.issues, rel)) {
+      throw new IssueIdCollision(issue.id.value);
+    }
+    const text = YAML.stringify(issue.toJSON());
+    try {
+      writeTextSafe(this.config.paths.issues, rel, text, {
+        createOnly: true,
+      });
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === 'EEXIST') {
+        throw new IssueIdCollision(issue.id.value);
+      }
+      throw e;
+    }
   }
 
   async nextSequence(dateKey: string): Promise<number> {

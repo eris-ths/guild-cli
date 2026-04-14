@@ -5,7 +5,10 @@ import {
   parseIssueState,
 } from '../../domain/issue/Issue.js';
 import { DomainError } from '../../domain/shared/DomainError.js';
-import { IssueRepository } from '../ports/IssueRepository.js';
+import {
+  IssueRepository,
+  IssueIdCollision,
+} from '../ports/IssueRepository.js';
 import { MemberRepository } from '../ports/MemberRepository.js';
 import { Clock } from '../ports/Clock.js';
 import { assertActor } from '../shared/assertActor.js';
@@ -28,18 +31,28 @@ export class IssueUseCases {
     const key = `${now.getUTCFullYear()}-${(now.getUTCMonth() + 1)
       .toString()
       .padStart(2, '0')}-${now.getUTCDate().toString().padStart(2, '0')}`;
-    const seq = await this.issues.nextSequence(key);
-    const id = IssueId.generate(now, seq);
-    const issue = Issue.create({
-      id,
-      from: input.from,
-      severity: input.severity,
-      area: input.area,
-      text: input.text,
-      createdAt: now.toISOString(),
-    });
-    await this.issues.save(issue);
-    return issue;
+    let seq = await this.issues.nextSequence(key);
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const issue = Issue.create({
+        id: IssueId.generate(now, seq),
+        from: input.from,
+        severity: input.severity,
+        area: input.area,
+        text: input.text,
+        createdAt: now.toISOString(),
+      });
+      try {
+        await this.issues.saveNew(issue);
+        return issue;
+      } catch (e) {
+        if (e instanceof IssueIdCollision) {
+          seq += 1;
+          continue;
+        }
+        throw e;
+      }
+    }
+    throw new Error('Failed to allocate issue id after 10 attempts');
   }
 
   async list(state?: string): Promise<Issue[]> {
