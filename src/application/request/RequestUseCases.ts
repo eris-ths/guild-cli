@@ -6,9 +6,15 @@ import {
 } from '../../domain/request/RequestState.js';
 import { Review } from '../../domain/request/Review.js';
 import { DomainError } from '../../domain/shared/DomainError.js';
-import { RequestRepository } from '../ports/RequestRepository.js';
+import {
+  RequestRepository,
+  RequestIdCollision,
+} from '../ports/RequestRepository.js';
 import { MemberRepository } from '../ports/MemberRepository.js';
 import { NotificationPort } from '../ports/NotificationPort.js';
+// NotificationPort is kept in deps for future targeted notifications
+// (e.g. request_completed → suggested reviewer). Request creation itself
+// no longer self-notifies the creator.
 import { Clock } from '../ports/Clock.js';
 import { assertActor } from '../shared/assertActor.js';
 
@@ -37,7 +43,7 @@ export class RequestUseCases {
     target?: string;
     autoReview?: string;
   }): Promise<Request> {
-    const { requests, members, notifier, clock } = this.deps;
+    const { requests, members, clock } = this.deps;
     const from = await assertActor(input.from, '--from', members);
     if (input.executor !== undefined) {
       await assertActor(input.executor, '--executor', members);
@@ -46,34 +52,39 @@ export class RequestUseCases {
       await assertActor(input.autoReview, '--auto-review', members);
     }
 
+    // Sequence allocation + create is TOCTOU: two concurrent calls may
+    // race to the same number. saveNew uses an O_EXCL create under the
+    // hood; on RequestIdCollision we bump the sequence and retry.
     const now = clock.now();
     const key = dateKey(now);
-    const seq = await requests.nextSequence(key);
-    const id = RequestId.generate(now, seq);
-
+    let seq = await requests.nextSequence(key);
     const createArgs: Parameters<typeof Request.create>[0] = {
-      id,
       from: from.value,
       action: input.action,
       reason: input.reason,
       createdAt: now.toISOString(),
+      id: RequestId.generate(now, seq),
     };
     if (input.executor !== undefined) createArgs.executor = input.executor;
     if (input.target !== undefined) createArgs.target = input.target;
     if (input.autoReview !== undefined)
       createArgs.autoReview = input.autoReview;
 
-    const request = Request.create(createArgs);
-    await requests.save(request);
-
-    await notifier.post({
-      from: from.value,
-      to: from, // mirror to self as audit
-      type: 'request_created',
-      text: `request ${id.value} created: ${input.action}`,
-      related: id.value,
-    });
-    return request;
+    for (let attempt = 0; attempt < 10; attempt++) {
+      createArgs.id = RequestId.generate(now, seq);
+      const request = Request.create(createArgs);
+      try {
+        await requests.saveNew(request);
+        return request;
+      } catch (e) {
+        if (e instanceof RequestIdCollision) {
+          seq += 1;
+          continue;
+        }
+        throw e;
+      }
+    }
+    throw new Error('Failed to allocate request id after 10 attempts');
   }
 
   async listPending(): Promise<Request[]> {

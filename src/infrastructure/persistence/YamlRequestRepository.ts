@@ -9,7 +9,10 @@ import {
 } from '../../domain/request/RequestState.js';
 import { Review } from '../../domain/request/Review.js';
 import { MemberName } from '../../domain/member/MemberName.js';
-import { RequestRepository } from '../../application/ports/RequestRepository.js';
+import {
+  RequestRepository,
+  RequestIdCollision,
+} from '../../application/ports/RequestRepository.js';
 import {
   existsSafe,
   listDirSafe,
@@ -49,6 +52,28 @@ export class YamlRequestRepository implements RequestRepository {
       if (r) out.push(r);
     }
     return out;
+  }
+
+  async saveNew(request: Request): Promise<void> {
+    // Refuse to create a file that already exists under ANY state dir.
+    for (const state of REQUEST_STATES) {
+      const rel = join(state, `${request.id.value}.yaml`);
+      if (existsSafe(this.config.paths.requests, rel)) {
+        throw new RequestIdCollision(request.id.value);
+      }
+    }
+    const rel = join(request.state, `${request.id.value}.yaml`);
+    const text = YAML.stringify(request.toJSON());
+    try {
+      writeTextSafe(this.config.paths.requests, rel, text, {
+        createOnly: true,
+      });
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === 'EEXIST') {
+        throw new RequestIdCollision(request.id.value);
+      }
+      throw e;
+    }
   }
 
   async save(request: Request): Promise<void> {
