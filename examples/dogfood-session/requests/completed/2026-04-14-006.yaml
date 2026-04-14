@@ -1,0 +1,36 @@
+id: 2026-04-14-006
+from: kiri
+action: "Feature E: gate fast-track を追加し、pending→approved→executing→completed
+  を一発で通す開発者向けショートカットを提供する"
+reason: 小さな自己完結タスクでは request→approve→execute→complete の4コマンドが摩擦。fast-track は
+  --skip-review なしで auto-review テンプレ出力も継承することで「規律を緩めるが記録は残す」バランスを取る。
+state: completed
+created_at: 2026-04-14T11:17:17.153Z
+status_log:
+  - state: pending
+    by: kiri
+    at: 2026-04-14T11:17:17.153Z
+    note: created
+  - state: approved
+    by: human
+    at: 2026-04-14T11:17:23.496Z
+  - state: executing
+    by: kiri
+    at: 2026-04-14T11:17:23.998Z
+  - state: completed
+    by: kiri
+    at: 2026-04-14T11:18:27.781Z
+    note: fast-track 実装。create→approve→execute→complete を逐次呼び、autoReview があれば既存の
+      complete と同じテンプレ出力を継承。self-approval 文言を status_log の note に残す
+reviews:
+  - by: noir
+    lense: devil
+    verdict: ok
+    comment: "fast-track は author の自分の作業を記録残しつつ加速する、規律と速度のバランスが良い。status_log に
+      'fast-track: self-approved/self-executed' マーカーが残るので監査時に「これは通常サイクルか
+      fast-track か」が一目でわかる。auto-review テンプレの継承も正しい。smoke test で動作確認済み。ok."
+    at: 2026-04-14T11:18:49.903Z
+executor: kiri
+auto_review: noir
+completion_note: fast-track 実装。create→approve→execute→complete を逐次呼び、autoReview
+  があれば既存の complete と同じテンプレ出力を継承。self-approval 文言を status_log の note に残す

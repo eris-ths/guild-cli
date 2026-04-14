@@ -13,15 +13,19 @@ const HELP = `gate — request lifecycle & dialogue CLI
 Requests:
   gate request --from <m> --action <a> --reason <r>
                  [--executor <m>] [--target <s>] [--auto-review <m>]
-  gate pending
-  gate list --state <state>
-  gate show <id>
+  gate pending [--for <m>]
+  gate list --state <state> [--for <m>] [--from <m>]
+                            [--executor <m>] [--auto-review <m>]
+  gate show <id> [--format json|text]
   gate approve <id> --by <m> [--note <s>]
   gate deny <id> --by <m> <reason>
   gate execute <id> --by <m> [--note <s>]
   gate complete <id> --by <m> [--note <s>]
   gate fail <id> --by <m> <reason>
-  gate review <id> --by <m> --lense <l> --verdict <v> <comment>
+  gate review <id> --by <m> --lense <l> --verdict <v>
+                   [--comment <s> | --comment - | <comment>]
+  gate fast-track --from <m> --action <a> --reason <r>
+                  [--executor <m>] [--auto-review <m>] [--note <s>]
 
 Issues:
   gate issues add --from <m> --severity <s> --area <a> <text>
@@ -32,6 +36,7 @@ Issues:
 
 Messages:
   gate message --from <m> --to <m> --text <s>
+  gate messages --for <m> [--unread]       (alias of gate inbox)
   gate broadcast --from <m> --text <s>
   gate inbox --for <m> [--unread]
 
@@ -53,10 +58,10 @@ export async function main(argv: readonly string[]): Promise<number> {
       case 'request':
         return await reqCreate(c, args);
       case 'pending':
-        return await reqList(c, 'pending');
+        return await reqList(c, 'pending', args);
       case 'list': {
         const state = requireOption(args, 'state', 'gate list --state <s>');
-        return await reqList(c, state);
+        return await reqList(c, state, args);
       }
       case 'show':
         return await reqShow(c, args);
@@ -72,8 +77,13 @@ export async function main(argv: readonly string[]): Promise<number> {
         return await reqFail(c, args);
       case 'review':
         return await reqReview(c, args);
+      case 'fast-track':
+      case 'fasttrack':
+        return await reqFastTrack(c, args);
       case 'issues':
         return await issuesCmd(c, args);
+      case 'messages':
+        return await msgInbox(c, args);
       case 'message':
         return await msgSend(c, args);
       case 'broadcast':
@@ -117,26 +127,129 @@ async function reqCreate(c: C, args: ParsedArgs): Promise<number> {
   return 0;
 }
 
-async function reqList(c: C, state: string): Promise<number> {
-  const items = await c.requestUC.listByState(state);
+async function reqList(
+  c: C,
+  state: string,
+  args: ParsedArgs,
+): Promise<number> {
+  const fromFilter = optionalOption(args, 'from');
+  const executorFilter = optionalOption(args, 'executor');
+  const autoReviewFilter = optionalOption(args, 'auto-review');
+  // --for is sugar: "anything I touch" — match if I'm the author, the
+  // executor, or the assigned reviewer. Combines with other filters via
+  // AND, not OR.
+  const forFilter = optionalOption(args, 'for');
+
+  let items = await c.requestUC.listByState(state);
+  if (fromFilter !== undefined) {
+    items = items.filter((r) => r.from.value === fromFilter);
+  }
+  if (executorFilter !== undefined) {
+    items = items.filter((r) => r.executor?.value === executorFilter);
+  }
+  if (autoReviewFilter !== undefined) {
+    items = items.filter((r) => r.autoReview?.value === autoReviewFilter);
+  }
+  if (forFilter !== undefined) {
+    items = items.filter(
+      (r) =>
+        r.from.value === forFilter ||
+        r.executor?.value === forFilter ||
+        r.autoReview?.value === forFilter,
+    );
+  }
+
   if (items.length === 0) {
-    process.stdout.write(`(no requests in ${state})\n`);
+    const suffix = describeFilters({
+      from: fromFilter,
+      executor: executorFilter,
+      'auto-review': autoReviewFilter,
+      for: forFilter,
+    });
+    process.stdout.write(`(no requests in ${state}${suffix})\n`);
     return 0;
   }
   for (const r of items) printSummary(r);
   return 0;
 }
 
+function describeFilters(filters: Record<string, string | undefined>): string {
+  const parts: string[] = [];
+  for (const [k, v] of Object.entries(filters)) {
+    if (v !== undefined) parts.push(`${k}=${v}`);
+  }
+  return parts.length === 0 ? '' : ` with ${parts.join(', ')}`;
+}
+
 async function reqShow(c: C, args: ParsedArgs): Promise<number> {
   const id = args.positional[0];
-  if (!id) throw new Error('Usage: gate show <id>');
+  if (!id) throw new Error('Usage: gate show <id> [--format json|text]');
+  const format = optionalOption(args, 'format') ?? 'json';
+  if (format !== 'json' && format !== 'text') {
+    throw new Error(`--format must be 'json' or 'text', got: ${format}`);
+  }
   const r = await c.requestUC.show(id);
   if (!r) {
     process.stderr.write(`not found: ${id}\n`);
     return 1;
   }
-  process.stdout.write(JSON.stringify(r.toJSON(), null, 2) + '\n');
+  if (format === 'json') {
+    process.stdout.write(JSON.stringify(r.toJSON(), null, 2) + '\n');
+  } else {
+    process.stdout.write(formatRequestText(r) + '\n');
+  }
   return 0;
+}
+
+function formatRequestText(r: Request): string {
+  const j = r.toJSON();
+  const lines: string[] = [];
+  lines.push(`${j['id']}  [${j['state']}]`);
+  lines.push(`  from:     ${j['from']}`);
+  if (j['executor']) lines.push(`  executor: ${j['executor']}`);
+  if (j['target']) lines.push(`  target:   ${j['target']}`);
+  if (j['auto_review']) lines.push(`  reviewer: ${j['auto_review']}`);
+  lines.push(`  created:  ${j['created_at']}`);
+  lines.push('');
+  lines.push(`  action:   ${j['action']}`);
+  lines.push(`  reason:   ${j['reason']}`);
+  if (j['completion_note']) {
+    lines.push(`  note:     ${j['completion_note']}`);
+  }
+  if (j['deny_reason']) {
+    lines.push(`  denied:   ${j['deny_reason']}`);
+  }
+  if (j['failure_reason']) {
+    lines.push(`  failed:   ${j['failure_reason']}`);
+  }
+
+  const log = Array.isArray(j['status_log']) ? j['status_log'] : [];
+  if (log.length > 0) {
+    lines.push('');
+    lines.push(`  status_log (${log.length}):`);
+    for (const entry of log as Array<Record<string, unknown>>) {
+      const note = entry['note'] ? ` — ${entry['note']}` : '';
+      lines.push(
+        `    ${entry['at']}  ${entry['state']}  by ${entry['by']}${note}`,
+      );
+    }
+  }
+
+  const reviews = Array.isArray(j['reviews']) ? j['reviews'] : [];
+  if (reviews.length > 0) {
+    lines.push('');
+    lines.push(`  reviews (${reviews.length}):`);
+    for (const rv of reviews as Array<Record<string, unknown>>) {
+      lines.push(
+        `    [${rv['lense']}/${rv['verdict']}] by ${rv['by']} at ${rv['at']}`,
+      );
+      const comment = String(rv['comment'] ?? '');
+      for (const line of comment.split('\n')) {
+        lines.push(`      ${line}`);
+      }
+    }
+  }
+  return lines.join('\n');
 }
 
 async function reqApprove(c: C, args: ParsedArgs): Promise<number> {
@@ -203,16 +316,84 @@ async function reqFail(c: C, args: ParsedArgs): Promise<number> {
 
 async function reqReview(c: C, args: ParsedArgs): Promise<number> {
   const id = args.positional[0];
-  const comment = args.positional.slice(1).join(' ');
-  if (!id || !comment)
+  if (!id) {
     throw new Error(
-      'Usage: gate review <id> --by <m> --lense <l> --verdict <v> <comment>',
+      'Usage: gate review <id> --by <m> --lense <l> --verdict <v> ' +
+        '[--comment <s> | --comment - | <comment>]',
     );
+  }
   const by = requireOption(args, 'by', '--by required');
   const lense = requireOption(args, 'lense', '--lense required');
   const verdict = requireOption(args, 'verdict', '--verdict required');
+
+  // Comment resolution order:
+  //   1. --comment <s>  (option value)
+  //   2. --comment -    (read STDIN until EOF — for piped/heredoc input)
+  //   3. <positional>   (legacy: everything after <id>)
+  const commentOpt = optionalOption(args, 'comment');
+  let comment: string;
+  if (commentOpt === '-') {
+    comment = await readStdin();
+  } else if (commentOpt !== undefined) {
+    comment = commentOpt;
+  } else {
+    comment = args.positional.slice(1).join(' ');
+  }
+  if (!comment.trim()) {
+    throw new Error(
+      'review comment is required (use --comment <s>, --comment - for STDIN, ' +
+        'or a positional argument)',
+    );
+  }
+
   await c.requestUC.review({ id, by, lense, verdict, comment });
   process.stdout.write(`✓ review recorded: ${id} [${lense}/${verdict}]\n`);
+  return 0;
+}
+
+async function readStdin(): Promise<string> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of process.stdin) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks).toString('utf8');
+}
+
+async function reqFastTrack(c: C, args: ParsedArgs): Promise<number> {
+  const from = requireOption(args, 'from', '--from required');
+  const action = requireOption(args, 'action', '--action required');
+  const reason = requireOption(args, 'reason', '--reason required');
+  const executor = optionalOption(args, 'executor') ?? from;
+  const autoReview = optionalOption(args, 'auto-review');
+  const note = optionalOption(args, 'note');
+
+  // Self-approval: fast-track is explicitly a "trust me, I'm doing this
+  // myself" path. The record still captures who acted at each step, so
+  // the audit trail is preserved — the Two-Persona Devil Review is just
+  // not enforced up front (it can still happen via auto-review).
+  const createInput: Parameters<typeof c.requestUC.create>[0] = {
+    from,
+    action,
+    reason,
+    executor,
+  };
+  if (autoReview !== undefined) createInput.autoReview = autoReview;
+  const created = await c.requestUC.create(createInput);
+  const id = created.id.value;
+
+  await c.requestUC.approve(id, from, 'fast-track: self-approved');
+  await c.requestUC.execute(id, executor, 'fast-track: self-executed');
+  const completed = await c.requestUC.complete(id, executor, note);
+
+  process.stdout.write(`✓ fast-tracked: ${id} (pending→completed)\n`);
+  if (completed.autoReview) {
+    const reviewer = completed.autoReview.value;
+    const tpl =
+      `gate review ${id} --by ${reviewer} --lense devil ` +
+      `--verdict <ok|concern|reject> "<comment>"`;
+    process.stdout.write(`→ auto-review pending for: ${reviewer}\n`);
+    process.stdout.write(`  ${tpl}\n`);
+  }
   return 0;
 }
 
@@ -279,6 +460,9 @@ async function issuesPromote(c: C, args: ParsedArgs): Promise<number> {
     return 1;
   }
   const j = issue.toJSON();
+  // Early-exit on resolved issues for a friendly error. The domain
+  // would also catch the resolved→resolved transition below via
+  // assertIssueTransition, but that message is less user-facing.
   if (j['state'] === 'resolved') {
     throw new Error(
       `issue ${id} is already resolved; cannot promote a resolved issue`,

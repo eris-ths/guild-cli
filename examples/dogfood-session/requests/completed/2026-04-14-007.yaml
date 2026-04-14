@@ -1,0 +1,33 @@
+id: 2026-04-14-007
+from: kiri
+action: "Smoke test: fast-track ショートカットが4段階を一発で通せることを確認する"
+reason: Feature E 自身の動作確認 — dogfood セッション内で使えるか検証
+state: completed
+created_at: 2026-04-14T11:18:35.536Z
+status_log:
+  - state: pending
+    by: kiri
+    at: 2026-04-14T11:18:35.536Z
+    note: created
+  - state: approved
+    by: kiri
+    at: 2026-04-14T11:18:35.561Z
+    note: "fast-track: self-approved"
+  - state: executing
+    by: kiri
+    at: 2026-04-14T11:18:35.571Z
+    note: "fast-track: self-executed"
+  - state: completed
+    by: kiri
+    at: 2026-04-14T11:18:35.583Z
+    note: smoke test
+reviews:
+  - by: rin
+    lense: devil
+    verdict: ok
+    comment: smoke test が実体を持って通ったので fast-track の契約が実証された。status_log
+      の4段階タイムスタンプも連続しており論理的整合性あり。
+    at: 2026-04-14T11:18:56.364Z
+executor: kiri
+auto_review: rin
+completion_note: smoke test
