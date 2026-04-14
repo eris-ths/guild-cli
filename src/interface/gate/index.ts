@@ -36,9 +36,8 @@ Issues:
 
 Messages:
   gate message --from <m> --to <m> --text <s>
-  gate messages --for <m> [--unread]       (alias of gate inbox)
   gate broadcast --from <m> --text <s>
-  gate inbox --for <m> [--unread]
+  gate inbox --for <m>
 
 States: pending | approved | executing | completed | failed | denied
 Verdicts: ok | concern | reject
@@ -78,12 +77,9 @@ export async function main(argv: readonly string[]): Promise<number> {
       case 'review':
         return await reqReview(c, args);
       case 'fast-track':
-      case 'fasttrack':
         return await reqFastTrack(c, args);
       case 'issues':
         return await issuesCmd(c, args);
-      case 'messages':
-        return await msgInbox(c, args);
       case 'message':
         return await msgSend(c, args);
       case 'broadcast':
@@ -563,22 +559,15 @@ async function msgBroadcast(c: C, args: ParsedArgs): Promise<number> {
 
 async function msgInbox(c: C, args: ParsedArgs): Promise<number> {
   const forName = requireOption(args, 'for', '--for required');
-  const unreadOnly = args.options['unread'] === true;
   const messages = await c.messageUC.inbox(forName);
-  const filtered = unreadOnly ? messages.filter((m) => !m.read) : messages;
-  if (filtered.length === 0) {
-    process.stdout.write(
-      unreadOnly
-        ? `(no unread messages for ${forName})\n`
-        : `(inbox empty for ${forName})\n`,
-    );
+  if (messages.length === 0) {
+    process.stdout.write(`(inbox empty for ${forName})\n`);
     return 0;
   }
-  for (const m of filtered) {
-    const flag = m.read ? ' ' : '*';
+  for (const m of messages) {
     const related = m.related ? ` (ref: ${m.related})` : '';
     process.stdout.write(
-      `${flag} [${m.at}] ${m.type} from ${m.from}${related}\n  ${m.text}\n`,
+      `  [${m.at}] ${m.type} from ${m.from}${related}\n  ${m.text}\n`,
     );
   }
   return 0;
