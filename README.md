@@ -204,8 +204,12 @@ node ./bin/gate.mjs pending
    assignee | trial | special | host`. Register with
    `guild new --name <n> --category <c>` or write the YAML by hand.
 
-3. **Verify with `guild validate`**. If it prints `N members valid`,
-   you're ready to file your first request.
+3. **Verify with `guild validate`**. If it prints
+   `N members valid, M host(s) configured`, you're ready to file your
+   first request. `guild list` will show all members plus any hosts
+   declared in `guild.config.yaml` with a `[host]` marker, so you can
+   see the full actor set (anyone who can appear in `--from` / `--by`
+   / `--executor` / `--auto-review`) without opening the config.
 
 4. **Try it on a real task.** `gate fast-track --from <you>
    --action "..." --reason "..."` is the lowest-friction entry
@@ -237,6 +241,20 @@ guild show <name>
 guild new --name <n> --category <core|professional|assignee|trial|special|host>
 guild validate
 ```
+
+`guild list` shows registered members first, then appends any
+`host_names` from `guild.config.yaml` with a `[host]` marker so the
+full actor set is visible in one place:
+
+```
+$ guild list
+kiri             [core]
+noir             [professional]
+alice            [host]  (non-member; no inbox)
+```
+
+`guild validate` reports both counts (`3 members valid, 2 host(s)
+configured`) so the output is not misleading about the total actor set.
 
 **`gate`** — request lifecycle, review, issues, messages (the what).
 
@@ -306,6 +324,52 @@ $ gate pending --for kiri
 $ gate list --state executing --executor noir
 $ gate list --state completed --auto-review rin
 ```
+
+### Interactive identity: `GUILD_ACTOR`
+
+If `GUILD_ACTOR` is set in the environment, it is used as the default
+for `--from` / `--by` / `--for` whenever those flags are omitted.
+Explicit flags always win. This is the low-friction way to drive the
+CLI by hand without retyping your name on every command:
+
+```
+$ export GUILD_ACTOR=kiri
+$ gate request --action "fix typo" --reason "trivial"    # --from kiri implied
+$ gate pending                                           # --for kiri implied
+# filtered by GUILD_ACTOR=kiri (use --for <m> or unset GUILD_ACTOR to override)
+$ gate complete 2026-04-14-007 --note "done"             # --by kiri implied
+```
+
+`--executor` and `--auto-review` are **not** covered: those flags
+point at *other* people (who will do the work, who will critique it),
+not at yourself, so env-filling them would silently mis-route
+delegation. Always pass them explicitly.
+
+For a one-off override without unexporting, pass an empty value —
+empty env vars are treated as unset:
+
+```
+$ GUILD_ACTOR= gate pending         # show everyone's queue this once
+$ GUILD_ACTOR=noir gate review 2026-04-14-007 --lense devil --verdict ok --comment "..."
+```
+
+`gate pending` and `gate list` emit a one-line stderr hint when the
+env var is implicitly filling in `--for`, so the behavior change is
+discoverable. Write-side commands currently apply the env var
+silently — if you switch shells frequently, double-check `echo
+$GUILD_ACTOR` before sending messages or broadcasting. (Extending
+the stderr hint to writes is tracked as follow-up in the dogfood
+session.)
+
+**Design note.** Identity is intentionally *not* part of
+`guild.config.yaml`: the config is shared across all operators of a
+content root, but "who am I in this shell" is per-session state.
+Using an environment variable (set in your shell profile, direnv, or
+a wrapper script) keeps the file-based ground truth unchanged — the
+env var only feeds the CLI boundary, and every write is still
+recorded in YAML with the explicit actor name. Automations should
+continue to pass `--from` / `--by` explicitly rather than relying on
+ambient state.
 
 ### Completion auto-review template
 

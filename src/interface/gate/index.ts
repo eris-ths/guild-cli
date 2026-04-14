@@ -42,6 +42,14 @@ Messages:
 States: pending | approved | executing | completed | failed | denied
 Verdicts: ok | concern | reject
 Lenses: devil | layer | cognitive | user
+
+Environment:
+  GUILD_ACTOR=<name>   If set, used as the default for --from / --by /
+                       --for when those flags are omitted. Explicit flags
+                       always win. Intended for interactive shells
+                       (export it in your shell profile or direnv).
+                       Automations should continue to pass --from / --by
+                       explicitly.
 `;
 
 export async function main(argv: readonly string[]): Promise<number> {
@@ -104,7 +112,12 @@ export async function main(argv: readonly string[]): Promise<number> {
 type C = ReturnType<typeof buildContainer>;
 
 async function reqCreate(c: C, args: ParsedArgs): Promise<number> {
-  const from = requireOption(args, 'from', 'gate request --from <m> ...');
+  const from = requireOption(
+    args,
+    'from',
+    'gate request --from <m> ...',
+    'GUILD_ACTOR',
+  );
   const action = requireOption(args, 'action', '--action required');
   const reason = requireOption(args, 'reason', '--reason required');
   const input: Parameters<typeof c.requestUC.create>[0] = {
@@ -134,7 +147,18 @@ async function reqList(
   // --for is sugar: "anything I touch" — match if I'm the author, the
   // executor, or the assigned reviewer. Combines with other filters via
   // AND, not OR.
-  const forFilter = optionalOption(args, 'for');
+  //
+  // Env fallback: if --for is omitted and GUILD_ACTOR is set, use that
+  // as the implicit filter. This lets interactive users treat
+  // `gate pending` as "my queue" without retyping their name every time,
+  // without moving identity state into shared config. We also emit a
+  // one-line hint to stderr so the behavior is discoverable.
+  const explicitFor = optionalOption(args, 'for');
+  const envActor =
+    explicitFor === undefined && process.env['GUILD_ACTOR']
+      ? process.env['GUILD_ACTOR']
+      : undefined;
+  const forFilter = explicitFor ?? envActor;
 
   let items = await c.requestUC.listByState(state);
   if (fromFilter !== undefined) {
@@ -152,6 +176,12 @@ async function reqList(
         r.from.value === forFilter ||
         r.executor?.value === forFilter ||
         r.autoReview?.value === forFilter,
+    );
+  }
+
+  if (envActor !== undefined) {
+    process.stderr.write(
+      `# filtered by GUILD_ACTOR=${envActor} (use --for <m> or unset GUILD_ACTOR to override)\n`,
     );
   }
 
@@ -251,7 +281,7 @@ function formatRequestText(r: Request): string {
 async function reqApprove(c: C, args: ParsedArgs): Promise<number> {
   const id = args.positional[0];
   if (!id) throw new Error('Usage: gate approve <id> --by <m>');
-  const by = requireOption(args, 'by', '--by required');
+  const by = requireOption(args, 'by', '--by required', 'GUILD_ACTOR');
   const note = optionalOption(args, 'note');
   await c.requestUC.approve(id, by, note);
   process.stdout.write(`✓ approved: ${id}\n`);
@@ -262,7 +292,7 @@ async function reqDeny(c: C, args: ParsedArgs): Promise<number> {
   const id = args.positional[0];
   const reason = args.positional.slice(1).join(' ');
   if (!id || !reason) throw new Error('Usage: gate deny <id> --by <m> <reason>');
-  const by = requireOption(args, 'by', '--by required');
+  const by = requireOption(args, 'by', '--by required', 'GUILD_ACTOR');
   await c.requestUC.deny(id, by, reason);
   process.stdout.write(`✓ denied: ${id}\n`);
   return 0;
@@ -271,7 +301,7 @@ async function reqDeny(c: C, args: ParsedArgs): Promise<number> {
 async function reqExecute(c: C, args: ParsedArgs): Promise<number> {
   const id = args.positional[0];
   if (!id) throw new Error('Usage: gate execute <id> --by <m>');
-  const by = requireOption(args, 'by', '--by required');
+  const by = requireOption(args, 'by', '--by required', 'GUILD_ACTOR');
   const note = optionalOption(args, 'note');
   await c.requestUC.execute(id, by, note);
   process.stdout.write(`✓ executing: ${id}\n`);
@@ -281,7 +311,7 @@ async function reqExecute(c: C, args: ParsedArgs): Promise<number> {
 async function reqComplete(c: C, args: ParsedArgs): Promise<number> {
   const id = args.positional[0];
   if (!id) throw new Error('Usage: gate complete <id> --by <m>');
-  const by = requireOption(args, 'by', '--by required');
+  const by = requireOption(args, 'by', '--by required', 'GUILD_ACTOR');
   const note = optionalOption(args, 'note');
   const r = await c.requestUC.complete(id, by, note);
   process.stdout.write(`✓ completed: ${id}\n`);
@@ -304,7 +334,7 @@ async function reqFail(c: C, args: ParsedArgs): Promise<number> {
   const id = args.positional[0];
   const reason = args.positional.slice(1).join(' ');
   if (!id || !reason) throw new Error('Usage: gate fail <id> --by <m> <reason>');
-  const by = requireOption(args, 'by', '--by required');
+  const by = requireOption(args, 'by', '--by required', 'GUILD_ACTOR');
   await c.requestUC.fail(id, by, reason);
   process.stdout.write(`✓ failed: ${id}\n`);
   return 0;
@@ -318,7 +348,7 @@ async function reqReview(c: C, args: ParsedArgs): Promise<number> {
         '[--comment <s> | --comment - | <comment>]',
     );
   }
-  const by = requireOption(args, 'by', '--by required');
+  const by = requireOption(args, 'by', '--by required', 'GUILD_ACTOR');
   const lense = requireOption(args, 'lense', '--lense required');
   const verdict = requireOption(args, 'verdict', '--verdict required');
 
@@ -356,7 +386,7 @@ async function readStdin(): Promise<string> {
 }
 
 async function reqFastTrack(c: C, args: ParsedArgs): Promise<number> {
-  const from = requireOption(args, 'from', '--from required');
+  const from = requireOption(args, 'from', '--from required', 'GUILD_ACTOR');
   const action = requireOption(args, 'action', '--action required');
   const reason = requireOption(args, 'reason', '--reason required');
   const executor = optionalOption(args, 'executor') ?? from;
@@ -399,7 +429,7 @@ async function issuesCmd(c: C, args: ParsedArgs): Promise<number> {
     return await issuesPromote(c, args);
   }
   if (sub === 'add') {
-    const from = requireOption(args, 'from', '--from required');
+    const from = requireOption(args, 'from', '--from required', 'GUILD_ACTOR');
     const severity = requireOption(args, 'severity', '--severity required');
     const area = requireOption(args, 'area', '--area required');
     const text = args.positional.slice(1).join(' ');
@@ -444,7 +474,7 @@ async function issuesPromote(c: C, args: ParsedArgs): Promise<number> {
         '[--auto-review <m>] [--action <a>] [--reason <r>]',
     );
   }
-  const from = requireOption(args, 'from', '--from required');
+  const from = requireOption(args, 'from', '--from required', 'GUILD_ACTOR');
   const executor = optionalOption(args, 'executor');
   const autoReview = optionalOption(args, 'auto-review');
   const actionOverride = optionalOption(args, 'action');
@@ -514,7 +544,7 @@ function truncateCodePoints(s: string, max: number): string {
 }
 
 async function msgSend(c: C, args: ParsedArgs): Promise<number> {
-  const from = requireOption(args, 'from', '--from required');
+  const from = requireOption(args, 'from', '--from required', 'GUILD_ACTOR');
   const to = requireOption(args, 'to', '--to required');
   const text = requireOption(args, 'text', '--text required');
   const type = optionalOption(args, 'type');
@@ -529,7 +559,7 @@ async function msgSend(c: C, args: ParsedArgs): Promise<number> {
 }
 
 async function msgBroadcast(c: C, args: ParsedArgs): Promise<number> {
-  const from = requireOption(args, 'from', '--from required');
+  const from = requireOption(args, 'from', '--from required', 'GUILD_ACTOR');
   const text = requireOption(args, 'text', '--text required');
   const type = optionalOption(args, 'type');
   const { delivered, failed } = await c.messageUC.broadcast({
@@ -558,7 +588,7 @@ async function msgBroadcast(c: C, args: ParsedArgs): Promise<number> {
 }
 
 async function msgInbox(c: C, args: ParsedArgs): Promise<number> {
-  const forName = requireOption(args, 'for', '--for required');
+  const forName = requireOption(args, 'for', '--for required', 'GUILD_ACTOR');
   const messages = await c.messageUC.inbox(forName);
   if (messages.length === 0) {
     process.stdout.write(`(inbox empty for ${forName})\n`);
