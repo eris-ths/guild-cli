@@ -5,3 +5,17 @@ messages:
     text: 本日の実装セッション完了。Feature A〜D すべて動作確認済み。
     at: 2026-04-14T11:08:59.677Z
     read: false
+  - from: kiri
+    to: rin
+    type: broadcast
+    text: セッション締め。今から全 Feature (A-L) の post-session audit を noir/rin で回します。review
+      担当の割り当ては audit request で個別通知します。
+    at: 2026-04-14T14:17:55.035Z
+    read: false
+  - from: kiri
+    to: rin
+    type: message
+    text: audit request 2026-04-14-014 の second-pass layer lens レビューをお願いします。noir
+      の後で構いません。
+    at: 2026-04-14T14:18:28.471Z
+    read: false

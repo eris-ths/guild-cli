@@ -267,8 +267,7 @@ gate issues promote <id> --from <m> [--executor <m>] [--auto-review <m>]
 
 gate message   --from <m> --to <m> --text <s>
 gate broadcast --from <m> --text <s>
-gate inbox     --for <m> [--unread]
-gate messages  --for <m> [--unread]     (alias of gate inbox)
+gate inbox     --for <m>
 ```
 
 ### Fast-track
@@ -345,9 +344,13 @@ be resolved manually.
 `gate message` appends a single notification to the recipient's
 inbox file. `gate broadcast` fans out to every active member except
 the sender, returning a delivery report (partial failures are
-written to stderr with exit 1). `gate inbox --for <m>` (or
-`gate messages --for <m>`) reads the inbox file back; `--unread`
-filters by the `read: false` flag persisted on each entry.
+written to stderr with exit 1). `gate inbox --for <m>` reads the
+inbox file back.
+
+Each stored message carries a `read: false` field for a future
+mark-read verb, but there is no CLI action to flip it today; the
+`--unread` filter was withdrawn until mark-read exists (tracked in
+the dogfood session as `i-2026-04-14-005`).
 
 Hosts (`host_names` in config) are valid senders but cannot receive
 messages — they have no inbox file. `gate inbox --for <host>` emits
