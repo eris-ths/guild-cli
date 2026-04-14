@@ -1,0 +1,26 @@
+{
+  "name": "guild-cli",
+  "version": "0.1.0",
+  "description": "Guild CLI — DDD/TS member & request management with Two-Persona Devil Review",
+  "type": "module",
+  "bin": {
+    "guild": "./bin/guild.mjs",
+    "gate": "./bin/gate.mjs"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "tsc && node --test \"dist/tests/**/*.test.js\"",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "yaml": "^2.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.4.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "license": "MIT"
+}

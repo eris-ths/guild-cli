@@ -1,0 +1,17 @@
+# guild-cli config example.
+# Copy to `guild.config.yaml` in your content root and edit.
+
+content_root: .
+
+# Names that may appear as --by/--from/--to/--executor/--auto-review
+# even though they aren't stored as members/*.yaml files. Use this
+# for human operators who sit outside the guild.
+host_names:
+  - alice
+  - bob
+
+paths:
+  members:  members
+  requests: requests
+  issues:   issues
+  inbox:    inbox
