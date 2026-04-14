@@ -1,0 +1,13 @@
+messages:
+  - from: kiri
+    to: noir
+    type: message
+    text: Feature D の実装完了。レビューをお願いします。
+    at: 2026-04-14T11:08:59.260Z
+    read: false
+  - from: kiri
+    to: noir
+    type: broadcast
+    text: 本日の実装セッション完了。Feature A〜D すべて動作確認済み。
+    at: 2026-04-14T11:08:59.677Z
+    read: false

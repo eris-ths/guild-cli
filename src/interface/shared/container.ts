@@ -7,12 +7,14 @@ import { systemClock } from '../../application/ports/Clock.js';
 import { MemberUseCases } from '../../application/member/MemberUseCases.js';
 import { RequestUseCases } from '../../application/request/RequestUseCases.js';
 import { IssueUseCases } from '../../application/issue/IssueUseCases.js';
+import { MessageUseCases } from '../../application/message/MessageUseCases.js';
 
 export interface Container {
   config: GuildConfig;
   memberUC: MemberUseCases;
   requestUC: RequestUseCases;
   issueUC: IssueUseCases;
+  messageUC: MessageUseCases;
 }
 
 export function buildContainer(): Container {
@@ -27,5 +29,6 @@ export function buildContainer(): Container {
     memberUC: new MemberUseCases(members),
     requestUC: new RequestUseCases({ requests, members, notifier, clock }),
     issueUC: new IssueUseCases(issues, members, clock),
+    messageUC: new MessageUseCases({ members, notifier, clock }),
   };
 }

@@ -1,9 +1,11 @@
 import YAML from 'yaml';
 import { join } from 'node:path';
 import {
+  InboxMessage,
   Notification,
   NotificationPort,
 } from '../../application/ports/NotificationPort.js';
+import { MemberName } from '../../domain/member/MemberName.js';
 import {
   existsSafe,
   readTextSafe,
@@ -47,6 +49,29 @@ export class FsInboxNotification implements NotificationPort {
     }
     writeTextSafe(this.config.paths.inbox, rel, YAML.stringify(file));
   }
+
+  async listFor(member: MemberName): Promise<InboxMessage[]> {
+    const rel = `${member.value}.yaml`;
+    if (!existsSafe(this.config.paths.inbox, rel)) return [];
+    const parsed = YAML.parse(readTextSafe(this.config.paths.inbox, rel)) as
+      | InboxFile
+      | null;
+    if (!parsed || !Array.isArray(parsed.messages)) return [];
+    return parsed.messages.map((m) => normalizeMessage(m));
+  }
+}
+
+function normalizeMessage(raw: Record<string, unknown>): InboxMessage {
+  const msg: InboxMessage = {
+    from: String(raw['from'] ?? ''),
+    to: String(raw['to'] ?? ''),
+    type: String(raw['type'] ?? ''),
+    text: String(raw['text'] ?? ''),
+    at: String(raw['at'] ?? ''),
+    read: raw['read'] === true,
+  };
+  if (typeof raw['related'] === 'string') msg.related = raw['related'];
+  return msg;
 }
 
 // silence unused

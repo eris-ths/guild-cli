@@ -1,0 +1,31 @@
+id: 2026-04-14-012
+from: kiri
+action: "Feature J: gate messages を gate inbox のエイリアスとして追加し、message/messages の表記揺れを解消"
+reason: gate message (送信) と gate messages (inbox) を並列にすることで動詞の一貫性を回復。既存 gate
+  inbox は後方互換のため残す。
+state: completed
+created_at: 2026-04-14T11:22:02.723Z
+status_log:
+  - state: pending
+    by: kiri
+    at: 2026-04-14T11:22:02.723Z
+    note: created
+  - state: approved
+    by: kiri
+    at: 2026-04-14T11:22:02.746Z
+    note: "fast-track: self-approved"
+  - state: executing
+    by: kiri
+    at: 2026-04-14T11:22:02.756Z
+    note: "fast-track: self-executed"
+  - state: completed
+    by: kiri
+    at: 2026-04-14T11:22:02.768Z
+reviews:
+  - by: noir
+    lense: cognitive
+    verdict: ok
+    comment: "alias で既存 inbox コマンドを壊さず並列性を回復。HELPもmessages: の下にまとめて表示され、認知負荷低い"
+    at: 2026-04-14T11:22:16.176Z
+executor: kiri
+auto_review: noir

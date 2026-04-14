@@ -1,0 +1,51 @@
+id: 2026-04-14-003
+from: kiri
+action: "Feature C: gate issues promote <id> を追加し、既存の open/deferred な issue を新規
+  request として昇格する"
+reason: README の 'When a review surfaces a new concern, either open it as an
+  issue or promote it to a new request' という基本フィードバックループを CLI で直接サポートする。promote
+  後は元 issue を resolved に遷移させて二重管理を防ぐ。
+state: completed
+created_at: 2026-04-14T11:03:20.397Z
+status_log:
+  - state: pending
+    by: kiri
+    at: 2026-04-14T11:03:20.397Z
+    note: created
+  - state: approved
+    by: human
+    at: 2026-04-14T11:03:26.123Z
+  - state: executing
+    by: kiri
+    at: 2026-04-14T11:03:26.552Z
+  - state: completed
+    by: kiri
+    at: 2026-04-14T11:04:58.405Z
+    note: issuesPromote ハンドラ実装。IssueUseCases.find を追加。実際に i-2026-04-14-002 を昇格して
+      2026-04-14-004 を生成、cross-reference が action/reason 双方に埋まっていること、二重 promote
+      が拒否されることを確認。
+reviews:
+  - by: noir
+    lense: devil
+    verdict: concern
+    comment: "Devil 観点で3点: (1) Non-atomic だと宣言しているが、request 作成成功後に issue setState
+      が失敗した場合、operator に返るエラーメッセージが setState 側の生のエラーだけで「でも request
+      は作成されてる」という重要情報が欠落する。try/catch で明示的にハンドルするか、README に書くべき。(2) 新規 request の
+      action が60文字で truncate されているが、CJK の途中で切れると文字として意味不明になる (例: 'approve
+      を...'). 最悪、サロゲートペアの途中で切れると invalid UTF-16 になる可能性もゼロではない。(3) reason に issue
+      全文を埋めているが、issue text の MAX_TEXT=2048 に対し Request の action/reason にも同等の
+      validation があるはず — 長い issue だと promote が domain error で落ちる可能性。境界値テストがない。"
+    at: 2026-04-14T11:05:10.921Z
+  - by: rin
+    lense: layer
+    verdict: ok
+    comment: 懸念1 (partial failure) と 2 (surrogate pair safety)
+      を反映。truncateCodePoints helper で Array.from を使うので絵文字含む全コードポイントを安全に扱える。懸念3
+      は境界値計算で Request MAX_TEXT(4096) > Issue MAX_TEXT(2048) + prefix(~40) なので常に
+      fit することがコメントで明記されており、妥当に却下されている。layer lens pass.
+    at: 2026-04-14T11:06:04.506Z
+executor: kiri
+auto_review: noir
+completion_note: issuesPromote ハンドラ実装。IssueUseCases.find を追加。実際に
+  i-2026-04-14-002 を昇格して 2026-04-14-004 を生成、cross-reference が action/reason
+  双方に埋まっていること、二重 promote が拒否されることを確認。

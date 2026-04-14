@@ -1,0 +1,42 @@
+id: 2026-04-14-001
+from: kiri
+action: "Feature A: gate complete の完了時に auto_review が設定されていたら review 起動テンプレを
+  stdout に出す"
+reason: README で明言されている 0.1.0 の制限「auto-review is persistence
+  only」を解消し、外部オーケストレータがレビュー起動を行うためのヒントを提供する
+state: completed
+created_at: 2026-04-14T10:59:05.842Z
+status_log:
+  - state: pending
+    by: kiri
+    at: 2026-04-14T10:59:05.842Z
+    note: created
+  - state: approved
+    by: human
+    at: 2026-04-14T10:59:11.559Z
+    note: 承認。小さく直接的な改善
+  - state: executing
+    by: kiri
+    at: 2026-04-14T10:59:17.039Z
+  - state: completed
+    by: kiri
+    at: 2026-04-14T10:59:47.315Z
+    note: reqComplete に auto-review テンプレ出力を追加。show() で再取得して autoReview を参照
+reviews:
+  - by: noir
+    lense: devil
+    verdict: concern
+    comment: "実装自体は小さく動く。しかし懸念が2つ: (1) complete() の後に show() で再取得しているので2回I/Oが走っている —
+      complete UC が Request を返すようにすればI/O半減。(2) テンプレに --note
+      オプションが含まれていない。レビュー記録には note を添えることが多いのに、テンプレがそれを誘導しない。"
+    at: 2026-04-14T10:59:57.309Z
+  - by: rin
+    lense: layer
+    verdict: ok
+    comment: layer lens で見ても問題なし。interface層のみの変更で domain/application に波及なし。complete
+      UC が Request を返す既存契約を正しく活用している。懸念1は解消済み。懸念2 (--note 追加提案)
+      は実装仕様と不整合だったので却下が妥当 — gate review は comment が本体で --note は存在しない。
+    at: 2026-04-14T11:00:48.327Z
+executor: kiri
+auto_review: noir
+completion_note: reqComplete に auto-review テンプレ出力を追加。show() で再取得して autoReview を参照
