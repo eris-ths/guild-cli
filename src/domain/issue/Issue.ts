@@ -12,6 +12,42 @@ export const ISSUE_STATES = [
 ] as const;
 export type IssueState = (typeof ISSUE_STATES)[number];
 
+/**
+ * Issue state transition rules. Unlike Request (strict linear DAG),
+ * Issue has three "working" states that freely interconvert, plus
+ * `resolved` which is terminal-but-recoverable:
+ *   - open / in_progress / deferred can move to each other and to resolved
+ *   - resolved can only move to open (via `reopen`)
+ *
+ * Same-state transitions are rejected so double-resolve etc. surface as
+ * programming errors rather than silent no-ops.
+ */
+const ISSUE_TRANSITIONS: Record<IssueState, readonly IssueState[]> = {
+  open: ['in_progress', 'deferred', 'resolved'],
+  in_progress: ['open', 'deferred', 'resolved'],
+  deferred: ['open', 'in_progress', 'resolved'],
+  resolved: ['open'],
+};
+
+export function canTransitionIssue(
+  from: IssueState,
+  to: IssueState,
+): boolean {
+  return ISSUE_TRANSITIONS[from].includes(to);
+}
+
+export function assertIssueTransition(
+  from: IssueState,
+  to: IssueState,
+): void {
+  if (!canTransitionIssue(from, to)) {
+    throw new DomainError(
+      `Invalid issue transition: ${from} → ${to}`,
+      'state',
+    );
+  }
+}
+
 const ISSUE_ID_PATTERN = /^i-\d{4}-\d{2}-\d{2}-\d{3}$/;
 const AREA_PATTERN = /^[a-z][a-z0-9_-]{0,31}$/;
 const MAX_TEXT = 2048;
@@ -115,6 +151,13 @@ export class Issue {
     });
   }
 
+  /**
+   * Restore an Issue from persisted props without re-validating state
+   * transitions. The invariant is: whatever is on disk is historical
+   * truth. Transition rules only apply to *new* transitions made by
+   * setState after restoration. If a persisted issue is in an invalid
+   * state, the operator must fix the YAML by hand.
+   */
   static restore(props: IssueProps): Issue {
     return new Issue({ ...props });
   }
@@ -127,6 +170,7 @@ export class Issue {
   }
 
   setState(next: IssueState): void {
+    assertIssueTransition(this.props.state, next);
     this.props.state = next;
   }
 

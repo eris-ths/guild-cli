@@ -1,0 +1,30 @@
+id: 2026-04-14-010
+from: kiri
+action: "Smoke test: Feature G の --comment option mode を確認"
+reason: smoke test
+state: completed
+created_at: 2026-04-14T11:20:45.587Z
+status_log:
+  - state: pending
+    by: kiri
+    at: 2026-04-14T11:20:45.587Z
+    note: created
+  - state: approved
+    by: kiri
+    at: 2026-04-14T11:20:45.610Z
+    note: "fast-track: self-approved"
+  - state: executing
+    by: kiri
+    at: 2026-04-14T11:20:45.622Z
+    note: "fast-track: self-executed"
+  - state: completed
+    by: kiri
+    at: 2026-04-14T11:20:45.634Z
+reviews:
+  - by: noir
+    lense: layer
+    verdict: ok
+    comment: "option-mode test: quotingなしで普通の文字列を渡せる"
+    at: 2026-04-14T11:20:46.044Z
+executor: kiri
+auto_review: noir
