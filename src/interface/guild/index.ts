@@ -25,9 +25,19 @@ export async function main(argv: readonly string[]): Promise<number> {
     switch (cmd) {
       case 'list': {
         const members = await c.memberUC.list();
+        const memberNames = new Set(members.map((m) => m.name.value));
         for (const m of members) {
           const dn = m.displayName ? ` (${m.displayName})` : '';
           process.stdout.write(`${m.name.value.padEnd(16)} [${m.category}]${dn}\n`);
+        }
+        // Hosts are non-member actors declared in guild.config.yaml.
+        // They may appear in --by / --from / --executor / --auto-review
+        // but have no members/*.yaml and cannot receive messages.
+        // Listing them here makes the full actor set visible without
+        // requiring the reader to open the config file.
+        for (const h of c.config.hostNames) {
+          if (memberNames.has(h)) continue; // don't double-print on collision
+          process.stdout.write(`${h.padEnd(16)} [host]  (non-member; no inbox)\n`);
         }
         return 0;
       }
@@ -54,7 +64,12 @@ export async function main(argv: readonly string[]): Promise<number> {
       }
       case 'validate': {
         const members = await c.memberUC.list();
-        process.stdout.write(`✓ ${members.length} members valid\n`);
+        const hostCount = c.config.hostNames.length;
+        const hostSuffix =
+          hostCount === 0 ? '' : `, ${hostCount} host(s) configured`;
+        process.stdout.write(
+          `✓ ${members.length} members valid${hostSuffix}\n`,
+        );
         return 0;
       }
       default:
