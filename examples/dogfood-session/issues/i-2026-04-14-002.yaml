@@ -1,0 +1,8 @@
+id: i-2026-04-14-002
+from: noir
+severity: med
+area: core
+text: Request の state transition に排他制御がなく、二つのプロセスが同時に approve を呼ぶと
+  last-writer-wins になる。README にも明記されている既知の制限だが、トラッキングとして残す。
+state: resolved
+created_at: 2026-04-14T11:04:19.923Z

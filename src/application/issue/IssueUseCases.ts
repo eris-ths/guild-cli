@@ -55,6 +55,10 @@ export class IssueUseCases {
     throw new Error('Failed to allocate issue id after 10 attempts');
   }
 
+  async find(id: string): Promise<Issue | null> {
+    return this.issues.findById(IssueId.of(id));
+  }
+
   async list(state?: string): Promise<Issue[]> {
     if (state === undefined) {
       return this.issues.listByState('open');

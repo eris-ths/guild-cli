@@ -1,0 +1,10 @@
+content_root: .
+
+host_names:
+  - human
+
+paths:
+  members:  members
+  requests: requests
+  issues:   issues
+  inbox:    inbox
