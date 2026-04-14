@@ -1,0 +1,10 @@
+id: i-2026-04-14-008
+from: kiri
+severity: low
+area: docs
+text: "Feature D の rin review concern #3 (sanitizeMessageText コピペ)
+  が許容判断で却下されたが、message/issue/request で制約が将来分岐する場合に追跡できる仕組みがない。gate audit
+  retrospective の noir devil #6 参照。各 module の sanitize MAX_TEXT を1箇所に集めた spec
+  table を docs/ に用意するのが安価な対策"
+state: open
+created_at: 2026-04-14T14:21:43.063Z

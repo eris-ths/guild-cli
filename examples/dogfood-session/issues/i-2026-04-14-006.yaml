@@ -1,0 +1,8 @@
+id: i-2026-04-14-006
+from: kiri
+severity: low
+area: core
+text: FsInboxNotification.ts:2 で import { join } from 'node:path' しているが、74行目で
+  'void join;' で握りつぶされているだけ。未使用 import を削除すべき。過去のリファクタで消し忘れたと思われる
+state: open
+created_at: 2026-04-14T14:20:22.477Z

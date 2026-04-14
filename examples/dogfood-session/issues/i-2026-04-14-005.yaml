@@ -1,0 +1,9 @@
+id: i-2026-04-14-005
+from: kiri
+severity: med
+area: feature
+text: InboxMessage.read は false で書き込まれるが true に反転させる動詞がないため gate inbox --unread
+  は実質全件表示と等価。gate inbox mark-read <name> [--index N] のような動詞を追加するか、さもなければ
+  --unread フラグを削除して混乱を避けるべき
+state: open
+created_at: 2026-04-14T14:20:12.928Z

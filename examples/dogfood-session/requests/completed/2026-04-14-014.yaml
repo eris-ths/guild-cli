@@ -1,0 +1,61 @@
+id: 2026-04-14-014
+from: kiri
+action: "Post-session audit: Feature A-L
+  の実装を横断的に点検し、コミット済みだが残っている技術的負債・ドキュメントギャップ・将来リスクを issue として列挙する"
+reason: 2コミット分の大規模変更後、dogfood の熱が冷めたタイミングで改めて全体を見直す。見落としを noir/rin が独立して捕捉する。
+state: completed
+created_at: 2026-04-14T14:18:11.761Z
+status_log:
+  - state: pending
+    by: kiri
+    at: 2026-04-14T14:18:11.761Z
+    note: created
+  - state: approved
+    by: human
+    at: 2026-04-14T14:18:38.126Z
+    note: audit は価値あり、承認
+  - state: executing
+    by: kiri
+    at: 2026-04-14T14:18:45.727Z
+    note: audit 作業開始
+  - state: completed
+    by: kiri
+    at: 2026-04-14T14:20:53.065Z
+    note: "audit 完了。4件の finding を i-2026-04-14-004〜007 として記録。内訳: 2 low (dead dep,
+      unused import) + 2 med (inbox read機能欠落, 新規動詞のテスト不足)"
+reviews:
+  - by: noir
+    lense: devil
+    verdict: concern
+    comment: >
+      devil lens で audit 結果を再検討。4件の finding は妥当だが、以下2点の**追加観点**を記録する:
+
+
+      (5) i-2026-04-14-004 (dead notifier dep) について: 単に削除するのは早計。過去コミット 7fe18d7
+      のメッセージで「F1 self-notification spam」を解消したとあり、かつ今後 request_completed → 担当
+      reviewer への通知を実装する計画が README (Completion auto-review template セクション)
+      で示唆されている。つまり notifier は「今は使っていないが意図的に配線を残している」可能性がある。削除前に commit log と
+      grep 'targeted notification' を全体確認すべき。
+
+
+      (6) audit 自体の盲点: このaudit は「コードに何が残っているか」の静的観点のみ。**動的な観点** — すなわち dogfood
+      セッションの request 履歴を読み直して「実装中に流れかけた concern のうち fix が見送られたもの」があるかの検査 —
+      が抜けている。例えば Feature D の rin review concern 3 (sanitize コピペ)
+      は明示的に却下されているが、それが本当に許容範囲だったか、次の feature で実害が出ていないかは追跡されていない。
+
+
+      verdict は concern で、finding #5 は **削除前の追加調査**が必要。finding #6 は audit
+      スコープの追加として別 issue にすべき。
+    at: 2026-04-14T14:21:12.613Z
+  - by: rin
+    lense: layer
+    verdict: ok
+    comment: "second pass: noir の devil 指摘を author が素直に受け入れ、finding 1 を resolved
+      に降ろし、finding 6 を i-2026-04-14-008 として正しく別 issue 化した。この audit ループ自体が
+      Two-Persona Devil Review の効果を実証している — author が critic
+      の指摘で自分の判断ミスを一つ訂正したので。layer 観点では追加問題なし"
+    at: 2026-04-14T14:21:57.535Z
+executor: kiri
+auto_review: noir
+completion_note: "audit 完了。4件の finding を i-2026-04-14-004〜007 として記録。内訳: 2 low
+  (dead dep, unused import) + 2 med (inbox read機能欠落, 新規動詞のテスト不足)"
