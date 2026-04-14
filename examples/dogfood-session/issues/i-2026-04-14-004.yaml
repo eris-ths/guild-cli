@@ -1,0 +1,10 @@
+id: i-2026-04-14-004
+from: kiri
+severity: low
+area: core
+text: RequestUseCasesDeps.notifier が宣言されているが本体で一切使われていない dead
+  dep。RequestUseCases.ts:24 — container.ts での配線も同様に無駄。自己通知を止めた際の掃除漏れと思われる
+  (過去コミット 7fe18d7 'fix devil pass — F1 self-notification spam'
+  参照)。削除するか、将来のターゲット通知のために TODO コメントを付けるかの判断が必要
+state: resolved
+created_at: 2026-04-14T14:20:03.387Z

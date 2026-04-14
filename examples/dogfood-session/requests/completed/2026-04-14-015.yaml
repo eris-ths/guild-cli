@@ -1,0 +1,53 @@
+id: 2026-04-14-015
+from: kiri
+action: "CLI surface 掃除: gate messages alias / fasttrack alias / gate inbox
+  --unread flag の3つを削除"
+reason: gate messages は概念の別物を並列扱いした判断ミス、fasttrack は undocumented drift
+  の源、--unread は mark-read 不在で no-op。いずれも 'ある方が迷う' 類の冗長
+state: completed
+created_at: 2026-04-14T14:29:38.195Z
+status_log:
+  - state: pending
+    by: kiri
+    at: 2026-04-14T14:29:38.195Z
+    note: created
+  - state: approved
+    by: kiri
+    at: 2026-04-14T14:29:38.226Z
+    note: "fast-track: self-approved"
+  - state: executing
+    by: kiri
+    at: 2026-04-14T14:29:38.238Z
+    note: "fast-track: self-executed"
+  - state: completed
+    by: kiri
+    at: 2026-04-14T14:29:38.252Z
+reviews:
+  - by: noir
+    lense: devil
+    verdict: ok
+    comment: >
+      削除作業レビュー (devil lens):
+
+
+      3つとも削除理由が明確で、**コードの不可逆的な破壊はない** (git から復活可能、削除動詞の再追加は tiny edit)。特筆:
+
+
+      (1) gate messages 削除: Feature J で noir 自身が cognitive/ok
+      を出したが、あれは「動詞表記の並列性」という形式的観点だけを見ていた。authentic な cognitive
+      負荷は「2つのコマンドで同じ結果が返る」の方が大きい。今回の削除で cognitive 負荷が実質下がった。過去の自分の判定ミスを訂正する形で ok
+      推奨。
+
+
+      (2) fasttrack 削除: undocumented alias は監査性を下げる。テストも undocumented
+      なので壊れない。ok.
+
+
+      (3) --unread 削除: これが一番 brave な判断。「嘘フラグを残すより削除」は正しい。i-005 にちゃんと開発されたら復活する旨の
+      backlog が残っているので、失われない。README に明示的に withdrawn と書いてあるのも良い。
+
+
+      全体 verdict: ok. 削除 diff は +0/-22 程度の小さいもので、既存テスト全通過 (44/44)。
+    at: 2026-04-14T14:31:09.278Z
+executor: kiri
+auto_review: noir
