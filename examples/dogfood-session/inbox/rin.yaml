@@ -1,0 +1,7 @@
+messages:
+  - from: kiri
+    to: rin
+    type: broadcast
+    text: 本日の実装セッション完了。Feature A〜D すべて動作確認済み。
+    at: 2026-04-14T11:08:59.677Z
+    read: false

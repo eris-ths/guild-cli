@@ -1,0 +1,47 @@
+id: 2026-04-14-002
+from: kiri
+action: "Feature B: gate issues に resolve / defer / start / reopen
+  動詞を追加し、setState UC を CLI から叩けるようにする"
+reason: README に書かれている 0.1.0 制限「issue state transition CLI
+  がない」を解消。IssueUseCases.setState は既に存在しているので、gate/index.ts の issuesCmd に case
+  を追加するだけで済む。
+state: completed
+created_at: 2026-04-14T11:01:12.683Z
+status_log:
+  - state: pending
+    by: kiri
+    at: 2026-04-14T11:01:12.683Z
+    note: created
+  - state: approved
+    by: human
+    at: 2026-04-14T11:01:19.519Z
+  - state: executing
+    by: kiri
+    at: 2026-04-14T11:01:19.939Z
+  - state: completed
+    by: kiri
+    at: 2026-04-14T11:02:07.788Z
+    note: 4動詞 (resolve/defer/start/reopen) 実装。手動テストで
+      open→in_progress→deferred→open→resolved の全遷移を確認
+reviews:
+  - by: rin
+    lense: devil
+    verdict: concern
+    comment: "1点懸念: ISSUE_VERBS record の値アクセスに non-null assertion (!)
+      を使っている。TypeScript の noUncheckedIndexedAccess が効いていないなら不要。tsconfig
+      を確認せよ。もし効いているなら、sub in ISSUE_VERBS で narrowing されないので代替策が必要。さらに devil 観点:
+      この実装は Issue domain にtransition validation を追加する「正しい場所」を迂回している — 例えば
+      resolved→open の reopen が無条件で許されてしまう。現状の Issue は setState
+      が無制約なのでコード的には「正しく動く」が、将来バリデーションを入れるときにどこに差し込むか README か実装コメントで明示すべき。"
+    at: 2026-04-14T11:02:19.526Z
+  - by: noir
+    lense: cognitive
+    verdict: ok
+    comment: rin の指摘を受けてリファクタ済み。resolveIssueVerb helper
+      で型安全になり、domain層の将来バリデーション位置もコメントに明記された。認知バイアス的にも「素直に実装している」ように読める。cognitive
+      lens pass.
+    at: 2026-04-14T11:02:59.860Z
+executor: kiri
+auto_review: rin
+completion_note: 4動詞 (resolve/defer/start/reopen) 実装。手動テストで
+  open→in_progress→deferred→open→resolved の全遷移を確認
