@@ -40,6 +40,10 @@ export type AuthoredUtterance = {
   readonly kind: 'authored';
   readonly at: string;
   readonly requestId: string;
+  // Who authored the containing request. Useful when tail streams
+  // utterances from every actor and the reader needs to see who said
+  // what without looking up the id.
+  readonly from: string;
   readonly action: string;
   readonly reason: string;
   // Any closure text the lifecycle ended on. Only one of these is
@@ -54,6 +58,8 @@ export type ReviewUtterance = {
   readonly kind: 'review';
   readonly at: string;
   readonly requestId: string;
+  // Who wrote the review. Same rationale as AuthoredUtterance.from.
+  readonly by: string;
   // The action of the containing request, so the reader has context
   // for what the review was *about* without chasing the id.
   readonly action: string;
@@ -65,15 +71,25 @@ export type ReviewUtterance = {
 export type Utterance = AuthoredUtterance | ReviewUtterance;
 
 export interface VoicesFilter {
-  readonly name: string;
+  // When omitted, match every actor. Used by `gate tail` to stream
+  // the unified dialogue across the content_root.
+  readonly name?: string;
   readonly lense?: string;
   readonly verdict?: string;
+  // Limit the returned utterance count after sorting. Combined with
+  // `order: 'desc'` this gives "the most recent N utterances".
+  readonly limit?: number;
+  // Sort direction for timestamps. Default 'asc' (oldest first) to
+  // preserve the existing voices semantics; 'desc' is what tail wants.
+  readonly order?: 'asc' | 'desc';
 }
 
 /**
- * Collect every utterance by `filter.name` across the given requests,
- * sorted chronologically ascending.
+ * Collect every utterance matching `filter` across the given requests,
+ * sorted chronologically.
  *
+ * When `filter.name` is set, only that actor's utterances are
+ * returned; when omitted, every actor's utterances flow through.
  * When `lense` or `verdict` is set, only review utterances are
  * returned — authored requests don't carry those fields, so including
  * them in a lens-scoped query would be a category error.
@@ -85,17 +101,21 @@ export function collectUtterances(
   requests: ReadonlyArray<RequestJSON>,
   filter: VoicesFilter,
 ): Utterance[] {
-  const needle = filter.name.toLowerCase();
+  const needle = filter.name?.toLowerCase();
   const reviewOnly =
     filter.lense !== undefined || filter.verdict !== undefined;
   const out: Utterance[] = [];
 
   for (const r of requests) {
-    if (!reviewOnly && r.from.toLowerCase() === needle) {
+    if (
+      !reviewOnly &&
+      (needle === undefined || r.from.toLowerCase() === needle)
+    ) {
       const u: AuthoredUtterance = {
         kind: 'authored',
         at: r.created_at,
         requestId: r.id,
+        from: r.from,
         action: r.action,
         reason: r.reason,
       };
@@ -115,7 +135,7 @@ export function collectUtterances(
     }
     const reviews = r.reviews ?? [];
     for (const rv of reviews) {
-      if (rv.by.toLowerCase() !== needle) continue;
+      if (needle !== undefined && rv.by.toLowerCase() !== needle) continue;
       if (filter.lense !== undefined && rv.lense !== filter.lense) continue;
       if (filter.verdict !== undefined && rv.verdict !== filter.verdict) {
         continue;
@@ -125,6 +145,7 @@ export function collectUtterances(
         at: rv.at,
         requestId: r.id,
         action: r.action,
+        by: rv.by,
         lense: rv.lense,
         verdict: rv.verdict,
         comment: rv.comment,
@@ -132,6 +153,81 @@ export function collectUtterances(
     }
   }
 
-  out.sort((a, b) => a.at.localeCompare(b.at));
+  const direction = filter.order ?? 'asc';
+  out.sort((a, b) =>
+    direction === 'asc'
+      ? a.at.localeCompare(b.at)
+      : b.at.localeCompare(a.at),
+  );
+  if (filter.limit !== undefined && filter.limit >= 0) {
+    return out.slice(0, filter.limit);
+  }
   return out;
+}
+
+/**
+ * Render a chronological delta between two ISO-8601 timestamps in a
+ * compact human-readable form. Returns an empty string if the inputs
+ * are unparseable or if `curr` precedes `prev` (which shouldn't happen
+ * in well-ordered logs, but we're defensive at the boundary).
+ *
+ * Examples: "+6s", "+3m", "+1h19m", "+2d4h".
+ *
+ * Exported for unit tests and for reuse in gate show / tail renderers.
+ */
+export function formatDelta(prevIso: string, currIso: string): string {
+  const prev = Date.parse(prevIso);
+  const curr = Date.parse(currIso);
+  if (Number.isNaN(prev) || Number.isNaN(curr)) return '';
+  const deltaMs = curr - prev;
+  if (deltaMs < 0) return '';
+  const seconds = Math.floor(deltaMs / 1000);
+  if (seconds < 60) return `+${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `+${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) {
+    const remMin = minutes % 60;
+    return remMin === 0 ? `+${hours}h` : `+${hours}h${remMin}m`;
+  }
+  const days = Math.floor(hours / 24);
+  const remHours = hours % 24;
+  return remHours === 0 ? `+${days}d` : `+${days}d${remHours}h`;
+}
+
+/**
+ * Render a single utterance as multi-line text, matching the
+ * vocabulary of `gate show --format text`. Shared between voices,
+ * tail, and whoami so the reader's eye learns one shape.
+ *
+ * The `includeActor` flag controls whether the first line labels
+ * the actor explicitly — voices already groups by actor so it's
+ * redundant there, but tail and whoami span actors.
+ */
+export function renderUtterance(
+  u: Utterance,
+  includeActor: boolean,
+): string {
+  const lines: string[] = [];
+  if (u.kind === 'authored') {
+    const actor = includeActor ? ` ${u.from}` : '';
+    lines.push(`[${u.at}] req=${u.requestId} authored${actor}`);
+    lines.push(`  action: ${u.action}`);
+    lines.push(`  reason: ${u.reason}`);
+    // At most one of these is set per request (completed / denied /
+    // failed are mutually exclusive terminal states).
+    if (u.completionNote) lines.push(`  note:   ${u.completionNote}`);
+    if (u.denyReason) lines.push(`  denied: ${u.denyReason}`);
+    if (u.failureReason) lines.push(`  failed: ${u.failureReason}`);
+  } else {
+    const actor = includeActor ? ` by ${u.by}` : '';
+    lines.push(
+      `[${u.at}] req=${u.requestId} [${u.lense}/${u.verdict}]${actor}`,
+    );
+    lines.push(`  re: ${u.action}`);
+    for (const line of u.comment.split('\n')) {
+      lines.push(`  ${line}`);
+    }
+  }
+  return lines.join('\n');
 }
