@@ -75,10 +75,23 @@ test('extractReferences: not confused by adjacent digits', () => {
   assert.deepEqual(r.issueIds, []);
 });
 
-test('extractReferences: rejects longer digit strings at end', () => {
-  // If the sequence is 4 digits instead of 3, it should not match.
-  const r = extractReferences('bogus 2026-04-14-0001');
+test('extractReferences: accepts 4-digit sequences', () => {
+  // As of 0.2.0, sequence ceiling is 9999/day and ids are 4 digits.
+  const r = extractReferences('see 2026-04-14-0001');
+  assert.deepEqual(r.requestIds, ['2026-04-14-0001']);
+});
+
+test('extractReferences: rejects 5+ digit sequences', () => {
+  // 5 digits exceeds the domain pattern and should not be extracted.
+  const r = extractReferences('bogus 2026-04-14-00001');
   assert.deepEqual(r.requestIds, []);
+});
+
+test('extractReferences: accepts legacy 3-digit sequences', () => {
+  // Backward-compat: content roots from 0.1.x still produce 3-digit ids
+  // and cross-references to them must keep working.
+  const r = extractReferences('legacy 2026-04-14-001');
+  assert.deepEqual(r.requestIds, ['2026-04-14-001']);
 });
 
 test('extractReferences: does not match ids embedded in word characters', () => {
