@@ -7,6 +7,16 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-04-15
+
+Second alpha release. Focus: **observation layer** (`gate doctor`),
+**intervention layer** (`gate repair`), **cross-cutting read verbs**
+(`voices` / `tail` / `whoami` / `chain` / `show --format text` time
+deltas / `list` review markers), and the **interactive-identity**
+affordance (`GUILD_ACTOR` env var fallback). Breaking changes are
+concentrated in the `OnMalformed` application port — if you've
+embedded `guild-cli` as a library, see the migration note below.
+
 ### Fixed
 - **`gate doctor` no longer crashes on unparseable YAML.** Previously,
   a file containing YAML syntax the library couldn't parse (e.g. a
