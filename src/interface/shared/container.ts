@@ -8,6 +8,11 @@ import { MemberUseCases } from '../../application/member/MemberUseCases.js';
 import { RequestUseCases } from '../../application/request/RequestUseCases.js';
 import { IssueUseCases } from '../../application/issue/IssueUseCases.js';
 import { MessageUseCases } from '../../application/message/MessageUseCases.js';
+import {
+  DiagnosticUseCases,
+  DiagnosticRepoBundle,
+} from '../../application/diagnostic/DiagnosticUseCases.js';
+import { OnMalformed } from '../../application/ports/OnMalformed.js';
 
 export interface Container {
   config: GuildConfig;
@@ -15,6 +20,7 @@ export interface Container {
   requestUC: RequestUseCases;
   issueUC: IssueUseCases;
   messageUC: MessageUseCases;
+  diagnosticUC: DiagnosticUseCases;
 }
 
 export function buildContainer(): Container {
@@ -24,11 +30,23 @@ export function buildContainer(): Container {
   const issues = new YamlIssueRepository(config);
   const notifier = new FsInboxNotification(config);
   const clock = systemClock;
+  // Diagnostic uses a fresh config per area so its collecting
+  // onMalformed callback isn't shared with the stderr-emitting
+  // default that the rest of the CLI uses.
+  const buildDiagRepos = (om: OnMalformed): DiagnosticRepoBundle => {
+    const cfg = GuildConfig.load(process.cwd(), om);
+    return {
+      members: new YamlMemberRepository(cfg),
+      requests: new YamlRequestRepository(cfg),
+      issues: new YamlIssueRepository(cfg),
+    };
+  };
   return {
     config,
     memberUC: new MemberUseCases(members),
     requestUC: new RequestUseCases({ requests, members, notifier, clock }),
     issueUC: new IssueUseCases(issues, members, clock),
     messageUC: new MessageUseCases({ members, notifier, clock }),
+    diagnosticUC: new DiagnosticUseCases(buildDiagRepos),
   };
 }
