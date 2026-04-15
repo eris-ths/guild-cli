@@ -36,6 +36,29 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: 'npm'
 
+      # Fail fast if package.json and package-lock.json disagree on the
+      # project's own version. `npm ci` validates dependency integrity
+      # but does NOT cross-check the top-level `version` field, so a
+      # release that bumps package.json but forgets the lockfile passes
+      # CI silently (this happened on the 0.2.0 release). This guard
+      # closes that gap.
+      - name: Verify package-lock.json version matches package.json
+        run: |
+          node -e '
+            const pkg  = require("./package.json");
+            const lock = require("./package-lock.json");
+            const lockRoot = lock.packages[""].version;
+            if (pkg.version !== lock.version || pkg.version !== lockRoot) {
+              console.error(
+                "version drift: package.json=" + pkg.version +
+                " lock.version=" + lock.version +
+                " lock.packages[\"\"].version=" + lockRoot
+              );
+              process.exit(1);
+            }
+            console.log("versions consistent: " + pkg.version);
+          '
+
       - name: Install dependencies
         run: npm ci
 

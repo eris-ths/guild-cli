@@ -1,5 +1,13 @@
 # guild-cli config example.
 # Copy to `guild.config.yaml` in your content root and edit.
+#
+# NOTE: `content_root` is where all members/requests/issues/inbox YAML
+# files live. `.` means "the directory this config is in", which is
+# fine for a dedicated guild workspace but risky if you run guild-cli
+# inside a project repo you also develop on — the tool will write
+# members/ and requests/ alongside your source. For dogfooding or
+# per-project review sessions, prefer an out-of-tree path such as
+# `~/guild-sessions/<project-name>/` so your repo stays clean.
 
 content_root: .
 

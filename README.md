@@ -192,7 +192,7 @@ touching the use cases.
 
 ### What this tool does NOT do (yet)
 
-Being honest about the 0.2.0 surface area so you can plan around it.
+Being honest about the current surface area so you can plan around it.
 Full release history lives in [`CHANGELOG.md`](./CHANGELOG.md); the
 list below is the subset of "known gaps" that a user should expect
 when building on this version:
@@ -235,7 +235,7 @@ when building on this version:
   split means `gate doctor` is always safe to run; `gate repair`
   defaults to a dry-run plan and only moves files with `--apply`.
 
-These are scope choices for 0.2.0, not accidents. If any of them
+These are deliberate scope choices at this stage, not accidents. If any of them
 blocks your use case, open an issue describing the workflow — the
 domain/application boundary is stable enough (per
 [`POLICY.md`](./POLICY.md)) to add these cleanly.
@@ -463,8 +463,7 @@ validated at the boundary, state transitions enforced.
 npm test
 ```
 
-Runs the full unit test suite via `node:test`. As of 0.2.0, 191
-tests cover:
+Runs the full unit test suite via `node:test`. The suite covers:
 
 - **domain**: Request / Issue / Member / Review / Verdict / Lense
   value objects, `compareSequenceIds` numeric-aware id ordering
