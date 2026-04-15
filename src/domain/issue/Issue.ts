@@ -48,7 +48,9 @@ export function assertIssueTransition(
   }
 }
 
-const ISSUE_ID_PATTERN = /^i-\d{4}-\d{2}-\d{2}-\d{3}$/;
+// Accepts both 3- and 4-digit sequences for backward compatibility
+// (see RequestId.ts for rationale). Generation produces 4 digits.
+const ISSUE_ID_PATTERN = /^i-\d{4}-\d{2}-\d{2}-\d{3,4}$/;
 const AREA_PATTERN = /^[a-z][a-z0-9_-]{0,31}$/;
 const MAX_TEXT = 2048;
 
@@ -58,7 +60,7 @@ export class IssueId {
   static of(raw: unknown): IssueId {
     if (typeof raw !== 'string' || !ISSUE_ID_PATTERN.test(raw)) {
       throw new DomainError(
-        `Invalid issue id: "${String(raw)}". Expected i-YYYY-MM-DD-NNN`,
+        `Invalid issue id: "${String(raw)}". Expected i-YYYY-MM-DD-NNNN (or legacy NNN)`,
         'id',
       );
     }
@@ -66,13 +68,13 @@ export class IssueId {
   }
 
   static generate(today: Date, sequence: number): IssueId {
-    if (!Number.isInteger(sequence) || sequence < 0 || sequence > 999) {
+    if (!Number.isInteger(sequence) || sequence < 0 || sequence > 9999) {
       throw new DomainError(`Invalid sequence: ${sequence}`, 'sequence');
     }
     const yyyy = today.getUTCFullYear().toString().padStart(4, '0');
     const mm = (today.getUTCMonth() + 1).toString().padStart(2, '0');
     const dd = today.getUTCDate().toString().padStart(2, '0');
-    const seq = sequence.toString().padStart(3, '0');
+    const seq = sequence.toString().padStart(4, '0');
     return new IssueId(`i-${yyyy}-${mm}-${dd}-${seq}`);
   }
 

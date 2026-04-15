@@ -183,12 +183,13 @@ export async function reqChain(c: C, args: ParsedArgs): Promise<number> {
   if (!rootId) {
     throw new Error('Usage: gate chain <request-id | issue-id>');
   }
-  const isIssueId = /^i-\d{4}-\d{2}-\d{2}-\d{3}$/.test(rootId);
-  const isRequestId = /^\d{4}-\d{2}-\d{2}-\d{3}$/.test(rootId);
+  // Accept 3- or 4-digit sequences for backward compat with pre-0.2.0 ids.
+  const isIssueId = /^i-\d{4}-\d{2}-\d{2}-\d{3,4}$/.test(rootId);
+  const isRequestId = /^\d{4}-\d{2}-\d{2}-\d{3,4}$/.test(rootId);
   if (!isIssueId && !isRequestId) {
     throw new DomainError(
-      `id must match YYYY-MM-DD-NNN (request) or ` +
-        `i-YYYY-MM-DD-NNN (issue), got: ${rootId}`,
+      `id must match YYYY-MM-DD-NNNN (request) or ` +
+        `i-YYYY-MM-DD-NNNN (issue), got: ${rootId}`,
       'id',
     );
   }
