@@ -36,9 +36,11 @@ test('SafeFsQuarantineStore.move: relocates issue file under quarantine', async 
     const result = await store.move(src);
     assert.equal(existsSync(src), false, 'source should be gone');
     assert.equal(existsSync(result.destination), true, 'dest should exist');
+    // [\\/] accepts both posix and win32 separators so the test
+    // passes on both CI matrix OS's.
     assert.match(
       result.destination,
-      /quarantine\/2026-04-15T10-00-00-000Z\/issues\/i-broken\.yaml$/,
+      /quarantine[\\/]2026-04-15T10-00-00-000Z[\\/]issues[\\/]i-broken\.yaml$/,
     );
   } finally {
     cleanup();
@@ -129,7 +131,7 @@ test('SafeFsQuarantineStore.move: requests file goes under requests/ area', asyn
     const result = await store.move(src);
     assert.match(
       result.destination,
-      /quarantine\/2026-04-15T10-00-00-000Z\/requests\/2026-04-15-099\.yaml$/,
+      /quarantine[\\/]2026-04-15T10-00-00-000Z[\\/]requests[\\/]2026-04-15-099\.yaml$/,
     );
   } finally {
     cleanup();

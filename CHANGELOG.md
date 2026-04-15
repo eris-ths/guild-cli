@@ -7,7 +7,56 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 
 ## [Unreleased]
 
+### Fixed
+- **Windows path-separator crash (first-startup bug).** Previously
+  `safeFs.assertUnder` and `GuildConfig.resolveUnder` checked
+  containment with `absTarget.startsWith(absBase + '/')` which
+  hardcoded the POSIX separator. On Windows, `path.resolve()` returns
+  backslash-separated paths, so `C:\Users\foo\content/` never matched
+  any legitimate subpath and every invocation threw
+  `DomainError: Path escapes base` before any verb could run. The
+  CLI was unusable on Windows despite the test suite passing on
+  Linux CI. Replaced the literal-`/` check with a new
+  `isUnderBase(absTarget, absBase)` helper in
+  `src/infrastructure/persistence/pathSafety.ts` that uses
+  `path.relative` for structural containment, plus a `makeIsUnderBase`
+  factory so the logic can be unit-tested against `path.posix` AND
+  `path.win32` from a Linux host. The `while (cur !== '/')` loop
+  terminator in `assertUnder` is similarly cleaned up — it now relies
+  on the cross-platform `parent === cur` root detection instead of a
+  hardcoded separator literal. Also, the `npm test` script no longer
+  depends on POSIX `find | xargs`; it uses Node's native
+  `node --test "dist/tests/**/*.test.js"` glob which works
+  identically on Linux and Windows.
+- **Error messages on path-safety failures now name the base.**
+  The old `DomainError: Path escapes base: kato.yaml` and
+  `DomainError: Config path escapes base: x → y` hid the base path,
+  forcing operators to read source to figure out which base the
+  target was being compared against. Both errors now include
+  `(resolved=..., base=...)` so the mismatch is visible without
+  a debugger.
+
 ### Added
+- **`$EDITOR` fallback for `gate review`.** When `gate review <id>
+  --by X --lense Y --verdict V` is called with no `--comment`,
+  no positional comment, no `--comment -` STDIN redirection, and
+  stdin is a TTY, the CLI now opens the user's editor on a temp
+  file — matching the `git commit` convention. Editor selection
+  follows `GIT_EDITOR > VISUAL > EDITOR > platform default`
+  (`notepad` on Windows, `vi` everywhere else). The template uses
+  git's "scissors" sentinel
+  `# ------------------------ >8 ------------------------`: everything
+  at and below the scissors line is stripped from the body, so
+  legitimate `#`-prefixed markdown headings inside the review are
+  preserved. This sidesteps the Windows git-bash pipe handling
+  quirks that made `--comment -` unreliable, and removes the
+  friction of quoting multi-paragraph reviews on one shell line.
+  Pure helpers `stripEditorComments` and `pickEditor` are exported
+  from `internal.ts` and covered by 12 unit tests.
+- **CI matrix now covers `windows-latest`** alongside `ubuntu-latest`
+  on Node 20 and Node 22. Four combinations total, `fail-fast: false`
+  so one OS's flake doesn't abort the others. This is the regression
+  gate that will catch the next POSIX hardcode before it ships.
 - **POLICY.md: value-object invariants under `domain/`.** `MemberName`'s
   ASCII-only shape (`^[a-z][a-z0-9_-]{0,31}$`) is now declared a
   *stable contract*, not just a current-implementation detail. The

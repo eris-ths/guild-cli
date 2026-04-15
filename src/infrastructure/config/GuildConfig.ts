@@ -2,6 +2,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { resolve, isAbsolute, join } from 'node:path';
 import YAML from 'yaml';
 import { DomainError } from '../../domain/shared/DomainError.js';
+import { isUnderBase } from '../persistence/pathSafety.js';
 
 /**
  * Called by repository hydrate paths when a YAML record cannot be
@@ -114,14 +115,19 @@ function findConfig(start: string): string | null {
 /**
  * Resolve `path` under `base`, rejecting any attempt to escape via `..`,
  * absolute paths, or symlinks later handled by the repo layer.
+ *
+ * Containment is checked via `isUnderBase` (see ../persistence/pathSafety.ts)
+ * which uses `path.relative` for cross-platform correctness — the
+ * previous `startsWith(absBase + '/')` form crashed every Windows
+ * startup because the literal `/` never matched a backslash-separated
+ * subpath.
  */
 function resolveUnder(base: string, path: string): string {
   const absBase = resolve(base);
   const target = isAbsolute(path) ? resolve(path) : resolve(absBase, path);
-  const rel = target.startsWith(absBase + '/') || target === absBase;
-  if (!rel) {
+  if (!isUnderBase(target, absBase)) {
     throw new DomainError(
-      `Config path escapes base: ${path} → ${target}`,
+      `Config path escapes base: ${path} (resolved=${target}, base=${absBase})`,
       'paths',
     );
   }

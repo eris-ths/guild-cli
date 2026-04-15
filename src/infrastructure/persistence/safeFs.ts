@@ -9,6 +9,7 @@ import {
 } from 'node:fs';
 import { resolve, join, dirname, isAbsolute } from 'node:path';
 import { DomainError } from '../../domain/shared/DomainError.js';
+import { isUnderBase } from './pathSafety.js';
 
 /**
  * safeFs — all file operations go through these helpers so the path-safety
@@ -18,20 +19,30 @@ import { DomainError } from '../../domain/shared/DomainError.js';
  *   - target path must resolve under `base`
  *   - intermediate path components must not be symlinks (defeats traversal)
  *   - writes use `wx` flag only for new files (no silent overwrite on create)
+ *
+ * Cross-platform note: containment is checked via `isUnderBase` in
+ * ./pathSafety.ts which uses `path.relative` rather than literal
+ * `/` concatenation. This closes a Windows-first-startup crash where
+ * `startsWith(absBase + '/')` never matched a backslash-separated
+ * subpath.
  */
 
 export function assertUnder(base: string, target: string): string {
   const absBase = resolve(base);
   const absTarget = isAbsolute(target) ? resolve(target) : resolve(absBase, target);
-  if (!(absTarget === absBase || absTarget.startsWith(absBase + '/'))) {
+  if (!isUnderBase(absTarget, absBase)) {
     throw new DomainError(
-      `Path escapes base: ${target}`,
+      `Path escapes base: ${target} (resolved=${absTarget}, base=${absBase})`,
       'path',
     );
   }
-  // Walk back from target towards base, rejecting symlinks.
+  // Walk back from target towards base, rejecting symlinks. Loop
+  // terminates either when we reach the base (expected) or when
+  // dirname() stops making progress (i.e. we've hit the filesystem
+  // root without finding base, which shouldn't happen after the
+  // isUnderBase check above but is defended against anyway).
   let cur = absTarget;
-  while (cur !== absBase && cur !== '/') {
+  while (cur !== absBase) {
     if (existsSync(cur)) {
       const st = lstatSync(cur);
       if (st.isSymbolicLink()) {
@@ -42,6 +53,10 @@ export function assertUnder(base: string, target: string): string {
       }
     }
     const parent = dirname(cur);
+    // dirname returns its input when called on a filesystem root
+    // (`/` on posix, `C:\\` on Windows). This is the portable way
+    // to detect "we've walked as far up as we can go" without a
+    // hardcoded separator literal.
     if (parent === cur) break;
     cur = parent;
   }
