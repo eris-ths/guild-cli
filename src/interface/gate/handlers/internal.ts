@@ -47,3 +47,121 @@ export async function readStdin(): Promise<string> {
   }
   return Buffer.concat(chunks).toString('utf8');
 }
+
+// --- Editor fallback for long-form review comments ---------------------
+//
+// When `gate review` is called without --comment / positional / STDIN
+// and stdin is a TTY, we spawn the user's editor on a temp file —
+// mirroring `git commit`'s behavior. This removes the friction of
+// quoting multi-paragraph reviews on one bash line, and sidesteps
+// pipe-handling quirks on Windows git-bash that made `--comment -`
+// unreliable for some users.
+//
+// We follow git's "scissors" convention: everything at and below the
+// line `# ------------------------ >8 ------------------------`
+// is stripped from the body before the comment is recorded. This is
+// unambiguous (no false positives on legitimate `#heading` markdown)
+// and familiar to anyone who has used `git commit --cleanup=scissors`.
+
+export const EDITOR_SCISSORS =
+  '# ------------------------ >8 ------------------------';
+
+/**
+ * Strip the scissors line (and everything below it) from the editor
+ * buffer and trim. Pure — no I/O — so the logic can be unit-tested
+ * without spawning an editor.
+ *
+ * Separated from `readCommentViaEditor` because the spawn path is
+ * hard to mock portably; the cleaning path is where real bugs hide,
+ * and this is testable in isolation.
+ */
+export function stripEditorComments(raw: string): string {
+  const idx = raw.indexOf(EDITOR_SCISSORS);
+  const body = idx >= 0 ? raw.slice(0, idx) : raw;
+  return body.trim();
+}
+
+/**
+ * Pick the user's preferred editor, following the git convention:
+ *   GIT_EDITOR > VISUAL > EDITOR > platform default.
+ * The platform default is `notepad` on Windows and `vi` everywhere
+ * else, matching what Git for Windows installs out of the box.
+ */
+export function pickEditor(): string {
+  const env = process.env;
+  if (env['GIT_EDITOR']) return env['GIT_EDITOR'];
+  if (env['VISUAL']) return env['VISUAL'];
+  if (env['EDITOR']) return env['EDITOR'];
+  return process.platform === 'win32' ? 'notepad' : 'vi';
+}
+
+/**
+ * Open the user's editor on a temp file pre-filled with a guidance
+ * template, wait for the editor to exit, and return the cleaned
+ * comment body.
+ *
+ * Throws if:
+ *   - the editor fails to launch (e.g. `EDITOR=nonexistent`)
+ *   - the editor exits with non-zero status (e.g. `:cq` in vim)
+ *   - the cleaned body is empty after stripping the scissors block
+ *
+ * The caller is expected to surface the thrown Error to the user
+ * with the outer CLI error handler.
+ */
+export async function readCommentViaEditor(context: {
+  id: string;
+  by: string;
+  lense: string;
+  verdict: string;
+}): Promise<string> {
+  // Lazy imports so test environments that never hit this path
+  // don't pay the fs/child_process cost at module load.
+  const fs = await import('node:fs');
+  const { spawnSync } = await import('node:child_process');
+  const { tmpdir } = await import('node:os');
+  const { join: pathJoin } = await import('node:path');
+
+  const editor = pickEditor();
+  const dir = fs.mkdtempSync(pathJoin(tmpdir(), 'gate-review-'));
+  const file = pathJoin(dir, 'REVIEW_EDITMSG');
+
+  const template = [
+    '',
+    '',
+    EDITOR_SCISSORS,
+    '# Write your review comment ABOVE the scissors line.',
+    '# The scissors line and everything below it are stripped.',
+    '# An empty message aborts the review.',
+    '#',
+    '# Context:',
+    `#   id:      ${context.id}`,
+    `#   by:      ${context.by}`,
+    `#   lense:   ${context.lense}`,
+    `#   verdict: ${context.verdict}`,
+    '#',
+    '# Note for VSCode users: set EDITOR="code --wait" so the CLI blocks',
+    '# until you close the tab. Without --wait, `code` returns immediately',
+    '# and gate will see an empty file.',
+    '',
+  ].join('\n');
+  fs.writeFileSync(file, template, 'utf8');
+
+  try {
+    const result = spawnSync(editor, [file], { stdio: 'inherit' });
+    if (result.error) {
+      throw new Error(
+        `failed to launch editor "${editor}": ${result.error.message}. ` +
+          `Set $GIT_EDITOR, $VISUAL, or $EDITOR to a valid editor command.`,
+      );
+    }
+    if (typeof result.status === 'number' && result.status !== 0) {
+      throw new Error(
+        `editor "${editor}" exited with status ${result.status}; aborting review.`,
+      );
+    }
+    const raw = fs.readFileSync(file, 'utf8');
+    return stripEditorComments(raw);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}

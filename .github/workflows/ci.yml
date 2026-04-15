@@ -9,10 +9,45 @@ on:
 permissions:
   contents: read
 
+# Two jobs instead of one node × os matrix product so the check-run
+# names stay compatible with main's branch protection. Branch protection
+# requires the exact names `test (node 20)` and `test (node 22)` — those
+# are produced by a single-dimension matrix in the `test` job below.
+# The `test-windows` job is the new cross-platform coverage added by the
+# 2026-04-15 Windows path-separator fix; its names
+# (`test-windows (node 20)` / `test-windows (node 22)`) are distinct so
+# branch protection can optionally require them later without renames.
 jobs:
   test:
     name: test (node ${{ matrix.node }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['20', '22']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js ${{ matrix.node }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+  test-windows:
+    name: test-windows (node ${{ matrix.node }})
+    runs-on: windows-latest
     strategy:
       fail-fast: false
       matrix:

@@ -9,7 +9,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "test": "tsc && find dist/tests -name '*.test.js' -print0 | xargs -0 node --test",
+    "test": "tsc && node scripts/run-tests.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
