@@ -6,6 +6,7 @@ import {
 } from '../../domain/request/RequestState.js';
 import { Review } from '../../domain/request/Review.js';
 import { DomainError } from '../../domain/shared/DomainError.js';
+import { compareSequenceIds } from '../../domain/shared/compareSequenceIds.js';
 import {
   RequestRepository,
   RequestIdCollision,
@@ -95,7 +96,8 @@ export class RequestUseCases {
     if (!(REQUEST_STATES as readonly string[]).includes(state)) {
       throw new DomainError(`Invalid state: ${state}`, 'state');
     }
-    return this.deps.requests.listByState(state as RequestState);
+    const items = await this.deps.requests.listByState(state as RequestState);
+    return sortRequests(items);
   }
 
   /**
@@ -104,7 +106,7 @@ export class RequestUseCases {
    * (voices / tail / whoami / chain) that do not care about lifecycle.
    */
   async listAll(): Promise<Request[]> {
-    return this.deps.requests.listAll();
+    return sortRequests(await this.deps.requests.listAll());
   }
 
   async show(id: string): Promise<Request | null> {
@@ -177,4 +179,10 @@ export class RequestUseCases {
     if (!req) throw new DomainError(`Request not found: ${id}`, 'id');
     return req;
   }
+}
+
+function sortRequests(items: Request[]): Request[] {
+  return [...items].sort((a, b) =>
+    compareSequenceIds(a.id.value, b.id.value),
+  );
 }
