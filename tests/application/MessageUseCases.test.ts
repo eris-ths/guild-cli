@@ -7,6 +7,7 @@ import { DomainError } from '../../src/domain/shared/DomainError.js';
 import { MemberRepository } from '../../src/application/ports/MemberRepository.js';
 import {
   InboxMessage,
+  MarkReadResult,
   Notification,
   NotificationPort,
 } from '../../src/application/ports/NotificationPort.js';
@@ -42,24 +43,73 @@ class FakeMemberRepo implements MemberRepository {
 
 class FakeNotifier implements NotificationPort {
   posted: Notification[] = [];
+  // `readMarks[i]` tracks whether posted[i] has been flipped to read.
+  readMarks: boolean[] = [];
+  readAtStamps: (string | undefined)[] = [];
   failFor: Set<string> = new Set();
   async post(n: Notification): Promise<void> {
     if (this.failFor.has(n.to.value)) {
       throw new Error(`simulated failure for ${n.to.value}`);
     }
     this.posted.push(n);
+    this.readMarks.push(false);
+    this.readAtStamps.push(undefined);
   }
   async listFor(member: MemberName): Promise<InboxMessage[]> {
-    return this.posted
-      .filter((n) => n.to.value === member.value)
-      .map((n) => ({
+    const out: InboxMessage[] = [];
+    for (let i = 0; i < this.posted.length; i++) {
+      const n = this.posted[i]!;
+      if (n.to.value !== member.value) continue;
+      const msg: InboxMessage = {
         from: n.from,
         to: n.to.value,
         type: n.type,
         text: n.text,
         at: n.at ?? '',
-        read: false,
-      }));
+        read: this.readMarks[i] === true,
+      };
+      const readAt = this.readAtStamps[i];
+      if (readAt !== undefined) msg.readAt = readAt;
+      out.push(msg);
+    }
+    return out;
+  }
+  async markRead(
+    member: MemberName,
+    readAt: string,
+    index?: number,
+  ): Promise<MarkReadResult> {
+    // Map the recipient's 1-based index into the underlying flat
+    // posted[] array. Only messages addressed to `member` are counted.
+    const recipientIndices: number[] = [];
+    for (let i = 0; i < this.posted.length; i++) {
+      if (this.posted[i]!.to.value === member.value) {
+        recipientIndices.push(i);
+      }
+    }
+    const total = recipientIndices.length;
+    if (index !== undefined) {
+      if (!Number.isInteger(index) || index < 1 || index > total) {
+        throw new DomainError(
+          `inbox index out of range: ${index} (inbox has ${total} message(s))`,
+          'index',
+        );
+      }
+    }
+    let marked = 0;
+    let alreadyRead = 0;
+    for (let k = 0; k < recipientIndices.length; k++) {
+      if (index !== undefined && k + 1 !== index) continue;
+      const i = recipientIndices[k]!;
+      if (this.readMarks[i] === true) {
+        alreadyRead++;
+        continue;
+      }
+      this.readMarks[i] = true;
+      this.readAtStamps[i] = readAt;
+      marked++;
+    }
+    return { marked, alreadyRead, total };
   }
 }
 
@@ -184,6 +234,97 @@ test('inbox for unknown-and-not-host gives plain error', async () => {
     (e: unknown) => {
       assert.ok(e instanceof DomainError);
       assert.match(e.message, /not a registered member/);
+      return true;
+    },
+  );
+});
+
+test('markRead flips all unread messages when no index', async () => {
+  const { uc, members } = build();
+  members.add('kiri');
+  members.add('noir');
+  await uc.send({ from: 'kiri', to: 'noir', text: 'one' });
+  await uc.send({ from: 'kiri', to: 'noir', text: 'two' });
+  await uc.send({ from: 'kiri', to: 'noir', text: 'three' });
+
+  const result = await uc.markRead('noir');
+  assert.equal(result.marked, 3);
+  assert.equal(result.alreadyRead, 0);
+  assert.equal(result.total, 3);
+
+  const msgs = await uc.inbox('noir');
+  assert.ok(msgs.every((m) => m.read === true));
+});
+
+test('markRead is idempotent: second call marks nothing, reports alreadyRead', async () => {
+  const { uc, members } = build();
+  members.add('kiri');
+  members.add('noir');
+  await uc.send({ from: 'kiri', to: 'noir', text: 'one' });
+  await uc.send({ from: 'kiri', to: 'noir', text: 'two' });
+
+  await uc.markRead('noir');
+  const result = await uc.markRead('noir');
+  assert.equal(result.marked, 0);
+  assert.equal(result.alreadyRead, 2);
+  assert.equal(result.total, 2);
+});
+
+test('markRead with index marks just that message (1-based)', async () => {
+  const { uc, members } = build();
+  members.add('kiri');
+  members.add('noir');
+  await uc.send({ from: 'kiri', to: 'noir', text: 'one' });
+  await uc.send({ from: 'kiri', to: 'noir', text: 'two' });
+  await uc.send({ from: 'kiri', to: 'noir', text: 'three' });
+
+  const result = await uc.markRead('noir', 2);
+  assert.equal(result.marked, 1);
+  assert.equal(result.alreadyRead, 0);
+  assert.equal(result.total, 3);
+
+  const msgs = await uc.inbox('noir');
+  assert.equal(msgs[0]!.read, false);
+  assert.equal(msgs[1]!.read, true);
+  assert.equal(msgs[2]!.read, false);
+});
+
+test('markRead with out-of-range index throws DomainError', async () => {
+  const { uc, members } = build();
+  members.add('kiri');
+  members.add('noir');
+  await uc.send({ from: 'kiri', to: 'noir', text: 'one' });
+
+  await assert.rejects(
+    () => uc.markRead('noir', 5),
+    (e: unknown) => {
+      assert.ok(e instanceof DomainError);
+      assert.match(e.message, /out of range/);
+      return true;
+    },
+  );
+});
+
+test('markRead for empty inbox returns zeros without error', async () => {
+  const { uc, members } = build();
+  members.add('kiri');
+  members.add('noir');
+  // noir exists but has no messages
+  const result = await uc.markRead('noir');
+  assert.equal(result.marked, 0);
+  assert.equal(result.alreadyRead, 0);
+  assert.equal(result.total, 0);
+});
+
+test('markRead for host name raises the inbox-owner error', async () => {
+  const { uc, members } = build();
+  members.add('kiri');
+  members.setHosts(['human']);
+  await assert.rejects(
+    () => uc.markRead('human'),
+    (e: unknown) => {
+      assert.ok(e instanceof DomainError);
+      assert.match(e.message, /hosts do not have inboxes/);
       return true;
     },
   );

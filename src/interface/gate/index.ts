@@ -7,14 +7,20 @@ import {
 } from '../shared/parseArgs.js';
 import { DomainError } from '../../domain/shared/DomainError.js';
 import { Request } from '../../domain/request/Request.js';
-import { REQUEST_STATES } from '../../domain/request/RequestState.js';
 import { parseLense } from '../../domain/shared/Lense.js';
 import { parseVerdict } from '../../domain/shared/Verdict.js';
 import {
   collectUtterances,
+  formatDelta,
+  renderUtterance,
   RequestJSON,
   VoicesFilter,
 } from './voices.js';
+import {
+  extractReferences,
+  gatherIssueText,
+  gatherRequestText,
+} from './chain.js';
 
 const HELP = `gate — request lifecycle & dialogue CLI
 
@@ -25,7 +31,11 @@ Requests:
   gate list --state <state> [--for <m>] [--from <m>]
                             [--executor <m>] [--auto-review <m>]
   gate show <id> [--format json|text]
-  gate voices <name> [--lense <l>] [--verdict <v>] [--format json|text]
+  gate voices <name> [--lense <l>] [--verdict <v>] [--limit <N>]
+                     [--format json|text]
+  gate tail [N]                                   (default 20)
+  gate whoami                                     (needs GUILD_ACTOR)
+  gate chain <id>                                 (request or issue)
   gate approve <id> --by <m> [--note <s>]
   gate deny <id> --by <m> <reason>
   gate execute <id> --by <m> [--note <s>]
@@ -46,7 +56,8 @@ Issues:
 Messages:
   gate message --from <m> --to <m> --text <s>
   gate broadcast --from <m> --text <s>
-  gate inbox --for <m>
+  gate inbox --for <m> [--unread]
+  gate inbox mark-read [N] [--for <m>]
 
 States: pending | approved | executing | completed | failed | denied
 Verdicts: ok | concern | reject
@@ -83,6 +94,12 @@ export async function main(argv: readonly string[]): Promise<number> {
         return await reqShow(c, args);
       case 'voices':
         return await reqVoices(c, args);
+      case 'tail':
+        return await reqTail(c, args);
+      case 'whoami':
+        return await reqWhoami(c, args);
+      case 'chain':
+        return await reqChain(c, args);
       case 'approve':
         return await reqApprove(c, args);
       case 'deny':
@@ -206,8 +223,34 @@ async function reqList(
     process.stdout.write(`(no requests in ${state}${suffix})\n`);
     return 0;
   }
-  for (const r of items) printSummary(r);
+  // Two-pass layout: compute the widest review-marker string across
+  // the visible rows first, then pad every row to that width. This
+  // keeps the action column aligned even when one row has more or
+  // longer marker strings than its neighbors. Pure per-row padding
+  // (what we did first) alignment-breaks when any single row blew
+  // past the baseline width.
+  const markerWidth = computeReviewMarkerWidth(items);
+  for (const r of items) printSummary(r, markerWidth);
   return 0;
+}
+
+// Compute the widest review-marker string across a list of requests,
+// returning at least the fallback minimum. Used to align the action
+// column in `gate list` / `gate pending` output.
+export function computeReviewMarkerWidth(
+  items: ReadonlyArray<Request>,
+  fallbackMin = 16,
+): number {
+  let max = fallbackMin;
+  for (const r of items) {
+    // formatReviewMarkers(minWidth=0) returns the natural string
+    // (no floor), so we can measure the un-padded length.
+    const natural = formatReviewMarkers(r.toJSON()['reviews'], 0);
+    if (natural.length > max) max = natural.length;
+  }
+  // Leave at least two trailing spaces between marker column and
+  // action column so nothing collides at the visual boundary.
+  return max + 2;
 }
 
 function describeFilters(filters: Record<string, string | undefined>): string {
@@ -260,30 +303,53 @@ function formatRequestText(r: Request): string {
     lines.push(`  failed:   ${j['failure_reason']}`);
   }
 
+  // Time deltas make the *pace* of the dialogue legible. A 45-second
+  // correction and a 25-minute pause look identical in raw ISO-8601;
+  // with deltas, the reader sees the difference at a glance between
+  // "critic responded immediately" and "author came back after a
+  // long think". The first status_log entry (pending/created) has no
+  // predecessor so gets no delta.
   const log = Array.isArray(j['status_log']) ? j['status_log'] : [];
   if (log.length > 0) {
     lines.push('');
     lines.push(`  status_log (${log.length}):`);
+    let prevAt: string | undefined;
     for (const entry of log as Array<Record<string, unknown>>) {
+      const at = String(entry['at']);
       const note = entry['note'] ? ` — ${entry['note']}` : '';
+      const delta = prevAt ? ` (${formatDelta(prevAt, at)})` : '';
       lines.push(
-        `    ${entry['at']}  ${entry['state']}  by ${entry['by']}${note}`,
+        `    ${at}  ${entry['state']}  by ${entry['by']}${delta}${note}`,
       );
+      prevAt = at;
     }
   }
 
+  // For reviews, the delta is measured from the final status_log
+  // entry (typically completed/failed/denied), which is "when the
+  // work finished" — so a delta of +10s means the critic jumped on
+  // it immediately, and +3d means the critic came back days later.
+  // Subsequent reviews show delta from the previous review.
   const reviews = Array.isArray(j['reviews']) ? j['reviews'] : [];
   if (reviews.length > 0) {
     lines.push('');
     lines.push(`  reviews (${reviews.length}):`);
+    const lastLogAt =
+      log.length > 0
+        ? String((log[log.length - 1] as Record<string, unknown>)['at'])
+        : undefined;
+    let prevAt = lastLogAt;
     for (const rv of reviews as Array<Record<string, unknown>>) {
+      const at = String(rv['at']);
+      const delta = prevAt ? ` (${formatDelta(prevAt, at)})` : '';
       lines.push(
-        `    [${rv['lense']}/${rv['verdict']}] by ${rv['by']} at ${rv['at']}`,
+        `    [${rv['lense']}/${rv['verdict']}] by ${rv['by']} at ${at}${delta}`,
       );
       const comment = String(rv['comment'] ?? '');
       for (const line of comment.split('\n')) {
         lines.push(`      ${line}`);
       }
+      prevAt = at;
     }
   }
   return lines.join('\n');
@@ -331,23 +397,13 @@ async function reqVoices(c: C, args: ParsedArgs): Promise<number> {
     lenseFilterRaw !== undefined ? parseLense(lenseFilterRaw) : undefined;
   const verdictFilter =
     verdictFilterRaw !== undefined ? parseVerdict(verdictFilterRaw) : undefined;
+  const limit = parseOptionalIntOption(args, 'limit');
   const format = optionalOption(args, 'format') ?? 'text';
   if (format !== 'json' && format !== 'text') {
     throw new Error(`--format must be 'json' or 'text', got: ${format}`);
   }
 
-  // O(N_states) repo reads. Acceptable for the sizes this tool targets
-  // (hundreds of requests per content_root). TOCTOU: a concurrent state
-  // transition between list calls can duplicate or drop a request —
-  // tracked as a follow-up issue since in-repo enumeration would need
-  // a new port method.
-  const allRequests: Request[] = [];
-  for (const s of REQUEST_STATES) {
-    allRequests.push(...(await c.requestUC.listByState(s)));
-  }
-  const allJson: RequestJSON[] = allRequests.map(
-    (r) => r.toJSON() as unknown as RequestJSON,
-  );
+  const allJson = await loadAllRequestsAsJson(c);
 
   const filter: VoicesFilter = { name };
   if (lenseFilter !== undefined) {
@@ -355,6 +411,9 @@ async function reqVoices(c: C, args: ParsedArgs): Promise<number> {
   }
   if (verdictFilter !== undefined) {
     (filter as { verdict?: string }).verdict = verdictFilter;
+  }
+  if (limit !== undefined) {
+    (filter as { limit?: number }).limit = limit;
   }
   const utterances = collectUtterances(allJson, filter);
 
@@ -366,6 +425,7 @@ async function reqVoices(c: C, args: ParsedArgs): Promise<number> {
   const filterDesc: string[] = [];
   if (lenseFilter !== undefined) filterDesc.push(`lense=${lenseFilter}`);
   if (verdictFilter !== undefined) filterDesc.push(`verdict=${verdictFilter}`);
+  if (limit !== undefined) filterDesc.push(`limit=${limit}`);
   const filterSuffix =
     filterDesc.length > 0 ? ` (${filterDesc.join(', ')})` : '';
 
@@ -381,33 +441,309 @@ async function reqVoices(c: C, args: ParsedArgs): Promise<number> {
     `${utterances.length} ${header} from ${name}${filterSuffix}\n\n`,
   );
   for (const u of utterances) {
-    if (u.kind === 'authored') {
-      process.stdout.write(`[${u.at}] req=${u.requestId} authored\n`);
-      process.stdout.write(`  action: ${u.action}\n`);
-      process.stdout.write(`  reason: ${u.reason}\n`);
-      // Field labels match `gate show --format text` so the reader's
-      // eye learns one vocabulary. At most one of these is set per
-      // request (completed / denied / failed are mutually exclusive).
-      if (u.completionNote) {
-        process.stdout.write(`  note:   ${u.completionNote}\n`);
-      }
-      if (u.denyReason) {
-        process.stdout.write(`  denied: ${u.denyReason}\n`);
-      }
-      if (u.failureReason) {
-        process.stdout.write(`  failed: ${u.failureReason}\n`);
-      }
-    } else {
-      process.stdout.write(
-        `[${u.at}] req=${u.requestId} [${u.lense}/${u.verdict}]\n`,
+    // includeActor=false: voices is scoped to a single actor, so the
+    // actor name is in the header, not on every line.
+    process.stdout.write(renderUtterance(u, false) + '\n\n');
+  }
+  return 0;
+}
+
+// Shared loader for cross-cutting reads (voices, tail, whoami, chain).
+// Delegates to RequestUseCases.listAll which reads every state
+// directory in parallel and dedupes on id in case a concurrent
+// transition has moved a file between directories during the scan.
+// Replaces the prior sequential N-state loop which had a larger
+// TOCTOU window (tracked in the dogfood session as i-2026-04-15-001).
+async function loadAllRequestsAsJson(c: C): Promise<RequestJSON[]> {
+  const all = await c.requestUC.listAll();
+  return all.map((r) => r.toJSON() as unknown as RequestJSON);
+}
+
+function parseOptionalIntOption(
+  args: ParsedArgs,
+  key: string,
+): number | undefined {
+  const raw = optionalOption(args, key);
+  if (raw === undefined) return undefined;
+  const n = Number.parseInt(raw, 10);
+  if (!Number.isFinite(n) || n < 0 || String(n) !== raw) {
+    throw new Error(`--${key} must be a non-negative integer, got: ${raw}`);
+  }
+  return n;
+}
+
+// `gate tail [N]` — the unified recent-activity stream.
+//
+// Merges authored requests and reviews from every actor, sorts
+// descending by timestamp, and prints the most recent N (default 20).
+// This is the "git log" of the content_root dialogue — the first
+// command you want to type when you open a content_root fresh.
+async function reqTail(c: C, args: ParsedArgs): Promise<number> {
+  // N can come from a positional arg or from --limit. Positional is
+  // the friendlier interactive form; --limit exists for consistency
+  // with voices and for scripted use where positional can conflict.
+  let n: number | undefined;
+  const positional = args.positional[0];
+  if (positional !== undefined) {
+    const parsed = Number.parseInt(positional, 10);
+    if (!Number.isFinite(parsed) || parsed < 0 || String(parsed) !== positional) {
+      throw new Error(
+        `gate tail: N must be a non-negative integer, got: ${positional}`,
       );
-      process.stdout.write(`  re: ${u.action}\n`);
-      for (const line of u.comment.split('\n')) {
-        process.stdout.write(`  ${line}\n`);
+    }
+    n = parsed;
+  } else {
+    n = parseOptionalIntOption(args, 'limit');
+  }
+  const limit = n ?? 20;
+
+  const allJson = await loadAllRequestsAsJson(c);
+  const utterances = collectUtterances(allJson, {
+    limit,
+    order: 'desc',
+  });
+
+  if (utterances.length === 0) {
+    process.stdout.write('(no utterances on this content_root yet)\n');
+    return 0;
+  }
+  // Preserve descending order in output so the newest entry is at the
+  // top — matches `git log` mental model. Reader can scroll down for
+  // older things.
+  process.stdout.write(
+    `${utterances.length} most recent utterance(s)\n\n`,
+  );
+  for (const u of utterances) {
+    // includeActor=true: tail spans every actor, so each line is
+    // labeled with who said it.
+    process.stdout.write(renderUtterance(u, true) + '\n\n');
+  }
+  return 0;
+}
+
+// `gate whoami` — session-start orientation.
+//
+// Resolves GUILD_ACTOR, classifies it (member / host / unknown), and
+// prints the actor's 5 most recent utterances so the reader re-enters
+// the content_root with their own recent voice loaded. Think of it as
+// the first command of a session: "who am I here, and where was I?"
+async function reqWhoami(c: C, args: ParsedArgs): Promise<number> {
+  const actor = process.env['GUILD_ACTOR'];
+  if (!actor || actor.length === 0) {
+    process.stderr.write(
+      'GUILD_ACTOR is not set.\n' +
+        'Export it in your shell to identify yourself:\n' +
+        '  export GUILD_ACTOR=<your-name>\n' +
+        'See `gate --help` > Environment for details.\n',
+    );
+    return 1;
+  }
+
+  // Classify: is this a known member, a configured host, or neither?
+  // Neither is fine for one-off actors but worth flagging — the
+  // session will still work, it just means this name won't appear
+  // in `guild list`.
+  const members = await c.memberUC.list();
+  const actorLower = actor.toLowerCase();
+  const isMember = members.some((m) => m.name.value === actorLower);
+  const isHost = c.config.hostNames.includes(actorLower);
+  const role = isMember
+    ? 'member'
+    : isHost
+      ? 'host'
+      : 'unknown (not in members/ or host_names)';
+
+  process.stdout.write(`you are ${actor} (${role})\n`);
+
+  // --limit lets tests and power users override the default 5.
+  const limit = parseOptionalIntOption(args, 'limit') ?? 5;
+
+  const allJson = await loadAllRequestsAsJson(c);
+  const utterances = collectUtterances(allJson, {
+    name: actor,
+    limit,
+    order: 'desc',
+  });
+
+  if (utterances.length === 0) {
+    process.stdout.write(
+      '\n(no utterances yet — try `gate fast-track --action "..." --reason "..."` ' +
+        'to file your first one)\n',
+    );
+    return 0;
+  }
+
+  process.stdout.write(
+    `\nyour most recent ${utterances.length} utterance(s):\n\n`,
+  );
+  for (const u of utterances) {
+    process.stdout.write(renderUtterance(u, false) + '\n\n');
+  }
+  return 0;
+}
+
+// `gate chain <id>` — one-hop cross-reference walk.
+//
+// Given a request or issue id, loads the root record and every other
+// record it mentions (by YYYY-MM-DD-NNN / i-YYYY-MM-DD-NNN pattern in
+// any free-text field: action, reason, closure notes, review
+// comments, issue text). Renders as a tree so a reader can walk the
+// narrative of how pieces of work relate to each other without
+// grepping yaml by hand.
+//
+// Scope: one hop. Deeper walks are achievable by calling `gate chain`
+// on one of the surfaced ids — the CLI stays a single-step tool, and
+// the reader drives the depth.
+async function reqChain(c: C, args: ParsedArgs): Promise<number> {
+  const rootId = args.positional[0];
+  if (!rootId) {
+    throw new Error('Usage: gate chain <request-id | issue-id>');
+  }
+  const isIssueId = /^i-\d{4}-\d{2}-\d{2}-\d{3}$/.test(rootId);
+  const isRequestId = /^\d{4}-\d{2}-\d{2}-\d{3}$/.test(rootId);
+  if (!isIssueId && !isRequestId) {
+    // DomainError keeps the error style consistent with parseLense /
+    // parseVerdict / parseRequestState, so the outer CLI catch prints
+    // a "DomainError: ..." prefix instead of a generic "error: ..."
+    // and the `field` label points the reader at the failing input.
+    throw new DomainError(
+      `id must match YYYY-MM-DD-NNN (request) or ` +
+        `i-YYYY-MM-DD-NNN (issue), got: ${rootId}`,
+      'id',
+    );
+  }
+
+  // Load all requests and all issues once up front so the index
+  // lookups below are O(1). For dogfood-scale this is <1ms.
+  const [allRequests, allIssues] = await Promise.all([
+    c.requestUC.listAll(),
+    c.issueUC.listAll(),
+  ]);
+  const requestById = new Map(allRequests.map((r) => [r.id.value, r]));
+  const issueById = new Map(allIssues.map((i) => [i.id.value, i]));
+
+  // Extract references from the root's free text. If the root is
+  // missing, we say so and bail — a typo should yield a clear error,
+  // not an empty tree.
+  let rootText: string;
+  let rootHeader: string;
+  if (isIssueId) {
+    const root = issueById.get(rootId);
+    if (!root) {
+      process.stderr.write(`not found: ${rootId}\n`);
+      return 1;
+    }
+    const j = root.toJSON();
+    rootText = gatherIssueText({ text: String(j['text'] ?? '') });
+    rootHeader =
+      `${rootId}  [${j['severity']}/${j['area']}]  ${j['state']}` +
+      `  ${truncateCodePoints(String(j['text'] ?? ''), 80)}`;
+  } else {
+    const root = requestById.get(rootId);
+    if (!root) {
+      process.stderr.write(`not found: ${rootId}\n`);
+      return 1;
+    }
+    const j = root.toJSON() as unknown as RequestJSON;
+    rootText = gatherRequestText({
+      action: j.action,
+      reason: j.reason,
+      ...(j.completion_note !== undefined
+        ? { completion_note: j.completion_note }
+        : {}),
+      ...(j.deny_reason !== undefined ? { deny_reason: j.deny_reason } : {}),
+      ...(j.failure_reason !== undefined
+        ? { failure_reason: j.failure_reason }
+        : {}),
+      ...(j.reviews !== undefined
+        ? { reviews: j.reviews.map((r) => ({ comment: r.comment })) }
+        : {}),
+    });
+    rootHeader =
+      `${rootId}  [${(root.toJSON() as Record<string, unknown>)['state']}]` +
+      `  from=${j.from}  ${truncateCodePoints(j.action, 80)}`;
+  }
+
+  const refs = extractReferences(rootText);
+
+  // Drop self-references so the root doesn't appear as its own child.
+  const linkedRequestIds = refs.requestIds.filter((id) => id !== rootId);
+  const linkedIssueIds = refs.issueIds.filter((id) => id !== rootId);
+
+  // Resolve ids → actual records (or mark as missing). Missing ids
+  // are real — a prose string can mention an id that was never
+  // created — so we surface them rather than silently dropping.
+  type Resolved<T> = { id: string; record: T | undefined };
+  const linkedRequests: Array<Resolved<ReturnType<typeof requestById.get>>> =
+    linkedRequestIds.map((id) => ({ id, record: requestById.get(id) }));
+  const linkedIssues: Array<Resolved<ReturnType<typeof issueById.get>>> =
+    linkedIssueIds.map((id) => ({ id, record: issueById.get(id) }));
+
+  // Output: tree with two branches (issues, requests), each branch
+  // sorted by id for stability. Empty branches are dropped entirely
+  // rather than shown as "(none)" — keeps the output scannable.
+  process.stdout.write(`${rootHeader}\n`);
+
+  const haveIssues = linkedIssues.length > 0;
+  const haveRequests = linkedRequests.length > 0;
+
+  if (!haveIssues && !haveRequests) {
+    process.stdout.write(
+      '└── (no cross-referenced records in action/reason/notes/reviews)\n',
+    );
+    return 0;
+  }
+
+  if (haveIssues) {
+    const isLastBranch = !haveRequests;
+    const branchGlyph = isLastBranch ? '└──' : '├──';
+    const childPrefix = isLastBranch ? '    ' : '│   ';
+    process.stdout.write(`${branchGlyph} referenced issues\n`);
+    const sorted = [...linkedIssues].sort((a, b) =>
+      a.id.localeCompare(b.id),
+    );
+    for (let i = 0; i < sorted.length; i++) {
+      const item = sorted[i]!;
+      const last = i === sorted.length - 1;
+      const glyph = last ? '└──' : '├──';
+      if (item.record) {
+        const ij = item.record.toJSON();
+        const summary =
+          `${item.id}  [${ij['severity']}/${ij['area']}]  ${ij['state']}` +
+          `  ${truncateCodePoints(String(ij['text'] ?? ''), 70)}`;
+        process.stdout.write(`${childPrefix}${glyph} ${summary}\n`);
+      } else {
+        process.stdout.write(
+          `${childPrefix}${glyph} ${item.id}  (referenced but not found)\n`,
+        );
       }
     }
-    process.stdout.write('\n');
   }
+
+  if (haveRequests) {
+    process.stdout.write(`└── referenced requests\n`);
+    const childPrefix = '    ';
+    const sorted = [...linkedRequests].sort((a, b) =>
+      a.id.localeCompare(b.id),
+    );
+    for (let i = 0; i < sorted.length; i++) {
+      const item = sorted[i]!;
+      const last = i === sorted.length - 1;
+      const glyph = last ? '└──' : '├──';
+      if (item.record) {
+        const rj = item.record.toJSON();
+        const summary =
+          `${item.id}  [${rj['state']}]  from=${rj['from']}` +
+          `  ${truncateCodePoints(String(rj['action'] ?? ''), 70)}`;
+        process.stdout.write(`${childPrefix}${glyph} ${summary}\n`);
+      } else {
+        process.stdout.write(
+          `${childPrefix}${glyph} ${item.id}  (referenced but not found)\n`,
+        );
+      }
+    }
+  }
+
   return 0;
 }
 
@@ -721,18 +1057,86 @@ async function msgBroadcast(c: C, args: ParsedArgs): Promise<number> {
 }
 
 async function msgInbox(c: C, args: ParsedArgs): Promise<number> {
+  // `gate inbox mark-read [N]` is dispatched here too — the first
+  // positional is treated as a subverb. This keeps the verb family
+  // under a single `inbox` namespace instead of introducing a
+  // top-level `mark-read` command.
+  if (args.positional[0] === 'mark-read') {
+    return await msgInboxMarkRead(c, args);
+  }
+
   const forName = requireOption(args, 'for', '--for required', 'GUILD_ACTOR');
+  const unreadOnly = args.options['unread'] === true;
   const messages = await c.messageUC.inbox(forName);
-  if (messages.length === 0) {
+  const filtered = unreadOnly
+    ? messages.filter((m) => !m.read)
+    : messages;
+
+  if (filtered.length === 0) {
+    const suffix = unreadOnly ? ' (unread only)' : '';
+    process.stdout.write(`(inbox empty for ${forName}${suffix})\n`);
+    return 0;
+  }
+  // Index is 1-based and counts every message in the inbox so the
+  // user can `gate inbox mark-read <index>` referring to numbers
+  // they see here. When --unread hides read messages the indices
+  // stay stable (we index against the unfiltered list).
+  for (let i = 0; i < messages.length; i++) {
+    const m = messages[i]!;
+    if (unreadOnly && m.read) continue;
+    const idx = i + 1;
+    const related = m.related ? ` (ref: ${m.related})` : '';
+    const readTag = m.read
+      ? m.readAt
+        ? ` (read ${m.readAt})`
+        : ' (read)'
+      : ' (unread)';
+    process.stdout.write(
+      `  ${idx}. [${m.at}] ${m.type} from ${m.from}${related}${readTag}\n  ${m.text}\n`,
+    );
+  }
+  return 0;
+}
+
+async function msgInboxMarkRead(c: C, args: ParsedArgs): Promise<number> {
+  // Usage:
+  //   gate inbox mark-read [N] [--for <m>]
+  // When N is present, only that 1-based message is flipped. The
+  // --for flag falls back to GUILD_ACTOR so interactive users can
+  // type `GUILD_ACTOR=kiri gate inbox mark-read`.
+  const forName = requireOption(args, 'for', '--for required', 'GUILD_ACTOR');
+  let index: number | undefined;
+  const positional = args.positional[1]; // [0] is 'mark-read'
+  if (positional !== undefined) {
+    const parsed = Number.parseInt(positional, 10);
+    if (
+      !Number.isFinite(parsed) ||
+      parsed < 1 ||
+      String(parsed) !== positional
+    ) {
+      throw new Error(
+        `gate inbox mark-read: N must be a positive integer, got: ${positional}`,
+      );
+    }
+    index = parsed;
+  }
+
+  const result = await c.messageUC.markRead(forName, index);
+  if (result.total === 0) {
     process.stdout.write(`(inbox empty for ${forName})\n`);
     return 0;
   }
-  for (const m of messages) {
-    const related = m.related ? ` (ref: ${m.related})` : '';
+  if (result.marked === 0) {
+    const scope = index !== undefined ? `#${index}` : 'all';
     process.stdout.write(
-      `  [${m.at}] ${m.type} from ${m.from}${related}\n  ${m.text}\n`,
+      `(nothing to mark for ${forName}: ${scope} already read)\n`,
     );
+    return 0;
   }
+  const scope = index !== undefined ? `#${index}` : `${result.marked}`;
+  process.stdout.write(
+    `✓ marked ${scope} as read for ${forName} (${result.alreadyRead} already read, ${result.total} total)\n`,
+  );
   return 0;
 }
 
@@ -751,9 +1155,44 @@ function resolveIssueVerb(sub: string | undefined): string | undefined {
   }
 }
 
-function printSummary(r: Request): void {
+function printSummary(r: Request, markerWidth = 16): void {
   const j = r.toJSON();
+  const markers = formatReviewMarkers(j['reviews'], markerWidth);
   process.stdout.write(
-    `${j['id']}  [${j['state']}]  from=${j['from']}  ${String(j['action']).slice(0, 60)}\n`,
+    `${j['id']}  [${j['state']}]  from=${j['from']}  ${markers}${String(j['action']).slice(0, 60)}\n`,
   );
+}
+
+// Render a compact per-lens verdict summary like "✓devil ✓layer" or
+// "!devil ✓layer" so the reader can tell at a glance whether a
+// completed request closed cleanly or carried a concern into its
+// reviews. The `width` parameter is the minimum padded width;
+// strings longer than `width` are returned unpadded (the caller is
+// responsible for computing a width that fits every row in the
+// output if cross-row alignment matters — see computeReviewMarkerWidth).
+//
+// Verdict icons:
+//   ✓  ok       (clean pass from this lens)
+//   !  concern  (reviewer wanted something fixed; may or may not have been)
+//   x  reject   (reviewer said no — rare, blocking)
+//
+// NOTE on widths: `joined.length` is UTF-16 code units, not visual
+// columns. The verdict icons and lens names are all in the BMP
+// (single code units) so this is accurate today. If a future lens
+// name uses astral characters, revisit — Array.from(joined).length
+// would give code points but still not visual width.
+export function formatReviewMarkers(reviews: unknown, width = 16): string {
+  if (!Array.isArray(reviews) || reviews.length === 0) {
+    return ''.padEnd(width);
+  }
+  const parts: string[] = [];
+  for (const rv of reviews as Array<Record<string, unknown>>) {
+    const verdict = String(rv['verdict'] ?? '');
+    const lense = String(rv['lense'] ?? '');
+    const icon =
+      verdict === 'ok' ? '✓' : verdict === 'concern' ? '!' : verdict === 'reject' ? 'x' : '?';
+    parts.push(`${icon}${lense}`);
+  }
+  const joined = parts.join(' ');
+  return joined.padEnd(width);
 }

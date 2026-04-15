@@ -5,6 +5,15 @@ import { RequestState } from '../../domain/request/RequestState.js';
 export interface RequestRepository {
   findById(id: RequestId): Promise<Request | null>;
   listByState(state: RequestState): Promise<Request[]>;
+  /**
+   * List every request in every state, deduplicated by id. Used by
+   * cross-cutting read commands (voices, tail, whoami, chain) that
+   * don't care about lifecycle state. Implementations should read
+   * all state directories in parallel and dedupe on id in case a
+   * concurrent transition caused the same file to appear under two
+   * state directories during the scan.
+   */
+  listAll(): Promise<Request[]>;
   /** Persist; positions file under current state directory. */
   save(request: Request): Promise<void>;
   /**

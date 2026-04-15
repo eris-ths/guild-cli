@@ -43,10 +43,15 @@ disk and survives across sessions.
 >   させ、各ステップが `status_log[]` に actor + timestamp 付きで残る
 > - `gate review` で**別メンバー**として批判的レビューを記録する
 > - `gate issues` で後で対処すべき欠陥を追跡する
-> - `gate message` / `broadcast` / `inbox` でメンバー間の非同期通知
->   をやり取りする
+> - `gate message` / `broadcast` / `inbox` / `inbox mark-read` で
+>   メンバー間の非同期通知と受領記録をやり取りする
 > - 小さな自己完結タスクなら `gate fast-track` で create→complete
 >   を一発で通し、記録だけ残して規律を緩める
+> - **読みの道具一式**: `gate whoami` でセッション開始時に自分と
+>   直近の発話を取り戻し、`gate tail` で content_root 全体の最近を
+>   眺め、`gate voices <name>` で特定アクターの横断履歴を呼び戻し、
+>   `gate chain <id>` で cross-reference をたどり、
+>   `gate show <id> --format text` で時間差付きの単体詳細を読む
 >
 > すべてファイル操作のみ。同一 content_root に複数プロセスが触る場合、
 > 作成系は O_EXCL で race-safe ですが、それ以外は協調的直列化を前提に
@@ -86,6 +91,22 @@ disk and survives across sessions.
   The `--for` filter matches anything you touch (author, executor, or
   assigned reviewer); the plain `gate pending` shows *everyone's*
   queue, not just yours. Everything is queryable without a server.
+- **Re-enter the content_root fresh.** `gate whoami` (needs
+  `GUILD_ACTOR`) returns your identity and your five most recent
+  utterances. `gate tail` shows the newest N (default 20) entries
+  from every actor — the `git log` of the dialogue. Together they
+  are the "where was I?" pair you reach for at session start.
+- **Read what someone said across all their work.** `gate voices
+  <name> [--lense <l>] [--verdict <v>]` walks the full request
+  corpus and surfaces everything that person authored or reviewed,
+  chronologically. Use it before you retrospect, before you write
+  a review in a lens you haven't used recently, or just to recall
+  what you've been arguing about.
+- **Follow a cross-reference.** `gate chain <id>` starts at a
+  request or issue and shows the other records it mentions in its
+  action / reason / completion notes / review comments — promoted
+  issues, cited prior requests, audited findings. The tree walks
+  one hop; call `gate chain` on a link to go deeper.
 - **Skip the ceremony for small self-contained work.** `gate
   fast-track --from you --action "..." --reason "..."` runs create
   → approve → execute → complete in one call with self-approval
@@ -134,9 +155,15 @@ history for free.
 5. **When a review surfaces a new concern**, either open it as an
    issue (`gate issues add`) or promote it to a new request. That's
    the feedback loop closing.
-6. **Browse history.** `requests/completed/*.yaml` is a readable
-   transcript of how work actually got done, including who objected
-   and why. Use it to train, audit, or just remember.
+6. **Browse history.** The raw `requests/completed/*.yaml` files are
+   still the source of truth and greppable as plain YAML. But for
+   reading, the dedicated verbs are nicer: `gate tail` shows the
+   content_root's most recent activity in one stream, `gate voices
+   <name>` surfaces everything a single actor has said, `gate show
+   <id> --format text` renders one request with time deltas on each
+   status and review entry, and `gate chain <id>` walks the
+   cross-references outward. Use them to train, audit, or just
+   remember where you were.
 
 If you plan to build automation on top of this (e.g. a scheduler that
 watches `pending/` and dispatches to the right executor), treat the
@@ -160,6 +187,14 @@ Being honest about the 0.1.0 surface area so you can plan around it:
   race-safe (O_EXCL), but two processes calling `gate approve` on the
   same request in the same millisecond have last-writer-wins semantics.
   Serialize at the caller if you run multiple concurrent operators.
+  Cross-cutting reads (`gate voices` / `tail` / `whoami` / `chain`)
+  use `RequestRepository.listAll()` which reads every state directory
+  in parallel and dedupes by id; the dedup keeps whichever snapshot
+  has the longer `status_log` (status_log only grows) so a transition
+  mid-read yields the newer representation deterministically. The
+  window is smaller than the sequential loop it replaced but not
+  zero — a file that moves between directories *during* a single
+  `readdir` can still be missed or double-counted.
 - **Sequence ceiling is 999 per day.** Request IDs are `YYYY-MM-DD-NNN`.
   The 1000th request in a single UTC day throws.
 
@@ -267,6 +302,11 @@ gate pending [--for <m>] [--from <m>] [--executor <m>] [--auto-review <m>]
 gate list --state <s> [--for <m>] [--from <m>]
                       [--executor <m>] [--auto-review <m>]
 gate show <id> [--format json|text]
+gate voices <name> [--lense <l>] [--verdict <v>] [--limit <N>]
+                   [--format json|text]
+gate tail [N]                                        (default 20)
+gate whoami                                          (needs GUILD_ACTOR)
+gate chain <id>                                      (request or issue)
 gate approve <id>  --by <m> [--note <s>]
 gate deny    <id>  --by <m> <reason>
 gate execute <id>  --by <m> [--note <s>]
@@ -285,7 +325,8 @@ gate issues promote <id> --from <m> [--executor <m>] [--auto-review <m>]
 
 gate message   --from <m> --to <m> --text <s>
 gate broadcast --from <m> --text <s>
-gate inbox     --for <m>
+gate inbox     --for <m> [--unread]
+gate inbox mark-read [N] --for <m>
 ```
 
 ### Fast-track
@@ -432,6 +473,143 @@ Use cases at the layer-1 surface: reading your own review history
 before a retrospective, auditing "what did critic X flag across
 all of feature Z", grepping for verdicts without yaml plumbing.
 
+`--limit <N>` truncates the result after sorting (useful for
+"what did I say most recently").
+
+### Tail: unified recent activity stream
+
+`gate tail [N]` merges authored requests and reviews from every
+actor into a single timeline and prints the most recent N entries
+(default 20), newest first. Think of it as `git log` for the
+content_root's dialogue — the command you type first when you open
+an existing content_root.
+
+```
+$ gate tail 5
+5 most recent utterance(s)
+
+[2026-04-15T12:04:11.223Z] req=2026-04-15-007 [user/ok] by rin
+  re: README: document tail/whoami/...
+  second pass: concerns folded in cleanly, approving.
+
+[2026-04-15T12:03:27.089Z] req=2026-04-15-007 authored kiri
+  action: README: document tail/whoami/...
+  reason: new surface area needs to be findable...
+...
+```
+
+Each line is labeled with the actor (author for `authored`
+entries, reviewer for review entries) so a multi-actor stream
+stays legible. Filters are intentionally omitted — tail is for
+"everything recent", and once you want to slice, switch to
+`gate voices` or `gate list`.
+
+### Whoami: session-start orientation
+
+`gate whoami` (requires `GUILD_ACTOR` in the environment) resolves
+your identity, classifies you as member / host / unknown, and
+prints your 5 most recent utterances so you re-enter the
+content_root with your own voice already reloaded:
+
+```
+$ export GUILD_ACTOR=noir
+$ gate whoami
+you are noir (member)
+
+your most recent 5 utterance(s):
+
+[2026-04-14T23:46:38.259Z] req=2026-04-14-008 [user/ok]
+  re: README: document host listing and GUILD_ACTOR env var
+  second-pass review: concerns (1) and (2) addressed...
+...
+```
+
+`gate whoami` is meant as a session-start ritual: one command
+before you do anything else, and you remember where you were.
+Pair it with `gate tail` to see what happened while you were away.
+
+### Time deltas in `gate show --format text`
+
+The text view of a single request now shows the delta between
+successive `status_log` entries and between reviews, making the
+*pace* of the dialogue legible alongside the events:
+
+```
+$ gate show 2026-04-14-014 --format text
+...
+  status_log (4):
+    2026-04-14T14:18:11.761Z  pending    by kiri — created
+    2026-04-14T14:18:38.126Z  approved   by human (+26s) — audit は価値あり
+    2026-04-14T14:18:45.727Z  executing  by kiri (+7s)
+    2026-04-14T14:20:53.065Z  completed  by kiri (+2m) — audit 完了...
+
+  reviews (2):
+    [devil/concern] by noir at 2026-04-14T14:21:12.613Z (+19s)
+      ...
+    [layer/ok] by rin at 2026-04-14T14:21:57.535Z (+44s)
+      ...
+```
+
+Delta units scale with the gap: `+5s`, `+44s`, `+3m`, `+1h19m`,
+`+2d4h`. Review deltas are measured from the last `status_log`
+entry (typically completion) for the first review, and from the
+previous review for subsequent ones — so a quick correction reads
+as `(+10s)` and a day-later afterthought as `(+1d)`.
+
+### Review markers on `gate list` / `gate pending`
+
+Each row in `gate list` and `gate pending` carries a compact
+per-lens verdict summary so you can scan a whole list of completed
+work and pick out the requests that closed with an unresolved
+concern:
+
+```
+$ gate list --state completed
+2026-04-14-001  [completed]  from=kiri  !devil ✓layer      Feature A: ...
+2026-04-14-006  [completed]  from=kiri  ✓devil             Feature E: ...
+2026-04-14-014  [completed]  from=kiri  !devil ✓layer      Post-session audit: ...
+```
+
+Icons: `✓` ok · `!` concern · `x` reject · `?` unknown (defensive).
+The marker column is width-aligned per list so the action column
+stays flush across rows; long multi-review strings push the
+baseline out rather than collide with the next column. Requests
+with no reviews (typically fast-tracked) show an empty marker
+column and are easy to spot by the blank.
+
+### Chain: cross-reference walks
+
+`gate chain <id>` starts at a request or issue and shows every
+other record it mentions in its free-text fields (`action`,
+`reason`, `completion_note`, `deny_reason`, `failure_reason`, and
+every review comment). The output is a one-hop tree so a reader
+can follow the narrative of related work without grepping YAML.
+
+```
+$ gate chain 2026-04-14-014
+2026-04-14-014  [completed]  from=kiri  Post-session audit: Feature A-L の実装...
+└── referenced issues
+    ├── i-2026-04-14-004  [low/core]  resolved  RequestUseCasesDeps.notifier ...
+    └── i-2026-04-14-008  [low/docs]  open  Feature D の rin review concern #3 ...
+```
+
+Both request ids (`YYYY-MM-DD-NNN`) and issue ids
+(`i-YYYY-MM-DD-NNN`) are followed, sorted by id under two branches.
+Ids that appear in text but don't resolve to a real record are
+shown as `(referenced but not found)` so prose mentions of
+deleted-or-future ids are surfaced rather than silently dropped.
+Self-references are ignored.
+
+**Scope is intentional.** `gate chain` walks exactly one hop. To
+go deeper, call `gate chain` on one of the surfaced ids — the CLI
+stays a single-step tool and the reader drives the depth. Also,
+the id scanner only follows **well-formed** ids: a Japanese range
+expression like `i-2026-04-14-004〜007` resolves only the first
+fully-spelled id; if you want all four chained, write them out in
+full in the note or review. This is a deliberate trade-off —
+range-parsing would grow the regex into something hard to audit
+for a tiny gain.
+
 ### Issue → Request promotion
 
 `gate issues promote` lifts an open issue into a new request and
@@ -454,12 +632,35 @@ be resolved manually.
 inbox file. `gate broadcast` fans out to every active member except
 the sender, returning a delivery report (partial failures are
 written to stderr with exit 1). `gate inbox --for <m>` reads the
-inbox file back.
+inbox file back; pass `--unread` to hide already-read messages.
 
-Each stored message carries a `read: false` field for a future
-mark-read verb, but there is no CLI action to flip it today; the
-`--unread` filter was withdrawn until mark-read exists (tracked in
-the dogfood session as `i-2026-04-14-005`).
+Each row in `gate inbox` output is labeled with `(unread)` or
+`(read <timestamp>)` so you can tell at a glance what's new.
+Messages are numbered 1-based against the unfiltered inbox, which
+stays stable even when `--unread` hides some rows — so an index
+shown in the display maps directly to a `mark-read` call.
+
+**Marking messages as read.** Reading is itself an act worth
+recording. `gate inbox mark-read` flips every unread message in the
+recipient's inbox to `read: true` and stamps a `read_at` timestamp
+for audit:
+
+```
+$ gate inbox --for kiri
+  1. [2026-04-15T02:10:00Z] message from noir (unread)
+  レビューありがとう
+  2. [2026-04-15T02:11:00Z] broadcast from alice (unread)
+  全員周知...
+
+$ gate inbox mark-read --for kiri
+✓ marked 2 as read for kiri (0 already read, 2 total)
+```
+
+Pass a positional `N` to mark just one (`gate inbox mark-read 2
+--for kiri`); mark-read is idempotent, so calling it twice simply
+reports `0 already read`. Both verbs respect `GUILD_ACTOR` in
+place of `--for`, so an interactive agent can just type `gate
+inbox mark-read`.
 
 Hosts (`host_names` in config) are valid senders but cannot receive
 messages — they have no inbox file. `gate inbox --for <host>` emits
@@ -571,7 +772,14 @@ validated at the boundary, state transitions enforced.
 npm test
 ```
 
-Runs domain-layer unit tests via `node:test`.
+Runs the full unit test suite via `node:test`. Coverage spans the
+domain layer (Request / Issue / Member / Review / Verdict / Lense
+value objects), the application layer (MessageUseCases including
+mark-read semantics), the interface layer (argument parsing with
+env-var fallback, voices collectors and renderers, gate chain
+reference extraction, formatDelta, review marker rendering), and
+the infrastructure layer (the cross-cutting `dedupeRequestsById`
+helper used by `listAll`).
 
 ## License
 

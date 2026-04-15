@@ -98,6 +98,15 @@ export class RequestUseCases {
     return this.deps.requests.listByState(state as RequestState);
   }
 
+  /**
+   * Return every request across all states, deduplicated by id.
+   * Delegates to the repository. Used by cross-cutting read commands
+   * (voices / tail / whoami / chain) that do not care about lifecycle.
+   */
+  async listAll(): Promise<Request[]> {
+    return this.deps.requests.listAll();
+  }
+
   async show(id: string): Promise<Request | null> {
     return this.deps.requests.findById(RequestId.of(id));
   }
