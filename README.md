@@ -16,8 +16,10 @@ separate runtime, just a separate binding: the same model, a different
 `--by`, a different lens. That is enough to surface blind spots a
 single self-contained loop reliably misses.
 
-> Status: **0.1.0 — alpha.** API may change. See `SECURITY.md` for the
-> threat model.
+> Status: **0.2.0 — alpha.** API may change per [`POLICY.md`](./POLICY.md)'s
+> strict 0.x variant (minor bump = may break, patch = must be
+> backward-compat). Full release history in [`CHANGELOG.md`](./CHANGELOG.md).
+> See [`SECURITY.md`](./SECURITY.md) for the threat model.
 
 ---
 
@@ -186,7 +188,10 @@ touching the use cases.
 
 ### What this tool does NOT do (yet)
 
-Being honest about the 0.1.0 surface area so you can plan around it:
+Being honest about the 0.2.0 surface area so you can plan around it.
+Full release history lives in [`CHANGELOG.md`](./CHANGELOG.md); the
+list below is the subset of "known gaps" that a user should expect
+when building on this version:
 
 - **`--auto-review <member>` is not auto-dispatched.** The value is
   stored on the request and — as of the messaging patch — `gate
@@ -226,9 +231,10 @@ Being honest about the 0.1.0 surface area so you can plan around it:
   split means `gate doctor` is always safe to run; `gate repair`
   defaults to a dry-run plan and only moves files with `--apply`.
 
-These are scope choices for 0.1.0, not accidents. If any of them
+These are scope choices for 0.2.0, not accidents. If any of them
 blocks your use case, open an issue describing the workflow — the
-domain/application boundary is stable enough to add these cleanly.
+domain/application boundary is stable enough (per
+[`POLICY.md`](./POLICY.md)) to add these cleanly.
 
 ---
 
@@ -457,14 +463,25 @@ validated at the boundary, state transitions enforced.
 npm test
 ```
 
-Runs the full unit test suite via `node:test`. Coverage spans the
-domain layer (Request / Issue / Member / Review / Verdict / Lense
-value objects), the application layer (MessageUseCases including
-mark-read semantics), the interface layer (argument parsing with
-env-var fallback, voices collectors and renderers, gate chain
-reference extraction, formatDelta, review marker rendering), and
-the infrastructure layer (the cross-cutting `dedupeRequestsById`
-helper used by `listAll`).
+Runs the full unit test suite via `node:test`. As of 0.2.0, 191
+tests cover:
+
+- **domain**: Request / Issue / Member / Review / Verdict / Lense
+  value objects, `compareSequenceIds` numeric-aware id ordering
+- **application**: `MessageUseCases` (mark-read semantics),
+  `DiagnosticUseCases` (doctor classifier), `RepairUseCases`
+  (plan + apply + idempotency + outcome reporting),
+  `IssueUseCases` sort contract
+- **interface**: argument parsing with `GUILD_ACTOR` env-var
+  fallback, voices collectors and renderers, `gate chain`
+  reference extraction, `formatDelta`, review marker rendering,
+  doctor JSON parser, `--version` flag
+- **infrastructure**: hydrate error surface (including unparseable
+  YAML via `parseYamlSafe`), `dedupeRequestsById` dedup rules,
+  `SafeFsQuarantineStore` path safety, `parseYamlSafe` contract
+
+CI runs the same suite on Node 20 and 22 via
+[`.github/workflows/ci.yml`](./.github/workflows/ci.yml).
 
 ## License
 
