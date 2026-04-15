@@ -387,6 +387,51 @@ The reviewer is not dispatched for you — you still have to run the
 command (or have your orchestrator run it). This is persistence-plus-
 hint, not a scheduler.
 
+### Voices: cross-cutting reads of what an actor has said
+
+`gate voices <name>` walks the full request corpus — every state,
+every review — and surfaces everything `<name>` authored or
+reviewed, sorted chronologically. It's the "show me my own history
+on this content root" command.
+
+```
+$ gate voices kiri
+17 utterances from kiri
+
+[2026-04-14T10:59:05.842Z] req=2026-04-14-001 authored
+  action: Feature A: gate complete の完了時に...
+  reason: README で明言されている 0.1.0 の制限...
+  note:   reqComplete に auto-review テンプレ出力を追加...
+...
+```
+
+Each entry is an *utterance* — either an authored request (action +
+reason + whichever closure note the lifecycle produced:
+`note:` / `denied:` / `failed:`) or a review (lens + verdict +
+comment). Filters combine via AND:
+
+- `--lense <devil|layer|cognitive|user>` — only reviews with that
+  lens (implies review-only; authored requests carry no lens)
+- `--verdict <ok|concern|reject>` — only reviews with that verdict
+  (implies review-only)
+- `--format json` — emit the utterance list as JSON for piping
+
+```
+$ gate voices noir --lense devil
+5 reviews from noir (lense=devil)
+
+[2026-04-14T10:59:57.309Z] req=2026-04-14-001 [devil/concern]
+  re: Feature A: gate complete の完了時に...
+  実装自体は小さく動く。しかし懸念が2つ: (1) complete()...
+```
+
+Name matching is case-insensitive. Timestamps are ISO-8601, so
+text-mode output sorts naturally.
+
+Use cases at the layer-1 surface: reading your own review history
+before a retrospective, auditing "what did critic X flag across
+all of feature Z", grepping for verdicts without yaml plumbing.
+
 ### Issue → Request promotion
 
 `gate issues promote` lifts an open issue into a new request and
