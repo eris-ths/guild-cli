@@ -35,7 +35,7 @@ export class YamlRequestRepository implements RequestRepository {
       const rel = join(state, `${id.value}.yaml`);
       if (existsSafe(this.config.paths.requests, rel)) {
         const raw = readTextSafe(this.config.paths.requests, rel);
-        return hydrate(YAML.parse(raw), state);
+        return hydrate(YAML.parse(raw), state, rel, this.config.onMalformed);
       }
     }
     return null;
@@ -47,8 +47,9 @@ export class YamlRequestRepository implements RequestRepository {
       .slice(0, 1000);
     const out: Request[] = [];
     for (const f of files) {
-      const raw = readTextSafe(this.config.paths.requests, join(state, f));
-      const r = hydrate(YAML.parse(raw), state);
+      const rel = join(state, f);
+      const raw = readTextSafe(this.config.paths.requests, rel);
+      const r = hydrate(YAML.parse(raw), state, rel, this.config.onMalformed);
       if (r) out.push(r);
     }
     return out;
@@ -158,8 +159,16 @@ export function dedupeRequestsById(
   return Array.from(byId.values());
 }
 
-function hydrate(data: unknown, stateHint?: RequestState): Request | null {
+function hydrate(
+  data: unknown,
+  stateHint: RequestState | undefined,
+  source: string,
+  onMalformed: (msg: string) => void,
+): Request | null {
   if (data === null || typeof data !== 'object' || Array.isArray(data)) {
+    onMalformed(
+      `request ${source}: top-level YAML is not a mapping; skipping`,
+    );
     return null;
   }
   const obj = data as Record<string, unknown>;
@@ -192,11 +201,12 @@ function hydrate(data: unknown, stateHint?: RequestState): Request | null {
       ? (obj['status_log'] as unknown[])
       : [];
     const statusLog: StatusLogEntry[] = [];
-    for (const s of statusLogRaw) {
+    for (let i = 0; i < statusLogRaw.length; i++) {
+      const s = statusLogRaw[i];
       if (!s || typeof s !== 'object') continue;
       const so = s as Record<string, unknown>;
       // Legacy entries may omit `state` (e.g., review notes). Skip them
-      // rather than failing the whole request.
+      // rather than failing the whole request — they are known-benign.
       if (typeof so['state'] !== 'string') continue;
       try {
         const entry: StatusLogEntry = {
@@ -206,8 +216,11 @@ function hydrate(data: unknown, stateHint?: RequestState): Request | null {
         };
         if (typeof so['note'] === 'string') entry.note = so['note'] as string;
         statusLog.push(entry);
-      } catch {
-        // drop malformed entries silently
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        onMalformed(
+          `request ${source}: dropping status_log[${i}] (state="${String(so['state'])}"): ${msg}`,
+        );
       }
     }
     const createdAt =
@@ -248,7 +261,13 @@ function hydrate(data: unknown, stateHint?: RequestState): Request | null {
     if (typeof obj['failure_reason'] === 'string')
       props.failureReason = obj['failure_reason'] as string;
     return Request.restore(props);
-  } catch {
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    const idHint =
+      typeof obj['id'] === 'string' ? ` (id=${obj['id']})` : '';
+    onMalformed(
+      `request ${source}${idHint}: hydrate failed, skipping record: ${msg}`,
+    );
     return null;
   }
 }

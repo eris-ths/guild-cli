@@ -26,7 +26,7 @@ export class YamlMemberRepository implements MemberRepository {
     if (!existsSafe(this.config.paths.members, file)) return null;
     const raw = readTextSafe(this.config.paths.members, file);
     const data = YAML.parse(raw);
-    return hydrate(data, name.value);
+    return hydrate(data, name.value, file, this.config.onMalformed);
   }
 
   async exists(name: MemberName): Promise<boolean> {
@@ -42,7 +42,7 @@ export class YamlMemberRepository implements MemberRepository {
       const raw = readTextSafe(this.config.paths.members, f);
       const data = YAML.parse(raw);
       const name = f.replace(/\.yaml$/, '');
-      const m = hydrate(data, name);
+      const m = hydrate(data, name, f, this.config.onMalformed);
       if (m) out.push(m);
     }
     return out;
@@ -60,8 +60,16 @@ export class YamlMemberRepository implements MemberRepository {
   }
 }
 
-function hydrate(data: unknown, fallbackName: string): Member | null {
+function hydrate(
+  data: unknown,
+  fallbackName: string,
+  source: string,
+  onMalformed: (msg: string) => void,
+): Member | null {
   if (data === null || typeof data !== 'object' || Array.isArray(data)) {
+    onMalformed(
+      `member ${source}: top-level YAML is not a mapping; skipping`,
+    );
     return null;
   }
   const obj = data as Record<string, unknown>;
@@ -84,7 +92,11 @@ function hydrate(data: unknown, fallbackName: string): Member | null {
     };
     if (displayName !== undefined) args.displayName = displayName;
     return Member.create(args);
-  } catch {
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    onMalformed(
+      `member ${source} (name=${name}): hydrate failed, skipping record: ${msg}`,
+    );
     return null;
   }
 }
