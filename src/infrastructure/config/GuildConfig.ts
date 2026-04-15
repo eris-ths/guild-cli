@@ -8,11 +8,15 @@ import { DomainError } from '../../domain/shared/DomainError.js';
  * parsed into a domain object. The CLI wires this to stderr so that
  * data-loss events surface instead of being silently swallowed.
  * Tests inject a collecting spy to assert the exact messages.
+ *
+ * `source` is the absolute filesystem path of the offending file.
+ * The path is mandatory and structured: gate repair consumes it
+ * directly without parsing the message string.
  */
-export type OnMalformed = (msg: string) => void;
+export type OnMalformed = (source: string, msg: string) => void;
 
-export const defaultOnMalformed: OnMalformed = (msg) => {
-  process.stderr.write(`warn: ${msg}\n`);
+export const defaultOnMalformed: OnMalformed = (source, msg) => {
+  process.stderr.write(`warn: ${source}: ${msg}\n`);
 };
 
 export interface GuildConfigProps {

@@ -22,6 +22,7 @@ import {
 } from './handlers/read.js';
 import { issuesCmd } from './handlers/issues.js';
 import { doctorCmd } from './handlers/doctor.js';
+import { repairCmd } from './handlers/repair.js';
 import {
   msgSend,
   msgBroadcast,
@@ -85,11 +86,20 @@ Environment:
                        Automations should continue to pass --from / --by
                        explicitly.
 
-Diagnostic:
+Diagnostic / Repair:
   gate doctor [--summary | --format json]
                        Read-only health check over the content root.
                        Exits 1 if any malformed records are detected.
-                       (Repair will be a separate verb in a future PR.)
+  gate repair [--apply] [--from-doctor <path>] [--format json]
+                       Intervention layer paired with doctor. Reads
+                       'gate doctor --format json' from stdin (or
+                       --from-doctor <file>) and either prints the
+                       proposed plan (default --dry-run) or executes
+                       it (--apply). Quarantine is the only action;
+                       duplicate_id and unknown findings are no-op.
+                       Usage:
+                         gate doctor --format json | gate repair
+                         gate doctor --format json | gate repair --apply
 
 Meta:
   gate --version       Print version and exit
@@ -151,6 +161,8 @@ export async function main(argv: readonly string[]): Promise<number> {
         return await msgInbox(c, args);
       case 'doctor':
         return await doctorCmd(c, args);
+      case 'repair':
+        return await repairCmd(c, args);
       default:
         process.stderr.write(`unknown command: ${cmd}\n${HELP}`);
         return 1;

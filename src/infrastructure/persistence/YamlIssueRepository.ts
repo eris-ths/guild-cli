@@ -17,7 +17,9 @@ import {
   readTextSafe,
   writeTextSafe,
 } from './safeFs.js';
+import { join } from 'node:path';
 import { GuildConfig } from '../config/GuildConfig.js';
+import { OnMalformed } from '../../application/ports/OnMalformed.js';
 
 const FILE_PATTERN = /^i-\d{4}-\d{2}-\d{2}-\d{3,4}\.yaml$/;
 
@@ -28,7 +30,8 @@ export class YamlIssueRepository implements IssueRepository {
     const rel = `${id.value}.yaml`;
     if (!existsSafe(this.config.paths.issues, rel)) return null;
     const raw = readTextSafe(this.config.paths.issues, rel);
-    return hydrate(YAML.parse(raw), rel, this.config.onMalformed);
+    const absSource = join(this.config.paths.issues, rel);
+    return hydrate(YAML.parse(raw), absSource, this.config.onMalformed);
   }
 
   async listByState(state: IssueState): Promise<Issue[]> {
@@ -43,7 +46,8 @@ export class YamlIssueRepository implements IssueRepository {
     const out: Issue[] = [];
     for (const f of files) {
       const raw = readTextSafe(this.config.paths.issues, f);
-      const issue = hydrate(YAML.parse(raw), f, this.config.onMalformed);
+      const absSource = join(this.config.paths.issues, f);
+      const issue = hydrate(YAML.parse(raw), absSource, this.config.onMalformed);
       if (issue) out.push(issue);
     }
     return out;
@@ -89,10 +93,10 @@ export class YamlIssueRepository implements IssueRepository {
 function hydrate(
   data: unknown,
   source: string,
-  onMalformed: (msg: string) => void,
+  onMalformed: OnMalformed,
 ): Issue | null {
   if (data === null || typeof data !== 'object' || Array.isArray(data)) {
-    onMalformed(`issue ${source}: top-level YAML is not a mapping; skipping`);
+    onMalformed(source, 'top-level YAML is not a mapping; skipping');
     return null;
   }
   const obj = data as Record<string, unknown>;
@@ -112,7 +116,8 @@ function hydrate(
     const msg = e instanceof Error ? e.message : String(e);
     const idHint = typeof obj['id'] === 'string' ? ` (id=${obj['id']})` : '';
     onMalformed(
-      `issue ${source}${idHint}: hydrate failed, skipping record: ${msg}`,
+      source,
+      `hydrate failed${idHint}, skipping record: ${msg}`,
     );
     return null;
   }

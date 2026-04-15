@@ -12,6 +12,8 @@ import {
   DiagnosticUseCases,
   DiagnosticRepoBundle,
 } from '../../application/diagnostic/DiagnosticUseCases.js';
+import { RepairUseCases } from '../../application/repair/RepairUseCases.js';
+import { SafeFsQuarantineStore } from '../../infrastructure/persistence/SafeFsQuarantineStore.js';
 import { OnMalformed } from '../../application/ports/OnMalformed.js';
 
 export interface Container {
@@ -21,6 +23,7 @@ export interface Container {
   issueUC: IssueUseCases;
   messageUC: MessageUseCases;
   diagnosticUC: DiagnosticUseCases;
+  repairUC: RepairUseCases;
 }
 
 export function buildContainer(): Container {
@@ -41,6 +44,9 @@ export function buildContainer(): Container {
       issues: new YamlIssueRepository(cfg),
     };
   };
+  // Repair quarantine store is constructed per-CLI-run so its
+  // timestamp directory groups all actions from a single invocation.
+  const quarantine = new SafeFsQuarantineStore(config.contentRoot);
   return {
     config,
     memberUC: new MemberUseCases(members),
@@ -48,5 +54,6 @@ export function buildContainer(): Container {
     issueUC: new IssueUseCases(issues, members, clock),
     messageUC: new MessageUseCases({ members, notifier, clock }),
     diagnosticUC: new DiagnosticUseCases(buildDiagRepos),
+    repairUC: new RepairUseCases(quarantine),
   };
 }

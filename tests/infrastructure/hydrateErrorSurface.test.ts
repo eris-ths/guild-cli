@@ -30,13 +30,13 @@ test('YamlRequestRepository: malformed request YAML surfaces via onMalformed', a
     writeFileSync(badPath, 'id: 2026-04-15-001\n# missing from/action/reason\n');
 
     const warnings: string[] = [];
-    const config = GuildConfig.load(root, (msg) => warnings.push(msg));
+    const config = GuildConfig.load(root, (source, msg) => warnings.push(`${source}: ${msg}`));
     const repo = new YamlRequestRepository(config);
 
     const items = await repo.listByState('pending');
     assert.equal(items.length, 0, 'malformed record should be dropped');
     assert.equal(warnings.length, 1, 'exactly one warning should surface');
-    assert.match(warnings[0]!, /request /);
+    assert.match(warnings[0]!, /requests\/pending\/2026-04-15-001\.yaml/);
     assert.match(warnings[0]!, /id=2026-04-15-001/);
     assert.match(warnings[0]!, /hydrate failed/);
   } finally {
@@ -71,7 +71,7 @@ test('YamlRequestRepository: malformed status_log entry surfaces per-entry', asy
     );
 
     const warnings: string[] = [];
-    const config = GuildConfig.load(root, (msg) => warnings.push(msg));
+    const config = GuildConfig.load(root, (source, msg) => warnings.push(`${source}: ${msg}`));
     const repo = new YamlRequestRepository(config);
 
     const items = await repo.listByState('pending');
@@ -92,13 +92,13 @@ test('YamlIssueRepository: malformed issue surfaces via onMalformed', async () =
     writeFileSync(badPath, 'id: i-2026-04-15-001\n# missing required fields\n');
 
     const warnings: string[] = [];
-    const config = GuildConfig.load(root, (msg) => warnings.push(msg));
+    const config = GuildConfig.load(root, (source, msg) => warnings.push(`${source}: ${msg}`));
     const repo = new YamlIssueRepository(config);
 
     const items = await repo.listAll();
     assert.equal(items.length, 0);
     assert.equal(warnings.length, 1);
-    assert.match(warnings[0]!, /issue /);
+    assert.match(warnings[0]!, /issues\/i-2026-04-15-001\.yaml/);
     assert.match(warnings[0]!, /i-2026-04-15-001/);
   } finally {
     cleanup();
@@ -113,13 +113,13 @@ test('YamlMemberRepository: malformed member surfaces via onMalformed', async ()
     writeFileSync(badPath, 'name: broken\ncategory: not-a-category\n');
 
     const warnings: string[] = [];
-    const config = GuildConfig.load(root, (msg) => warnings.push(msg));
+    const config = GuildConfig.load(root, (source, msg) => warnings.push(`${source}: ${msg}`));
     const repo = new YamlMemberRepository(config);
 
     const items = await repo.listAll();
     assert.equal(items.length, 0);
     assert.equal(warnings.length, 1);
-    assert.match(warnings[0]!, /member /);
+    assert.match(warnings[0]!, /members\/broken\.yaml/);
     assert.match(warnings[0]!, /name=broken/);
   } finally {
     cleanup();
@@ -135,7 +135,7 @@ test('findByName also routes through onMalformed on malformed YAML', async () =>
     );
 
     const warnings: string[] = [];
-    const config = GuildConfig.load(root, (msg) => warnings.push(msg));
+    const config = GuildConfig.load(root, (source, msg) => warnings.push(`${source}: ${msg}`));
     const repo = new YamlMemberRepository(config);
 
     const result = await repo.findByName(MemberName.of('broken'));

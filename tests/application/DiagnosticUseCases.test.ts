@@ -23,6 +23,7 @@ import { RequestId } from '../../src/domain/request/RequestId.js';
 import { RequestState } from '../../src/domain/request/RequestState.js';
 
 class FakeMemberRepo implements MemberRepository {
+  private fakeArea = '/members';
   constructor(
     private items: Member[],
     private malformedMessages: string[] = [],
@@ -34,7 +35,9 @@ class FakeMemberRepo implements MemberRepository {
     return false;
   }
   async listAll(): Promise<Member[]> {
-    for (const m of this.malformedMessages) this.onMalformed?.(m);
+    for (let i = 0; i < this.malformedMessages.length; i++) {
+      this.onMalformed?.(`/fake${this.fakeArea}/${i}.yaml`, this.malformedMessages[i]!);
+    }
     return this.items;
   }
   async save(_m: Member): Promise<void> {}
@@ -45,6 +48,7 @@ class FakeMemberRepo implements MemberRepository {
 }
 
 class FakeRequestRepo implements RequestRepository {
+  private fakeArea = '/requests';
   constructor(
     private items: Request[],
     private malformedMessages: string[] = [],
@@ -53,7 +57,9 @@ class FakeRequestRepo implements RequestRepository {
     return [];
   }
   async listAll(): Promise<Request[]> {
-    for (const m of this.malformedMessages) this.onMalformed?.(m);
+    for (let i = 0; i < this.malformedMessages.length; i++) {
+      this.onMalformed?.(`/fake${this.fakeArea}/${i}.yaml`, this.malformedMessages[i]!);
+    }
     return this.items;
   }
   async findById(_id: RequestId): Promise<Request | null> {
@@ -68,6 +74,7 @@ class FakeRequestRepo implements RequestRepository {
 }
 
 class FakeIssueRepo implements IssueRepository {
+  private fakeArea = '/issues';
   constructor(
     private items: Issue[],
     private malformedMessages: string[] = [],
@@ -79,7 +86,9 @@ class FakeIssueRepo implements IssueRepository {
     return [];
   }
   async listAll(): Promise<Issue[]> {
-    for (const m of this.malformedMessages) this.onMalformed?.(m);
+    for (let i = 0; i < this.malformedMessages.length; i++) {
+      this.onMalformed?.(`/fake${this.fakeArea}/${i}.yaml`, this.malformedMessages[i]!);
+    }
     return this.items;
   }
   async save(_i: Issue): Promise<void> {}
@@ -199,10 +208,12 @@ test('DiagnosticReport.toJSON: stable shape for future repair consumer', async (
   const report = await uc.run();
   const json = report.toJSON() as {
     summary: unknown;
-    findings: { area: string; kind: string; message: string }[];
+    findings: { area: string; source: string; kind: string; message: string }[];
   };
   assert.ok(json.summary);
   assert.equal(json.findings.length, 1);
   assert.equal(json.findings[0]?.area, 'issues');
   assert.equal(json.findings[0]?.kind, 'top_level_not_mapping');
+  assert.equal(typeof json.findings[0]?.source, 'string');
+  assert.match(json.findings[0]!.source, /\.yaml$/);
 });

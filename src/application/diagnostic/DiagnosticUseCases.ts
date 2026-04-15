@@ -48,8 +48,13 @@ export class DiagnosticUseCases {
     const findings: DiagnosticFinding[] = [];
 
     const areaCollector = (area: DiagnosticArea): OnMalformed =>
-      (msg: string) =>
-        findings.push({ area, kind: classifyMessage(msg), message: msg });
+      (source: string, msg: string) =>
+        findings.push({
+          area,
+          source,
+          kind: classifyMessage(msg),
+          message: msg,
+        });
 
     const beforeMembers = findings.length;
     const memberBundle = this.buildRepos(areaCollector('members'));
