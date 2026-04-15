@@ -46,9 +46,10 @@ export async function doctorCmd(c: C, args: ParsedArgs): Promise<number> {
   writeOverall(report);
   if (!report.isClean) {
     process.stdout.write(
-      '\nnote: `gate doctor` is read-only. A future `gate repair`\n' +
-        'verb will consume `gate doctor --format json` to drive fixes.\n' +
-        'For now, inspect the offending YAML files manually.\n',
+      '\nnote: `gate doctor` is read-only (observation layer).\n' +
+        'To act on findings, pipe to `gate repair` (intervention layer):\n' +
+        '  gate doctor --format json | gate repair          # dry-run plan\n' +
+        '  gate doctor --format json | gate repair --apply  # quarantine\n',
     );
   }
   return report.isClean ? 0 : 1;
@@ -72,7 +73,8 @@ function writeAreaSection(
   writeSummaryLine(area, s);
   const local = findings.filter((f) => f.area === area);
   for (const f of local) {
-    process.stdout.write(`    [${f.kind}] ${f.message}\n`);
+    process.stdout.write(`    [${f.kind}] ${f.source}\n`);
+    process.stdout.write(`      ${f.message}\n`);
   }
 }
 

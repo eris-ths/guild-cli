@@ -9,7 +9,9 @@ import {
   readTextSafe,
   writeTextSafe,
 } from './safeFs.js';
+import { join } from 'node:path';
 import { GuildConfig } from '../config/GuildConfig.js';
+import { OnMalformed } from '../../application/ports/OnMalformed.js';
 
 /**
  * File layout: <config.paths.members>/<name>.yaml
@@ -26,7 +28,8 @@ export class YamlMemberRepository implements MemberRepository {
     if (!existsSafe(this.config.paths.members, file)) return null;
     const raw = readTextSafe(this.config.paths.members, file);
     const data = YAML.parse(raw);
-    return hydrate(data, name.value, file, this.config.onMalformed);
+    const absSource = join(this.config.paths.members, file);
+    return hydrate(data, name.value, absSource, this.config.onMalformed);
   }
 
   async exists(name: MemberName): Promise<boolean> {
@@ -42,7 +45,8 @@ export class YamlMemberRepository implements MemberRepository {
       const raw = readTextSafe(this.config.paths.members, f);
       const data = YAML.parse(raw);
       const name = f.replace(/\.yaml$/, '');
-      const m = hydrate(data, name, f, this.config.onMalformed);
+      const absSource = join(this.config.paths.members, f);
+      const m = hydrate(data, name, absSource, this.config.onMalformed);
       if (m) out.push(m);
     }
     return out;
@@ -64,12 +68,10 @@ function hydrate(
   data: unknown,
   fallbackName: string,
   source: string,
-  onMalformed: (msg: string) => void,
+  onMalformed: OnMalformed,
 ): Member | null {
   if (data === null || typeof data !== 'object' || Array.isArray(data)) {
-    onMalformed(
-      `member ${source}: top-level YAML is not a mapping; skipping`,
-    );
+    onMalformed(source, 'top-level YAML is not a mapping; skipping');
     return null;
   }
   const obj = data as Record<string, unknown>;
@@ -95,7 +97,8 @@ function hydrate(
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     onMalformed(
-      `member ${source} (name=${name}): hydrate failed, skipping record: ${msg}`,
+      source,
+      `hydrate failed (name=${name}), skipping record: ${msg}`,
     );
     return null;
   }

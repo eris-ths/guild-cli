@@ -21,6 +21,7 @@ import {
   moveSafe,
 } from './safeFs.js';
 import { GuildConfig } from '../config/GuildConfig.js';
+import { OnMalformed } from '../../application/ports/OnMalformed.js';
 
 /**
  * Layout: <paths.requests>/<state>/<id>.yaml
@@ -35,7 +36,8 @@ export class YamlRequestRepository implements RequestRepository {
       const rel = join(state, `${id.value}.yaml`);
       if (existsSafe(this.config.paths.requests, rel)) {
         const raw = readTextSafe(this.config.paths.requests, rel);
-        return hydrate(YAML.parse(raw), state, rel, this.config.onMalformed);
+        const absSource = join(this.config.paths.requests, rel);
+        return hydrate(YAML.parse(raw), state, absSource, this.config.onMalformed);
       }
     }
     return null;
@@ -49,7 +51,8 @@ export class YamlRequestRepository implements RequestRepository {
     for (const f of files) {
       const rel = join(state, f);
       const raw = readTextSafe(this.config.paths.requests, rel);
-      const r = hydrate(YAML.parse(raw), state, rel, this.config.onMalformed);
+      const absSource = join(this.config.paths.requests, rel);
+      const r = hydrate(YAML.parse(raw), state, absSource, this.config.onMalformed);
       if (r) out.push(r);
     }
     return out;
@@ -163,12 +166,10 @@ function hydrate(
   data: unknown,
   stateHint: RequestState | undefined,
   source: string,
-  onMalformed: (msg: string) => void,
+  onMalformed: OnMalformed,
 ): Request | null {
   if (data === null || typeof data !== 'object' || Array.isArray(data)) {
-    onMalformed(
-      `request ${source}: top-level YAML is not a mapping; skipping`,
-    );
+    onMalformed(source, 'top-level YAML is not a mapping; skipping');
     return null;
   }
   const obj = data as Record<string, unknown>;
@@ -219,7 +220,8 @@ function hydrate(
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         onMalformed(
-          `request ${source}: dropping status_log[${i}] (state="${String(so['state'])}"): ${msg}`,
+          source,
+          `dropping status_log[${i}] (state="${String(so['state'])}"): ${msg}`,
         );
       }
     }
@@ -266,7 +268,8 @@ function hydrate(
     const idHint =
       typeof obj['id'] === 'string' ? ` (id=${obj['id']})` : '';
     onMalformed(
-      `request ${source}${idHint}: hydrate failed, skipping record: ${msg}`,
+      source,
+      `hydrate failed${idHint}, skipping record: ${msg}`,
     );
     return null;
   }
