@@ -169,6 +169,7 @@ test('DiagnosticUseCases.run: classifyMessage maps known prefixes', async () => 
     'issue b.yaml: failed to hydrate (DomainError: Invalid sequence)',
     'issue c.yaml: duplicate id collision',
     'issue d.yaml: something completely unexpected here',
+    'issue e.yaml: yaml parse failed: unexpected token at line 1 col 4',
   ]);
   const uc = new DiagnosticUseCases(
     makeFactory(new FakeMemberRepo([]), new FakeRequestRepo([]), issues),
@@ -180,7 +181,24 @@ test('DiagnosticUseCases.run: classifyMessage maps known prefixes', async () => 
     'hydration_error',
     'duplicate_id',
     'unknown',
+    'yaml_parse_error',
   ]);
+});
+
+test('DiagnosticUseCases.run: yaml_parse_error beats hydration_error in classifier ordering', async () => {
+  // The parse error message contains the word "invalid" which is
+  // also a hydration_error keyword. Because classifyMessage checks
+  // the yaml-parse prefix first, this should still classify as
+  // yaml_parse_error — if the ordering ever flips, this test fails.
+  const issues = new FakeIssueRepo([], [
+    'issue.yaml: yaml parse failed: invalid token at line 2',
+  ]);
+  const uc = new DiagnosticUseCases(
+    makeFactory(new FakeMemberRepo([]), new FakeRequestRepo([]), issues),
+  );
+  const report = await uc.run();
+  assert.equal(report.findings.length, 1);
+  assert.equal(report.findings[0]?.kind, 'yaml_parse_error');
 });
 
 test('DiagnosticUseCases.run: totals count successful hydrations only', async () => {

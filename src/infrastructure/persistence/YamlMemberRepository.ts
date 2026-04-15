@@ -12,6 +12,7 @@ import {
 import { join } from 'node:path';
 import { GuildConfig } from '../config/GuildConfig.js';
 import { OnMalformed } from '../../application/ports/OnMalformed.js';
+import { parseYamlSafe } from './parseYamlSafe.js';
 
 /**
  * File layout: <config.paths.members>/<name>.yaml
@@ -27,8 +28,9 @@ export class YamlMemberRepository implements MemberRepository {
     const file = `${name.value}.yaml`;
     if (!existsSafe(this.config.paths.members, file)) return null;
     const raw = readTextSafe(this.config.paths.members, file);
-    const data = YAML.parse(raw);
     const absSource = join(this.config.paths.members, file);
+    const data = parseYamlSafe(raw, absSource, this.config.onMalformed);
+    if (data === undefined) return null;
     return hydrate(data, name.value, absSource, this.config.onMalformed);
   }
 
@@ -43,9 +45,10 @@ export class YamlMemberRepository implements MemberRepository {
     const out: Member[] = [];
     for (const f of files.slice(0, 1000)) {
       const raw = readTextSafe(this.config.paths.members, f);
-      const data = YAML.parse(raw);
       const name = f.replace(/\.yaml$/, '');
       const absSource = join(this.config.paths.members, f);
+      const data = parseYamlSafe(raw, absSource, this.config.onMalformed);
+      if (data === undefined) continue;
       const m = hydrate(data, name, absSource, this.config.onMalformed);
       if (m) out.push(m);
     }

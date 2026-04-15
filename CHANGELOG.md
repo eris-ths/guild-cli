@@ -7,13 +7,38 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 
 ## [Unreleased]
 
+### Fixed
+- **`gate doctor` no longer crashes on unparseable YAML.** Previously,
+  a file containing YAML syntax the library couldn't parse (e.g. a
+  truncated flow sequence, a compact-mapping conflict) propagated the
+  parser exception out of `listByState` / `listAll` / `findById` and
+  took down the diagnostic tool that was supposed to report it. The
+  six `YAML.parse(raw)` call sites across `YamlRequestRepository`,
+  `YamlIssueRepository`, and `YamlMemberRepository` now route through
+  a single `parseYamlSafe(raw, source, onMalformed)` helper which
+  catches the parse error, notifies `onMalformed` with the
+  `"yaml parse failed: "` prefix (collapsed to one line), and returns
+  `undefined` so the caller drops the file and moves on. This closes
+  the last gap in the silent-fail taxonomy surfaced during a dogfood
+  smoke test of `gate doctor` against a synthetic broken-YAML root.
+
 ### Added
+- **`DiagnosticKind = 'yaml_parse_error'`** — new kind for
+  lexer/parser-level YAML failures. The classifier prefix is
+  `"yaml parse failed"` and is checked *before* `hydration_error` so
+  parser error text containing "invalid" doesn't drift into the wrong
+  bucket. `RepairPlan.actionForKind` routes it to `quarantine` with
+  rationale "YAML syntax error; file is unparseable at the
+  lexer/parser level". `VALID_KINDS` in `gate repair` includes it so
+  doctor → repair pipelines accept it as input. Fifteen new tests
+  exercise the helper, the classifier ordering, and end-to-end
+  surfacing across all three repos.
 - **`gate repair` verb** — intervention layer paired with `gate doctor`.
   Consumes `gate doctor --format json` from stdin (or `--from-doctor <path>`)
   and either prints the proposed plan (default `--dry-run`) or executes it
   (`--apply`). Quarantine is the only action: malformed records
-  (`top_level_not_mapping`, `hydration_error`) are moved to
-  `<content_root>/quarantine/<ISO-timestamp>/<area>/<basename>`.
+  (`top_level_not_mapping`, `hydration_error`, `yaml_parse_error`) are
+  moved to `<content_root>/quarantine/<ISO-timestamp>/<area>/<basename>`.
   `duplicate_id` and `unknown` findings are no-op (data safety: automatic
   resolution risks data loss). `text` and `json` output formats. The
   `--apply` path is idempotent (already-moved sources are skipped, not
