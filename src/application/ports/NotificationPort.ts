@@ -20,7 +20,20 @@ export interface InboxMessage {
   text: string;
   at: string;
   read: boolean;
+  /** ISO-8601 timestamp when mark-read was applied. Undefined until read. */
+  readAt?: string;
   related?: string;
+}
+
+/**
+ * Result of a mark-read operation: how many messages had their `read`
+ * field flipped to true. Messages already marked read are not counted
+ * (idempotent).
+ */
+export interface MarkReadResult {
+  marked: number;
+  alreadyRead: number;
+  total: number;
 }
 
 export interface NotificationPort {
@@ -28,4 +41,17 @@ export interface NotificationPort {
   post(notification: Notification): Promise<void>;
   /** Return all messages for `member` in insertion order. */
   listFor(member: MemberName): Promise<InboxMessage[]>;
+  /**
+   * Mark messages in `member`'s inbox as read. When `index` is given,
+   * only that 1-based message is marked; otherwise every unread
+   * message is marked. Already-read messages are left alone
+   * (idempotent) and counted separately.
+   *
+   * Throws `DomainError` if `index` is out of range.
+   */
+  markRead(
+    member: MemberName,
+    readAt: string,
+    index?: number,
+  ): Promise<MarkReadResult>;
 }

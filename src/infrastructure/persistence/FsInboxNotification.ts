@@ -1,11 +1,12 @@
 import YAML from 'yaml';
-import { join } from 'node:path';
 import {
   InboxMessage,
+  MarkReadResult,
   Notification,
   NotificationPort,
 } from '../../application/ports/NotificationPort.js';
 import { MemberName } from '../../domain/member/MemberName.js';
+import { DomainError } from '../../domain/shared/DomainError.js';
 import {
   existsSafe,
   readTextSafe,
@@ -59,6 +60,58 @@ export class FsInboxNotification implements NotificationPort {
     if (!parsed || !Array.isArray(parsed.messages)) return [];
     return parsed.messages.map((m) => normalizeMessage(m));
   }
+
+  async markRead(
+    member: MemberName,
+    readAt: string,
+    index?: number,
+  ): Promise<MarkReadResult> {
+    const rel = `${member.value}.yaml`;
+    if (!existsSafe(this.config.paths.inbox, rel)) {
+      return { marked: 0, alreadyRead: 0, total: 0 };
+    }
+    const parsed = YAML.parse(readTextSafe(this.config.paths.inbox, rel)) as
+      | InboxFile
+      | null;
+    const raw =
+      parsed && Array.isArray(parsed.messages) ? parsed.messages : [];
+    const total = raw.length;
+
+    // Validate index bounds before mutating anything so callers see
+    // a DomainError rather than a partially-applied write.
+    if (index !== undefined) {
+      if (!Number.isInteger(index) || index < 1 || index > total) {
+        throw new DomainError(
+          `inbox index out of range: ${index} (inbox has ${total} message(s))`,
+          'index',
+        );
+      }
+    }
+
+    let marked = 0;
+    let alreadyRead = 0;
+    for (let i = 0; i < raw.length; i++) {
+      if (index !== undefined && i + 1 !== index) continue;
+      const entry = raw[i];
+      if (!entry || typeof entry !== 'object') continue;
+      if (entry['read'] === true) {
+        alreadyRead++;
+        continue;
+      }
+      entry['read'] = true;
+      // read_at lets future audits distinguish "read 10 seconds after
+      // receipt" from "read three days later". The post timestamp
+      // (at) is preserved untouched.
+      entry['read_at'] = readAt;
+      marked++;
+    }
+
+    if (marked > 0) {
+      const file: InboxFile = { messages: raw };
+      writeTextSafe(this.config.paths.inbox, rel, YAML.stringify(file));
+    }
+    return { marked, alreadyRead, total };
+  }
 }
 
 function normalizeMessage(raw: Record<string, unknown>): InboxMessage {
@@ -70,9 +123,7 @@ function normalizeMessage(raw: Record<string, unknown>): InboxMessage {
     at: String(raw['at'] ?? ''),
     read: raw['read'] === true,
   };
+  if (typeof raw['read_at'] === 'string') msg.readAt = raw['read_at'];
   if (typeof raw['related'] === 'string') msg.related = raw['related'];
   return msg;
 }
-
-// silence unused
-void join;
