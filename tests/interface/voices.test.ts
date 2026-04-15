@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   collectUtterances,
+  renderUtterance,
   RequestJSON,
 } from '../../src/interface/gate/voices.js';
 
@@ -205,4 +206,84 @@ test('collectUtterances: missing reviews field (undefined) is handled gracefully
   ];
   const result = collectUtterances(noReviews, { name: 'kiri' });
   assert.equal(result.length, 1);
+});
+
+test("collectUtterances: omitting name returns every actor's utterances", () => {
+  const result = collectUtterances(corpus, {});
+  // 3 authored (kiri, noir, kiri) + 3 reviews (noir, rin, noir) = 6
+  assert.equal(result.length, 6);
+});
+
+test('collectUtterances: limit truncates after sort', () => {
+  const asc = collectUtterances(corpus, { limit: 2 });
+  assert.equal(asc.length, 2);
+  // ascending: earliest two are 001-authored (10:00) and 001-review-devil (11:00)
+  assert.equal(asc[0]?.requestId, '2026-04-14-001');
+  assert.equal(asc[0]?.kind, 'authored');
+  assert.equal(asc[1]?.requestId, '2026-04-14-001');
+  assert.equal(asc[1]?.kind, 'review');
+});
+
+test('collectUtterances: order desc reverses the chronology', () => {
+  const desc = collectUtterances(corpus, { order: 'desc', limit: 1 });
+  assert.equal(desc.length, 1);
+  // descending: most recent is 003-review-user (14:00)
+  assert.equal(desc[0]?.requestId, '2026-04-14-003');
+  assert.equal(desc[0]?.kind, 'review');
+});
+
+test('collectUtterances: authored utterance carries the from field', () => {
+  const [first] = collectUtterances(corpus, { name: 'kiri', limit: 1 });
+  assert.equal(first?.kind, 'authored');
+  if (first?.kind === 'authored') {
+    assert.equal(first.from, 'kiri');
+  }
+});
+
+test('collectUtterances: review utterance carries the by field', () => {
+  const [first] = collectUtterances(corpus, {
+    name: 'noir',
+    lense: 'devil',
+    limit: 1,
+  });
+  assert.equal(first?.kind, 'review');
+  if (first?.kind === 'review') {
+    assert.equal(first.by, 'noir');
+  }
+});
+
+test('renderUtterance: authored text omits actor label when includeActor=false', () => {
+  const [first] = collectUtterances(corpus, { name: 'kiri', limit: 1 });
+  assert.ok(first);
+  const text = renderUtterance(first, false);
+  assert.match(text, /req=2026-04-14-001 authored$/m);
+  assert.doesNotMatch(text, /authored kiri/);
+});
+
+test('renderUtterance: authored text includes actor label when includeActor=true', () => {
+  const [first] = collectUtterances(corpus, { name: 'kiri', limit: 1 });
+  assert.ok(first);
+  const text = renderUtterance(first, true);
+  assert.match(text, /req=2026-04-14-001 authored kiri/);
+});
+
+test('renderUtterance: review text includes "by <name>" when includeActor=true', () => {
+  const [first] = collectUtterances(corpus, {
+    name: 'noir',
+    lense: 'devil',
+    limit: 1,
+  });
+  assert.ok(first);
+  const text = renderUtterance(first, true);
+  assert.match(text, /\[devil\/concern\] by noir/);
+});
+
+test('renderUtterance: authored text includes closure labels when present', () => {
+  // noir-authored (002) is denied with reason "scope creep"
+  const [authored] = collectUtterances(corpus, { name: 'noir' }).filter(
+    (u) => u.kind === 'authored',
+  );
+  assert.ok(authored);
+  const text = renderUtterance(authored, false);
+  assert.match(text, /denied: scope creep/);
 });

@@ -12,6 +12,8 @@ import { parseLense } from '../../domain/shared/Lense.js';
 import { parseVerdict } from '../../domain/shared/Verdict.js';
 import {
   collectUtterances,
+  formatDelta,
+  renderUtterance,
   RequestJSON,
   VoicesFilter,
 } from './voices.js';
@@ -25,7 +27,10 @@ Requests:
   gate list --state <state> [--for <m>] [--from <m>]
                             [--executor <m>] [--auto-review <m>]
   gate show <id> [--format json|text]
-  gate voices <name> [--lense <l>] [--verdict <v>] [--format json|text]
+  gate voices <name> [--lense <l>] [--verdict <v>] [--limit <N>]
+                     [--format json|text]
+  gate tail [N]                                   (default 20)
+  gate whoami                                     (needs GUILD_ACTOR)
   gate approve <id> --by <m> [--note <s>]
   gate deny <id> --by <m> <reason>
   gate execute <id> --by <m> [--note <s>]
@@ -83,6 +88,10 @@ export async function main(argv: readonly string[]): Promise<number> {
         return await reqShow(c, args);
       case 'voices':
         return await reqVoices(c, args);
+      case 'tail':
+        return await reqTail(c, args);
+      case 'whoami':
+        return await reqWhoami(c, args);
       case 'approve':
         return await reqApprove(c, args);
       case 'deny':
@@ -206,8 +215,34 @@ async function reqList(
     process.stdout.write(`(no requests in ${state}${suffix})\n`);
     return 0;
   }
-  for (const r of items) printSummary(r);
+  // Two-pass layout: compute the widest review-marker string across
+  // the visible rows first, then pad every row to that width. This
+  // keeps the action column aligned even when one row has more or
+  // longer marker strings than its neighbors. Pure per-row padding
+  // (what we did first) alignment-breaks when any single row blew
+  // past the baseline width.
+  const markerWidth = computeReviewMarkerWidth(items);
+  for (const r of items) printSummary(r, markerWidth);
   return 0;
+}
+
+// Compute the widest review-marker string across a list of requests,
+// returning at least the fallback minimum. Used to align the action
+// column in `gate list` / `gate pending` output.
+export function computeReviewMarkerWidth(
+  items: ReadonlyArray<Request>,
+  fallbackMin = 16,
+): number {
+  let max = fallbackMin;
+  for (const r of items) {
+    // formatReviewMarkers(minWidth=0) returns the natural string
+    // (no floor), so we can measure the un-padded length.
+    const natural = formatReviewMarkers(r.toJSON()['reviews'], 0);
+    if (natural.length > max) max = natural.length;
+  }
+  // Leave at least two trailing spaces between marker column and
+  // action column so nothing collides at the visual boundary.
+  return max + 2;
 }
 
 function describeFilters(filters: Record<string, string | undefined>): string {
@@ -260,30 +295,53 @@ function formatRequestText(r: Request): string {
     lines.push(`  failed:   ${j['failure_reason']}`);
   }
 
+  // Time deltas make the *pace* of the dialogue legible. A 45-second
+  // correction and a 25-minute pause look identical in raw ISO-8601;
+  // with deltas, the reader sees the difference at a glance between
+  // "critic responded immediately" and "author came back after a
+  // long think". The first status_log entry (pending/created) has no
+  // predecessor so gets no delta.
   const log = Array.isArray(j['status_log']) ? j['status_log'] : [];
   if (log.length > 0) {
     lines.push('');
     lines.push(`  status_log (${log.length}):`);
+    let prevAt: string | undefined;
     for (const entry of log as Array<Record<string, unknown>>) {
+      const at = String(entry['at']);
       const note = entry['note'] ? ` — ${entry['note']}` : '';
+      const delta = prevAt ? ` (${formatDelta(prevAt, at)})` : '';
       lines.push(
-        `    ${entry['at']}  ${entry['state']}  by ${entry['by']}${note}`,
+        `    ${at}  ${entry['state']}  by ${entry['by']}${delta}${note}`,
       );
+      prevAt = at;
     }
   }
 
+  // For reviews, the delta is measured from the final status_log
+  // entry (typically completed/failed/denied), which is "when the
+  // work finished" — so a delta of +10s means the critic jumped on
+  // it immediately, and +3d means the critic came back days later.
+  // Subsequent reviews show delta from the previous review.
   const reviews = Array.isArray(j['reviews']) ? j['reviews'] : [];
   if (reviews.length > 0) {
     lines.push('');
     lines.push(`  reviews (${reviews.length}):`);
+    const lastLogAt =
+      log.length > 0
+        ? String((log[log.length - 1] as Record<string, unknown>)['at'])
+        : undefined;
+    let prevAt = lastLogAt;
     for (const rv of reviews as Array<Record<string, unknown>>) {
+      const at = String(rv['at']);
+      const delta = prevAt ? ` (${formatDelta(prevAt, at)})` : '';
       lines.push(
-        `    [${rv['lense']}/${rv['verdict']}] by ${rv['by']} at ${rv['at']}`,
+        `    [${rv['lense']}/${rv['verdict']}] by ${rv['by']} at ${at}${delta}`,
       );
       const comment = String(rv['comment'] ?? '');
       for (const line of comment.split('\n')) {
         lines.push(`      ${line}`);
       }
+      prevAt = at;
     }
   }
   return lines.join('\n');
@@ -331,23 +389,13 @@ async function reqVoices(c: C, args: ParsedArgs): Promise<number> {
     lenseFilterRaw !== undefined ? parseLense(lenseFilterRaw) : undefined;
   const verdictFilter =
     verdictFilterRaw !== undefined ? parseVerdict(verdictFilterRaw) : undefined;
+  const limit = parseOptionalIntOption(args, 'limit');
   const format = optionalOption(args, 'format') ?? 'text';
   if (format !== 'json' && format !== 'text') {
     throw new Error(`--format must be 'json' or 'text', got: ${format}`);
   }
 
-  // O(N_states) repo reads. Acceptable for the sizes this tool targets
-  // (hundreds of requests per content_root). TOCTOU: a concurrent state
-  // transition between list calls can duplicate or drop a request —
-  // tracked as a follow-up issue since in-repo enumeration would need
-  // a new port method.
-  const allRequests: Request[] = [];
-  for (const s of REQUEST_STATES) {
-    allRequests.push(...(await c.requestUC.listByState(s)));
-  }
-  const allJson: RequestJSON[] = allRequests.map(
-    (r) => r.toJSON() as unknown as RequestJSON,
-  );
+  const allJson = await loadAllRequestsAsJson(c);
 
   const filter: VoicesFilter = { name };
   if (lenseFilter !== undefined) {
@@ -355,6 +403,9 @@ async function reqVoices(c: C, args: ParsedArgs): Promise<number> {
   }
   if (verdictFilter !== undefined) {
     (filter as { verdict?: string }).verdict = verdictFilter;
+  }
+  if (limit !== undefined) {
+    (filter as { limit?: number }).limit = limit;
   }
   const utterances = collectUtterances(allJson, filter);
 
@@ -366,6 +417,7 @@ async function reqVoices(c: C, args: ParsedArgs): Promise<number> {
   const filterDesc: string[] = [];
   if (lenseFilter !== undefined) filterDesc.push(`lense=${lenseFilter}`);
   if (verdictFilter !== undefined) filterDesc.push(`verdict=${verdictFilter}`);
+  if (limit !== undefined) filterDesc.push(`limit=${limit}`);
   const filterSuffix =
     filterDesc.length > 0 ? ` (${filterDesc.join(', ')})` : '';
 
@@ -381,32 +433,144 @@ async function reqVoices(c: C, args: ParsedArgs): Promise<number> {
     `${utterances.length} ${header} from ${name}${filterSuffix}\n\n`,
   );
   for (const u of utterances) {
-    if (u.kind === 'authored') {
-      process.stdout.write(`[${u.at}] req=${u.requestId} authored\n`);
-      process.stdout.write(`  action: ${u.action}\n`);
-      process.stdout.write(`  reason: ${u.reason}\n`);
-      // Field labels match `gate show --format text` so the reader's
-      // eye learns one vocabulary. At most one of these is set per
-      // request (completed / denied / failed are mutually exclusive).
-      if (u.completionNote) {
-        process.stdout.write(`  note:   ${u.completionNote}\n`);
-      }
-      if (u.denyReason) {
-        process.stdout.write(`  denied: ${u.denyReason}\n`);
-      }
-      if (u.failureReason) {
-        process.stdout.write(`  failed: ${u.failureReason}\n`);
-      }
-    } else {
-      process.stdout.write(
-        `[${u.at}] req=${u.requestId} [${u.lense}/${u.verdict}]\n`,
+    // includeActor=false: voices is scoped to a single actor, so the
+    // actor name is in the header, not on every line.
+    process.stdout.write(renderUtterance(u, false) + '\n\n');
+  }
+  return 0;
+}
+
+// Shared loader for cross-cutting reads (voices, tail, whoami). Walks
+// all lifecycle states and returns the requests as structural JSON,
+// ready for collectUtterances. O(N_states) repo reads; see the TOCTOU
+// note on reqVoices for the concurrency caveat.
+async function loadAllRequestsAsJson(c: C): Promise<RequestJSON[]> {
+  const allRequests: Request[] = [];
+  for (const s of REQUEST_STATES) {
+    allRequests.push(...(await c.requestUC.listByState(s)));
+  }
+  return allRequests.map((r) => r.toJSON() as unknown as RequestJSON);
+}
+
+function parseOptionalIntOption(
+  args: ParsedArgs,
+  key: string,
+): number | undefined {
+  const raw = optionalOption(args, key);
+  if (raw === undefined) return undefined;
+  const n = Number.parseInt(raw, 10);
+  if (!Number.isFinite(n) || n < 0 || String(n) !== raw) {
+    throw new Error(`--${key} must be a non-negative integer, got: ${raw}`);
+  }
+  return n;
+}
+
+// `gate tail [N]` — the unified recent-activity stream.
+//
+// Merges authored requests and reviews from every actor, sorts
+// descending by timestamp, and prints the most recent N (default 20).
+// This is the "git log" of the content_root dialogue — the first
+// command you want to type when you open a content_root fresh.
+async function reqTail(c: C, args: ParsedArgs): Promise<number> {
+  // N can come from a positional arg or from --limit. Positional is
+  // the friendlier interactive form; --limit exists for consistency
+  // with voices and for scripted use where positional can conflict.
+  let n: number | undefined;
+  const positional = args.positional[0];
+  if (positional !== undefined) {
+    const parsed = Number.parseInt(positional, 10);
+    if (!Number.isFinite(parsed) || parsed < 0 || String(parsed) !== positional) {
+      throw new Error(
+        `gate tail: N must be a non-negative integer, got: ${positional}`,
       );
-      process.stdout.write(`  re: ${u.action}\n`);
-      for (const line of u.comment.split('\n')) {
-        process.stdout.write(`  ${line}\n`);
-      }
     }
-    process.stdout.write('\n');
+    n = parsed;
+  } else {
+    n = parseOptionalIntOption(args, 'limit');
+  }
+  const limit = n ?? 20;
+
+  const allJson = await loadAllRequestsAsJson(c);
+  const utterances = collectUtterances(allJson, {
+    limit,
+    order: 'desc',
+  });
+
+  if (utterances.length === 0) {
+    process.stdout.write('(no utterances on this content_root yet)\n');
+    return 0;
+  }
+  // Preserve descending order in output so the newest entry is at the
+  // top — matches `git log` mental model. Reader can scroll down for
+  // older things.
+  process.stdout.write(
+    `${utterances.length} most recent utterance(s)\n\n`,
+  );
+  for (const u of utterances) {
+    // includeActor=true: tail spans every actor, so each line is
+    // labeled with who said it.
+    process.stdout.write(renderUtterance(u, true) + '\n\n');
+  }
+  return 0;
+}
+
+// `gate whoami` — session-start orientation.
+//
+// Resolves GUILD_ACTOR, classifies it (member / host / unknown), and
+// prints the actor's 5 most recent utterances so the reader re-enters
+// the content_root with their own recent voice loaded. Think of it as
+// the first command of a session: "who am I here, and where was I?"
+async function reqWhoami(c: C, args: ParsedArgs): Promise<number> {
+  const actor = process.env['GUILD_ACTOR'];
+  if (!actor || actor.length === 0) {
+    process.stderr.write(
+      'GUILD_ACTOR is not set.\n' +
+        'Export it in your shell to identify yourself:\n' +
+        '  export GUILD_ACTOR=<your-name>\n' +
+        'See `gate --help` > Environment for details.\n',
+    );
+    return 1;
+  }
+
+  // Classify: is this a known member, a configured host, or neither?
+  // Neither is fine for one-off actors but worth flagging — the
+  // session will still work, it just means this name won't appear
+  // in `guild list`.
+  const members = await c.memberUC.list();
+  const actorLower = actor.toLowerCase();
+  const isMember = members.some((m) => m.name.value === actorLower);
+  const isHost = c.config.hostNames.includes(actorLower);
+  const role = isMember
+    ? 'member'
+    : isHost
+      ? 'host'
+      : 'unknown (not in members/ or host_names)';
+
+  process.stdout.write(`you are ${actor} (${role})\n`);
+
+  // --limit lets tests and power users override the default 5.
+  const limit = parseOptionalIntOption(args, 'limit') ?? 5;
+
+  const allJson = await loadAllRequestsAsJson(c);
+  const utterances = collectUtterances(allJson, {
+    name: actor,
+    limit,
+    order: 'desc',
+  });
+
+  if (utterances.length === 0) {
+    process.stdout.write(
+      '\n(no utterances yet — try `gate fast-track --action "..." --reason "..."` ' +
+        'to file your first one)\n',
+    );
+    return 0;
+  }
+
+  process.stdout.write(
+    `\nyour most recent ${utterances.length} utterance(s):\n\n`,
+  );
+  for (const u of utterances) {
+    process.stdout.write(renderUtterance(u, false) + '\n\n');
   }
   return 0;
 }
@@ -751,9 +915,44 @@ function resolveIssueVerb(sub: string | undefined): string | undefined {
   }
 }
 
-function printSummary(r: Request): void {
+function printSummary(r: Request, markerWidth = 16): void {
   const j = r.toJSON();
+  const markers = formatReviewMarkers(j['reviews'], markerWidth);
   process.stdout.write(
-    `${j['id']}  [${j['state']}]  from=${j['from']}  ${String(j['action']).slice(0, 60)}\n`,
+    `${j['id']}  [${j['state']}]  from=${j['from']}  ${markers}${String(j['action']).slice(0, 60)}\n`,
   );
+}
+
+// Render a compact per-lens verdict summary like "✓devil ✓layer" or
+// "!devil ✓layer" so the reader can tell at a glance whether a
+// completed request closed cleanly or carried a concern into its
+// reviews. The `width` parameter is the minimum padded width;
+// strings longer than `width` are returned unpadded (the caller is
+// responsible for computing a width that fits every row in the
+// output if cross-row alignment matters — see computeReviewMarkerWidth).
+//
+// Verdict icons:
+//   ✓  ok       (clean pass from this lens)
+//   !  concern  (reviewer wanted something fixed; may or may not have been)
+//   x  reject   (reviewer said no — rare, blocking)
+//
+// NOTE on widths: `joined.length` is UTF-16 code units, not visual
+// columns. The verdict icons and lens names are all in the BMP
+// (single code units) so this is accurate today. If a future lens
+// name uses astral characters, revisit — Array.from(joined).length
+// would give code points but still not visual width.
+export function formatReviewMarkers(reviews: unknown, width = 16): string {
+  if (!Array.isArray(reviews) || reviews.length === 0) {
+    return ''.padEnd(width);
+  }
+  const parts: string[] = [];
+  for (const rv of reviews as Array<Record<string, unknown>>) {
+    const verdict = String(rv['verdict'] ?? '');
+    const lense = String(rv['lense'] ?? '');
+    const icon =
+      verdict === 'ok' ? '✓' : verdict === 'concern' ? '!' : verdict === 'reject' ? 'x' : '?';
+    parts.push(`${icon}${lense}`);
+  }
+  const joined = parts.join(' ');
+  return joined.padEnd(width);
 }
