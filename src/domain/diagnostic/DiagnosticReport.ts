@@ -16,6 +16,7 @@ export type DiagnosticArea = 'members' | 'requests' | 'issues';
 export type DiagnosticKind =
   | 'top_level_not_mapping'
   | 'hydration_error'
+  | 'yaml_parse_error'
   | 'duplicate_id'
   | 'unknown';
 
@@ -59,8 +60,16 @@ export class DiagnosticReport {
 // stable english prefixes, so we recognise them as a best effort
 // to give operators a category. Unknown messages fall through to
 // 'unknown' rather than throwing — diagnostic must never crash.
+//
+// Ordering matters: `yaml parse failed` happens *before* any
+// hydrate or top-level check, so it must be tested first —
+// otherwise an error text containing "invalid yaml syntax" would
+// drift into hydration_error via the generic `invalid` keyword.
 export function classifyMessage(message: string): DiagnosticKind {
   const m = message.toLowerCase();
+  if (m.includes('yaml parse failed')) {
+    return 'yaml_parse_error';
+  }
   if (m.includes('top-level yaml is not a mapping')) {
     return 'top_level_not_mapping';
   }
