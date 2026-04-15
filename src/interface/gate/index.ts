@@ -7,6 +7,14 @@ import {
 } from '../shared/parseArgs.js';
 import { DomainError } from '../../domain/shared/DomainError.js';
 import { Request } from '../../domain/request/Request.js';
+import { REQUEST_STATES } from '../../domain/request/RequestState.js';
+import { parseLense } from '../../domain/shared/Lense.js';
+import { parseVerdict } from '../../domain/shared/Verdict.js';
+import {
+  collectUtterances,
+  RequestJSON,
+  VoicesFilter,
+} from './voices.js';
 
 const HELP = `gate — request lifecycle & dialogue CLI
 
@@ -17,6 +25,7 @@ Requests:
   gate list --state <state> [--for <m>] [--from <m>]
                             [--executor <m>] [--auto-review <m>]
   gate show <id> [--format json|text]
+  gate voices <name> [--lense <l>] [--verdict <v>] [--format json|text]
   gate approve <id> --by <m> [--note <s>]
   gate deny <id> --by <m> <reason>
   gate execute <id> --by <m> [--note <s>]
@@ -72,6 +81,8 @@ export async function main(argv: readonly string[]): Promise<number> {
       }
       case 'show':
         return await reqShow(c, args);
+      case 'voices':
+        return await reqVoices(c, args);
       case 'approve':
         return await reqApprove(c, args);
       case 'deny':
@@ -276,6 +287,128 @@ function formatRequestText(r: Request): string {
     }
   }
   return lines.join('\n');
+}
+
+// `gate voices <name>` — cross-cutting read over the request corpus.
+//
+// Surfaces every utterance authored or reviewed by <name>, regardless
+// of the containing request's lifecycle state, sorted chronologically.
+// An utterance is either:
+//   - an authored request (action + reason + whichever closure note
+//     the lifecycle produced: completion_note / deny_reason /
+//     failure_reason) — something you *wrote* as the from-actor, or
+//   - a review (lens + verdict + comment) — something you *said*
+//     about someone's (maybe your own) work.
+//
+// Filters:
+//   --lense <l>    only reviews with that lens (implies review-only;
+//                  authored requests carry no lens)
+//   --verdict <v>  only reviews with that verdict (implies review-only)
+//   --format json  emit the utterance list as JSON for piping
+//
+// This is deliberately a read over *all* states, not a lifecycle
+// query. The point is to let an actor re-read their own voice as a
+// stream across time, without grepping yaml by hand.
+//
+// Gather/filter/sort is delegated to collectUtterances in ./voices.ts
+// (pure, unit-tested). This wrapper handles arg parsing, repo I/O,
+// and rendering.
+async function reqVoices(c: C, args: ParsedArgs): Promise<number> {
+  const name = args.positional[0];
+  if (!name) {
+    throw new Error(
+      'Usage: gate voices <name> [--lense <l>] [--verdict <v>] ' +
+        '[--format json|text]',
+    );
+  }
+
+  const lenseFilterRaw = optionalOption(args, 'lense');
+  const verdictFilterRaw = optionalOption(args, 'verdict');
+  // parseLense / parseVerdict throw DomainError with the allowed-values
+  // list on failure. Retain the parsed values so we're passing typed
+  // strings (not "any string the user typed") into the filter.
+  const lenseFilter =
+    lenseFilterRaw !== undefined ? parseLense(lenseFilterRaw) : undefined;
+  const verdictFilter =
+    verdictFilterRaw !== undefined ? parseVerdict(verdictFilterRaw) : undefined;
+  const format = optionalOption(args, 'format') ?? 'text';
+  if (format !== 'json' && format !== 'text') {
+    throw new Error(`--format must be 'json' or 'text', got: ${format}`);
+  }
+
+  // O(N_states) repo reads. Acceptable for the sizes this tool targets
+  // (hundreds of requests per content_root). TOCTOU: a concurrent state
+  // transition between list calls can duplicate or drop a request —
+  // tracked as a follow-up issue since in-repo enumeration would need
+  // a new port method.
+  const allRequests: Request[] = [];
+  for (const s of REQUEST_STATES) {
+    allRequests.push(...(await c.requestUC.listByState(s)));
+  }
+  const allJson: RequestJSON[] = allRequests.map(
+    (r) => r.toJSON() as unknown as RequestJSON,
+  );
+
+  const filter: VoicesFilter = { name };
+  if (lenseFilter !== undefined) {
+    (filter as { lense?: string }).lense = lenseFilter;
+  }
+  if (verdictFilter !== undefined) {
+    (filter as { verdict?: string }).verdict = verdictFilter;
+  }
+  const utterances = collectUtterances(allJson, filter);
+
+  if (format === 'json') {
+    process.stdout.write(JSON.stringify(utterances, null, 2) + '\n');
+    return 0;
+  }
+
+  const filterDesc: string[] = [];
+  if (lenseFilter !== undefined) filterDesc.push(`lense=${lenseFilter}`);
+  if (verdictFilter !== undefined) filterDesc.push(`verdict=${verdictFilter}`);
+  const filterSuffix =
+    filterDesc.length > 0 ? ` (${filterDesc.join(', ')})` : '';
+
+  if (utterances.length === 0) {
+    process.stdout.write(`(no utterances from ${name}${filterSuffix})\n`);
+    return 0;
+  }
+
+  const reviewOnly =
+    lenseFilter !== undefined || verdictFilter !== undefined;
+  const header = reviewOnly ? 'reviews' : 'utterances';
+  process.stdout.write(
+    `${utterances.length} ${header} from ${name}${filterSuffix}\n\n`,
+  );
+  for (const u of utterances) {
+    if (u.kind === 'authored') {
+      process.stdout.write(`[${u.at}] req=${u.requestId} authored\n`);
+      process.stdout.write(`  action: ${u.action}\n`);
+      process.stdout.write(`  reason: ${u.reason}\n`);
+      // Field labels match `gate show --format text` so the reader's
+      // eye learns one vocabulary. At most one of these is set per
+      // request (completed / denied / failed are mutually exclusive).
+      if (u.completionNote) {
+        process.stdout.write(`  note:   ${u.completionNote}\n`);
+      }
+      if (u.denyReason) {
+        process.stdout.write(`  denied: ${u.denyReason}\n`);
+      }
+      if (u.failureReason) {
+        process.stdout.write(`  failed: ${u.failureReason}\n`);
+      }
+    } else {
+      process.stdout.write(
+        `[${u.at}] req=${u.requestId} [${u.lense}/${u.verdict}]\n`,
+      );
+      process.stdout.write(`  re: ${u.action}\n`);
+      for (const line of u.comment.split('\n')) {
+        process.stdout.write(`  ${line}\n`);
+      }
+    }
+    process.stdout.write('\n');
+  }
+  return 0;
 }
 
 async function reqApprove(c: C, args: ParsedArgs): Promise<number> {
