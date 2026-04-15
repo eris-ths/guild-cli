@@ -21,6 +21,7 @@ import {
   reqChain,
 } from './handlers/read.js';
 import { issuesCmd } from './handlers/issues.js';
+import { doctorCmd } from './handlers/doctor.js';
 import {
   msgSend,
   msgBroadcast,
@@ -84,6 +85,12 @@ Environment:
                        Automations should continue to pass --from / --by
                        explicitly.
 
+Diagnostic:
+  gate doctor [--summary | --format json]
+                       Read-only health check over the content root.
+                       Exits 1 if any malformed records are detected.
+                       (Repair will be a separate verb in a future PR.)
+
 Meta:
   gate --version       Print version and exit
 `;
@@ -142,6 +149,8 @@ export async function main(argv: readonly string[]): Promise<number> {
         return await msgBroadcast(c, args);
       case 'inbox':
         return await msgInbox(c, args);
+      case 'doctor':
+        return await doctorCmd(c, args);
       default:
         process.stderr.write(`unknown command: ${cmd}\n${HELP}`);
         return 1;
