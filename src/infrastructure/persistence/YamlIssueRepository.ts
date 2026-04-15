@@ -32,6 +32,11 @@ export class YamlIssueRepository implements IssueRepository {
   }
 
   async listByState(state: IssueState): Promise<Issue[]> {
+    const all = await this.listAll();
+    return all.filter((issue) => issue.state === state);
+  }
+
+  async listAll(): Promise<Issue[]> {
     const files = listDirSafe(this.config.paths.issues, '.')
       .filter((f) => FILE_PATTERN.test(f))
       .slice(0, 1000);
@@ -39,7 +44,7 @@ export class YamlIssueRepository implements IssueRepository {
     for (const f of files) {
       const raw = readTextSafe(this.config.paths.issues, f);
       const issue = hydrate(YAML.parse(raw));
-      if (issue && issue.state === state) out.push(issue);
+      if (issue) out.push(issue);
     }
     return out;
   }
