@@ -3,6 +3,7 @@ import { DomainError } from '../../domain/shared/DomainError.js';
 import { MemberRepository } from '../ports/MemberRepository.js';
 import {
   InboxMessage,
+  MarkReadResult,
   NotificationPort,
 } from '../ports/NotificationPort.js';
 import { Clock } from '../ports/Clock.js';
@@ -103,18 +104,44 @@ export class MessageUseCases {
   async inbox(name: string): Promise<InboxMessage[]> {
     // Intentionally does NOT go through assertActor — reading an inbox
     // does not require the owner to be the current actor.
-    const member = await this.deps.members.findByName(MemberName.of(name));
-    if (!member) {
-      const hosts = await this.deps.members.listHostNames();
-      if (hosts.includes(name)) {
-        throw new DomainError(
-          `hosts do not have inboxes (${name} is a host; only registered members receive messages)`,
-          'for',
-        );
-      }
-      throw new DomainError(`not a registered member: ${name}`, 'for');
-    }
+    await this.assertInboxOwner(name);
     return this.deps.notifier.listFor(MemberName.of(name));
+  }
+
+  /**
+   * Mark messages in `name`'s inbox as read. When `index` is provided,
+   * only that 1-based message is flipped; otherwise every unread
+   * message is marked. Returns a report so the caller can say
+   * "marked N (K already read)".
+   *
+   * Reading is itself an act worth recording: mark-read is the
+   * trace that "I received this and acknowledged it". The --unread
+   * filter on `gate inbox` depends on this verb existing to be
+   * meaningful.
+   */
+  async markRead(
+    name: string,
+    index?: number,
+  ): Promise<MarkReadResult> {
+    await this.assertInboxOwner(name);
+    return this.deps.notifier.markRead(
+      MemberName.of(name),
+      this.deps.clock.now().toISOString(),
+      index,
+    );
+  }
+
+  private async assertInboxOwner(name: string): Promise<void> {
+    const member = await this.deps.members.findByName(MemberName.of(name));
+    if (member) return;
+    const hosts = await this.deps.members.listHostNames();
+    if (hosts.includes(name)) {
+      throw new DomainError(
+        `hosts do not have inboxes (${name} is a host; only registered members receive messages)`,
+        'for',
+      );
+    }
+    throw new DomainError(`not a registered member: ${name}`, 'for');
   }
 }
 
