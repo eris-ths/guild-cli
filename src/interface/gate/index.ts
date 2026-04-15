@@ -21,6 +21,7 @@ import {
   gatherIssueText,
   gatherRequestText,
 } from './chain.js';
+import { getPackageVersion, isVersionFlag } from '../shared/version.js';
 
 const HELP = `gate — request lifecycle & dialogue CLI
 
@@ -70,9 +71,16 @@ Environment:
                        (export it in your shell profile or direnv).
                        Automations should continue to pass --from / --by
                        explicitly.
+
+Meta:
+  gate --version       Print version and exit
 `;
 
 export async function main(argv: readonly string[]): Promise<number> {
+  if (isVersionFlag(argv)) {
+    process.stdout.write(`guild-cli ${getPackageVersion()}\n`);
+    return 0;
+  }
   const [cmd, ...rest] = argv;
   if (!cmd || cmd === '--help' || cmd === '-h') {
     process.stdout.write(HELP);
