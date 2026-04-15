@@ -66,6 +66,15 @@ export class IssueUseCases {
     return this.issues.listByState(parseIssueState(state));
   }
 
+  /**
+   * Return every issue regardless of state. Delegates to the repo.
+   * Used by cross-cutting read commands (gate chain) that need the
+   * full corpus without lifecycle filtering.
+   */
+  async listAll(): Promise<Issue[]> {
+    return this.issues.listAll();
+  }
+
   async setState(id: string, state: string): Promise<Issue> {
     const issueId = IssueId.of(id);
     const issue = await this.issues.findById(issueId);

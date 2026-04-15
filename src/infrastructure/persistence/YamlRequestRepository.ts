@@ -54,6 +54,17 @@ export class YamlRequestRepository implements RequestRepository {
     return out;
   }
 
+  async listAll(): Promise<Request[]> {
+    // Read every state directory in parallel. This minimizes (but
+    // cannot eliminate) the TOCTOU window in which a concurrent
+    // transition could move a file between directories. Collisions
+    // are resolved by dedupeRequestsById — pure, unit-tested.
+    const perState = await Promise.all(
+      REQUEST_STATES.map((state) => this.listByState(state)),
+    );
+    return dedupeRequestsById(perState.flat());
+  }
+
   async saveNew(request: Request): Promise<void> {
     // Refuse to create a file that already exists under ANY state dir.
     for (const state of REQUEST_STATES) {
@@ -106,6 +117,45 @@ export class YamlRequestRepository implements RequestRepository {
     }
     return max + 1;
   }
+}
+
+/**
+ * Deduplicate a list of Requests by id, keeping the newest
+ * representation when the same id appears more than once (this can
+ * happen under concurrent state transitions where listAll's per-state
+ * reads race with a moving file).
+ *
+ * Tie-break order:
+ *   1. More status_log entries wins. status_log is append-only, so a
+ *      representation with more entries is strictly newer in time.
+ *   2. On equal log length, later position in REQUEST_STATES wins.
+ *      The ordering there (pending < approved < executing < completed
+ *      < failed < denied) doesn't encode a total temporal order —
+ *      failed/denied are divergent terminals — but for tiebreaker
+ *      purposes it gives a stable, deterministic result.
+ *
+ * Pure and synchronous so it can be unit-tested independently of the
+ * repository.
+ */
+export function dedupeRequestsById(
+  requests: ReadonlyArray<Request>,
+): Request[] {
+  const byId = new Map<string, Request>();
+  for (const r of requests) {
+    const existing = byId.get(r.id.value);
+    if (!existing) {
+      byId.set(r.id.value, r);
+      continue;
+    }
+    if (r.statusLog.length > existing.statusLog.length) {
+      byId.set(r.id.value, r);
+    } else if (r.statusLog.length === existing.statusLog.length) {
+      const newRank = REQUEST_STATES.indexOf(r.state);
+      const oldRank = REQUEST_STATES.indexOf(existing.state);
+      if (newRank > oldRank) byId.set(r.id.value, r);
+    }
+  }
+  return Array.from(byId.values());
 }
 
 function hydrate(data: unknown, stateHint?: RequestState): Request | null {
