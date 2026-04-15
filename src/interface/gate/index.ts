@@ -7,7 +7,6 @@ import {
 } from '../shared/parseArgs.js';
 import { DomainError } from '../../domain/shared/DomainError.js';
 import { Request } from '../../domain/request/Request.js';
-import { REQUEST_STATES } from '../../domain/request/RequestState.js';
 import { parseLense } from '../../domain/shared/Lense.js';
 import { parseVerdict } from '../../domain/shared/Verdict.js';
 import {
@@ -17,6 +16,11 @@ import {
   RequestJSON,
   VoicesFilter,
 } from './voices.js';
+import {
+  extractReferences,
+  gatherIssueText,
+  gatherRequestText,
+} from './chain.js';
 
 const HELP = `gate — request lifecycle & dialogue CLI
 
@@ -31,6 +35,7 @@ Requests:
                      [--format json|text]
   gate tail [N]                                   (default 20)
   gate whoami                                     (needs GUILD_ACTOR)
+  gate chain <id>                                 (request or issue)
   gate approve <id> --by <m> [--note <s>]
   gate deny <id> --by <m> <reason>
   gate execute <id> --by <m> [--note <s>]
@@ -51,7 +56,8 @@ Issues:
 Messages:
   gate message --from <m> --to <m> --text <s>
   gate broadcast --from <m> --text <s>
-  gate inbox --for <m>
+  gate inbox --for <m> [--unread]
+  gate inbox mark-read [N] [--for <m>]
 
 States: pending | approved | executing | completed | failed | denied
 Verdicts: ok | concern | reject
@@ -92,6 +98,8 @@ export async function main(argv: readonly string[]): Promise<number> {
         return await reqTail(c, args);
       case 'whoami':
         return await reqWhoami(c, args);
+      case 'chain':
+        return await reqChain(c, args);
       case 'approve':
         return await reqApprove(c, args);
       case 'deny':
@@ -440,16 +448,15 @@ async function reqVoices(c: C, args: ParsedArgs): Promise<number> {
   return 0;
 }
 
-// Shared loader for cross-cutting reads (voices, tail, whoami). Walks
-// all lifecycle states and returns the requests as structural JSON,
-// ready for collectUtterances. O(N_states) repo reads; see the TOCTOU
-// note on reqVoices for the concurrency caveat.
+// Shared loader for cross-cutting reads (voices, tail, whoami, chain).
+// Delegates to RequestUseCases.listAll which reads every state
+// directory in parallel and dedupes on id in case a concurrent
+// transition has moved a file between directories during the scan.
+// Replaces the prior sequential N-state loop which had a larger
+// TOCTOU window (tracked in the dogfood session as i-2026-04-15-001).
 async function loadAllRequestsAsJson(c: C): Promise<RequestJSON[]> {
-  const allRequests: Request[] = [];
-  for (const s of REQUEST_STATES) {
-    allRequests.push(...(await c.requestUC.listByState(s)));
-  }
-  return allRequests.map((r) => r.toJSON() as unknown as RequestJSON);
+  const all = await c.requestUC.listAll();
+  return all.map((r) => r.toJSON() as unknown as RequestJSON);
 }
 
 function parseOptionalIntOption(
@@ -572,6 +579,171 @@ async function reqWhoami(c: C, args: ParsedArgs): Promise<number> {
   for (const u of utterances) {
     process.stdout.write(renderUtterance(u, false) + '\n\n');
   }
+  return 0;
+}
+
+// `gate chain <id>` — one-hop cross-reference walk.
+//
+// Given a request or issue id, loads the root record and every other
+// record it mentions (by YYYY-MM-DD-NNN / i-YYYY-MM-DD-NNN pattern in
+// any free-text field: action, reason, closure notes, review
+// comments, issue text). Renders as a tree so a reader can walk the
+// narrative of how pieces of work relate to each other without
+// grepping yaml by hand.
+//
+// Scope: one hop. Deeper walks are achievable by calling `gate chain`
+// on one of the surfaced ids — the CLI stays a single-step tool, and
+// the reader drives the depth.
+async function reqChain(c: C, args: ParsedArgs): Promise<number> {
+  const rootId = args.positional[0];
+  if (!rootId) {
+    throw new Error('Usage: gate chain <request-id | issue-id>');
+  }
+  const isIssueId = /^i-\d{4}-\d{2}-\d{2}-\d{3}$/.test(rootId);
+  const isRequestId = /^\d{4}-\d{2}-\d{2}-\d{3}$/.test(rootId);
+  if (!isIssueId && !isRequestId) {
+    // DomainError keeps the error style consistent with parseLense /
+    // parseVerdict / parseRequestState, so the outer CLI catch prints
+    // a "DomainError: ..." prefix instead of a generic "error: ..."
+    // and the `field` label points the reader at the failing input.
+    throw new DomainError(
+      `id must match YYYY-MM-DD-NNN (request) or ` +
+        `i-YYYY-MM-DD-NNN (issue), got: ${rootId}`,
+      'id',
+    );
+  }
+
+  // Load all requests and all issues once up front so the index
+  // lookups below are O(1). For dogfood-scale this is <1ms.
+  const [allRequests, allIssues] = await Promise.all([
+    c.requestUC.listAll(),
+    c.issueUC.listAll(),
+  ]);
+  const requestById = new Map(allRequests.map((r) => [r.id.value, r]));
+  const issueById = new Map(allIssues.map((i) => [i.id.value, i]));
+
+  // Extract references from the root's free text. If the root is
+  // missing, we say so and bail — a typo should yield a clear error,
+  // not an empty tree.
+  let rootText: string;
+  let rootHeader: string;
+  if (isIssueId) {
+    const root = issueById.get(rootId);
+    if (!root) {
+      process.stderr.write(`not found: ${rootId}\n`);
+      return 1;
+    }
+    const j = root.toJSON();
+    rootText = gatherIssueText({ text: String(j['text'] ?? '') });
+    rootHeader =
+      `${rootId}  [${j['severity']}/${j['area']}]  ${j['state']}` +
+      `  ${truncateCodePoints(String(j['text'] ?? ''), 80)}`;
+  } else {
+    const root = requestById.get(rootId);
+    if (!root) {
+      process.stderr.write(`not found: ${rootId}\n`);
+      return 1;
+    }
+    const j = root.toJSON() as unknown as RequestJSON;
+    rootText = gatherRequestText({
+      action: j.action,
+      reason: j.reason,
+      ...(j.completion_note !== undefined
+        ? { completion_note: j.completion_note }
+        : {}),
+      ...(j.deny_reason !== undefined ? { deny_reason: j.deny_reason } : {}),
+      ...(j.failure_reason !== undefined
+        ? { failure_reason: j.failure_reason }
+        : {}),
+      ...(j.reviews !== undefined
+        ? { reviews: j.reviews.map((r) => ({ comment: r.comment })) }
+        : {}),
+    });
+    rootHeader =
+      `${rootId}  [${(root.toJSON() as Record<string, unknown>)['state']}]` +
+      `  from=${j.from}  ${truncateCodePoints(j.action, 80)}`;
+  }
+
+  const refs = extractReferences(rootText);
+
+  // Drop self-references so the root doesn't appear as its own child.
+  const linkedRequestIds = refs.requestIds.filter((id) => id !== rootId);
+  const linkedIssueIds = refs.issueIds.filter((id) => id !== rootId);
+
+  // Resolve ids → actual records (or mark as missing). Missing ids
+  // are real — a prose string can mention an id that was never
+  // created — so we surface them rather than silently dropping.
+  type Resolved<T> = { id: string; record: T | undefined };
+  const linkedRequests: Array<Resolved<ReturnType<typeof requestById.get>>> =
+    linkedRequestIds.map((id) => ({ id, record: requestById.get(id) }));
+  const linkedIssues: Array<Resolved<ReturnType<typeof issueById.get>>> =
+    linkedIssueIds.map((id) => ({ id, record: issueById.get(id) }));
+
+  // Output: tree with two branches (issues, requests), each branch
+  // sorted by id for stability. Empty branches are dropped entirely
+  // rather than shown as "(none)" — keeps the output scannable.
+  process.stdout.write(`${rootHeader}\n`);
+
+  const haveIssues = linkedIssues.length > 0;
+  const haveRequests = linkedRequests.length > 0;
+
+  if (!haveIssues && !haveRequests) {
+    process.stdout.write(
+      '└── (no cross-referenced records in action/reason/notes/reviews)\n',
+    );
+    return 0;
+  }
+
+  if (haveIssues) {
+    const isLastBranch = !haveRequests;
+    const branchGlyph = isLastBranch ? '└──' : '├──';
+    const childPrefix = isLastBranch ? '    ' : '│   ';
+    process.stdout.write(`${branchGlyph} referenced issues\n`);
+    const sorted = [...linkedIssues].sort((a, b) =>
+      a.id.localeCompare(b.id),
+    );
+    for (let i = 0; i < sorted.length; i++) {
+      const item = sorted[i]!;
+      const last = i === sorted.length - 1;
+      const glyph = last ? '└──' : '├──';
+      if (item.record) {
+        const ij = item.record.toJSON();
+        const summary =
+          `${item.id}  [${ij['severity']}/${ij['area']}]  ${ij['state']}` +
+          `  ${truncateCodePoints(String(ij['text'] ?? ''), 70)}`;
+        process.stdout.write(`${childPrefix}${glyph} ${summary}\n`);
+      } else {
+        process.stdout.write(
+          `${childPrefix}${glyph} ${item.id}  (referenced but not found)\n`,
+        );
+      }
+    }
+  }
+
+  if (haveRequests) {
+    process.stdout.write(`└── referenced requests\n`);
+    const childPrefix = '    ';
+    const sorted = [...linkedRequests].sort((a, b) =>
+      a.id.localeCompare(b.id),
+    );
+    for (let i = 0; i < sorted.length; i++) {
+      const item = sorted[i]!;
+      const last = i === sorted.length - 1;
+      const glyph = last ? '└──' : '├──';
+      if (item.record) {
+        const rj = item.record.toJSON();
+        const summary =
+          `${item.id}  [${rj['state']}]  from=${rj['from']}` +
+          `  ${truncateCodePoints(String(rj['action'] ?? ''), 70)}`;
+        process.stdout.write(`${childPrefix}${glyph} ${summary}\n`);
+      } else {
+        process.stdout.write(
+          `${childPrefix}${glyph} ${item.id}  (referenced but not found)\n`,
+        );
+      }
+    }
+  }
+
   return 0;
 }
 
@@ -885,18 +1057,86 @@ async function msgBroadcast(c: C, args: ParsedArgs): Promise<number> {
 }
 
 async function msgInbox(c: C, args: ParsedArgs): Promise<number> {
+  // `gate inbox mark-read [N]` is dispatched here too — the first
+  // positional is treated as a subverb. This keeps the verb family
+  // under a single `inbox` namespace instead of introducing a
+  // top-level `mark-read` command.
+  if (args.positional[0] === 'mark-read') {
+    return await msgInboxMarkRead(c, args);
+  }
+
   const forName = requireOption(args, 'for', '--for required', 'GUILD_ACTOR');
+  const unreadOnly = args.options['unread'] === true;
   const messages = await c.messageUC.inbox(forName);
-  if (messages.length === 0) {
+  const filtered = unreadOnly
+    ? messages.filter((m) => !m.read)
+    : messages;
+
+  if (filtered.length === 0) {
+    const suffix = unreadOnly ? ' (unread only)' : '';
+    process.stdout.write(`(inbox empty for ${forName}${suffix})\n`);
+    return 0;
+  }
+  // Index is 1-based and counts every message in the inbox so the
+  // user can `gate inbox mark-read <index>` referring to numbers
+  // they see here. When --unread hides read messages the indices
+  // stay stable (we index against the unfiltered list).
+  for (let i = 0; i < messages.length; i++) {
+    const m = messages[i]!;
+    if (unreadOnly && m.read) continue;
+    const idx = i + 1;
+    const related = m.related ? ` (ref: ${m.related})` : '';
+    const readTag = m.read
+      ? m.readAt
+        ? ` (read ${m.readAt})`
+        : ' (read)'
+      : ' (unread)';
+    process.stdout.write(
+      `  ${idx}. [${m.at}] ${m.type} from ${m.from}${related}${readTag}\n  ${m.text}\n`,
+    );
+  }
+  return 0;
+}
+
+async function msgInboxMarkRead(c: C, args: ParsedArgs): Promise<number> {
+  // Usage:
+  //   gate inbox mark-read [N] [--for <m>]
+  // When N is present, only that 1-based message is flipped. The
+  // --for flag falls back to GUILD_ACTOR so interactive users can
+  // type `GUILD_ACTOR=kiri gate inbox mark-read`.
+  const forName = requireOption(args, 'for', '--for required', 'GUILD_ACTOR');
+  let index: number | undefined;
+  const positional = args.positional[1]; // [0] is 'mark-read'
+  if (positional !== undefined) {
+    const parsed = Number.parseInt(positional, 10);
+    if (
+      !Number.isFinite(parsed) ||
+      parsed < 1 ||
+      String(parsed) !== positional
+    ) {
+      throw new Error(
+        `gate inbox mark-read: N must be a positive integer, got: ${positional}`,
+      );
+    }
+    index = parsed;
+  }
+
+  const result = await c.messageUC.markRead(forName, index);
+  if (result.total === 0) {
     process.stdout.write(`(inbox empty for ${forName})\n`);
     return 0;
   }
-  for (const m of messages) {
-    const related = m.related ? ` (ref: ${m.related})` : '';
+  if (result.marked === 0) {
+    const scope = index !== undefined ? `#${index}` : 'all';
     process.stdout.write(
-      `  [${m.at}] ${m.type} from ${m.from}${related}\n  ${m.text}\n`,
+      `(nothing to mark for ${forName}: ${scope} already read)\n`,
     );
+    return 0;
   }
+  const scope = index !== undefined ? `#${index}` : `${result.marked}`;
+  process.stdout.write(
+    `✓ marked ${scope} as read for ${forName} (${result.alreadyRead} already read, ${result.total} total)\n`,
+  );
   return 0;
 }
 
