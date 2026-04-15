@@ -267,6 +267,10 @@ gate pending [--for <m>] [--from <m>] [--executor <m>] [--auto-review <m>]
 gate list --state <s> [--for <m>] [--from <m>]
                       [--executor <m>] [--auto-review <m>]
 gate show <id> [--format json|text]
+gate voices <name> [--lense <l>] [--verdict <v>] [--limit <N>]
+                   [--format json|text]
+gate tail [N]                                        (default 20)
+gate whoami                                          (needs GUILD_ACTOR)
 gate approve <id>  --by <m> [--note <s>]
 gate deny    <id>  --by <m> <reason>
 gate execute <id>  --by <m> [--note <s>]
@@ -431,6 +435,110 @@ text-mode output sorts naturally.
 Use cases at the layer-1 surface: reading your own review history
 before a retrospective, auditing "what did critic X flag across
 all of feature Z", grepping for verdicts without yaml plumbing.
+
+`--limit <N>` truncates the result after sorting (useful for
+"what did I say most recently").
+
+### Tail: unified recent activity stream
+
+`gate tail [N]` merges authored requests and reviews from every
+actor into a single timeline and prints the most recent N entries
+(default 20), newest first. Think of it as `git log` for the
+content_root's dialogue — the command you type first when you open
+an existing content_root.
+
+```
+$ gate tail 5
+5 most recent utterance(s)
+
+[2026-04-15T12:04:11.223Z] req=2026-04-15-007 [user/ok] by rin
+  re: README: document tail/whoami/...
+  second pass: concerns folded in cleanly, approving.
+
+[2026-04-15T12:03:27.089Z] req=2026-04-15-007 authored kiri
+  action: README: document tail/whoami/...
+  reason: new surface area needs to be findable...
+...
+```
+
+Each line is labeled with the actor (author for `authored`
+entries, reviewer for review entries) so a multi-actor stream
+stays legible. Filters are intentionally omitted — tail is for
+"everything recent", and once you want to slice, switch to
+`gate voices` or `gate list`.
+
+### Whoami: session-start orientation
+
+`gate whoami` (requires `GUILD_ACTOR` in the environment) resolves
+your identity, classifies you as member / host / unknown, and
+prints your 5 most recent utterances so you re-enter the
+content_root with your own voice already reloaded:
+
+```
+$ export GUILD_ACTOR=noir
+$ gate whoami
+you are noir (member)
+
+your most recent 5 utterance(s):
+
+[2026-04-14T23:46:38.259Z] req=2026-04-14-008 [user/ok]
+  re: README: document host listing and GUILD_ACTOR env var
+  second-pass review: concerns (1) and (2) addressed...
+...
+```
+
+`gate whoami` is meant as a session-start ritual: one command
+before you do anything else, and you remember where you were.
+Pair it with `gate tail` to see what happened while you were away.
+
+### Time deltas in `gate show --format text`
+
+The text view of a single request now shows the delta between
+successive `status_log` entries and between reviews, making the
+*pace* of the dialogue legible alongside the events:
+
+```
+$ gate show 2026-04-14-014 --format text
+...
+  status_log (4):
+    2026-04-14T14:18:11.761Z  pending    by kiri — created
+    2026-04-14T14:18:38.126Z  approved   by human (+26s) — audit は価値あり
+    2026-04-14T14:18:45.727Z  executing  by kiri (+7s)
+    2026-04-14T14:20:53.065Z  completed  by kiri (+2m) — audit 完了...
+
+  reviews (2):
+    [devil/concern] by noir at 2026-04-14T14:21:12.613Z (+19s)
+      ...
+    [layer/ok] by rin at 2026-04-14T14:21:57.535Z (+44s)
+      ...
+```
+
+Delta units scale with the gap: `+5s`, `+44s`, `+3m`, `+1h19m`,
+`+2d4h`. Review deltas are measured from the last `status_log`
+entry (typically completion) for the first review, and from the
+previous review for subsequent ones — so a quick correction reads
+as `(+10s)` and a day-later afterthought as `(+1d)`.
+
+### Review markers on `gate list` / `gate pending`
+
+Each row in `gate list` and `gate pending` carries a compact
+per-lens verdict summary so you can scan a whole list of completed
+work and pick out the requests that closed with an unresolved
+concern:
+
+```
+$ gate list --state completed
+2026-04-14-001  [completed]  from=kiri  !devil ✓layer      Feature A: ...
+2026-04-14-006  [completed]  from=kiri  ✓devil             Feature E: ...
+2026-04-14-014  [completed]  from=kiri  !devil ✓layer      Post-session audit: ...
+```
+
+Icons: `✓` ok · `!` concern · `x` reject · `?` unknown (defensive).
+The marker column is width-aligned per list so the action column
+stays flush across rows; long multi-review strings push the
+baseline out rather than collide with the next column. Requests
+with no reviews (typically fast-tracked) show an empty marker
+column and are easy to spot by the blank.
 
 ### Issue → Request promotion
 
