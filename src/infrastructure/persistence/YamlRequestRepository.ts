@@ -43,7 +43,7 @@ export class YamlRequestRepository implements RequestRepository {
 
   async listByState(state: RequestState): Promise<Request[]> {
     const files = listDirSafe(this.config.paths.requests, state)
-      .filter((f) => /^\d{4}-\d{2}-\d{2}-\d{3}\.yaml$/.test(f))
+      .filter((f) => /^\d{4}-\d{2}-\d{2}-\d{3,4}\.yaml$/.test(f))
       .slice(0, 1000);
     const out: Request[] = [];
     for (const f of files) {
@@ -109,7 +109,7 @@ export class YamlRequestRepository implements RequestRepository {
     for (const state of REQUEST_STATES) {
       const files = listDirSafe(this.config.paths.requests, state);
       for (const f of files) {
-        const m = f.match(/^(\d{4}-\d{2}-\d{2})-(\d{3})\.yaml$/);
+        const m = f.match(/^(\d{4}-\d{2}-\d{2})-(\d{3,4})\.yaml$/);
         if (m && m[1] === dateKey) {
           const n = parseInt(m[2] as string, 10);
           if (n > max) max = n;

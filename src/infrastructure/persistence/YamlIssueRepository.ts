@@ -19,7 +19,7 @@ import {
 } from './safeFs.js';
 import { GuildConfig } from '../config/GuildConfig.js';
 
-const FILE_PATTERN = /^i-\d{4}-\d{2}-\d{2}-\d{3}\.yaml$/;
+const FILE_PATTERN = /^i-\d{4}-\d{2}-\d{2}-\d{3,4}\.yaml$/;
 
 export class YamlIssueRepository implements IssueRepository {
   constructor(private readonly config: GuildConfig) {}
@@ -76,7 +76,7 @@ export class YamlIssueRepository implements IssueRepository {
   async nextSequence(dateKey: string): Promise<number> {
     let max = 0;
     for (const f of listDirSafe(this.config.paths.issues, '.')) {
-      const m = f.match(/^i-(\d{4}-\d{2}-\d{2})-(\d{3})\.yaml$/);
+      const m = f.match(/^i-(\d{4}-\d{2}-\d{2})-(\d{3,4})\.yaml$/);
       if (m && m[1] === dateKey) {
         const n = parseInt(m[2] as string, 10);
         if (n > max) max = n;

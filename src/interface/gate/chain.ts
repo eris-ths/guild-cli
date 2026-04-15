@@ -26,7 +26,10 @@
  * don't double-count requests that happen to share a suffix with an
  * issue id.
  */
-const ID_PATTERN = /(?<!\w)(i-)?(\d{4}-\d{2}-\d{2}-\d{3})(?!\d)/g;
+// \d{3,4} accepts both legacy (0.1.x) 3-digit and current 4-digit
+// sequence suffixes. The trailing (?!\d) forbids longer digit runs
+// so "2026-04-15-00123" (5+ digits) is not partially matched.
+const ID_PATTERN = /(?<!\w)(i-)?(\d{4}-\d{2}-\d{2}-\d{3,4})(?!\d)/g;
 
 export interface ExtractedReferences {
   readonly requestIds: ReadonlyArray<string>;

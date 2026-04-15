@@ -195,8 +195,10 @@ Being honest about the 0.1.0 surface area so you can plan around it:
   window is smaller than the sequential loop it replaced but not
   zero — a file that moves between directories *during* a single
   `readdir` can still be missed or double-counted.
-- **Sequence ceiling is 999 per day.** Request IDs are `YYYY-MM-DD-NNN`.
-  The 1000th request in a single UTC day throws.
+- **Sequence ceiling is 9999 per UTC day.** Request IDs are
+  `YYYY-MM-DD-NNNN`. The 10,000th request in a single UTC day throws.
+  Legacy 3-digit ids (`YYYY-MM-DD-NNN`) produced by 0.1.x are still
+  accepted on read for backward compatibility.
 
 These are scope choices for 0.1.0, not accidents. If any of them
 blocks your use case, open an issue describing the workflow — the
@@ -758,7 +760,9 @@ subdirectory names.
   inbox/<name>.yaml
 ```
 
-Request IDs are `YYYY-MM-DD-NNN`; issue IDs are `i-YYYY-MM-DD-NNN`.
+Request IDs are `YYYY-MM-DD-NNNN`; issue IDs are `i-YYYY-MM-DD-NNNN`.
+Legacy 3-digit ids from 0.1.x are still accepted on read for backward
+compatibility; all newly-generated ids use the 4-digit form.
 
 ## Security
 
