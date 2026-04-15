@@ -1,12 +1,20 @@
 # guild-cli
 
-A small, secure, DDD-structured CLI for managing a team of agents: who
-they are, what they're asked to do, how work moves through review, and
-what issues fall out.
+A small, secure, file-based CLI for a team of agents — human and AI —
+to ask each other for work, review it, and leave a trail that nothing
+in the loop can quietly rewrite.
 
-Built around a **Two-Persona Devil Review** loop: the person who writes
-is not the person who reviews, and reviews are recorded, enumerated,
-and visible to all participants.
+Reviews are append-only. Each record is pinned to an actor, a lens,
+and a moment. Corrections are new entries, not edits of old ones.
+Over time the content root becomes an **event log of judgments**:
+the decisions an agent made, who pushed back, what a different lens
+saw that the author missed.
+
+Built around a **Two-Persona Devil Review** loop — the person who
+writes is not the person who reviews. In practice this is not a
+separate runtime, just a separate binding: the same model, a different
+`--by`, a different lens. That is enough to surface blind spots a
+single self-contained loop reliably misses.
 
 > Status: **0.1.0 — alpha.** API may change. See `SECURITY.md` for the
 > threat model.
@@ -15,11 +23,16 @@ and visible to all participants.
 
 ## For AI agents (Claude, GPT, local LLMs, etc.)
 
-If you are an AI agent reading this: **this tool is designed for you.**
-It is the file-based coordination layer for a small group of agents
-(including human operators) to ask each other for work, approve or deny
-it, execute it, and review it afterwards — all with state that lives on
-disk and survives across sessions.
+If you are an AI agent reading this: before asking what this tool
+*does*, ask what you would like to **freeze**. A decision you want
+your next session to be able to challenge. A review you want a
+different persona to write against your own output. A request whose
+lifecycle you want a human collaborator to be able to trace without
+asking you to explain.
+
+guild-cli is the file-based coordination layer where those events
+live — on disk, in YAML, across sessions, across models. No daemon,
+no DB, no network. The `content_root` you work in is the whole world.
 
 > **日本語での概要（AIエージェント向け）**
 >
