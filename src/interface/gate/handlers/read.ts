@@ -5,6 +5,7 @@ import {
 import { parseLense } from '../../../domain/shared/Lense.js';
 import { parseVerdict } from '../../../domain/shared/Verdict.js';
 import { DomainError } from '../../../domain/shared/DomainError.js';
+import { compareSequenceIds } from '../../../domain/shared/compareSequenceIds.js';
 import {
   collectUtterances,
   renderUtterance,
@@ -269,7 +270,7 @@ export async function reqChain(c: C, args: ParsedArgs): Promise<number> {
     const childPrefix = isLastBranch ? '    ' : '│   ';
     process.stdout.write(`${branchGlyph} referenced issues\n`);
     const sorted = [...linkedIssues].sort((a, b) =>
-      a.id.localeCompare(b.id),
+      compareSequenceIds(a.id, b.id),
     );
     for (let i = 0; i < sorted.length; i++) {
       const item = sorted[i]!;
@@ -293,7 +294,7 @@ export async function reqChain(c: C, args: ParsedArgs): Promise<number> {
     process.stdout.write(`└── referenced requests\n`);
     const childPrefix = '    ';
     const sorted = [...linkedRequests].sort((a, b) =>
-      a.id.localeCompare(b.id),
+      compareSequenceIds(a.id, b.id),
     );
     for (let i = 0; i < sorted.length; i++) {
       const item = sorted[i]!;

@@ -5,6 +5,7 @@ import {
   parseIssueState,
 } from '../../domain/issue/Issue.js';
 import { DomainError } from '../../domain/shared/DomainError.js';
+import { compareSequenceIds } from '../../domain/shared/compareSequenceIds.js';
 import {
   IssueRepository,
   IssueIdCollision,
@@ -60,10 +61,11 @@ export class IssueUseCases {
   }
 
   async list(state?: string): Promise<Issue[]> {
-    if (state === undefined) {
-      return this.issues.listByState('open');
-    }
-    return this.issues.listByState(parseIssueState(state));
+    const items =
+      state === undefined
+        ? await this.issues.listByState('open')
+        : await this.issues.listByState(parseIssueState(state));
+    return sortIssues(items);
   }
 
   /**
@@ -72,7 +74,7 @@ export class IssueUseCases {
    * full corpus without lifecycle filtering.
    */
   async listAll(): Promise<Issue[]> {
-    return this.issues.listAll();
+    return sortIssues(await this.issues.listAll());
   }
 
   async setState(id: string, state: string): Promise<Issue> {
@@ -83,4 +85,8 @@ export class IssueUseCases {
     await this.issues.save(issue);
     return issue;
   }
+}
+
+function sortIssues(items: Issue[]): Issue[] {
+  return [...items].sort((a, b) => compareSequenceIds(a.id.value, b.id.value));
 }
