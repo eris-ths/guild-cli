@@ -36,7 +36,10 @@ test('YamlRequestRepository: malformed request YAML surfaces via onMalformed', a
     const items = await repo.listByState('pending');
     assert.equal(items.length, 0, 'malformed record should be dropped');
     assert.equal(warnings.length, 1, 'exactly one warning should surface');
-    assert.match(warnings[0]!, /requests\/pending\/2026-04-15-001\.yaml/);
+    // [\\/] matches both posix '/' and win32 '\' so the test runs on
+    // both CI matrix OS's. Same pattern applied to every path-containing
+    // regex in this file below.
+    assert.match(warnings[0]!, /requests[\\/]pending[\\/]2026-04-15-001\.yaml/);
     assert.match(warnings[0]!, /id=2026-04-15-001/);
     assert.match(warnings[0]!, /hydrate failed/);
   } finally {
@@ -98,7 +101,7 @@ test('YamlIssueRepository: malformed issue surfaces via onMalformed', async () =
     const items = await repo.listAll();
     assert.equal(items.length, 0);
     assert.equal(warnings.length, 1);
-    assert.match(warnings[0]!, /issues\/i-2026-04-15-001\.yaml/);
+    assert.match(warnings[0]!, /issues[\\/]i-2026-04-15-001\.yaml/);
     assert.match(warnings[0]!, /i-2026-04-15-001/);
   } finally {
     cleanup();
@@ -119,7 +122,7 @@ test('YamlMemberRepository: malformed member surfaces via onMalformed', async ()
     const items = await repo.listAll();
     assert.equal(items.length, 0);
     assert.equal(warnings.length, 1);
-    assert.match(warnings[0]!, /members\/broken\.yaml/);
+    assert.match(warnings[0]!, /members[\\/]broken\.yaml/);
     assert.match(warnings[0]!, /name=broken/);
   } finally {
     cleanup();
@@ -166,7 +169,7 @@ test('YamlRequestRepository: unparseable YAML surfaces via onMalformed (no crash
     const items = await repo.listByState('pending');
     assert.equal(items.length, 0, 'unparseable file should be dropped');
     assert.equal(warnings.length, 1);
-    assert.match(warnings[0]!, /requests\/pending\/2026-04-15-0001\.yaml/);
+    assert.match(warnings[0]!, /requests[\\/]pending[\\/]2026-04-15-0001\.yaml/);
     assert.match(warnings[0]!, /yaml parse failed/);
   } finally {
     cleanup();
@@ -232,7 +235,7 @@ test('YamlIssueRepository: unparseable YAML surfaces via onMalformed', async () 
     const items = await repo.listAll();
     assert.equal(items.length, 0);
     assert.equal(warnings.length, 1);
-    assert.match(warnings[0]!, /issues\/i-2026-04-15-0001\.yaml/);
+    assert.match(warnings[0]!, /issues[\\/]i-2026-04-15-0001\.yaml/);
     assert.match(warnings[0]!, /yaml parse failed/);
   } finally {
     cleanup();
@@ -254,7 +257,7 @@ test('YamlMemberRepository: unparseable YAML surfaces via onMalformed', async ()
     const items = await repo.listAll();
     assert.equal(items.length, 0);
     assert.equal(warnings.length, 1);
-    assert.match(warnings[0]!, /members\/broken\.yaml/);
+    assert.match(warnings[0]!, /members[\\/]broken\.yaml/);
     assert.match(warnings[0]!, /yaml parse failed/);
   } finally {
     cleanup();

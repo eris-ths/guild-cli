@@ -3,7 +3,7 @@ import {
   requireOption,
   optionalOption,
 } from '../../shared/parseArgs.js';
-import { C, readStdin } from './internal.js';
+import { C, readStdin, readCommentViaEditor } from './internal.js';
 
 export async function reqReview(c: C, args: ParsedArgs): Promise<number> {
   const id = args.positional[0];
@@ -18,22 +18,31 @@ export async function reqReview(c: C, args: ParsedArgs): Promise<number> {
   const verdict = requireOption(args, 'verdict', '--verdict required');
 
   // Comment resolution order:
-  //   1. --comment <s>  (option value)
-  //   2. --comment -    (read STDIN until EOF — for piped/heredoc input)
-  //   3. <positional>   (legacy: everything after <id>)
+  //   1. --comment <s>    option value (inline short comment)
+  //   2. --comment -      STDIN until EOF (for piped/heredoc input)
+  //   3. <positional>     legacy: everything after <id>
+  //   4. $EDITOR fallback when stdin is a TTY and none of the above
+  //                       were given — matches `git commit` convention,
+  //                       sidesteps the Windows git-bash pipe issues
+  //                       that made (2) unreliable for some users.
   const commentOpt = optionalOption(args, 'comment');
+  const positional = args.positional.slice(1).join(' ');
   let comment: string;
   if (commentOpt === '-') {
     comment = await readStdin();
   } else if (commentOpt !== undefined) {
     comment = commentOpt;
+  } else if (positional) {
+    comment = positional;
+  } else if (process.stdin.isTTY) {
+    comment = await readCommentViaEditor({ id, by, lense, verdict });
   } else {
-    comment = args.positional.slice(1).join(' ');
+    comment = '';
   }
   if (!comment.trim()) {
     throw new Error(
       'review comment is required (use --comment <s>, --comment - for STDIN, ' +
-        'or a positional argument)',
+        'a positional argument, or run interactively so $EDITOR opens)',
     );
   }
 
