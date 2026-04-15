@@ -9,7 +9,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "test": "tsc && node --test \"dist/tests/**/*.test.js\"",
+    "test": "tsc && find dist/tests -name '*.test.js' -print0 | xargs -0 node --test",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
