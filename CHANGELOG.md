@@ -7,6 +7,33 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 
 ## [Unreleased]
 
+### Added
+- **POLICY.md: value-object invariants under `domain/`.** `MemberName`'s
+  ASCII-only shape (`^[a-z][a-z0-9_-]{0,31}$`) is now declared a
+  *stable contract*, not just a current-implementation detail. The
+  read-side verbs (`gate voices` / `tail` / `whoami` / `chain`)
+  rely on this invariant to do case-insensitive matching via
+  `.toLowerCase()` at the interface layer without routing through
+  `MemberName.of()`; freezing the invariant explicitly means a
+  future relaxation to non-ASCII identifiers is a breaking change
+  that forces a Unicode-normalization audit of every caller.
+  Similarly, `RequestId` / `IssueId` lexical shape (accepts both
+  3-digit legacy and 4-digit current sequence suffixes, ceiling
+  9999/UTC-day) is now pinned as a documented consumer contract.
+- **POLICY.md: `domain/diagnostic/` and `domain/repair/` partial
+  stability.** These layers are declared *partially stable*: the
+  top-level JSON shapes of `DiagnosticReport` and `RepairResult`
+  are frozen for a given 0.x line, but the enum variants inside
+  (`DiagnosticKind`, `RepairActionKind`, outcome statuses) are
+  **additive only**. External tools that pipe `gate doctor --format
+  json` into dashboards or migration scripts should code against
+  the shape rather than enum exhaustiveness and treat unknown
+  kinds as opaque pass-through — this gives clean forward-compat
+  as the taxonomy grows. Closes the implicit-curation ambiguity
+  surfaced by the 0.2.0 PR #17 retrospective (where `yaml_parse_error`
+  was added as an additive variant but POLICY did not explicitly
+  say that was the contract).
+
 ## [0.2.0] — 2026-04-15
 
 Second alpha release. Focus: **observation layer** (`gate doctor`),
