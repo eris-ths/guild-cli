@@ -11,6 +11,9 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 - `CHANGELOG.md` and `POLICY.md` — versioning promise and change history.
 - `guild --version` / `gate --version` (alias `-v`) — print `guild-cli <version>` and exit 0.
 
+### Changed (internal)
+- **Refactor**: `src/interface/gate/index.ts` split into `handlers/{request,review,read,issues,messages}.ts` plus `handlers/internal.ts` for shared helpers. `index.ts` is now 158 lines (was 1206) and contains only routing + HELP. Behavior unchanged; `formatReviewMarkers` and `computeReviewMarkerWidth` are re-exported from `index.ts` for backward-compat with existing test imports.
+
 ### Infrastructure
 - `.github/workflows/ci.yml` — typecheck + test on Node 20 / 22.
 
