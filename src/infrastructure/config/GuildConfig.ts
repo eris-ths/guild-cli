@@ -3,6 +3,18 @@ import { resolve, isAbsolute, join } from 'node:path';
 import YAML from 'yaml';
 import { DomainError } from '../../domain/shared/DomainError.js';
 
+/**
+ * Called by repository hydrate paths when a YAML record cannot be
+ * parsed into a domain object. The CLI wires this to stderr so that
+ * data-loss events surface instead of being silently swallowed.
+ * Tests inject a collecting spy to assert the exact messages.
+ */
+export type OnMalformed = (msg: string) => void;
+
+export const defaultOnMalformed: OnMalformed = (msg) => {
+  process.stderr.write(`warn: ${msg}\n`);
+};
+
 export interface GuildConfigProps {
   root: string;
   contentRoot: string;
@@ -13,6 +25,7 @@ export interface GuildConfigProps {
     inbox: string;
   };
   hostNames: readonly string[];
+  onMalformed: OnMalformed;
 }
 
 const DEFAULT_HOSTS = ['eris', 'nao'] as const;
@@ -29,13 +42,17 @@ export class GuildConfig implements GuildConfigProps {
     readonly contentRoot: string,
     readonly paths: GuildConfigProps['paths'],
     readonly hostNames: readonly string[],
+    readonly onMalformed: OnMalformed,
   ) {}
 
-  static load(cwd: string = process.cwd()): GuildConfig {
+  static load(
+    cwd: string = process.cwd(),
+    onMalformed: OnMalformed = defaultOnMalformed,
+  ): GuildConfig {
     const configPath = findConfig(cwd);
     if (!configPath) {
       // Default: treat cwd as guild root
-      return GuildConfig.default(cwd);
+      return GuildConfig.default(cwd, onMalformed);
     }
     const raw = YAML.parse(readFileSync(configPath, 'utf8')) ?? {};
     const root = resolve(configPath, '..');
@@ -55,10 +72,13 @@ export class GuildConfig implements GuildConfigProps {
           .filter((x: unknown): x is string => typeof x === 'string')
           .map((x: string) => x.toLowerCase())
       : [...DEFAULT_HOSTS];
-    return new GuildConfig(root, contentRoot, paths, hostNames);
+    return new GuildConfig(root, contentRoot, paths, hostNames, onMalformed);
   }
 
-  static default(root: string): GuildConfig {
+  static default(
+    root: string,
+    onMalformed: OnMalformed = defaultOnMalformed,
+  ): GuildConfig {
     const abs = resolve(root);
     return new GuildConfig(
       abs,
@@ -70,6 +90,7 @@ export class GuildConfig implements GuildConfigProps {
         inbox: join(abs, 'inbox'),
       },
       [...DEFAULT_HOSTS],
+      onMalformed,
     );
   }
 }

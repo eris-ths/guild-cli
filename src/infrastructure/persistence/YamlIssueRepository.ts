@@ -28,7 +28,7 @@ export class YamlIssueRepository implements IssueRepository {
     const rel = `${id.value}.yaml`;
     if (!existsSafe(this.config.paths.issues, rel)) return null;
     const raw = readTextSafe(this.config.paths.issues, rel);
-    return hydrate(YAML.parse(raw));
+    return hydrate(YAML.parse(raw), rel, this.config.onMalformed);
   }
 
   async listByState(state: IssueState): Promise<Issue[]> {
@@ -43,7 +43,7 @@ export class YamlIssueRepository implements IssueRepository {
     const out: Issue[] = [];
     for (const f of files) {
       const raw = readTextSafe(this.config.paths.issues, f);
-      const issue = hydrate(YAML.parse(raw));
+      const issue = hydrate(YAML.parse(raw), f, this.config.onMalformed);
       if (issue) out.push(issue);
     }
     return out;
@@ -86,8 +86,13 @@ export class YamlIssueRepository implements IssueRepository {
   }
 }
 
-function hydrate(data: unknown): Issue | null {
+function hydrate(
+  data: unknown,
+  source: string,
+  onMalformed: (msg: string) => void,
+): Issue | null {
   if (data === null || typeof data !== 'object' || Array.isArray(data)) {
+    onMalformed(`issue ${source}: top-level YAML is not a mapping; skipping`);
     return null;
   }
   const obj = data as Record<string, unknown>;
@@ -103,7 +108,12 @@ function hydrate(data: unknown): Issue | null {
       createdAt: String(obj['created_at'] ?? new Date().toISOString()),
     });
     return issue;
-  } catch {
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    const idHint = typeof obj['id'] === 'string' ? ` (id=${obj['id']})` : '';
+    onMalformed(
+      `issue ${source}${idHint}: hydrate failed, skipping record: ${msg}`,
+    );
     return null;
   }
 }
