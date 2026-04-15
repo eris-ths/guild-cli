@@ -63,6 +63,15 @@ test('planRepair: hydration_error → quarantine', () => {
   assert.equal(plan.actions[0]?.kind, 'quarantine');
 });
 
+test('planRepair: yaml_parse_error → quarantine', () => {
+  // Structurally unrepairable: the file isn't even parseable, so
+  // field-level patch is impossible. Quarantine is the smallest
+  // action that lets subsequent reads stop tripping on it.
+  const plan = planRepair([f('requests', '/r/r/x.yaml', 'yaml_parse_error')]);
+  assert.equal(plan.actions[0]?.kind, 'quarantine');
+  assert.match(plan.actions[0]!.rationale, /unparseable|syntax/i);
+});
+
 test('planRepair: duplicate_id → no_op (data safety)', () => {
   const plan = planRepair([f('issues', '/r/i/x.yaml', 'duplicate_id')]);
   assert.equal(plan.actions[0]?.kind, 'no_op');
@@ -84,10 +93,11 @@ test('planRepair: summary counts each kind correctly', () => {
   const plan = planRepair([
     f('members', '/a.yaml', 'top_level_not_mapping'),
     f('members', '/b.yaml', 'hydration_error'),
+    f('members', '/e.yaml', 'yaml_parse_error'),
     f('issues', '/c.yaml', 'duplicate_id'),
     f('requests', '/d.yaml', 'unknown'),
   ]);
-  assert.deepEqual(plan.summary, { total: 4, quarantine: 2, noOp: 2 });
+  assert.deepEqual(plan.summary, { total: 5, quarantine: 3, noOp: 2 });
 });
 
 test('apply: quarantines existing sources', async () => {

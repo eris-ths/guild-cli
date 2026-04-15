@@ -145,3 +145,195 @@ test('findByName also routes through onMalformed on malformed YAML', async () =>
     cleanup();
   }
 });
+
+// YAML-parse-level failures (files that don't even reach the hydrate
+// path because the lexer throws) must also surface via onMalformed,
+// not propagate out of the list* paths. Before parseYamlSafe, these
+// crashed gate doctor — the tool it's meant to help with.
+
+test('YamlRequestRepository: unparseable YAML surfaces via onMalformed (no crash)', async () => {
+  const { root, cleanup } = makeRoot();
+  try {
+    const badPath = join(root, 'requests', 'pending', '2026-04-15-0001.yaml');
+    writeFileSync(badPath, ':: this is not valid yaml at all ::\n');
+
+    const warnings: string[] = [];
+    const config = GuildConfig.load(root, (source, msg) =>
+      warnings.push(`${source}: ${msg}`),
+    );
+    const repo = new YamlRequestRepository(config);
+
+    const items = await repo.listByState('pending');
+    assert.equal(items.length, 0, 'unparseable file should be dropped');
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0]!, /requests\/pending\/2026-04-15-0001\.yaml/);
+    assert.match(warnings[0]!, /yaml parse failed/);
+  } finally {
+    cleanup();
+  }
+});
+
+test('YamlRequestRepository.listAll: unparseable file does not poison the good ones', async () => {
+  const { root, cleanup } = makeRoot();
+  try {
+    // One good request + one unparseable file in the same directory.
+    // The good one must come through; the bad one must surface as a
+    // warning but not short-circuit the rest of the scan.
+    writeFileSync(
+      join(root, 'requests', 'pending', '2026-04-15-0001.yaml'),
+      [
+        'id: 2026-04-15-0001',
+        'from: alice',
+        'action: good',
+        'reason: valid',
+        'state: pending',
+        'created_at: 2026-04-15T00:00:00Z',
+        'status_log:',
+        '  - state: pending',
+        '    by: alice',
+        '    at: 2026-04-15T00:00:00Z',
+        'reviews: []',
+        '',
+      ].join('\n'),
+    );
+    writeFileSync(
+      join(root, 'requests', 'pending', '2026-04-15-0002.yaml'),
+      ':: broken ::\n',
+    );
+
+    const warnings: string[] = [];
+    const config = GuildConfig.load(root, (source, msg) =>
+      warnings.push(`${source}: ${msg}`),
+    );
+    const repo = new YamlRequestRepository(config);
+
+    const items = await repo.listAll();
+    assert.equal(items.length, 1);
+    assert.equal(items[0]!.id.value, '2026-04-15-0001');
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0]!, /yaml parse failed/);
+  } finally {
+    cleanup();
+  }
+});
+
+test('YamlIssueRepository: unparseable YAML surfaces via onMalformed', async () => {
+  const { root, cleanup } = makeRoot();
+  try {
+    const badPath = join(root, 'issues', 'i-2026-04-15-0001.yaml');
+    writeFileSync(badPath, ':: broken yaml ::\n');
+
+    const warnings: string[] = [];
+    const config = GuildConfig.load(root, (source, msg) =>
+      warnings.push(`${source}: ${msg}`),
+    );
+    const repo = new YamlIssueRepository(config);
+
+    const items = await repo.listAll();
+    assert.equal(items.length, 0);
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0]!, /issues\/i-2026-04-15-0001\.yaml/);
+    assert.match(warnings[0]!, /yaml parse failed/);
+  } finally {
+    cleanup();
+  }
+});
+
+test('YamlMemberRepository: unparseable YAML surfaces via onMalformed', async () => {
+  const { root, cleanup } = makeRoot();
+  try {
+    const badPath = join(root, 'members', 'broken.yaml');
+    writeFileSync(badPath, ':: broken yaml ::\n');
+
+    const warnings: string[] = [];
+    const config = GuildConfig.load(root, (source, msg) =>
+      warnings.push(`${source}: ${msg}`),
+    );
+    const repo = new YamlMemberRepository(config);
+
+    const items = await repo.listAll();
+    assert.equal(items.length, 0);
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0]!, /members\/broken\.yaml/);
+    assert.match(warnings[0]!, /yaml parse failed/);
+  } finally {
+    cleanup();
+  }
+});
+
+test('YamlMemberRepository.findByName: unparseable YAML returns null without throwing', async () => {
+  const { root, cleanup } = makeRoot();
+  try {
+    writeFileSync(
+      join(root, 'members', 'broken.yaml'),
+      ':: broken yaml ::\n',
+    );
+
+    const warnings: string[] = [];
+    const config = GuildConfig.load(root, (source, msg) =>
+      warnings.push(`${source}: ${msg}`),
+    );
+    const repo = new YamlMemberRepository(config);
+
+    const result = await repo.findByName(MemberName.of('broken'));
+    assert.equal(result, null);
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0]!, /yaml parse failed/);
+  } finally {
+    cleanup();
+  }
+});
+
+// findById coverage for symmetry with listAll — the hydrate paths
+// share the same parseYamlSafe helper but the call sites are
+// structurally different, so test both shapes explicitly.
+
+test('YamlRequestRepository.findById: unparseable YAML returns null without throwing', async () => {
+  const { root, cleanup } = makeRoot();
+  try {
+    writeFileSync(
+      join(root, 'requests', 'pending', '2026-04-15-0001.yaml'),
+      ':: broken yaml ::\n',
+    );
+
+    const warnings: string[] = [];
+    const config = GuildConfig.load(root, (source, msg) =>
+      warnings.push(`${source}: ${msg}`),
+    );
+    const repo = new YamlRequestRepository(config);
+
+    const { RequestId } = await import(
+      '../../src/domain/request/RequestId.js'
+    );
+    const result = await repo.findById(RequestId.of('2026-04-15-0001'));
+    assert.equal(result, null);
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0]!, /yaml parse failed/);
+  } finally {
+    cleanup();
+  }
+});
+
+test('YamlIssueRepository.findById: unparseable YAML returns null without throwing', async () => {
+  const { root, cleanup } = makeRoot();
+  try {
+    writeFileSync(
+      join(root, 'issues', 'i-2026-04-15-0001.yaml'),
+      ':: broken yaml ::\n',
+    );
+
+    const warnings: string[] = [];
+    const config = GuildConfig.load(root, (source, msg) =>
+      warnings.push(`${source}: ${msg}`),
+    );
+    const repo = new YamlIssueRepository(config);
+
+    const { IssueId } = await import('../../src/domain/issue/Issue.js');
+    const result = await repo.findById(IssueId.of('i-2026-04-15-0001'));
+    assert.equal(result, null);
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0]!, /yaml parse failed/);
+  } finally {
+    cleanup();
+  }
+});

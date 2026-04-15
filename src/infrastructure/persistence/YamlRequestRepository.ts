@@ -22,6 +22,7 @@ import {
 } from './safeFs.js';
 import { GuildConfig } from '../config/GuildConfig.js';
 import { OnMalformed } from '../../application/ports/OnMalformed.js';
+import { parseYamlSafe } from './parseYamlSafe.js';
 
 /**
  * Layout: <paths.requests>/<state>/<id>.yaml
@@ -37,7 +38,9 @@ export class YamlRequestRepository implements RequestRepository {
       if (existsSafe(this.config.paths.requests, rel)) {
         const raw = readTextSafe(this.config.paths.requests, rel);
         const absSource = join(this.config.paths.requests, rel);
-        return hydrate(YAML.parse(raw), state, absSource, this.config.onMalformed);
+        const parsed = parseYamlSafe(raw, absSource, this.config.onMalformed);
+        if (parsed === undefined) return null;
+        return hydrate(parsed, state, absSource, this.config.onMalformed);
       }
     }
     return null;
@@ -52,7 +55,9 @@ export class YamlRequestRepository implements RequestRepository {
       const rel = join(state, f);
       const raw = readTextSafe(this.config.paths.requests, rel);
       const absSource = join(this.config.paths.requests, rel);
-      const r = hydrate(YAML.parse(raw), state, absSource, this.config.onMalformed);
+      const parsed = parseYamlSafe(raw, absSource, this.config.onMalformed);
+      if (parsed === undefined) continue;
+      const r = hydrate(parsed, state, absSource, this.config.onMalformed);
       if (r) out.push(r);
     }
     return out;

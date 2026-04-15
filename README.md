@@ -195,23 +195,36 @@ Being honest about the 0.1.0 surface area so you can plan around it:
   automatically *executes* the reviewer: your outer automation still
   has to invoke it. The template just saves you the string assembly.
 - **No auto-generated dashboard** (`DASHBOARD.md` etc.). The raw YAML
-  files are the UI. A generator will come with the next layer.
+  files are the UI, augmented by the read-side verbs (`gate tail` /
+  `voices` / `whoami` / `show --format text` / `chain`). A generator
+  on top of those signals will come with the next layer.
 - **No locking on state transitions.** `saveNew` for creation is
   race-safe (O_EXCL), but two processes calling `gate approve` on the
   same request in the same millisecond have last-writer-wins semantics.
   Serialize at the caller if you run multiple concurrent operators.
-  Cross-cutting reads (`gate voices` / `tail` / `whoami` / `chain`)
-  use `RequestRepository.listAll()` which reads every state directory
-  in parallel and dedupes by id; the dedup keeps whichever snapshot
-  has the longer `status_log` (status_log only grows) so a transition
-  mid-read yields the newer representation deterministically. The
-  window is smaller than the sequential loop it replaced but not
-  zero — a file that moves between directories *during* a single
-  `readdir` can still be missed or double-counted.
+  Cross-cutting reads (`gate voices` / `tail` / `whoami` / `chain` /
+  `doctor`) use `RequestRepository.listAll()` which reads every state
+  directory in parallel and dedupes by id; the dedup keeps whichever
+  snapshot has the longer `status_log` (status_log only grows) so a
+  transition mid-read yields the newer representation
+  deterministically. The window is smaller than the sequential loop
+  it replaced but not zero — a file that moves between directories
+  *during* a single `readdir` can still be missed or double-counted.
 - **Sequence ceiling is 9999 per UTC day.** Request IDs are
   `YYYY-MM-DD-NNNN`. The 10,000th request in a single UTC day throws.
   Legacy 3-digit ids (`YYYY-MM-DD-NNN`) produced by 0.1.x are still
   accepted on read for backward compatibility.
+- **Repair is minimal (quarantine only).** `gate doctor` observes
+  malformed records (YAML-parse errors, top-level shape errors,
+  domain-hydrate errors) and `gate doctor --format json | gate
+  repair --apply` moves them out of the hot path into
+  `quarantine/<ISO-timestamp>/<area>/`. **There is no field-level
+  patch repair** — if a record is broken, it goes aside intact, not
+  rewritten. `duplicate_id` and unrecognized failure kinds are
+  `no_op` on purpose: automatic reconciliation risks data loss and
+  the operator has to compare manually. The observation / intervention
+  split means `gate doctor` is always safe to run; `gate repair`
+  defaults to a dry-run plan and only moves files with `--apply`.
 
 These are scope choices for 0.1.0, not accidents. If any of them
 blocks your use case, open an issue describing the workflow — the

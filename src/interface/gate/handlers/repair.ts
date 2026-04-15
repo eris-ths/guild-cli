@@ -32,6 +32,7 @@ const VALID_AREAS: ReadonlySet<DiagnosticArea> = new Set([
 const VALID_KINDS: ReadonlySet<DiagnosticKind> = new Set([
   'top_level_not_mapping',
   'hydration_error',
+  'yaml_parse_error',
   'duplicate_id',
   'unknown',
 ]);

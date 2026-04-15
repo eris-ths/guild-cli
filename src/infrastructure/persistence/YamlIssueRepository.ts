@@ -20,6 +20,7 @@ import {
 import { join } from 'node:path';
 import { GuildConfig } from '../config/GuildConfig.js';
 import { OnMalformed } from '../../application/ports/OnMalformed.js';
+import { parseYamlSafe } from './parseYamlSafe.js';
 
 const FILE_PATTERN = /^i-\d{4}-\d{2}-\d{2}-\d{3,4}\.yaml$/;
 
@@ -31,7 +32,9 @@ export class YamlIssueRepository implements IssueRepository {
     if (!existsSafe(this.config.paths.issues, rel)) return null;
     const raw = readTextSafe(this.config.paths.issues, rel);
     const absSource = join(this.config.paths.issues, rel);
-    return hydrate(YAML.parse(raw), absSource, this.config.onMalformed);
+    const parsed = parseYamlSafe(raw, absSource, this.config.onMalformed);
+    if (parsed === undefined) return null;
+    return hydrate(parsed, absSource, this.config.onMalformed);
   }
 
   async listByState(state: IssueState): Promise<Issue[]> {
@@ -47,7 +50,9 @@ export class YamlIssueRepository implements IssueRepository {
     for (const f of files) {
       const raw = readTextSafe(this.config.paths.issues, f);
       const absSource = join(this.config.paths.issues, f);
-      const issue = hydrate(YAML.parse(raw), absSource, this.config.onMalformed);
+      const parsed = parseYamlSafe(raw, absSource, this.config.onMalformed);
+      if (parsed === undefined) continue;
+      const issue = hydrate(parsed, absSource, this.config.onMalformed);
       if (issue) out.push(issue);
     }
     return out;

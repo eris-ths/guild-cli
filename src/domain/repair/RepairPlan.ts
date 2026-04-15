@@ -82,6 +82,13 @@ export function planRepair(
 function actionForKind(f: DiagnosticFinding): RepairAction {
   const kind: DiagnosticKind = f.kind;
   switch (kind) {
+    case 'yaml_parse_error':
+      return {
+        finding: f,
+        kind: 'quarantine',
+        rationale:
+          'YAML syntax error; file is unparseable at the lexer/parser level, quarantine so subsequent scans stop tripping on it',
+      };
     case 'top_level_not_mapping':
       return {
         finding: f,
