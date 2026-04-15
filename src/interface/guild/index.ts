@@ -1,6 +1,7 @@
 import { buildContainer } from '../shared/container.js';
 import { parseArgs, requireOption, optionalOption } from '../shared/parseArgs.js';
 import { DomainError } from '../../domain/shared/DomainError.js';
+import { getPackageVersion, isVersionFlag } from '../shared/version.js';
 
 const HELP = `guild — member management CLI
 
@@ -9,11 +10,16 @@ Usage:
   guild show <name>                       Show member YAML
   guild new --name <n> --category <c>     Create new member
   guild validate                          Validate all member YAMLs
+  guild --version                         Print version and exit
 
 Categories: core | professional | assignee | trial | special | host
 `;
 
 export async function main(argv: readonly string[]): Promise<number> {
+  if (isVersionFlag(argv)) {
+    process.stdout.write(`guild-cli ${getPackageVersion()}\n`);
+    return 0;
+  }
   const [cmd, ...rest] = argv;
   if (!cmd || cmd === '--help' || cmd === '-h') {
     process.stdout.write(HELP);

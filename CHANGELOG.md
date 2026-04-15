@@ -9,6 +9,7 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 
 ### Added
 - `CHANGELOG.md` and `POLICY.md` — versioning promise and change history.
+- `guild --version` / `gate --version` (alias `-v`) — print `guild-cli <version>` and exit 0.
 
 ### Infrastructure
 - `.github/workflows/ci.yml` — typecheck + test on Node 20 / 22.
