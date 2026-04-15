@@ -21,6 +21,7 @@ export type DiagnosticKind =
 
 export interface DiagnosticFinding {
   readonly area: DiagnosticArea;
+  readonly source: string; // absolute path of the offending file
   readonly kind: DiagnosticKind;
   readonly message: string;
 }

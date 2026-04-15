@@ -8,8 +8,33 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 ## [Unreleased]
 
 ### Added
+- **`gate repair` verb** — intervention layer paired with `gate doctor`.
+  Consumes `gate doctor --format json` from stdin (or `--from-doctor <path>`)
+  and either prints the proposed plan (default `--dry-run`) or executes it
+  (`--apply`). Quarantine is the only action: malformed records
+  (`top_level_not_mapping`, `hydration_error`) are moved to
+  `<content_root>/quarantine/<ISO-timestamp>/<area>/<basename>`.
+  `duplicate_id` and `unknown` findings are no-op (data safety: automatic
+  resolution risks data loss). `text` and `json` output formats. The
+  `--apply` path is idempotent (already-moved sources are skipped, not
+  errored). Path safety is enforced via `realpathSync` canonicalization
+  on both content_root and source — symlink-escape is closed structurally.
+  Closes `i-2026-04-15-0026` (partial: quarantine path; field-level patch
+  repair tracked separately).
 - `CHANGELOG.md` and `POLICY.md` — versioning promise and change history.
 - `guild --version` / `gate --version` (alias `-v`) — print `guild-cli <version>` and exit 0.
+
+### Changed (breaking — application port)
+- **`OnMalformed` port signature** widened from `(msg: string) => void`
+  to `(source: string, msg: string) => void`. The `source` is the
+  absolute filesystem path of the offending file. This makes the
+  intervention contract type-enforced rather than convention-pinned
+  (previously the path was carried as a prefix of the message string).
+  All three YAML repositories (`YamlMemberRepository`,
+  `YamlRequestRepository`, `YamlIssueRepository`) now pass the absolute
+  source path explicitly. `DiagnosticFinding` gains a new
+  `readonly source: string` field, surfaced in `gate doctor` text/json
+  output. Closes `i-2026-04-15-0025`.
 
 ### Changed
 - **Sequence ceiling**: Request and Issue ids now use 4-digit
