@@ -30,6 +30,95 @@ entries (`pending`, `approved`, `executing`, `completed`) with
 distinguish them from full-cycle transitions. `--auto-review` still
 works — it just moves the review from "blocking" to "after-the-fact."
 
+### Boot: single-command orientation
+
+`gate boot` is the agent-first entry point. Where the Session-start
+recipe below uses three verbs (`status` + `whoami` + `tail`), `boot`
+returns a single JSON payload with identity, queues, recent activity,
+your own recent utterances, and unread inbox:
+
+```json
+{
+  "actor": "kiri",
+  "role": "member",
+  "status": { "pending": {...}, "approved": {...}, ... },
+  "tail": [...],        // 10 most recent utterances across all actors
+  "your_recent": [...], // 5 most recent utterances by you
+  "inbox_unread": [...],
+  "last_activity": "2026-04-16T..."
+}
+```
+
+`GUILD_ACTOR` is optional — without it, `your_recent` is `null` and
+per-actor counts are zero, but the global snapshot still returns.
+Use `--format text` for the human-readable rendering.
+
+**Design note.** Three short commands (`status` + `whoami` + `tail`)
+is agent-friendly but not agent-first: the agent has to decide "what
+do I fetch next" during orientation. `boot` bundles the three into
+one payload so the agent can acquire full context with one tool call.
+
+### Write verbs: `--format json` and `suggested_next`
+
+Every write verb (`request`, `approve`, `deny`, `execute`, `complete`,
+`fail`, `review`, `fast-track`) accepts `--format json` and returns a
+structured response:
+
+```json
+{
+  "ok": true,
+  "id": "2026-04-16-0001",
+  "state": "approved",
+  "message": "✓ approved: 2026-04-16-0001",
+  "suggested_next": {
+    "verb": "execute",
+    "args": { "id": "2026-04-16-0001", "by": "kiri" },
+    "reason": "request is approved; executor should begin work"
+  }
+}
+```
+
+`suggested_next` is derived deterministically from state, assigned
+executor, and auto-review. An orchestrator can parse it directly into
+the next tool call. When the lifecycle has no further step (terminal
+state, or completed with no auto-review), `suggested_next` is `null`.
+
+**Review suggestion omits `verdict` on purpose.** Defaulting it to
+`ok` would let an inattentive agent chain-call the suggestion and
+rubber-stamp a review — the exact failure mode the Two-Persona loop
+exists to prevent. The reviewer must supply `--verdict` explicitly.
+
+**Pending with multiple hosts.** When `host_names` has more than one
+entry, `suggested_next.args.by` is omitted and the `reason` field lists
+the candidates, so the agent (or human) picks explicitly rather than
+rubber-stamping on the first configured host.
+
+### Schema: JSON Schema introspection for LLM tool layers
+
+`gate schema` emits a JSON Schema (draft-07) catalogue of every verb,
+its inputs, and its outputs. Primary consumer is an LLM wiring gate
+into an MCP tool layer — instead of parsing `gate --help` and guessing
+arg names, the agent ingests this payload:
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "version": "0.1.0",
+  "verbs": [
+    { "name": "approve", "category": "write",
+      "input": { "type": "object",
+                 "properties": { "id": {...}, "by": {...}, ... },
+                 "required": ["id"] },
+      "output": { ... writeResponseSchema ... } },
+    ...
+  ]
+}
+```
+
+Use `--verb <name>` to filter to one verb. `--format text` produces a
+one-line-per-verb summary for humans. A CI test pins the `VERBS` list
+against `index.ts`'s dispatch table so the schema can't silently drift.
+
 ### Status: agent orientation
 
 `gate status` is the first command an agent calls at session start.

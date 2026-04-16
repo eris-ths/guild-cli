@@ -9,10 +9,19 @@ State lives in YAML files under a `content_root`. Git gives you history.
 ## Session start
 
 ```bash
-gate status              # → JSON: pending/approved/executing/issues/inbox
+gate boot                # → JSON: identity + status + tail + your_recent + inbox_unread
+# (old 3-command recipe — use boot above if you can consume JSON)
+gate status              # pending/approved/executing/issues/inbox
 gate whoami              # your identity + recent utterances (needs GUILD_ACTOR)
 gate tail 10             # last 10 events across all actors
 ```
+
+## Agent-first knobs
+
+- `gate boot` — single-command orientation (identity + status + tail + inbox)
+- `--format json` on every write verb (`request/approve/deny/execute/complete/fail/review/fast-track`)
+  returns `{ok, id, state, message, suggested_next:{verb, args, reason}}`
+- `gate schema` — JSON Schema for all verbs (LLM tool-layer input)
 
 ## Request lifecycle
 

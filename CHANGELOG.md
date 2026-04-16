@@ -7,8 +7,27 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 
 ## [Unreleased]
 
-### Added
-- **Atomic writes for request files.** `YamlRequestRepository.save()` now
+### Added (agent-first)
+- **`gate boot` — single-command session orientation.** Returns
+  identity + status + tail + your recent utterances + inbox unread as
+  one JSON payload. Replaces the three-verb `status`+`whoami`+`tail`
+  recipe. `GUILD_ACTOR` is optional (global view if unset).
+- **`--format json` on every write verb.** `request`, `approve`,
+  `deny`, `execute`, `complete`, `fail`, `review`, and `fast-track`
+  now return `{ok, id, state, message, suggested_next}`. The
+  `suggested_next` field is derived deterministically from the
+  post-mutation state so orchestrators can parse it straight into
+  the next tool call. `suggested_next` is `null` at terminal states.
+  Multi-host content roots omit `by` and list candidates in `reason`
+  rather than silently nominating a host. Review suggestions
+  intentionally omit `verdict` — rubber-stamping is the exact
+  failure mode the Two-Persona loop exists to prevent.
+- **`gate schema` — JSON Schema introspection.** Draft-07 catalogue
+  of every verb's inputs and outputs. Primary consumer: LLM tool
+  layers. A CI test (`schema drift`) pins the VERBS list against
+  `index.ts` dispatch so silent drift is impossible.
+
+### Added `YamlRequestRepository.save()` now
   writes via `.tmp-<pid>-<rand>-<basename>` + `rename()` so readers never
   observe a torn or partial YAML. Temp files are cleaned up on failure.
 - **Optimistic lock on save.** `Request.loadedVersion` snapshots the

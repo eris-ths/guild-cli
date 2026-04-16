@@ -23,6 +23,8 @@ import {
 import { issuesCmd } from './handlers/issues.js';
 import { doctorCmd } from './handlers/doctor.js';
 import { repairCmd } from './handlers/repair.js';
+import { bootCmd } from './handlers/boot.js';
+import { schemaCmd } from './handlers/schema.js';
 import {
   msgSend,
   msgBroadcast,
@@ -107,8 +109,16 @@ Status:
                        Agent orientation: pending/approved/executing
                        counts, open issues, unread inbox, last activity.
                        Default output is JSON (agent-first).
+  gate boot [--format json|text] [--tail <N>] [--utterances <N>]
+                       Single-command session bootstrap for agents.
+                       Returns identity + status + tail + your recent
+                       utterances + inbox unread as one JSON payload.
+                       GUILD_ACTOR optional (global view if unset).
 
 Meta:
+  gate schema [--verb <name>] [--format json|text]
+                       Introspection: JSON Schema for every verb's
+                       inputs and outputs. Consumed by LLM tool layers.
   gate --version       Print version and exit
 `;
 
@@ -172,6 +182,10 @@ export async function main(argv: readonly string[]): Promise<number> {
         return await repairCmd(c, args);
       case 'status':
         return await statusCmd(c, args);
+      case 'boot':
+        return await bootCmd(c, args);
+      case 'schema':
+        return await schemaCmd(c, args);
       default:
         process.stderr.write(`unknown command: ${cmd}\n${HELP}`);
         return 1;

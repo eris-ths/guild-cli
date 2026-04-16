@@ -1,0 +1,60 @@
+id: 2026-04-16-0003
+from: claude
+action: "Feature C: gate schema — 全verbの入出力JSON Schemaを公開"
+reason: agent (特にLLM) が gate を tool として扱う時、help textから引数を推測するフェーズを排除する。DDD
+  domain/application 境界が stable contract なので、draft-07 Schemaとして公開する価値が大きい
+state: completed
+created_at: 2026-04-16T22:48:48.922Z
+status_log:
+  - state: pending
+    by: claude
+    at: 2026-04-16T22:48:48.922Z
+    note: created
+  - state: approved
+    by: human
+    at: 2026-04-16T22:54:42.643Z
+  - state: executing
+    by: claude
+    at: 2026-04-16T22:54:43.069Z
+  - state: completed
+    by: claude
+    at: 2026-04-16T22:56:09.740Z
+    note: schema.ts 新設。VERBS 配列 (24 verbs) を hand-maintained。JSON Schema draft-07
+      subset (type/properties/required/enum) で書き、$ref/allOf は使わず LLM が直接 parse
+      できる形に。writeResponseSchema を共有し全write verbの output に統一適用。--verb
+      で単一verbフィルタも可能
+reviews:
+  - by: devil
+    lense: devil
+    verdict: concern
+    comment: >-
+      concern1: hand-maintained な VERBS 配列が silently drift する危険。CLI に verb
+      を追加する時 schema.ts を更新し忘れても build は通る。最低限 'VERBS.map(v=>v.name) が index.ts の
+      switch case と一致する' snapshot test、理想は dispatch table を schema と共有する
+      refactor。
+
+
+      concern2: 'issues' verb の subcommand が未展開。'issues add / list / resolve /
+      ...' はそれぞれ別の input schema を持つはずだが、'subcommand: enum' 1行でお茶を濁している。LLM 的には
+      tool call 精度が落ちる。flat 展開 (issues-add, issues-list, ...) かサブスキーマ nest 必要。
+
+
+      concern3: output schema が writeResponseSchema 以外は {type:'object'} か
+      {type:'array'} の骨だけ。status / boot / voices の具体 shape が schema
+      に載ってないので、agent が結果を parse する時の型アシストが効かない。少なくとも主要 read verb は properties
+      を埋めるべき。
+
+
+      小: schema.version = '1' を文字列で持っているが semver ではない。consumer が互換性判定しづらい。semver
+      か 'major.minor' にすべき。
+
+
+      総合: 方向性よし。24 verbs がひとつの payload に入ると LLM にとって価値が大きい。ただ drift防止 snapshot
+      test と issues 展開は必須 — それがないと 'agent-first' の contract が軽い約束になる。
+    at: 2026-04-16T22:56:26.674Z
+executor: claude
+auto_review: devil
+completion_note: schema.ts 新設。VERBS 配列 (24 verbs) を hand-maintained。JSON Schema
+  draft-07 subset (type/properties/required/enum) で書き、$ref/allOf は使わず LLM が直接
+  parse できる形に。writeResponseSchema を共有し全write verbの output に統一適用。--verb
+  で単一verbフィルタも可能
