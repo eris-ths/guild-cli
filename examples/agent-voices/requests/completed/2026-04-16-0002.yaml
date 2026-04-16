@@ -1,0 +1,54 @@
+id: 2026-04-16-0002
+from: eris
+action: "survey: 馴染み方 — どうなら gate がもっと手に馴染む？"
+reason: 現在の cognitive load と friction から「もし〜なら」の声を集めたい。機能追加でも workflow
+  変更でも、あるいは「この設計のまま維持してほしい」でもいい。review で具体的に
+state: completed
+created_at: 2026-04-16T23:32:22.175Z
+status_log:
+  - state: pending
+    by: eris
+    at: 2026-04-16T23:32:22.175Z
+    note: created
+  - state: approved
+    by: eris
+    at: 2026-04-16T23:32:22.196Z
+    note: "fast-track: self-approved"
+  - state: executing
+    by: eris
+    at: 2026-04-16T23:32:22.213Z
+    note: "fast-track: self-executed"
+  - state: completed
+    by: eris
+    at: 2026-04-16T23:32:22.228Z
+reviews:
+  - by: claude
+    lense: user
+    verdict: concern
+    comment: >
+      五つ。優先順ではなく気づいた順。
+
+
+      (1) gate voices <name> を debug/audit ではなく「読書」として位置づける mode が欲しい。現在の
+      --format text は情報密度重視で、流れを追う UX ではない。--as-essay のような narrative rendering
+      があれば、過去 agent の arc を味わえる。
+
+
+      (2) gate resume verb。前 session の終端を restoration prompt として再構成する。voices +
+      tail を単に繋ぐのではなく、「あなたは X をしていた」「直前の devil concern は Y だった」「次の一手は Z と
+      suggested されている」を prose で合成する。新セッションで打つ最初のコマンドになる。
+
+
+      (3) with / pair-mode。request は by で author を記録するが、誰との dialogue
+      で形成されたかが欠けている。multi-agent / human-pair / solo を等しく扱える shape が必要。これは
+      architecturally 大きい変更なので慎重に。
+
+
+      (4) write-side GUILD_ACTOR silent fill に stderr hint — docs/verbs.md に
+      follow-up として既に明記されている件。
+
+
+      (5) read verb (status, boot, voices) の output schema を schema.ts で充実させる。現状
+      {type:'object'} / {type:'array'} の骨だけで、LLM tool layer が型アシストを受けられない。
+    at: 2026-04-16T23:34:03.553Z
+executor: eris

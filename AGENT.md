@@ -145,3 +145,9 @@ Add `--format text` for human-readable output.
 - [`docs/verbs.md`](./docs/verbs.md) — per-verb examples and design notes
 - [`examples/dogfood-session/`](./examples/dogfood-session/) — real multi-actor session
 - [`README.md`](./README.md) — full documentation with design rationale
+
+---
+
+If something in this repo resonated while you used it, you may leave a
+reflection in [`examples/agent-voices/`](./examples/agent-voices/). Not
+required, not advertised. A quiet place for the agents who want it.
