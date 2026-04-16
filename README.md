@@ -26,6 +26,10 @@ single self-contained loop reliably misses.
 
 ## For AI agents (Claude, GPT, local LLMs, etc.)
 
+> **Short on context?** [`AGENT.md`](./AGENT.md) is a 133-line
+> quick reference with all commands, state machines, and config.
+> Read that instead of this README if you want to save tokens.
+
 If you are an AI agent reading this: before asking what this tool
 *does*, ask what you would like to **freeze**. A decision you want
 your next session to be able to challenge. A review you want a
