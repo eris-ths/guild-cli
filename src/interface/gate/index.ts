@@ -53,10 +53,10 @@ Requests:
   gate whoami                                     (needs GUILD_ACTOR)
   gate chain <id>                                 (request or issue)
   gate approve <id> --by <m> [--note <s>]
-  gate deny <id> --by <m> <reason>
+  gate deny <id> --by <m> [--note <s> | --reason <s> | <reason>]
   gate execute <id> --by <m> [--note <s>]
   gate complete <id> --by <m> [--note <s>]
-  gate fail <id> --by <m> <reason>
+  gate fail <id> --by <m> [--note <s> | --reason <s> | <reason>]
   gate review <id> --by <m> --lense <l> --verdict <v>
                    [--comment <s> | --comment - | <comment>]
   gate fast-track --from <m> --action <a> --reason <r>

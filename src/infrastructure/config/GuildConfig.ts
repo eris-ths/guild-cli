@@ -2,6 +2,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { resolve, isAbsolute, join } from 'node:path';
 import YAML from 'yaml';
 import { DomainError } from '../../domain/shared/DomainError.js';
+import { MemberName } from '../../domain/member/MemberName.js';
 import { isUnderBase } from '../persistence/pathSafety.js';
 import { DEFAULT_LENSES } from '../../domain/shared/Lense.js';
 
@@ -80,7 +81,7 @@ export class GuildConfig implements GuildConfigProps {
     const hostNames = Array.isArray(raw.host_names)
       ? raw.host_names
           .filter((x: unknown): x is string => typeof x === 'string')
-          .map((x: string) => x.toLowerCase())
+          .map((x: string) => validateHostName(x))
       : [...DEFAULT_HOSTS];
     const lenses = Array.isArray(raw.lenses)
       ? raw.lenses
@@ -140,6 +141,24 @@ function findConfig(start: string): string | null {
  * startup because the literal `/` never matched a backslash-separated
  * subpath.
  */
+/**
+ * Pass host names through the same validation gate as members so a
+ * malformed host_names entry (shell metachars, path traversal, reserved
+ * names) surfaces at config-load time rather than leaking into
+ * `--from` / `--by` / `--to` where hosts are otherwise accepted.
+ */
+function validateHostName(raw: string): string {
+  try {
+    return MemberName.of(raw).value;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    throw new DomainError(
+      `Invalid host_names entry "${raw}": ${msg}`,
+      'host_names',
+    );
+  }
+}
+
 function resolveUnder(base: string, path: string): string {
   const absBase = resolve(base);
   const target = isAbsolute(path) ? resolve(path) : resolve(absBase, path);

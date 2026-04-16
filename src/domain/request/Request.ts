@@ -31,13 +31,21 @@ export interface RequestProps {
   createdAt: string;
   reviews: Review[];
   statusLog: StatusLogEntry[];
-  completionNote?: string;
-  denyReason?: string;
-  failureReason?: string;
 }
 
+/**
+ * Closure notes (completed/denied/failed) live in `status_log[-1].note`
+ * as the single source of truth. toJSON derives the legacy top-level
+ * keys (`completion_note` / `deny_reason` / `failure_reason`) from the
+ * log so external readers stay stable while the domain keeps one place
+ * to write. Restore may receive the legacy keys from older files; they
+ * are used only to backfill a missing log note, never stored separately.
+ */
 export class Request {
-  private constructor(private props: RequestProps) {}
+  private constructor(
+    private props: RequestProps,
+    private readonly _loadedVersion: number,
+  ) {}
 
   static create(input: {
     id: RequestId;
@@ -74,11 +82,17 @@ export class Request {
     if (input.target !== undefined) {
       props.target = sanitizeText(input.target, 'target');
     }
-    return new Request(props);
+    // New requests have no on-disk predecessor; loadedVersion=0 marks
+    // "never seen" for the optimistic-lock check in save().
+    return new Request(props, 0);
   }
 
   static restore(props: RequestProps): Request {
-    return new Request({ ...props });
+    // loadedVersion snapshots the statusLog length AT LOAD time. After
+    // a mutation (approve/execute/...), statusLog.length becomes
+    // loadedVersion + 1, and the repository compares the on-disk
+    // length against loadedVersion to detect lost-update races.
+    return new Request({ ...props }, props.statusLog.length);
   }
 
   get id(): RequestId {
@@ -108,6 +122,15 @@ export class Request {
   get statusLog(): readonly StatusLogEntry[] {
     return this.props.statusLog;
   }
+  /**
+   * Number of `statusLog` entries observed when this aggregate was loaded
+   * from disk (0 for freshly-created instances). The repository uses it
+   * as an optimistic-lock version: if the on-disk log has grown since,
+   * another writer won the race and our save must be rejected.
+   */
+  get loadedVersion(): number {
+    return this._loadedVersion;
+  }
 
   approve(by: MemberName, note?: string): void {
     this.transition('approved', by, note);
@@ -115,7 +138,6 @@ export class Request {
 
   deny(by: MemberName, reason: string): void {
     this.transition('denied', by, reason);
-    this.props.denyReason = sanitizeText(reason, 'reason');
   }
 
   execute(by: MemberName, note?: string): void {
@@ -124,14 +146,10 @@ export class Request {
 
   complete(by: MemberName, note?: string): void {
     this.transition('completed', by, note);
-    if (note !== undefined) {
-      this.props.completionNote = sanitizeText(note, 'note');
-    }
   }
 
   fail(by: MemberName, reason: string): void {
     this.transition('failed', by, reason);
-    this.props.failureReason = sanitizeText(reason, 'reason');
   }
 
   addReview(review: Review): void {
@@ -180,12 +198,15 @@ export class Request {
     if (this.props.autoReview)
       out['auto_review'] = this.props.autoReview.value;
     if (this.props.target !== undefined) out['target'] = this.props.target;
-    if (this.props.completionNote !== undefined)
-      out['completion_note'] = this.props.completionNote;
-    if (this.props.denyReason !== undefined)
-      out['deny_reason'] = this.props.denyReason;
-    if (this.props.failureReason !== undefined)
-      out['failure_reason'] = this.props.failureReason;
+    // Derive legacy closure keys from the last status_log entry so
+    // external consumers (chain / voices / show --format text) keep
+    // working unchanged. Single source of truth: status_log[-1].note.
+    const last = this.props.statusLog[this.props.statusLog.length - 1];
+    if (last && last.note !== undefined) {
+      if (last.state === 'completed') out['completion_note'] = last.note;
+      else if (last.state === 'denied') out['deny_reason'] = last.note;
+      else if (last.state === 'failed') out['failure_reason'] = last.note;
+    }
     return out;
   }
 }
