@@ -9,7 +9,8 @@ State lives in YAML files under a `content_root`. Git gives you history.
 ## Session start
 
 ```bash
-gate boot                # → JSON: identity + status + tail + your_recent + inbox_unread
+gate boot                # identity + status + tail + your_recent + inbox_unread (1 JSON)
+gate resume              # picking up where the last session ended (needs GUILD_ACTOR)
 # (old 3-command recipe — use boot above if you can consume JSON)
 gate status              # pending/approved/executing/issues/inbox
 gate whoami              # your identity + recent utterances (needs GUILD_ACTOR)

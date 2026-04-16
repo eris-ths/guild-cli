@@ -117,6 +117,36 @@ const VERBS: readonly VerbSchema[] = [
     output: { type: 'object' },
   },
   {
+    name: 'resume',
+    category: 'read',
+    summary: 'restoration prompt: last utterance, last transition, open loops, suggested next',
+    input: {
+      type: 'object',
+      properties: {
+        format: formatField,
+        locale: { type: 'string', enum: ['en', 'ja'], description: 'prose language; also via GUILD_LOCALE env' },
+      },
+    },
+    output: {
+      type: 'object',
+      properties: {
+        actor: str,
+        session_hint: str,
+        last_context: {
+          type: 'object',
+          properties: {
+            summary: str,
+            last_utterance: { type: 'object' },
+            last_transition: { type: 'object' },
+            open_loops: { type: 'array' },
+          },
+        },
+        suggested_next: { type: 'object' },
+        restoration_prose: str,
+      },
+    },
+  },
+  {
     name: 'whoami',
     category: 'read',
     summary: 'identity + recent utterances (requires GUILD_ACTOR)',

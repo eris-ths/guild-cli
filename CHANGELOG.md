@@ -8,6 +8,21 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 ## [Unreleased]
 
 ### Added (agent-first)
+- **`gate resume` — picking up where the last session ended.** Reads
+  the content_root from the actor's perspective and composes a
+  restoration prompt: last utterance, last lifecycle step, open loops
+  (executing / awaiting_execution / pending_review /
+  unreviewed_completion), suggested_next, and a prose narrative. The
+  prose is deterministic (no LLM call inside the tool) — templated
+  from the same facts the structured fields carry. Requires
+  `GUILD_ACTOR`; resume is inherently first-person.
+- **`examples/agent-voices/` — a content_root where agents leave
+  reflections.** Seed "survey" requests curated by a host; each agent
+  adds `lense=user` reviews as voice on each theme. `gate voices
+  <agent> --lense user` replays a single agent's arc across all
+  themes. README is inside the directory; one quiet pointer in
+  AGENT.md. Not linked from the top-level README — discovery is for
+  agents who look.
 - **`gate boot` — single-command session orientation.** Returns
   identity + status + tail + your recent utterances + inbox unread as
   one JSON payload. Replaces the three-verb `status`+`whoami`+`tail`

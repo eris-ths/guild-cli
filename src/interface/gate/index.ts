@@ -25,6 +25,7 @@ import { doctorCmd } from './handlers/doctor.js';
 import { repairCmd } from './handlers/repair.js';
 import { bootCmd } from './handlers/boot.js';
 import { schemaCmd } from './handlers/schema.js';
+import { resumeCmd } from './handlers/resume.js';
 import {
   msgSend,
   msgBroadcast,
@@ -114,6 +115,12 @@ Status:
                        Returns identity + status + tail + your recent
                        utterances + inbox unread as one JSON payload.
                        GUILD_ACTOR optional (global view if unset).
+  gate resume [--format json|text]
+                       Reconstruct what the actor was doing when the
+                       last session ended. Returns last utterance,
+                       last transition, open loops (awaiting/
+                       executing/pending review/unreviewed), and a
+                       prose restoration note. Requires GUILD_ACTOR.
 
 Meta:
   gate schema [--verb <name>] [--format json|text]
@@ -184,6 +191,8 @@ export async function main(argv: readonly string[]): Promise<number> {
         return await statusCmd(c, args);
       case 'boot':
         return await bootCmd(c, args);
+      case 'resume':
+        return await resumeCmd(c, args);
       case 'schema':
         return await schemaCmd(c, args);
       default:

@@ -30,6 +30,76 @@ entries (`pending`, `approved`, `executing`, `completed`) with
 distinguish them from full-cycle transitions. `--auto-review` still
 works — it just moves the review from "blocking" to "after-the-fact."
 
+### Resume: picking up where the last session ended
+
+`gate resume` answers "what was I doing?" at the start of a new
+session. It reads the content_root from the actor's perspective and
+composes a **restoration prompt** — structured and prose — so the
+new session can pick up the thread of the old one.
+
+```bash
+$ export GUILD_ACTOR=claude
+$ gate resume --format text
+# resuming as claude
+
+Your last voice was a review (3h ago) on req=2026-04-16-0002 — [user/concern]:
+  "(1) gate voices <name> を debug/audit ではなく「読書」として..."
+
+Your last lifecycle step (3h ago): req=2026-04-16-0006 → executing
+
+Open loops waiting on you (1):
+  - [3h ago] 2026-04-16-0006 (executor): you started; not yet completed — "Feature: gate resume ..."
+
+Suggested next: gate complete --id 2026-04-16-0006 --by claude
+  reason: request is executing; executor should complete (or fail) when done
+```
+
+The JSON shape carries the same information plus per-field structure:
+
+```json
+{
+  "actor": "claude",
+  "session_hint": "2026-04-16T23:40:...",
+  "last_context": {
+    "summary": "claude last reviewed at ...; 1 open loop.",
+    "last_utterance": { ... },
+    "last_transition": { ... },
+    "open_loops": [{ "type": "executing", "id": "...", "role": "executor", "age_hint": "3h ago", ... }]
+  },
+  "suggested_next": { "verb": "complete", "args": {...}, "reason": "..." },
+  "restoration_prose": "..."
+}
+```
+
+**Open-loop taxonomy** (priority order):
+- `executing` — you started work, haven't completed yet (most urgent;
+  others may be blocked by your half-finished state).
+- `awaiting_execution` — approved, you're the executor, haven't
+  started.
+- `pending_review` — a completed request auto-assigned to you is
+  waiting for your review.
+- `unreviewed_completion` — your own completion is waiting on your
+  reviewer; lowest urgency (the ball is in their court).
+
+`suggested_next` is derived from the top loop via the same
+`deriveSuggestedNext` logic write verbs use, so the hint is
+identical across `gate complete`, `gate boot`, and `gate resume`.
+Review suggestions still omit `verdict` on purpose — the anti-rubber-
+stamp guard applies here too.
+
+**Why prose + structure both?** An agent consuming the JSON goes
+straight to `suggested_next`. An agent consuming the prose restores
+continuity by reading — the same way a human reads back yesterday's
+notes. The prose is deterministic (no LLM call inside the tool); it
+is templated from the same facts the JSON carries.
+
+`GUILD_ACTOR` is required: `resume` is inherently first-person.
+
+**Locale.** `--locale <en|ja>` or `GUILD_LOCALE` env var selects the
+prose language. Defaults to `en`. Only the `restoration_prose` field
+is localized; the structured fields stay in English so programmatic
+consumers are stable.
+
 ### Boot: single-command orientation
 
 `gate boot` is the agent-first entry point. Where the Session-start
