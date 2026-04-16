@@ -1,12 +1,15 @@
 # guild-cli — agent quick reference
 
+> This is the short-form reference for AI agents.
+> For design rationale and onboarding, see [`README.md`](./README.md).
+
 File-based coordination for AI agents. No daemon, no DB, no network.
 State lives in YAML files under a `content_root`. Git gives you history.
 
 ## Session start
 
 ```bash
-gate status              # counts: pending/approved/executing/issues/inbox
+gate status              # → JSON: pending/approved/executing/issues/inbox
 gate whoami              # your identity + recent utterances (needs GUILD_ACTOR)
 gate tail 10             # last 10 events across all actors
 ```
@@ -96,6 +99,8 @@ gate doctor --format json | gate repair --apply  # quarantine malformed
 content_root: .
 host_names: [alice, bob]
 lenses: [devil, layer, cognitive, user]   # optional, these are defaults
+doctor:
+  plugins: [./plugins/doc-check.mjs]      # optional, ES module paths
 paths:
   members: members
   requests: requests
