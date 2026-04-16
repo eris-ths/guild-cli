@@ -3,7 +3,7 @@ import { resolve, isAbsolute, join } from 'node:path';
 import YAML from 'yaml';
 import { DomainError } from '../../domain/shared/DomainError.js';
 import { isUnderBase } from '../persistence/pathSafety.js';
-import { DEFAULT_LENSES, setAllowedLenses } from '../../domain/shared/Lense.js';
+import { DEFAULT_LENSES } from '../../domain/shared/Lense.js';
 
 /**
  * Called by repository hydrate paths when a YAML record cannot be
@@ -53,10 +53,7 @@ export class GuildConfig implements GuildConfigProps {
     readonly lenses: readonly string[],
     readonly doctorPlugins: readonly string[],
     readonly onMalformed: OnMalformed,
-  ) {
-    // Propagate configured lenses to the domain parser
-    setAllowedLenses(lenses);
-  }
+  ) {}
 
   static load(
     cwd: string = process.cwd(),
