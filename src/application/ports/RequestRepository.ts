@@ -34,9 +34,10 @@ export class RequestIdCollision extends Error {
 }
 
 /**
- * Thrown when `save()` detects that the on-disk status_log has grown
- * since the request was loaded — i.e. another writer committed a
- * transition in the meantime. Callers should reload and retry rather
+ * Thrown when `save()` detects that the on-disk total mutation count
+ * (status_log.length + reviews.length) has grown since the request
+ * was loaded — i.e. another writer committed a transition or a
+ * review in the meantime. Callers should reload and retry rather
  * than blindly overwrite.
  */
 export class RequestVersionConflict extends Error {
@@ -46,7 +47,7 @@ export class RequestVersionConflict extends Error {
     public readonly actualVersion: number,
   ) {
     super(
-      `Request ${id} changed on disk (expected status_log length ${expectedVersion}, found ${actualVersion}); reload and retry`,
+      `Request ${id} changed on disk (expected version ${expectedVersion}, found ${actualVersion}); reload and retry`,
     );
     this.name = 'RequestVersionConflict';
   }

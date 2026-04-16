@@ -7,6 +7,44 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 
 ## [Unreleased]
 
+### Added
+- **Atomic writes for request files.** `YamlRequestRepository.save()` now
+  writes via `.tmp-<pid>-<rand>-<basename>` + `rename()` so readers never
+  observe a torn or partial YAML. Temp files are cleaned up on failure.
+- **Optimistic lock on save.** `Request.loadedVersion` snapshots the
+  total mutation count (`status_log.length + reviews.length`) at load
+  time. If the on-disk total has grown before save, the repo throws
+  `RequestVersionConflict` instead of overwriting. Catches both
+  transition races (concurrent `approve`/`execute`) and review races
+  (concurrent `addReview`, which does not touch `status_log`).
+- **`gate deny` / `gate fail` accept `--note <s>` or `--reason <s>`** in
+  addition to the legacy positional argument. Aligns muscle memory
+  with `approve`/`execute`/`complete`.
+
+### Changed
+- **Closure notes have a single source of truth.** The domain no
+  longer writes `completion_note` / `deny_reason` / `failure_reason`
+  as separate Request fields; they are derived at `toJSON()` time
+  from `status_log[-1].note`. External shape is unchanged — the
+  top-level keys are still emitted for backward compatibility with
+  consumers of the YAML / JSON output. **On next save, the status_log
+  entry is authoritative**: if a legacy file has the two disagreeing,
+  the top-level value is dropped. Hydration warns via `onMalformed`
+  when disagreement is detected.
+- **`host_names` are validated via `MemberName.of()`** at config-load
+  time. Entries that were previously accepted but could collide with
+  path-traversal, shell metachars, or reserved names now fail loudly
+  with `Invalid host_names entry ...`.
+- **`findById` now scans every state directory** and dedupes by total
+  mutation count, so a file mid-transition (present under two dirs
+  between atomic-write and old-file-unlink) deterministically returns
+  the newer representation. The previous first-hit-wins behavior could
+  return the stale pending/ file while the newer approved/ file also
+  existed.
+- **`gate` MCP (`mcp/gate_mcp.py`) stops mixing stderr into stdout.**
+  `--format json` output is no longer corrupted by `[stderr] ...`
+  suffixes. Stderr is forwarded to the host's stderr for observability.
+
 ## [0.3.0] — 2026-04-16
 
 ### Added

@@ -88,11 +88,14 @@ export class Request {
   }
 
   static restore(props: RequestProps): Request {
-    // loadedVersion snapshots the statusLog length AT LOAD time. After
-    // a mutation (approve/execute/...), statusLog.length becomes
-    // loadedVersion + 1, and the repository compares the on-disk
-    // length against loadedVersion to detect lost-update races.
-    return new Request({ ...props }, props.statusLog.length);
+    // loadedVersion snapshots the TOTAL mutation count at load time —
+    // status_log entries PLUS reviews. Using status_log alone would
+    // miss concurrent addReview races (reviews push into reviews[]
+    // without touching status_log), letting two simultaneous reviewers
+    // silently lose one review on last-writer-wins. See
+    // `computeVersion` below for the single place that defines the
+    // invariant.
+    return new Request({ ...props }, computeVersion(props.statusLog.length, props.reviews.length));
   }
 
   get id(): RequestId {
@@ -123,13 +126,23 @@ export class Request {
     return this.props.statusLog;
   }
   /**
-   * Number of `statusLog` entries observed when this aggregate was loaded
-   * from disk (0 for freshly-created instances). The repository uses it
-   * as an optimistic-lock version: if the on-disk log has grown since,
-   * another writer won the race and our save must be rejected.
+   * Total mutation count observed when this aggregate was loaded from
+   * disk (0 for freshly-created instances). Defined as
+   * `status_log.length + reviews.length` — both arrays are append-only,
+   * so their combined length is a monotonic version. The repository
+   * uses it as an optimistic-lock token: if the on-disk total has
+   * grown since, another writer won the race and our save is rejected.
    */
   get loadedVersion(): number {
     return this._loadedVersion;
+  }
+
+  /**
+   * Current total mutation count. Equivalent to the version the
+   * repository will write with, so `loadedVersion` + delta = `currentVersion`.
+   */
+  get currentVersion(): number {
+    return computeVersion(this.props.statusLog.length, this.props.reviews.length);
   }
 
   approve(by: MemberName, note?: string): void {
@@ -209,6 +222,16 @@ export class Request {
     }
     return out;
   }
+}
+
+/**
+ * Total mutation count: status_log entries + reviews. Both arrays are
+ * append-only so the sum is monotonic across any legal transition.
+ * Kept as a module-private helper so the invariant is defined in one
+ * place and the repository can reuse it when reading raw YAML.
+ */
+export function computeVersion(statusLogLen: number, reviewsLen: number): number {
+  return statusLogLen + reviewsLen;
 }
 
 function sanitizeText(raw: unknown, field: string): string {
