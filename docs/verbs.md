@@ -30,6 +30,49 @@ entries (`pending`, `approved`, `executing`, `completed`) with
 distinguish them from full-cycle transitions. `--auto-review` still
 works — it just moves the review from "blocking" to "after-the-fact."
 
+### Status: agent orientation
+
+`gate status` is the first command an agent calls at session start.
+It returns a structured summary of the content root's current state:
+
+```
+$ gate status
+{
+  "actor": null,
+  "pending": { "total": 3, "as_executor": 0, "as_author": 0 },
+  "approved": { "total": 1, "awaiting_execution": 1 },
+  "executing": { "total": 0, "by_actor": 0 },
+  "open_issues": 4,
+  "unreviewed": 1,
+  "inbox_unread": 0,
+  "last_activity": "2026-04-16T05:12:12.925Z"
+}
+```
+
+With `GUILD_ACTOR` or `--for`, the counts are scoped to that actor:
+
+```
+$ GUILD_ACTOR=noir gate status --format text
+status for noir
+──────────────────────────────
+pending: 3 (1 as executor, 2 authored)
+approved: 1 (0 awaiting your execution)
+open issues: 4
+inbox unread: 2
+last activity: 2026-04-16T05:12:12.925Z
+```
+
+**Default output is JSON** — designed for agents to parse and act on.
+Use `--format text` for human-readable display.
+
+**Design note.** `gate status` vs `gate whoami`: status answers
+"what's the state of this content root?" (numbers, queues, counts).
+`whoami` answers "who am I and what did I say recently?" (identity,
+voice). Use both at session start: status first for orientation,
+whoami for voice recovery.
+
+---
+
 ### Filtering lists
 
 `gate list` and `gate pending` accept filter flags that combine
@@ -136,7 +179,7 @@ comment). Filters combine via AND:
   lens (implies review-only; authored requests carry no lens)
 - `--verdict <ok|concern|reject>` — only reviews with that verdict
   (implies review-only)
-- `--format json` — emit the utterance list as JSON for piping
+- `--format text` — human-readable output (default is JSON since 0.2.0)
 
 ```
 $ gate voices noir --lense devil
@@ -367,6 +410,53 @@ quote on one bash line. The STDIN form is the one you want
 when piping from an editor or a larger automation step.
 EOF
 ```
+
+### Doctor and repair
+
+`gate doctor` is a read-only health check over the content root.
+It scans members, requests, and issues for malformed YAML records
+and reports findings without modifying anything:
+
+```
+$ gate doctor
+gate doctor — content root health
+
+✓ members   3 total, 0 malformed
+✓ requests  17 total, 0 malformed
+✓ issues    8 total, 0 malformed
+
+✓ clean — no malformed records detected
+```
+
+When findings exist, pipe to `gate repair` for intervention:
+
+```
+$ gate doctor --format json | gate repair          # dry-run: show plan
+$ gate doctor --format json | gate repair --apply  # execute: quarantine
+```
+
+Repair quarantines malformed files to `<content_root>/quarantine/`
+with a timestamp directory. `duplicate_id` and `unknown` findings
+are no-op (data safety: automatic resolution risks data loss).
+
+**Design note.** Doctor and repair are separate verbs — observation
+vs intervention. You can always run `gate doctor` without fear of
+side effects. This mirrors the `silent_fail_taxonomy` principle:
+separate the "what's wrong" from the "what to do about it."
+
+**Plugins.** `gate doctor` supports plugins via `guild.config.yaml`:
+
+```yaml
+doctor:
+  plugins:
+    - ./plugins/doc-check.mjs
+```
+
+A plugin is an ES module exporting a function that returns additional
+findings. Plugin errors become findings (never crash doctor). See
+`DoctorPluginFn` in `DiagnosticUseCases.ts` for the interface.
+
+---
 
 A fully worked multi-turn example — author/critic personas driving
 each of these verbs through a real request lifecycle — lives in

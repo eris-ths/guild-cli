@@ -53,7 +53,11 @@ export function buildContainer(): Container {
     requestUC: new RequestUseCases({ requests, members, notifier, clock }),
     issueUC: new IssueUseCases(issues, members, clock),
     messageUC: new MessageUseCases({ members, notifier, clock }),
-    diagnosticUC: new DiagnosticUseCases(buildDiagRepos),
+    diagnosticUC: new DiagnosticUseCases(
+      buildDiagRepos,
+      config.doctorPlugins,
+      { root: config.root, contentRoot: config.contentRoot },
+    ),
     repairUC: new RepairUseCases(quarantine),
   };
 }

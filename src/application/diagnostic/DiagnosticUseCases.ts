@@ -33,8 +33,29 @@ export type DiagnosticRepoFactory = (
   onMalformed: OnMalformed,
 ) => DiagnosticRepoBundle;
 
+/**
+ * Doctor plugin interface. A plugin is an ES module that default-exports
+ * a function returning additional findings. Plugins run after the
+ * built-in checks and their findings are merged into the report.
+ *
+ * The plugin receives the config root and content root so it can
+ * locate files (README, docs, etc.) relative to the project.
+ */
+export interface DoctorPluginContext {
+  readonly root: string;
+  readonly contentRoot: string;
+}
+
+export type DoctorPluginFn = (
+  ctx: DoctorPluginContext,
+) => Promise<DiagnosticFinding[]>;
+
 export class DiagnosticUseCases {
-  constructor(private readonly buildRepos: DiagnosticRepoFactory) {}
+  constructor(
+    private readonly buildRepos: DiagnosticRepoFactory,
+    private readonly pluginPaths: readonly string[] = [],
+    private readonly pluginContext?: DoctorPluginContext,
+  ) {}
 
   async run(): Promise<DiagnosticReport> {
     // Findings accumulate across all three areas. Two invariants
@@ -70,6 +91,28 @@ export class DiagnosticUseCases {
     const issueBundle = this.buildRepos(areaCollector('issues'));
     const issues = await issueBundle.issues.listAll();
     const issueMalformed = findings.length - beforeIssues;
+
+    // Run doctor plugins (if any)
+    if (this.pluginPaths.length > 0 && this.pluginContext) {
+      for (const pluginPath of this.pluginPaths) {
+        try {
+          const mod = await import(pluginPath);
+          const fn: DoctorPluginFn = mod.default ?? mod;
+          if (typeof fn === 'function') {
+            const pluginFindings = await fn(this.pluginContext);
+            findings.push(...pluginFindings);
+          }
+        } catch (e) {
+          // Plugin errors become findings, never crash doctor
+          findings.push({
+            area: 'plugin',
+            source: pluginPath,
+            kind: 'unknown',
+            message: `plugin error: ${e instanceof Error ? e.message : String(e)}`,
+          });
+        }
+      }
+    }
 
     return new DiagnosticReport(
       {
