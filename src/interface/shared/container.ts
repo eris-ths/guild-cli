@@ -50,7 +50,7 @@ export function buildContainer(): Container {
   return {
     config,
     memberUC: new MemberUseCases(members),
-    requestUC: new RequestUseCases({ requests, members, notifier, clock }),
+    requestUC: new RequestUseCases({ requests, members, notifier, clock, allowedLenses: config.lenses }),
     issueUC: new IssueUseCases(issues, members, clock),
     messageUC: new MessageUseCases({ members, notifier, clock }),
     diagnosticUC: new DiagnosticUseCases(

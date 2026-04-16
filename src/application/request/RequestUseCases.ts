@@ -24,6 +24,7 @@ export interface RequestUseCasesDeps {
   members: MemberRepository;
   notifier: NotificationPort;
   clock: Clock;
+  allowedLenses?: readonly string[];
 }
 
 function dateKey(d: Date): string {
@@ -168,6 +169,7 @@ export class RequestUseCases {
       verdict: input.verdict,
       comment: input.comment,
       at: this.deps.clock.now().toISOString(),
+      ...(this.deps.allowedLenses ? { allowedLenses: this.deps.allowedLenses } : {}),
     });
     req.addReview(review);
     await this.deps.requests.save(req);

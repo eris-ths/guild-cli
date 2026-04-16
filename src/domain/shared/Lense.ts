@@ -4,26 +4,19 @@ export const DEFAULT_LENSES = ['devil', 'layer', 'cognitive', 'user'] as const;
 export type Lense = string;
 
 /**
- * Runtime-configurable lense set.
- * Defaults to the four built-in lenses. GuildConfig can override this
- * at startup by calling setAllowedLenses() with values from config.
+ * Parse and validate a lense value against an allowed set.
+ * Pure function — no module-level mutable state.
  */
-let _allowedLenses: readonly string[] = DEFAULT_LENSES;
-
-export function setAllowedLenses(lenses: readonly string[]): void {
-  _allowedLenses = lenses.length > 0 ? lenses : DEFAULT_LENSES;
-}
-
-export function getAllowedLenses(): readonly string[] {
-  return _allowedLenses;
-}
-
-export function parseLense(value: string): Lense {
-  if (_allowedLenses.includes(value)) {
+export function parseLense(
+  value: string,
+  allowed: readonly string[] = DEFAULT_LENSES,
+): Lense {
+  const effectiveAllowed = allowed.length > 0 ? allowed : DEFAULT_LENSES;
+  if (effectiveAllowed.includes(value)) {
     return value;
   }
   throw new DomainError(
-    `Invalid lense: "${value}". Must be one of: ${_allowedLenses.join(', ')}`,
+    `Invalid lense: "${value}". Must be one of: ${effectiveAllowed.join(', ')}`,
     'lense',
   );
 }

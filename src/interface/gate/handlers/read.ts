@@ -42,7 +42,7 @@ export async function reqVoices(c: C, args: ParsedArgs): Promise<number> {
   const lenseFilterRaw = optionalOption(args, 'lense');
   const verdictFilterRaw = optionalOption(args, 'verdict');
   const lenseFilter =
-    lenseFilterRaw !== undefined ? parseLense(lenseFilterRaw) : undefined;
+    lenseFilterRaw !== undefined ? parseLense(lenseFilterRaw, c.config.lenses) : undefined;
   const verdictFilter =
     verdictFilterRaw !== undefined ? parseVerdict(verdictFilterRaw) : undefined;
   const limit = parseOptionalIntOption(args, 'limit');

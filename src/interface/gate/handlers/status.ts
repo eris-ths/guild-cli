@@ -25,10 +25,7 @@ function collectStatus(
   all: Request[],
   actor: string | null,
 ): StatusSummary {
-  const byState = (s: string) => all.filter((r) => {
-    const j = r.toJSON() as Record<string, unknown>;
-    return j['state'] === s;
-  });
+  const byState = (s: string) => all.filter((r) => r.state === s);
 
   const pending = byState('pending');
   const approved = byState('approved');
@@ -37,40 +34,19 @@ function collectStatus(
 
   const actorLower = actor?.toLowerCase() ?? null;
 
-  const getFrom = (r: Request) =>
-    String((r.toJSON() as Record<string, unknown>)['from'] ?? '');
-  const getExecutor = (r: Request) =>
-    String((r.toJSON() as Record<string, unknown>)['executor'] ?? '');
-  const getAutoReview = (r: Request) =>
-    (r.toJSON() as Record<string, unknown>)['auto_review'] as string | undefined;
-
   // Unreviewed: completed requests with auto_review set but no reviews yet
-  const unreviewed = completed.filter((r) => {
-    const j = r.toJSON() as Record<string, unknown>;
-    const reviews = j['reviews'] as unknown[] | undefined;
-    return getAutoReview(r) && (!reviews || reviews.length === 0);
-  }).length;
+  const unreviewed = completed.filter(
+    (r) => r.autoReview && r.reviews.length === 0,
+  ).length;
 
   // Last activity: most recent timestamp across all requests
   let lastActivity: string | null = null;
   for (const r of all) {
-    const j = r.toJSON() as Record<string, unknown>;
-    const timestamps: string[] = [];
-    if (typeof j['created_at'] === 'string') timestamps.push(j['created_at']);
-    const statusLog = j['status_log'] as Array<{ at?: string }> | undefined;
-    if (statusLog) {
-      for (const entry of statusLog) {
-        if (entry.at) timestamps.push(entry.at);
-      }
+    for (const entry of r.statusLog) {
+      if (entry.at > (lastActivity ?? '')) lastActivity = entry.at;
     }
-    const reviews = j['reviews'] as Array<{ at?: string }> | undefined;
-    if (reviews) {
-      for (const rev of reviews) {
-        if (rev.at) timestamps.push(rev.at);
-      }
-    }
-    for (const ts of timestamps) {
-      if (!lastActivity || ts > lastActivity) lastActivity = ts;
+    for (const rev of r.reviews) {
+      if (rev.at > (lastActivity ?? '')) lastActivity = rev.at;
     }
   }
 
@@ -79,16 +55,16 @@ function collectStatus(
     pending: {
       total: pending.length,
       as_executor: actorLower
-        ? pending.filter((r) => getExecutor(r) === actorLower).length
+        ? pending.filter((r) => r.executor?.value === actorLower).length
         : 0,
       as_author: actorLower
-        ? pending.filter((r) => getFrom(r) === actorLower).length
+        ? pending.filter((r) => r.from.value === actorLower).length
         : 0,
     },
     approved: {
       total: approved.length,
       awaiting_execution: actorLower
-        ? approved.filter((r) => getExecutor(r) === actorLower).length
+        ? approved.filter((r) => r.executor?.value === actorLower).length
         : approved.length,
     },
     executing: {
@@ -96,8 +72,8 @@ function collectStatus(
       by_actor: actorLower
         ? executing.filter(
             (r) =>
-              getExecutor(r) === actorLower ||
-              getFrom(r) === actorLower,
+              r.executor?.value === actorLower ||
+              r.from.value === actorLower,
           ).length
         : 0,
     },
@@ -169,7 +145,7 @@ export async function statusCmd(c: C, args: ParsedArgs): Promise<number> {
     const issues = await c.issueUC.listAll();
     summary.open_issues = issues.filter(
       (i) => {
-        const state = (i.toJSON() as Record<string, unknown>)['state'];
+        const state = i.state;
         return state === 'open' || state === 'in_progress';
       },
     ).length;

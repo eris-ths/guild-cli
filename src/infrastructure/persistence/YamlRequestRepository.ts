@@ -40,7 +40,7 @@ export class YamlRequestRepository implements RequestRepository {
         const absSource = join(this.config.paths.requests, rel);
         const parsed = parseYamlSafe(raw, absSource, this.config.onMalformed);
         if (parsed === undefined) return null;
-        return hydrate(parsed, state, absSource, this.config.onMalformed);
+        return hydrate(parsed, state, absSource, this.config.onMalformed, this.config.lenses);
       }
     }
     return null;
@@ -172,6 +172,7 @@ function hydrate(
   stateHint: RequestState | undefined,
   source: string,
   onMalformed: OnMalformed,
+  allowedLenses?: readonly string[],
 ): Request | null {
   if (data === null || typeof data !== 'object' || Array.isArray(data)) {
     onMalformed(source, 'top-level YAML is not a mapping; skipping');
@@ -200,6 +201,8 @@ function hydrate(
           comment: String(ro['comment'] ?? ''),
         };
         if (typeof ro['at'] === 'string') rc.at = ro['at'] as string;
+        // Hydrate with config lenses so custom lenses in saved data are accepted
+        if (allowedLenses) rc.allowedLenses = allowedLenses;
         reviews.push(Review.create(rc));
       }
     }

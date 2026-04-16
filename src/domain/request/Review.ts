@@ -22,9 +22,10 @@ export class Review {
     verdict: string;
     comment: string;
     at?: string;
+    allowedLenses?: readonly string[];
   }): Review {
     const by = MemberName.of(input.by);
-    const lense = parseLense(input.lense);
+    const lense = parseLense(input.lense, input.allowedLenses);
     const verdict = parseVerdict(input.verdict);
     const comment = sanitizeComment(input.comment);
     const at = input.at ?? new Date().toISOString();
