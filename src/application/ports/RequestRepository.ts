@@ -32,3 +32,23 @@ export class RequestIdCollision extends Error {
     this.name = 'RequestIdCollision';
   }
 }
+
+/**
+ * Thrown when `save()` detects that the on-disk total mutation count
+ * (status_log.length + reviews.length) has grown since the request
+ * was loaded — i.e. another writer committed a transition or a
+ * review in the meantime. Callers should reload and retry rather
+ * than blindly overwrite.
+ */
+export class RequestVersionConflict extends Error {
+  constructor(
+    public readonly id: string,
+    public readonly expectedVersion: number,
+    public readonly actualVersion: number,
+  ) {
+    super(
+      `Request ${id} changed on disk (expected version ${expectedVersion}, found ${actualVersion}); reload and retry`,
+    );
+    this.name = 'RequestVersionConflict';
+  }
+}

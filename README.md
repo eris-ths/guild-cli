@@ -363,10 +363,10 @@ gate status [--for <m>] [--format json|text]         (default: json)
 gate whoami                                          (needs GUILD_ACTOR)
 gate chain <id>                                      (request or issue)
 gate approve <id>  --by <m> [--note <s>]
-gate deny    <id>  --by <m> <reason>
+gate deny    <id>  --by <m> [--note <s> | --reason <s> | <reason>]
 gate execute <id>  --by <m> [--note <s>]
 gate complete <id> --by <m> [--note <s>]
-gate fail    <id>  --by <m> <reason>
+gate fail    <id>  --by <m> [--note <s> | --reason <s> | <reason>]
 gate review  <id>  --by <m> --lense <devil|layer|cognitive|user>
                    --verdict <ok|concern|reject>
                    [--comment <s> | --comment - | <comment>]

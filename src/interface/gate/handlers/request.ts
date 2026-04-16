@@ -199,8 +199,12 @@ export async function reqApprove(c: C, args: ParsedArgs): Promise<number> {
 
 export async function reqDeny(c: C, args: ParsedArgs): Promise<number> {
   const id = args.positional[0];
-  const reason = args.positional.slice(1).join(' ');
-  if (!id || !reason) throw new Error('Usage: gate deny <id> --by <m> <reason>');
+  const reason = resolveReason(args, 'deny');
+  if (!id || !reason) {
+    throw new Error(
+      'Usage: gate deny <id> --by <m> [--note <s> | --reason <s> | <reason>]',
+    );
+  }
   const by = requireOption(args, 'by', '--by required', 'GUILD_ACTOR');
   await c.requestUC.deny(id, by, reason);
   process.stdout.write(`✓ denied: ${id}\n`);
@@ -237,12 +241,29 @@ export async function reqComplete(c: C, args: ParsedArgs): Promise<number> {
 
 export async function reqFail(c: C, args: ParsedArgs): Promise<number> {
   const id = args.positional[0];
-  const reason = args.positional.slice(1).join(' ');
-  if (!id || !reason) throw new Error('Usage: gate fail <id> --by <m> <reason>');
+  const reason = resolveReason(args, 'fail');
+  if (!id || !reason) {
+    throw new Error(
+      'Usage: gate fail <id> --by <m> [--note <s> | --reason <s> | <reason>]',
+    );
+  }
   const by = requireOption(args, 'by', '--by required', 'GUILD_ACTOR');
   await c.requestUC.fail(id, by, reason);
   process.stdout.write(`✓ failed: ${id}\n`);
   return 0;
+}
+
+// Resolve the closure reason for deny/fail accepting any of:
+//   --reason <s>    explicit & semantically precise
+//   --note <s>      muscle-memory parity with approve/execute/complete
+//   <positional>    legacy form retained for back-compat
+// Explicit options take precedence over positional.
+function resolveReason(args: ParsedArgs, _verb: string): string {
+  const reasonOpt = optionalOption(args, 'reason');
+  const noteOpt = optionalOption(args, 'note');
+  if (reasonOpt !== undefined && reasonOpt.trim()) return reasonOpt;
+  if (noteOpt !== undefined && noteOpt.trim()) return noteOpt;
+  return args.positional.slice(1).join(' ');
 }
 
 export async function reqFastTrack(c: C, args: ParsedArgs): Promise<number> {

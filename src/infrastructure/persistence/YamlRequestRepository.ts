@@ -1,6 +1,6 @@
 import YAML from 'yaml';
 import { join } from 'node:path';
-import { Request, StatusLogEntry } from '../../domain/request/Request.js';
+import { Request, StatusLogEntry, computeVersion } from '../../domain/request/Request.js';
 import { RequestId } from '../../domain/request/RequestId.js';
 import {
   RequestState,
@@ -12,13 +12,15 @@ import { MemberName } from '../../domain/member/MemberName.js';
 import {
   RequestRepository,
   RequestIdCollision,
+  RequestVersionConflict,
 } from '../../application/ports/RequestRepository.js';
 import {
   existsSafe,
   listDirSafe,
   readTextSafe,
   writeTextSafe,
-  moveSafe,
+  writeTextSafeAtomic,
+  unlinkSafe,
 } from './safeFs.js';
 import { GuildConfig } from '../config/GuildConfig.js';
 import { OnMalformed } from '../../application/ports/OnMalformed.js';
@@ -33,17 +35,23 @@ export class YamlRequestRepository implements RequestRepository {
   constructor(private readonly config: GuildConfig) {}
 
   async findById(id: RequestId): Promise<Request | null> {
+    // Scan every state dir so a file mid-transition (present under two
+    // dirs between atomic-write and old-file-unlink) is still found,
+    // and dedupe picks the newer representation by status_log length.
+    const found: Request[] = [];
     for (const state of REQUEST_STATES) {
       const rel = join(state, `${id.value}.yaml`);
-      if (existsSafe(this.config.paths.requests, rel)) {
-        const raw = readTextSafe(this.config.paths.requests, rel);
-        const absSource = join(this.config.paths.requests, rel);
-        const parsed = parseYamlSafe(raw, absSource, this.config.onMalformed);
-        if (parsed === undefined) return null;
-        return hydrate(parsed, state, absSource, this.config.onMalformed, this.config.lenses);
-      }
+      if (!existsSafe(this.config.paths.requests, rel)) continue;
+      const raw = readTextSafe(this.config.paths.requests, rel);
+      const absSource = join(this.config.paths.requests, rel);
+      const parsed = parseYamlSafe(raw, absSource, this.config.onMalformed);
+      if (parsed === undefined) continue;
+      const r = hydrate(parsed, state, absSource, this.config.onMalformed, this.config.lenses);
+      if (r) found.push(r);
     }
-    return null;
+    if (found.length === 0) return null;
+    if (found.length === 1) return found[0]!;
+    return dedupeRequestsById(found)[0] ?? null;
   }
 
   async listByState(state: RequestState): Promise<Request[]> {
@@ -97,19 +105,62 @@ export class YamlRequestRepository implements RequestRepository {
   }
 
   async save(request: Request): Promise<void> {
-    const currentState = request.state;
-    const currentRel = join(currentState, `${request.id.value}.yaml`);
-    // Locate any existing file under another state dir
-    for (const state of REQUEST_STATES) {
-      if (state === currentState) continue;
-      const rel = join(state, `${request.id.value}.yaml`);
-      if (existsSafe(this.config.paths.requests, rel)) {
-        moveSafe(this.config.paths.requests, rel, currentRel);
-        break;
-      }
+    const id = request.id.value;
+    const newState = request.state;
+    const newRel = join(newState, `${id}.yaml`);
+
+    // Defensive: save() is for updates. Fresh aggregates (loadedVersion=0,
+    // meaning "never on disk") must go through saveNew() so the O_EXCL
+    // create path catches collisions. Otherwise a misused call could
+    // silently overwrite a file created by a concurrent saveNew.
+    if (request.loadedVersion === 0) {
+      throw new Error(
+        `save() called on a freshly-created request ${id}; use saveNew() instead`,
+      );
     }
+
+    // 1. Scan every state dir; collect existing locations. A concurrent
+    //    transition may have left stragglers under multiple dirs.
+    const existing: Array<{ state: RequestState; rel: string; version: number }> = [];
+    for (const state of REQUEST_STATES) {
+      const rel = join(state, `${id}.yaml`);
+      if (!existsSafe(this.config.paths.requests, rel)) continue;
+      const raw = readTextSafe(this.config.paths.requests, rel);
+      const absSource = join(this.config.paths.requests, rel);
+      const parsed = parseYamlSafe(raw, absSource, this.config.onMalformed);
+      const version = readVersion(parsed);
+      existing.push({ state, rel, version });
+    }
+
+    // 2. Optimistic-lock check: the highest on-disk total mutation
+    //    count (status_log.length + reviews.length) must equal the
+    //    version we loaded. Using status_log alone would miss
+    //    concurrent addReview races — two reviewers writing at once
+    //    both touch reviews[] without growing status_log, so a
+    //    status_log-only check would let one review silently vanish
+    //    under last-writer-wins.
+    const maxOnDisk = existing.reduce((m, e) => Math.max(m, e.version), 0);
+    if (maxOnDisk !== request.loadedVersion) {
+      throw new RequestVersionConflict(
+        id,
+        request.loadedVersion,
+        maxOnDisk,
+      );
+    }
+
+    // 3. Atomic write of the new content to the new state dir. The
+    //    .tmp-*+rename keeps readers from ever seeing a torn file.
     const text = YAML.stringify(request.toJSON());
-    writeTextSafe(this.config.paths.requests, currentRel, text);
+    writeTextSafeAtomic(this.config.paths.requests, newRel, text);
+
+    // 4. Remove leftover files from any state dir that isn't the new
+    //    one. Done AFTER the atomic write so a crash between steps 3
+    //    and 4 leaves the newer file in place; findById's dedupe
+    //    returns it deterministically (longer status_log wins).
+    for (const e of existing) {
+      if (e.state === newState) continue;
+      unlinkSafe(this.config.paths.requests, e.rel);
+    }
   }
 
   async nextSequence(dateKey: string): Promise<number> {
@@ -129,17 +180,33 @@ export class YamlRequestRepository implements RequestRepository {
 }
 
 /**
+ * Read the total mutation count from raw parsed YAML using the same
+ * `computeVersion` invariant the domain uses. Defined here (not just
+ * on Request) so the repository can compare on-disk state without
+ * hydrating — a malformed or torn file returns 0, forcing the caller
+ * to reload rather than proceed on incomplete data.
+ */
+function readVersion(parsed: unknown): number {
+  if (!parsed || typeof parsed !== 'object') return 0;
+  const obj = parsed as Record<string, unknown>;
+  const log = Array.isArray(obj['status_log']) ? obj['status_log'].length : 0;
+  const reviews = Array.isArray(obj['reviews']) ? obj['reviews'].length : 0;
+  return computeVersion(log, reviews);
+}
+
+/**
  * Deduplicate a list of Requests by id, keeping the newest
  * representation when the same id appears more than once (this can
- * happen under concurrent state transitions where listAll's per-state
- * reads race with a moving file).
+ * happen under concurrent state transitions or review races where
+ * listAll's per-state reads see a moving file).
  *
  * Tie-break order:
- *   1. More status_log entries wins. status_log is append-only, so a
- *      representation with more entries is strictly newer in time.
- *   2. On equal log length, later position in REQUEST_STATES wins.
- *      The ordering there (pending < approved < executing < completed
- *      < failed < denied) doesn't encode a total temporal order —
+ *   1. Higher total mutation count (status_log + reviews) wins. Both
+ *      arrays are append-only so the sum is a monotonic version
+ *      across any legal mutation — transitions AND reviews.
+ *   2. On equal version, later position in REQUEST_STATES wins. The
+ *      ordering there (pending < approved < executing < completed <
+ *      failed < denied) doesn't encode a total temporal order —
  *      failed/denied are divergent terminals — but for tiebreaker
  *      purposes it gives a stable, deterministic result.
  *
@@ -156,9 +223,11 @@ export function dedupeRequestsById(
       byId.set(r.id.value, r);
       continue;
     }
-    if (r.statusLog.length > existing.statusLog.length) {
+    const rv = r.currentVersion;
+    const ev = existing.currentVersion;
+    if (rv > ev) {
       byId.set(r.id.value, r);
-    } else if (r.statusLog.length === existing.statusLog.length) {
+    } else if (rv === ev) {
       const newRank = REQUEST_STATES.indexOf(r.state);
       const oldRank = REQUEST_STATES.indexOf(existing.state);
       if (newRank > oldRank) byId.set(r.id.value, r);
@@ -264,12 +333,41 @@ function hydrate(
     if (typeof obj['auto_review'] === 'string')
       props.autoReview = MemberName.of(obj['auto_review']);
     if (typeof obj['target'] === 'string') props.target = obj['target'] as string;
-    if (typeof obj['completion_note'] === 'string')
-      props.completionNote = obj['completion_note'] as string;
-    if (typeof obj['deny_reason'] === 'string')
-      props.denyReason = obj['deny_reason'] as string;
-    if (typeof obj['failure_reason'] === 'string')
-      props.failureReason = obj['failure_reason'] as string;
+    // Legacy top-level closure keys (completion_note / deny_reason /
+    // failure_reason) are no longer written separately — status_log[-1].note
+    // is the single source of truth. Handle the three migration cases
+    // explicitly so silent data loss is impossible:
+    //   (a) log note present, top-level absent → normal; no-op
+    //   (b) log note absent, top-level present → backfill
+    //   (c) both present AND agreeing → normal; no-op
+    //   (d) both present AND disagreeing → warn via onMalformed so the
+    //       operator sees it in stderr and `gate doctor`, rather than
+    //       a silent drop on next save.
+    const legacyClosureKey =
+      state === 'completed'
+        ? 'completion_note'
+        : state === 'denied'
+          ? 'deny_reason'
+          : state === 'failed'
+            ? 'failure_reason'
+            : undefined;
+    if (legacyClosureKey && typeof obj[legacyClosureKey] === 'string') {
+      const last = statusLog[statusLog.length - 1];
+      const topLevel = obj[legacyClosureKey] as string;
+      if (last && last.state === state) {
+        if (last.note === undefined) {
+          // case (b): backfill so the new derivation surfaces it
+          last.note = topLevel;
+        } else if (last.note !== topLevel) {
+          // case (d): legacy field and log disagree; surface loudly
+          // since the next save() will emit only the log entry.
+          onMalformed(
+            source,
+            `legacy top-level ${legacyClosureKey} disagrees with status_log[-1].note; the log entry wins on next save`,
+          );
+        }
+      }
+    }
     return Request.restore(props);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
