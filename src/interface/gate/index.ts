@@ -28,6 +28,7 @@ import {
   msgBroadcast,
   msgInbox,
 } from './handlers/messages.js';
+import { statusCmd } from './handlers/status.js';
 
 // Re-export for test backward-compat (tests/interface/reviewMarkers.test.ts).
 // formatReviewMarkers and computeReviewMarkerWidth live in handlers/request.ts
@@ -45,9 +46,9 @@ Requests:
   gate pending [--for <m>]
   gate list --state <state> [--for <m>] [--from <m>]
                             [--executor <m>] [--auto-review <m>]
-  gate show <id> [--format json|text]
+  gate show <id> [--format json|text]          (default: json)
   gate voices <name> [--lense <l>] [--verdict <v>] [--limit <N>]
-                     [--format json|text]
+                     [--format json|text]          (default: json)
   gate tail [N]                                   (default 20)
   gate whoami                                     (needs GUILD_ACTOR)
   gate chain <id>                                 (request or issue)
@@ -76,7 +77,7 @@ Messages:
 
 States: pending | approved | executing | completed | failed | denied
 Verdicts: ok | concern | reject
-Lenses: devil | layer | cognitive | user
+Lenses: devil | layer | cognitive | user (configurable via guild.config.yaml)
 
 Environment:
   GUILD_ACTOR=<name>   If set, used as the default for --from / --by /
@@ -100,6 +101,12 @@ Diagnostic / Repair:
                        Usage:
                          gate doctor --format json | gate repair
                          gate doctor --format json | gate repair --apply
+
+Status:
+  gate status [--for <m>] [--format json|text]
+                       Agent orientation: pending/approved/executing
+                       counts, open issues, unread inbox, last activity.
+                       Default output is JSON (agent-first).
 
 Meta:
   gate --version       Print version and exit
@@ -163,6 +170,8 @@ export async function main(argv: readonly string[]): Promise<number> {
         return await doctorCmd(c, args);
       case 'repair':
         return await repairCmd(c, args);
+      case 'status':
+        return await statusCmd(c, args);
       default:
         process.stderr.write(`unknown command: ${cmd}\n${HELP}`);
         return 1;

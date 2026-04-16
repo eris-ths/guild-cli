@@ -11,7 +11,7 @@
 // modification. The report shape is JSON-stable so a future repair
 // verb can consume it from --json output.
 
-export type DiagnosticArea = 'members' | 'requests' | 'issues';
+export type DiagnosticArea = 'members' | 'requests' | 'issues' | 'plugin';
 
 export type DiagnosticKind =
   | 'top_level_not_mapping'

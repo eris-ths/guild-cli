@@ -63,6 +63,9 @@ no DB, no network. The `content_root` you work in is the whole world.
 >   メンバー間の非同期通知と受領記録をやり取りする
 > - 小さな自己完結タスクなら `gate fast-track` で create→complete
 >   を一発で通し、記録だけ残して規律を緩める
+> - `gate status` でセッション開始時の全体把握 — pending / approved /
+>   executing の件数、open issues、未読 inbox、最終活動を JSON で一発
+>   取得（`--format text` で人間向け表示）
 > - **読みの道具一式**: `gate whoami` でセッション開始時に自分と
 >   直近の発話を取り戻し、`gate tail` で content_root 全体の最近を
 >   眺め、`gate voices <name>` で特定アクターの横断履歴を呼び戻し、
@@ -98,10 +101,17 @@ no DB, no network. The `content_root` you work in is the whole world.
   concern "<comment>"`. Reviews append to `reviews[]` and are visible
   forever. The lenses (`devil | layer | cognitive | user`) let you run
   the same review target through multiple viewpoints in sequence.
+  Lenses are configurable via `guild.config.yaml` — the four built-in
+  lenses are the default, but teams can add domain-specific lenses
+  (e.g. `security`, `correctness`).
 - **Track defects as issues.** `gate issues add --from you --severity
   med --area design "<text>"` opens an `i-YYYY-MM-DD-NNN` record. Use
   this when you hit a problem that should be fixed later but shouldn't
   block the current task.
+- **Orient yourself.** `gate status` returns pending/approved/executing
+  counts, open issues, unread inbox, and last activity as JSON — the
+  first command an agent calls in a new session. Add `--for <you>` to
+  scope it to your own work.
 - **Ask "what's on my plate?"** `gate pending --for you`, `gate list
   --state executing --executor you`, `gate show <id> --format text`.
   The `--for` filter matches anything you touch (author, executor, or
@@ -198,6 +208,7 @@ list below is the subset of "known gaps" that a user should expect
 when building on this version:
 
 - **`--auto-review <member>` is not auto-dispatched.** The value is
+<<<<<<< HEAD
   stored on the request, and `gate complete` prints a ready-to-run
   `gate review ...` command template for the configured critic.
   Nothing in this package automatically *executes* the reviewer —
@@ -207,6 +218,16 @@ when building on this version:
   files are the UI, augmented by the read-side verbs (`gate tail` /
   `voices` / `whoami` / `show --format text` / `chain`). A generator
   on top of those signals will come with the next layer.
+=======
+  stored on the request and — as of the messaging patch — `gate
+  complete` now prints a ready-to-run `gate review ...` command
+  template for the configured critic. But nothing in this package
+  automatically *executes* the reviewer: your outer automation still
+  has to invoke it. The template just saves you the string assembly.
+- **No auto-generated dashboard** (`DASHBOARD.md` etc.). `gate status`
+  provides a JSON summary of pending/approved/executing/issues/inbox
+  counts, but a persistent rendered dashboard is not yet generated.
+>>>>>>> 63972b1 (feat: v0.2.0 — agent-first enhancements + doctor plugin system)
 - **No locking on state transitions.** `saveNew` for creation is
   race-safe (O_EXCL), but two processes calling `gate approve` on the
   same request in the same millisecond have last-writer-wins semantics.
@@ -342,10 +363,11 @@ gate fast-track --from <m> --action <a> --reason <r>
 gate pending [--for <m>] [--from <m>] [--executor <m>] [--auto-review <m>]
 gate list --state <s> [--for <m>] [--from <m>]
                       [--executor <m>] [--auto-review <m>]
-gate show <id> [--format json|text]
+gate show <id> [--format json|text]                  (default: json)
 gate voices <name> [--lense <l>] [--verdict <v>] [--limit <N>]
-                   [--format json|text]
+                   [--format json|text]              (default: json)
 gate tail [N]                                        (default 20)
+gate status [--for <m>] [--format json|text]         (default: json)
 gate whoami                                          (needs GUILD_ACTOR)
 gate chain <id>                                      (request or issue)
 gate approve <id>  --by <m> [--note <s>]
@@ -368,6 +390,9 @@ gate message   --from <m> --to <m> --text <s>
 gate broadcast --from <m> --text <s>
 gate inbox     --for <m> [--unread]
 gate inbox mark-read [N] --for <m>
+
+gate doctor [--summary | --format json]              (read-only health check)
+gate repair [--apply] [--from-doctor <path>]         (quarantine malformed records)
 ```
 
 ### Verb cookbook
@@ -421,6 +446,12 @@ walking up to the filesystem root:
 ```yaml
 content_root: .                # base for all paths (must contain everything)
 host_names: [alice, bob]       # non-member actors also allowed in --by/--from
+lenses:                        # review lenses (optional; defaults shown)
+  - devil
+  - layer
+  - cognitive
+  - user
+  # - security                 # add domain-specific lenses here
 paths:
   members:  members            # relative to content_root
   requests: requests
