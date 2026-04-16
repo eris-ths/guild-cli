@@ -1,0 +1,133 @@
+# guild-cli — agent quick reference
+
+File-based coordination for AI agents. No daemon, no DB, no network.
+State lives in YAML files under a `content_root`. Git gives you history.
+
+## Session start
+
+```bash
+gate status              # counts: pending/approved/executing/issues/inbox
+gate whoami              # your identity + recent utterances (needs GUILD_ACTOR)
+gate tail 10             # last 10 events across all actors
+```
+
+## Request lifecycle
+
+```
+pending ─ approve ─▶ approved ─ execute ─▶ executing ─ complete ─▶ completed
+   │                                            │
+   └── deny ──▶ denied                          └── fail ──▶ failed
+```
+
+```bash
+gate request --from <m> --action "..." --reason "..." [--executor <m>] [--auto-review <m>]
+gate approve <id> --by <m> [--note "..."]
+gate execute <id> --by <m>
+gate complete <id> --by <m> [--note "..."]
+gate fast-track --from <m> --action "..." --reason "..."   # one-shot create→complete
+```
+
+## Review (Two-Persona Devil)
+
+```bash
+gate review <id> --by <m> --lense <l> --verdict <v> --comment "..."
+```
+
+- Lenses: `devil | layer | cognitive | user` (configurable in guild.config.yaml)
+- Verdicts: `ok | concern | reject`
+- Reviews are append-only. Corrections are new entries, not edits.
+
+## Reading
+
+```bash
+gate show <id>                          # request detail (JSON default)
+gate list --state <s> [--for <m>]       # filtered list
+gate pending [--for <m>]                # shortcut for --state pending
+gate voices <name> [--lense <l>]        # actor's full history (JSON default)
+gate tail [N]                           # recent activity stream (default 20)
+gate chain <id>                         # cross-reference walk (one hop)
+```
+
+## Issues
+
+```
+open ↔ in_progress ↔ deferred → resolved (reopen → open)
+```
+
+```bash
+gate issues add --from <m> --severity <low|med|high> --area <a> "text"
+gate issues list [--state <s>]
+gate issues resolve|defer|start|reopen <id>
+gate issues promote <id> --from <m>     # lift issue → new request
+```
+
+## Messages
+
+```bash
+gate message --from <m> --to <m> --text "..."
+gate broadcast --from <m> --text "..."
+gate inbox --for <m>
+gate inbox mark-read [N] --for <m>
+```
+
+## Members
+
+```bash
+guild list                              # all members + hosts
+guild show <name>                       # member YAML
+guild new --name <n> --category <c>     # create member
+guild validate                          # check all member YAMLs
+```
+
+Categories: `core | professional | assignee | trial | special | host`
+
+## Diagnostic
+
+```bash
+gate doctor                             # read-only health check
+gate doctor --format json | gate repair          # dry-run plan
+gate doctor --format json | gate repair --apply  # quarantine malformed
+```
+
+## Configuration
+
+```yaml
+# guild.config.yaml
+content_root: .
+host_names: [alice, bob]
+lenses: [devil, layer, cognitive, user]   # optional, these are defaults
+paths:
+  members: members
+  requests: requests
+  issues: issues
+  inbox: inbox
+```
+
+## File layout
+
+```
+<content_root>/
+  guild.config.yaml
+  members/<name>.yaml
+  requests/{pending,approved,executing,completed,failed,denied}/<id>.yaml
+  issues/<id>.yaml
+  inbox/<name>.yaml
+```
+
+Request IDs: `YYYY-MM-DD-NNNN`. Issue IDs: `i-YYYY-MM-DD-NNNN`.
+
+## Environment
+
+`GUILD_ACTOR=<name>` — default for `--from` / `--by` / `--for`.
+Explicit flags always win. `--executor` and `--auto-review` are never env-filled.
+
+## Output format
+
+`gate show`, `gate voices`, `gate status` default to **JSON**.
+Add `--format text` for human-readable output.
+
+## Deep dives
+
+- [`docs/verbs.md`](./docs/verbs.md) — per-verb examples and design notes
+- [`examples/dogfood-session/`](./examples/dogfood-session/) — real multi-actor session
+- [`README.md`](./README.md) — full documentation with design rationale
