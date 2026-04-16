@@ -411,6 +411,93 @@ when piping from an editor or a larger automation step.
 EOF
 ```
 
+### Configurable lenses
+
+The four built-in lenses (`devil | layer | cognitive | user`) are
+the default, but teams can add domain-specific lenses via
+`guild.config.yaml`:
+
+```yaml
+lenses:
+  - devil
+  - layer
+  - cognitive
+  - user
+  - security       # e.g. OWASP / supply-chain review
+  - correctness    # e.g. formal invariant checks
+```
+
+When configured, `gate review` and `gate voices --lense` accept the
+custom values:
+
+```
+$ gate review 2026-04-16-001 --by noir --lense security --verdict ok \
+  --comment "no injection vectors, input sanitized at boundary"
+✓ review recorded: 2026-04-16-001 [security/ok]
+```
+
+If `lenses` is omitted from the config, the four built-ins apply.
+An empty list also falls back to the defaults. Lense names are
+lowercased on load. The validation error message lists all
+configured lenses so mistyped values are easy to correct.
+
+**Design note.** Lenses are an extension point for the review
+system. Each lens is a perspective, not a role — the same reviewer
+can write `devil` and `security` reviews on the same request. The
+config makes the set of valid perspectives explicit for a given
+content root, which prevents lens drift across long-lived projects.
+
+### Editor-based review comments
+
+When `gate review` is called without `--comment`, without a
+positional comment, and without `--comment -` STDIN, and stdin is
+a TTY, the CLI opens your editor — matching the `git commit`
+convention:
+
+```
+$ gate review 2026-04-16-001 --by noir --lense devil --verdict concern
+# → opens $EDITOR with a template
+```
+
+Editor selection follows `GIT_EDITOR > VISUAL > EDITOR > platform
+default` (`notepad` on Windows, `vi` elsewhere). The template uses
+git's "scissors" sentinel — everything at and below the scissors
+line is stripped:
+
+```
+# Write your review comment ABOVE the scissors line.
+# The scissors line and everything below it are stripped.
+# ------------------------ >8 ------------------------
+# Reviewing: 2026-04-16-001
+# Lense: devil  Verdict: concern
+```
+
+This is the most comfortable way to write multi-paragraph reviews
+without shell quoting pain. `--comment -` (STDIN) is still
+available for automation pipelines.
+
+### Session-start recipe
+
+Three commands give you full orientation at the start of a session:
+
+```bash
+# 1. What's the state of this content root?
+gate status --for $GUILD_ACTOR
+
+# 2. Who am I and what did I say recently?
+gate whoami
+
+# 3. What happened while I was away?
+gate tail 10
+```
+
+`status` gives you the numbers (queues, issues, inbox).
+`whoami` gives you your voice (identity, recent utterances).
+`tail` gives you the timeline (what everyone else did).
+
+Together they answer "where was I, what's waiting, and what
+changed" in under a second.
+
 ### Doctor and repair
 
 `gate doctor` is a read-only health check over the content root.
