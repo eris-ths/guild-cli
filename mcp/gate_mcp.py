@@ -117,8 +117,14 @@ paths:
 
 
 def _project_dir(project: str) -> Path:
-    """Return the directory for a named project."""
-    return Path(_PROJECTS_DIR) / project
+    """Return the directory for a named project. Validates path stays under PROJECTS_DIR."""
+    if not project or "/" in project or "\\" in project or project in (".", ".."):
+        raise ValueError(f"Invalid project name: {project!r}")
+    resolved = (Path(_PROJECTS_DIR) / project).resolve()
+    base = Path(_PROJECTS_DIR).resolve()
+    if not str(resolved).startswith(str(base) + os.sep) and resolved != base:
+        raise ValueError(f"Project path escapes base: {project!r}")
+    return resolved
 
 
 @mcp.tool()
