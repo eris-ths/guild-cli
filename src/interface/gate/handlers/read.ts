@@ -46,7 +46,7 @@ export async function reqVoices(c: C, args: ParsedArgs): Promise<number> {
   const verdictFilter =
     verdictFilterRaw !== undefined ? parseVerdict(verdictFilterRaw) : undefined;
   const limit = parseOptionalIntOption(args, 'limit');
-  const format = optionalOption(args, 'format') ?? 'text';
+  const format = optionalOption(args, 'format') ?? 'json';
   if (format !== 'json' && format !== 'text') {
     throw new Error(`--format must be 'json' or 'text', got: ${format}`);
   }

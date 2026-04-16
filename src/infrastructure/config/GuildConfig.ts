@@ -3,6 +3,7 @@ import { resolve, isAbsolute, join } from 'node:path';
 import YAML from 'yaml';
 import { DomainError } from '../../domain/shared/DomainError.js';
 import { isUnderBase } from '../persistence/pathSafety.js';
+import { DEFAULT_LENSES, setAllowedLenses } from '../../domain/shared/Lense.js';
 
 /**
  * Called by repository hydrate paths when a YAML record cannot be
@@ -30,6 +31,8 @@ export interface GuildConfigProps {
     inbox: string;
   };
   hostNames: readonly string[];
+  lenses: readonly string[];
+  doctorPlugins: readonly string[];
   onMalformed: OnMalformed;
 }
 
@@ -47,8 +50,13 @@ export class GuildConfig implements GuildConfigProps {
     readonly contentRoot: string,
     readonly paths: GuildConfigProps['paths'],
     readonly hostNames: readonly string[],
+    readonly lenses: readonly string[],
+    readonly doctorPlugins: readonly string[],
     readonly onMalformed: OnMalformed,
-  ) {}
+  ) {
+    // Propagate configured lenses to the domain parser
+    setAllowedLenses(lenses);
+  }
 
   static load(
     cwd: string = process.cwd(),
@@ -77,7 +85,18 @@ export class GuildConfig implements GuildConfigProps {
           .filter((x: unknown): x is string => typeof x === 'string')
           .map((x: string) => x.toLowerCase())
       : [...DEFAULT_HOSTS];
-    return new GuildConfig(root, contentRoot, paths, hostNames, onMalformed);
+    const lenses = Array.isArray(raw.lenses)
+      ? raw.lenses
+          .filter((x: unknown): x is string => typeof x === 'string')
+          .map((x: string) => x.toLowerCase())
+      : [...DEFAULT_LENSES];
+    const doctor = raw.doctor ?? {};
+    const doctorPlugins = Array.isArray(doctor.plugins)
+      ? doctor.plugins
+          .filter((x: unknown): x is string => typeof x === 'string')
+          .map((x: string) => resolveUnder(root, x))
+      : [];
+    return new GuildConfig(root, contentRoot, paths, hostNames, lenses, doctorPlugins, onMalformed);
   }
 
   static default(
@@ -95,6 +114,8 @@ export class GuildConfig implements GuildConfigProps {
         inbox: join(abs, 'inbox'),
       },
       [...DEFAULT_HOSTS],
+      [...DEFAULT_LENSES],
+      [],
       onMalformed,
     );
   }

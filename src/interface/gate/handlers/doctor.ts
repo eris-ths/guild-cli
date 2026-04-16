@@ -43,6 +43,15 @@ export async function doctorCmd(c: C, args: ParsedArgs): Promise<number> {
   writeAreaSection('members', report.summary.members, report.findings);
   writeAreaSection('requests', report.summary.requests, report.findings);
   writeAreaSection('issues', report.summary.issues, report.findings);
+  // Plugin findings (area = 'plugin')
+  const pluginFindings = report.findings.filter((f) => f.area === 'plugin');
+  if (pluginFindings.length > 0) {
+    process.stdout.write(`\nplugins: ${pluginFindings.length} finding(s)\n`);
+    for (const f of pluginFindings) {
+      process.stdout.write(`    [${f.kind}] ${f.source}\n`);
+      process.stdout.write(`      ${f.message}\n`);
+    }
+  }
   writeOverall(report);
   if (!report.isClean) {
     process.stdout.write(
