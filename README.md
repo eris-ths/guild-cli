@@ -212,26 +212,14 @@ list below is the subset of "known gaps" that a user should expect
 when building on this version:
 
 - **`--auto-review <member>` is not auto-dispatched.** The value is
-<<<<<<< HEAD
   stored on the request, and `gate complete` prints a ready-to-run
   `gate review ...` command template for the configured critic.
   Nothing in this package automatically *executes* the reviewer —
   your outer automation still has to invoke it. The template just
   saves you the string assembly.
-- **No auto-generated dashboard** (`DASHBOARD.md` etc.). The raw YAML
-  files are the UI, augmented by the read-side verbs (`gate tail` /
-  `voices` / `whoami` / `show --format text` / `chain`). A generator
-  on top of those signals will come with the next layer.
-=======
-  stored on the request and — as of the messaging patch — `gate
-  complete` now prints a ready-to-run `gate review ...` command
-  template for the configured critic. But nothing in this package
-  automatically *executes* the reviewer: your outer automation still
-  has to invoke it. The template just saves you the string assembly.
 - **No auto-generated dashboard** (`DASHBOARD.md` etc.). `gate status`
   provides a JSON summary of pending/approved/executing/issues/inbox
   counts, but a persistent rendered dashboard is not yet generated.
->>>>>>> 63972b1 (feat: v0.2.0 — agent-first enhancements + doctor plugin system)
 - **No locking on state transitions.** `saveNew` for creation is
   race-safe (O_EXCL), but two processes calling `gate approve` on the
   same request in the same millisecond have last-writer-wins semantics.
