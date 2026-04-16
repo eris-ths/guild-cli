@@ -47,6 +47,101 @@ test('YamlRequestRepository: malformed request YAML surfaces via onMalformed', a
   }
 });
 
+test('YamlRequestRepository: disagreement between status_log[-1].note and legacy completion_note is warned', async () => {
+  const { root, cleanup } = makeRoot();
+  try {
+    // Legacy file where someone hand-edited the top-level field
+    // without updating status_log (or vice versa). The log entry is
+    // authoritative on the next save, so we must warn the operator
+    // rather than silently drop the top-level value.
+    mkdirSync(join(root, 'requests', 'completed'), { recursive: true });
+    const p = join(root, 'requests', 'completed', '2026-04-15-001.yaml');
+    writeFileSync(
+      p,
+      [
+        'id: 2026-04-15-001',
+        'from: alice',
+        'action: a',
+        'reason: r',
+        'state: completed',
+        'created_at: 2026-04-15T00:00:00.000Z',
+        'status_log:',
+        '  - state: pending',
+        '    by: alice',
+        '    at: 2026-04-15T00:00:00.000Z',
+        '  - state: completed',
+        '    by: alice',
+        '    at: 2026-04-15T00:00:01.000Z',
+        '    note: log-value',
+        'reviews: []',
+        'completion_note: top-value-that-disagrees',
+        '',
+      ].join('\n'),
+    );
+    const warnings: string[] = [];
+    const config = GuildConfig.load(root, (_s, msg) => warnings.push(msg));
+    const repo = new YamlRequestRepository(config);
+    const r = await repo.findById(
+      (await import('../../src/domain/request/RequestId.js')).RequestId.of('2026-04-15-001'),
+    );
+    assert.ok(r);
+    assert.equal(
+      r!.statusLog[r!.statusLog.length - 1]?.note,
+      'log-value',
+      'log entry is authoritative',
+    );
+    assert.ok(
+      warnings.some((w) => /completion_note disagrees/i.test(w)),
+      `expected disagreement warning, got: ${warnings.join(' | ')}`,
+    );
+  } finally {
+    cleanup();
+  }
+});
+
+test('YamlRequestRepository: agreeing legacy completion_note is silent', async () => {
+  const { root, cleanup } = makeRoot();
+  try {
+    mkdirSync(join(root, 'requests', 'completed'), { recursive: true });
+    const p = join(root, 'requests', 'completed', '2026-04-15-001.yaml');
+    writeFileSync(
+      p,
+      [
+        'id: 2026-04-15-001',
+        'from: alice',
+        'action: a',
+        'reason: r',
+        'state: completed',
+        'created_at: 2026-04-15T00:00:00.000Z',
+        'status_log:',
+        '  - state: pending',
+        '    by: alice',
+        '    at: 2026-04-15T00:00:00.000Z',
+        '  - state: completed',
+        '    by: alice',
+        '    at: 2026-04-15T00:00:01.000Z',
+        '    note: same',
+        'reviews: []',
+        'completion_note: same',
+        '',
+      ].join('\n'),
+    );
+    const warnings: string[] = [];
+    const config = GuildConfig.load(root, (_s, msg) => warnings.push(msg));
+    const repo = new YamlRequestRepository(config);
+    await repo.findById(
+      (await import('../../src/domain/request/RequestId.js')).RequestId.of('2026-04-15-001'),
+    );
+    assert.deepEqual(
+      warnings.filter((w) => /completion_note/i.test(w)),
+      [],
+      'agreeing legacy field must not warn',
+    );
+  } finally {
+    cleanup();
+  }
+});
+
 test('YamlRequestRepository: malformed status_log entry surfaces per-entry', async () => {
   const { root, cleanup } = makeRoot();
   try {

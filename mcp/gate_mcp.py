@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -54,7 +55,12 @@ def _cwd() -> str | None:
 
 
 async def _run_gate(*args: str, stdin_text: str | None = None) -> str:
-    """Run gate CLI and return stdout. Raises on non-zero exit."""
+    """Run gate CLI and return stdout unmodified. Raises on non-zero exit.
+
+    stderr is never mixed into stdout: agents consuming --format json would
+    otherwise see "[stderr] ..." suffixed after valid JSON and fail to parse.
+    Diagnostic stderr is forwarded to the MCP host's stderr for observability.
+    """
     cmd = ["node", GATE_BIN, *args]
     proc = await asyncio.create_subprocess_exec(
         *cmd,
@@ -66,18 +72,17 @@ async def _run_gate(*args: str, stdin_text: str | None = None) -> str:
     stdout, stderr = await proc.communicate(
         input=stdin_text.encode() if stdin_text else None
     )
-    out = stdout.decode().strip()
+    out = stdout.decode()
     err = stderr.decode().strip()
     if proc.returncode != 0:
-        raise RuntimeError(f"gate exited {proc.returncode}: {err or out}")
-    # Append stderr warnings if any
+        raise RuntimeError(f"gate exited {proc.returncode}: {err or out.strip()}")
     if err:
-        out = f"{out}\n[stderr] {err}"
+        print(f"[gate stderr] {err}", file=sys.stderr)
     return out
 
 
 async def _run_guild(*args: str) -> str:
-    """Run guild CLI and return stdout."""
+    """Run guild CLI and return stdout unmodified. stderr goes to host stderr."""
     cmd = ["node", GUILD_BIN, *args]
     proc = await asyncio.create_subprocess_exec(
         *cmd,
@@ -86,12 +91,12 @@ async def _run_guild(*args: str) -> str:
         cwd=_cwd(),
     )
     stdout, stderr = await proc.communicate()
-    out = stdout.decode().strip()
+    out = stdout.decode()
     err = stderr.decode().strip()
     if proc.returncode != 0:
-        raise RuntimeError(f"guild exited {proc.returncode}: {err or out}")
+        raise RuntimeError(f"guild exited {proc.returncode}: {err or out.strip()}")
     if err:
-        out = f"{out}\n[stderr] {err}"
+        print(f"[guild stderr] {err}", file=sys.stderr)
     return out
 
 

@@ -6,8 +6,10 @@ import {
   writeFileSync,
   readdirSync,
   renameSync,
+  unlinkSync,
 } from 'node:fs';
-import { resolve, join, dirname, isAbsolute } from 'node:path';
+import { resolve, join, dirname, isAbsolute, basename } from 'node:path';
+import { randomBytes } from 'node:crypto';
 import { DomainError } from '../../domain/shared/DomainError.js';
 import { isUnderBase } from './pathSafety.js';
 
@@ -81,6 +83,46 @@ export function writeTextSafe(
   } else {
     writeFileSync(p, content);
   }
+}
+
+/**
+ * Write `content` to `relOrAbs` atomically: a sibling temp file is
+ * written fully, then `rename()`d into place. Readers never observe a
+ * torn or half-written file — they see either the previous content or
+ * the new content. Temp and target are in the same directory, which
+ * keeps the rename on a single filesystem (the atomicity guarantee on
+ * POSIX and Windows NTFS).
+ *
+ * On failure (disk full, permission), the temp is best-effort removed
+ * so leftover `.tmp-*` files don't accumulate. Successful rename
+ * implicitly replaces any existing target.
+ */
+export function writeTextSafeAtomic(
+  base: string,
+  relOrAbs: string,
+  content: string,
+): void {
+  const p = assertUnder(base, relOrAbs);
+  const dir = dirname(p);
+  mkdirSync(dir, { recursive: true });
+  const tmpName = `.tmp-${process.pid}-${randomBytes(6).toString('hex')}-${basename(p)}`;
+  const tmp = join(dir, tmpName);
+  try {
+    writeFileSync(tmp, content, { flag: 'wx' });
+    renameSync(tmp, p);
+  } catch (e) {
+    try {
+      if (existsSync(tmp)) unlinkSync(tmp);
+    } catch {
+      // ignore cleanup failure — original error is what matters
+    }
+    throw e;
+  }
+}
+
+export function unlinkSafe(base: string, relOrAbs: string): void {
+  const p = assertUnder(base, relOrAbs);
+  if (existsSync(p)) unlinkSync(p);
 }
 
 export function listDirSafe(base: string, relOrAbs: string): string[] {

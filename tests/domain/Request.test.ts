@@ -138,3 +138,103 @@ test('Review strips control chars', () => {
   });
   assert.equal(rev.comment, 'helloworld');
 });
+
+test('Request.create starts with loadedVersion=0 (never on disk)', () => {
+  const r = mkReq();
+  assert.equal(r.loadedVersion, 0);
+  assert.equal(r.currentVersion, 1); // 1 status_log entry
+});
+
+test('Request.restore snapshots loadedVersion as status_log + reviews', () => {
+  // Hand-build a request with 3 log entries and 2 reviews to prove
+  // version counts both. If someone narrows version back to
+  // status_log alone, this test fails.
+  const r = Request.restore({
+    id: RequestId.generate(d, 1),
+    from: MemberName.of('alice'),
+    action: 'a',
+    reason: 'r',
+    state: 'completed',
+    createdAt: '2026-04-14T00:00:00.000Z',
+    statusLog: [
+      { state: 'pending', by: 'alice', at: '2026-04-14T00:00:00.000Z' },
+      { state: 'approved', by: 'eris', at: '2026-04-14T00:00:01.000Z' },
+      { state: 'completed', by: 'alice', at: '2026-04-14T00:00:02.000Z' },
+    ],
+    reviews: [
+      Review.create({ by: 'eris', lense: 'devil', verdict: 'ok', comment: 'a' }),
+      Review.create({ by: 'eris', lense: 'layer', verdict: 'ok', comment: 'b' }),
+    ],
+  });
+  assert.equal(r.loadedVersion, 5);
+  assert.equal(r.currentVersion, 5);
+});
+
+test('Request.addReview increments currentVersion but not loadedVersion', () => {
+  // After addReview, on-disk is stale by one; the repo compares
+  // on-disk.version to loadedVersion, so loadedVersion must NOT
+  // move with in-memory mutations.
+  const r = Request.restore({
+    id: RequestId.generate(d, 1),
+    from: MemberName.of('alice'),
+    action: 'a',
+    reason: 'r',
+    state: 'completed',
+    createdAt: '2026-04-14T00:00:00.000Z',
+    statusLog: [
+      { state: 'pending', by: 'alice', at: '2026-04-14T00:00:00.000Z' },
+      { state: 'completed', by: 'alice', at: '2026-04-14T00:00:02.000Z' },
+    ],
+    reviews: [],
+  });
+  assert.equal(r.loadedVersion, 2);
+  r.addReview(Review.create({ by: 'eris', lense: 'devil', verdict: 'ok', comment: 'x' }));
+  assert.equal(r.loadedVersion, 2, 'loadedVersion is the load-time snapshot, never bumped');
+  assert.equal(r.currentVersion, 3);
+});
+
+test('Request.toJSON derives completion_note from status_log[-1].note', () => {
+  const r = mkReq();
+  r.approve(MemberName.of('eris'));
+  r.execute(MemberName.of('bob'));
+  r.complete(MemberName.of('bob'), 'shipped');
+  const j = r.toJSON();
+  assert.equal(j['completion_note'], 'shipped');
+  assert.equal(j['deny_reason'], undefined);
+  assert.equal(j['failure_reason'], undefined);
+});
+
+test('Request.toJSON derives deny_reason and failure_reason from status_log[-1].note', () => {
+  const denied = mkReq();
+  denied.deny(MemberName.of('eris'), 'not now');
+  assert.equal(denied.toJSON()['deny_reason'], 'not now');
+  assert.equal(denied.toJSON()['completion_note'], undefined);
+
+  const failed = mkReq();
+  failed.approve(MemberName.of('eris'));
+  failed.execute(MemberName.of('bob'));
+  failed.fail(MemberName.of('bob'), 'broken');
+  assert.equal(failed.toJSON()['failure_reason'], 'broken');
+  assert.equal(failed.toJSON()['completion_note'], undefined);
+});
+
+test('Request.toJSON: closure-note derivation is single-sourced from status_log', () => {
+  // The old duplication bug wrote the note into both props.completionNote
+  // and status_log[-1].note. If someone mutates status_log out of band
+  // (only possible via restore), toJSON must still reflect what the
+  // log says, proving there is no shadow field.
+  const r = Request.restore({
+    id: RequestId.generate(d, 1),
+    from: MemberName.of('alice'),
+    action: 'a',
+    reason: 'r',
+    state: 'completed',
+    createdAt: '2026-04-14T00:00:00.000Z',
+    statusLog: [
+      { state: 'pending', by: 'alice', at: '2026-04-14T00:00:00.000Z' },
+      { state: 'completed', by: 'alice', at: '2026-04-14T00:00:01.000Z', note: 'log-wins' },
+    ],
+    reviews: [],
+  });
+  assert.equal(r.toJSON()['completion_note'], 'log-wins');
+});
