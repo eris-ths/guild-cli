@@ -50,11 +50,24 @@ interface BootPayload {
    * or `null` when cwd is being used as a fallback root.
    *
    * `resolved_content_root`: absolute path gate is reading data from.
+   *
+   * `content_root_health`: lightweight summary of whether any YAML
+   * records in the content_root failed to hydrate. Surfacing this at
+   * boot time catches test leftovers or schema-drifted records that
+   * would otherwise emit a warning on every subsequent verb. When
+   * `malformed_count > 0` the caller can reach for
+   * `gate doctor` (inspect) and `gate doctor --format json | gate repair --apply`
+   * (quarantine) — the onboarding unlock is named in `fix_hint`.
    */
   hints: {
     misconfigured_cwd: boolean;
     config_file: string | null;
     resolved_content_root: string;
+    content_root_health: {
+      malformed_count: number;
+      areas: Array<{ area: string; malformed: number; total: number }>;
+      fix_hint: string | null;
+    };
   };
 }
 
@@ -132,6 +145,46 @@ export async function bootCmd(c: C, args: ParsedArgs): Promise<number> {
     members.length === 0 &&
     allRequests.length === 0;
 
+  // Content-root health: lightweight summary of malformed records.
+  // We piggyback on DiagnosticUseCases which already walks every
+  // area; its onMalformed collector picks up YAML that failed to
+  // hydrate (schema drift, test leftovers, half-written records).
+  // Errors during the health probe are non-fatal — a failing
+  // diagnostic shouldn't break boot, which agents depend on for
+  // orientation.
+  const contentRootHealth: BootPayload['hints']['content_root_health'] = {
+    malformed_count: 0,
+    areas: [],
+    fix_hint: null,
+  };
+  try {
+    const report = await c.diagnosticUC.run();
+    const summary = report.summary as unknown as Record<
+      string,
+      { total: number; malformed: number }
+    >;
+    for (const [area, s] of Object.entries(summary)) {
+      if (s && typeof s.total === 'number') {
+        contentRootHealth.areas.push({
+          area,
+          total: s.total,
+          malformed: s.malformed,
+        });
+        contentRootHealth.malformed_count += s.malformed;
+      }
+    }
+    if (contentRootHealth.malformed_count > 0) {
+      contentRootHealth.fix_hint =
+        'Run `gate doctor` to see each finding, then ' +
+        '`gate doctor --format json | gate repair --apply` to ' +
+        'quarantine malformed records out of the hot path. ' +
+        'Quarantine is reversible: files move under ' +
+        '`<content_root>/quarantine/<timestamp>/<area>/`.';
+    }
+  } catch {
+    // Diagnostic errored — skip health, keep boot usable.
+  }
+
   const payload: BootPayload = {
     actor,
     role,
@@ -144,6 +197,7 @@ export async function bootCmd(c: C, args: ParsedArgs): Promise<number> {
       misconfigured_cwd: misconfiguredCwd,
       config_file: c.config.configFile,
       resolved_content_root: c.config.contentRoot,
+      content_root_health: contentRootHealth,
     },
   };
 
@@ -176,6 +230,24 @@ function renderBootText(p: BootPayload): string {
     );
     lines.push(
       `        or use a wrapper that cd's before invoking gate.mjs.`,
+    );
+  }
+  const health = p.hints.content_root_health;
+  if (health.malformed_count > 0) {
+    lines.push('');
+    lines.push(
+      `⚠️  ${health.malformed_count} malformed record(s) in content_root`,
+    );
+    for (const a of health.areas) {
+      if (a.malformed > 0) {
+        lines.push(
+          `   ${a.area}: ${a.malformed} malformed of ${a.total}`,
+        );
+      }
+    }
+    lines.push(`   fix: gate doctor   # inspect each finding`);
+    lines.push(
+      `        gate doctor --format json | gate repair --apply   # quarantine`,
     );
   }
   lines.push('');
