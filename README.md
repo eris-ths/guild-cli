@@ -22,6 +22,24 @@ single self-contained loop reliably misses.
 > release history lives in [`CHANGELOG.md`](./CHANGELOG.md).
 > See [`SECURITY.md`](./SECURITY.md) for the threat model.
 
+### How much of this do I need to read?
+
+Pick a depth. Every layer works on its own; you keep going only if
+the value you're getting is worth the reading.
+
+| Depth | File | When it's enough |
+|-------|------|------------------|
+| 30 sec | the paragraphs above | you want to know what this is |
+| 5 min | [`docs/concepts-for-newcomers.md`](./docs/concepts-for-newcomers.md) | you came from Jira / PR review / ADR and want the translation |
+| 10 min | [`AGENT.md`](./AGENT.md) | you're an AI agent about to run `gate` and want the verb map |
+| 30 min | **this README** (below) | you want the design rationale, first-time setup, verb cookbook |
+| 1 hour | [`docs/verbs.md`](./docs/verbs.md) + [`examples/dogfood-session/`](./examples/dogfood-session/) | you're adopting this seriously and want to see real sessions |
+| when needed | [`POLICY.md`](./POLICY.md) / [`SECURITY.md`](./SECURITY.md) | you're embedding guild-cli and need the stability / threat contract |
+
+If a layer is enough for what you're doing, stop there. Nothing
+deeper is hidden value you're missing — it's scaffolding that
+only matters when your use case grows into it.
+
 ---
 
 ## For AI agents (Claude, GPT, local LLMs, etc.)

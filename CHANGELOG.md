@@ -8,6 +8,39 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 ## [Unreleased]
 
 ### Added
+- **`parseVerdict` accepts grammatical and muscle-memory aliases.**
+  `approve`/`approved`/`pass`/`lgtm`/`yes` → `ok`,
+  `concerned`/`concerning`/`worried`/`warn` → `concern`,
+  `rejected`/`block`/`blocked`/`veto` → `reject`.
+  Case-insensitive after trim. The canonical 3 values and the
+  `Verdict` type are unchanged — interface-layer convenience for
+  reviewers (especially AI agents) who reach for the grammatical
+  adjective (`concerned`) before the noun (`concern`). Rejection
+  error lists both canonical values and accepted aliases.
+- **Concept map for newcomers.**
+  [`docs/concepts-for-newcomers.md`](./docs/concepts-for-newcomers.md)
+  — a 30-second mental map from Jira / Linear / ADR / PR review /
+  Slack to the guild-cli vocabulary. Elevator pitch, "coming from"
+  table, quick vocabulary list, core loop diagram, and the one
+  thing most newcomers miss. `README.md` links this as the first
+  stop before the command surface.
+
+### Changed (onboarding ergonomics)
+- **Layered documentation signposts.** The README now has a
+  "How much of this do I need to read?" table naming every doc
+  with the time cost and when it's enough. `AGENT.md` says
+  upfront "you don't need to read all of this to be productive"
+  and names which sections are essential. `docs/verbs.md` now
+  opens with "you probably don't need this yet — come back when
+  a verb surprises you." The intent is zero reading pressure at
+  each layer; you keep going only if the value warrants it.
+- **`suggested_next` description softened.** Schema and
+  inline comments now make explicit that the field is a
+  convenience hint for orchestrators — safe to ignore if you
+  have other plans. The lifecycle does not demand progression
+  along the suggested axis.
+
+### Added
 - **`parseIssueSeverity` accepts common aliases.** `medium`, `mid`,
   `crit`, `hi`, `lo`, and single-letter shortcuts (`l`/`m`/`h`/`c`)
   now normalize to the canonical 4 values. Matching is case-

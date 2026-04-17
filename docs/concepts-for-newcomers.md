@@ -61,7 +61,15 @@ of accrued reviews across four lenses become an agent's memory.
 
 ## Where to go next
 
-- [AGENT.md](../AGENT.md) — agent-first quick reference
-- [README.md § Verb cookbook](../README.md#verb-cookbook) — each verb with examples
-- [docs/verbs.md](./verbs.md) — deeper per-verb design notes
-- [examples/dogfood-session/](../examples/dogfood-session/) — a real multi-actor session you can read end-to-end
+The documentation is layered. **Stop at whichever layer is enough for what you're doing** — depth isn't hidden value, it's scaffolding for when your use case grows.
+
+| Next step | File | Time |
+|-----------|------|------|
+| You're an AI agent about to run `gate` | [AGENT.md](../AGENT.md) | 10 min |
+| You want design rationale + first-time setup | [README.md](../README.md) | 30 min |
+| You want to see a real multi-actor session | [examples/dogfood-session/](../examples/dogfood-session/) | 15 min |
+| You want deeper per-verb notes and surprises | [docs/verbs.md](./verbs.md) | 1 hour |
+| You're embedding guild-cli as a library | [POLICY.md](../POLICY.md) (stable surface) | when needed |
+| You're operating it in a sensitive context | [SECURITY.md](../SECURITY.md) (threat model) | when needed |
+
+A 30-second pitch plus one `gate boot` is often enough to start being productive. The rest is available when the moment calls for it.
