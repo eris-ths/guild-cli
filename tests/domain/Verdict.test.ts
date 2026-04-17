@@ -10,10 +10,41 @@ test('parseVerdict accepts valid values', () => {
   assert.equal(parseVerdict('reject'), 'reject');
 });
 
-test('parseVerdict rejects unknown', () => {
-  assert.throws(() => parseVerdict('approved'), DomainError);
+test('parseVerdict accepts common aliases (grammatical + muscle memory)', () => {
+  // ok family
+  assert.equal(parseVerdict('approve'), 'ok');
+  assert.equal(parseVerdict('approved'), 'ok');
+  assert.equal(parseVerdict('pass'), 'ok');
+  assert.equal(parseVerdict('lgtm'), 'ok');
+  assert.equal(parseVerdict('yes'), 'ok');
+  // concern family (the adjective is the natural reach)
+  assert.equal(parseVerdict('concerned'), 'concern');
+  assert.equal(parseVerdict('concerning'), 'concern');
+  assert.equal(parseVerdict('worried'), 'concern');
+  assert.equal(parseVerdict('warn'), 'concern');
+  // reject family
+  assert.equal(parseVerdict('rejected'), 'reject');
+  assert.equal(parseVerdict('block'), 'reject');
+  assert.equal(parseVerdict('veto'), 'reject');
+});
+
+test('parseVerdict is case-insensitive and trims whitespace', () => {
+  assert.equal(parseVerdict('OK'), 'ok');
+  assert.equal(parseVerdict('  Concerned  '), 'concern');
+  assert.equal(parseVerdict('LGTM'), 'ok');
+});
+
+test('parseVerdict rejects truly unknown values with an informative error', () => {
+  assert.throws(() => parseVerdict('maybe'), DomainError);
   assert.throws(() => parseVerdict(''), DomainError);
-  assert.throws(() => parseVerdict('OK'), DomainError);
+  try {
+    parseVerdict('maybe');
+    assert.fail('expected throw');
+  } catch (err) {
+    assert.ok(err instanceof DomainError);
+    assert.match(err.message, /ok, concern, reject/);
+    assert.match(err.message, /concerned.*concern/);
+  }
 });
 
 test('parseLense accepts valid values', () => {
