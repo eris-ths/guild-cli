@@ -26,7 +26,7 @@ single self-contained loop reliably misses.
 
 ## For AI agents (Claude, GPT, local LLMs, etc.)
 
-> **Short on context?** [`AGENT.md`](./AGENT.md) is a 133-line
+> **Short on context?** [`AGENT.md`](./AGENT.md) is a short
 > quick reference with all commands, state machines, and config.
 > Read that instead of this README if you want to save tokens.
 
@@ -361,6 +361,9 @@ gate voices <name> [--lense <l>] [--verdict <v>] [--limit <N>]
 gate tail [N]                                        (default 20)
 gate status [--for <m>] [--format json|text]         (default: json)
 gate whoami                                          (needs GUILD_ACTOR)
+gate boot   [--format json|text] [--tail <N>] [--utterances <N>]
+gate resume [--format json|text]                     (needs GUILD_ACTOR)
+gate schema [--verb <name>] [--format json|text]
 gate chain <id>                                      (request or issue)
 gate approve <id>  --by <m> [--note <s>]
 gate deny    <id>  --by <m> [--note <s> | --reason <s> | <reason>]
