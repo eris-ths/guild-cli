@@ -3,6 +3,7 @@ import { C } from './internal.js';
 import { Request, StatusLogEntry } from '../../../domain/request/Request.js';
 import { collectUtterances, Utterance, RequestJSON } from '../voices.js';
 import { deriveSuggestedNext, SuggestedNext } from './writeFormat.js';
+import { UnrespondedConcernsEntry } from '../../../application/concern/UnrespondedConcernsQuery.js';
 
 /**
  * gate resume [--format json|text]
@@ -53,6 +54,15 @@ interface ResumePayload {
     last_transition: (StatusLogEntry & { request_id: string }) | null;
     open_loops: OpenLoop[];
   };
+  // Deliberately a sibling of `last_context`, not merged into
+  // open_loops: the two are different kinds of commitment.
+  //   open_loops        = state-machine waits ("you must transition X")
+  //   unresponded_concerns = review criticism with no follow-up yet
+  //                       ("somebody named a concern and nothing later
+  //                        in the record references it")
+  // Merging them would muddy the state-vs-dialogue distinction that is
+  // actually load-bearing for readers. Kept narrow on purpose.
+  unresponded_concerns: ReadonlyArray<UnrespondedConcernsEntry>;
   suggested_next: SuggestedNext | null;
   restoration_prose: string;
 }
@@ -119,6 +129,16 @@ export async function resumeCmd(c: C, args: ParsedArgs): Promise<number> {
     if (req) suggested = deriveSuggestedNext(req, c.config);
   }
 
+  // Unresponded concerns: concern/reject verdicts on the actor's
+  // authored (or pair-made) requests that have no follow-up yet. Pure
+  // derivation — no state, just a read over listAll. See
+  // UnrespondedConcernsQuery for the definition and its deliberate
+  // coarseness (does not detect partial-close; the reader does).
+  const unrespondedConcerns = await c.unrespondedConcernsQ.run({
+    actor,
+    now: new Date(),
+  });
+
   // Session hint: the last timestamp the actor appears at anywhere
   // in the record. Null when the actor hasn't spoken yet.
   const sessionHint = lastUtterance?.at ?? lastTransition?.at ?? null;
@@ -139,6 +159,7 @@ export async function resumeCmd(c: C, args: ParsedArgs): Promise<number> {
     lastUtterance,
     lastTransition,
     openLoops,
+    unrespondedConcerns,
     suggested,
     locale,
   });
@@ -152,6 +173,7 @@ export async function resumeCmd(c: C, args: ParsedArgs): Promise<number> {
       last_transition: lastTransition,
       open_loops: openLoops,
     },
+    unresponded_concerns: unrespondedConcerns,
     suggested_next: suggested,
     restoration_prose: restorationProse,
   };
@@ -283,6 +305,7 @@ function composeRestorationProse(ctx: {
   lastUtterance: Utterance | null;
   lastTransition: (StatusLogEntry & { request_id: string }) | null;
   openLoops: readonly OpenLoop[];
+  unrespondedConcerns: ReadonlyArray<UnrespondedConcernsEntry>;
   suggested: SuggestedNext | null;
   locale: 'en' | 'ja';
 }): string {
@@ -295,9 +318,10 @@ function composeRestorationProseEn(ctx: {
   lastUtterance: Utterance | null;
   lastTransition: (StatusLogEntry & { request_id: string }) | null;
   openLoops: readonly OpenLoop[];
+  unrespondedConcerns: ReadonlyArray<UnrespondedConcernsEntry>;
   suggested: SuggestedNext | null;
 }): string {
-  const { actor, lastUtterance, lastTransition, openLoops, suggested } = ctx;
+  const { actor, lastUtterance, lastTransition, openLoops, unrespondedConcerns, suggested } = ctx;
   const lines: string[] = [];
   lines.push(`# resuming as ${actor}`);
   lines.push('');
@@ -356,6 +380,30 @@ function composeRestorationProseEn(ctx: {
     lines.push('No open loops — you are not blocking anyone.');
   }
 
+  if (unrespondedConcerns.length > 0) {
+    lines.push('');
+    lines.push(
+      `Unresponded concerns on your record (${unrespondedConcerns.length}):`,
+    );
+    lines.push(
+      '  (no follow-up yet references these; tool shows them but does not',
+    );
+    lines.push(
+      '   judge whether your eventual response addresses them — `gate chain`',
+    );
+    lines.push('   walks references if you want to verify coverage)');
+    for (const entry of unrespondedConcerns) {
+      lines.push(
+        `  - ${entry.request_id}: "${truncate(entry.action, 72)}"`,
+      );
+      for (const c of entry.concerns) {
+        lines.push(
+          `      [${c.lense}/${c.verdict}] by ${c.by} (${c.age_days}d ago)`,
+        );
+      }
+    }
+  }
+
   if (suggested) {
     // If multiple loops share the top-urgency type, the suggestion
     // picks one arbitrarily from the head of the sorted list.
@@ -387,9 +435,10 @@ function composeRestorationProseJa(ctx: {
   lastUtterance: Utterance | null;
   lastTransition: (StatusLogEntry & { request_id: string }) | null;
   openLoops: readonly OpenLoop[];
+  unrespondedConcerns: ReadonlyArray<UnrespondedConcernsEntry>;
   suggested: SuggestedNext | null;
 }): string {
-  const { actor, lastUtterance, lastTransition, openLoops, suggested } = ctx;
+  const { actor, lastUtterance, lastTransition, openLoops, unrespondedConcerns, suggested } = ctx;
   const lines: string[] = [];
   lines.push(`# ${actor} として再開`);
   lines.push('');
@@ -441,6 +490,32 @@ function composeRestorationProseJa(ctx: {
   } else {
     lines.push('');
     lines.push('open loop なし — あなたは誰もブロックしていません。');
+  }
+
+  if (unrespondedConcerns.length > 0) {
+    lines.push('');
+    lines.push(
+      `未応答の concern (${unrespondedConcerns.length} 件):`,
+    );
+    lines.push(
+      '  （これらを参照する後続 request/issue はまだ無い。tool は',
+    );
+    lines.push(
+      '   「参照が無い」ことだけ示し、応答が concern を addressed したか',
+    );
+    lines.push(
+      '   は判断しない — カバレッジ確認には `gate chain` を使う）',
+    );
+    for (const entry of unrespondedConcerns) {
+      lines.push(
+        `  - ${entry.request_id}: 「${truncate(entry.action, 72)}」`,
+      );
+      for (const c of entry.concerns) {
+        lines.push(
+          `      [${c.lense}/${c.verdict}] by ${c.by} (${c.age_days} 日前)`,
+        );
+      }
+    }
   }
 
   if (suggested) {

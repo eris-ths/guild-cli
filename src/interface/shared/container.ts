@@ -13,6 +13,7 @@ import {
   DiagnosticRepoBundle,
 } from '../../application/diagnostic/DiagnosticUseCases.js';
 import { RepairUseCases } from '../../application/repair/RepairUseCases.js';
+import { UnrespondedConcernsQuery } from '../../application/concern/UnrespondedConcernsQuery.js';
 import { SafeFsQuarantineStore } from '../../infrastructure/persistence/SafeFsQuarantineStore.js';
 import { OnMalformed } from '../../application/ports/OnMalformed.js';
 
@@ -24,6 +25,7 @@ export interface Container {
   messageUC: MessageUseCases;
   diagnosticUC: DiagnosticUseCases;
   repairUC: RepairUseCases;
+  unrespondedConcernsQ: UnrespondedConcernsQuery;
 }
 
 export function buildContainer(): Container {
@@ -59,5 +61,6 @@ export function buildContainer(): Container {
       { root: config.root, contentRoot: config.contentRoot },
     ),
     repairUC: new RepairUseCases(quarantine),
+    unrespondedConcernsQ: new UnrespondedConcernsQuery(requests, issues),
   };
 }

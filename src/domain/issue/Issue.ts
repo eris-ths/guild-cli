@@ -207,6 +207,12 @@ export class Issue {
   get state(): IssueState {
     return this.props.state;
   }
+  get from(): MemberName {
+    return this.props.from;
+  }
+  get text(): string {
+    return this.props.text;
+  }
 
   setState(next: IssueState): void {
     assertIssueTransition(this.props.state, next);
