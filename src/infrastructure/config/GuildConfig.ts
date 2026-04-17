@@ -54,6 +54,14 @@ export class GuildConfig implements GuildConfigProps {
     readonly lenses: readonly string[],
     readonly doctorPlugins: readonly string[],
     readonly onMalformed: OnMalformed,
+    /**
+     * Absolute path to the `guild.config.yaml` that produced this
+     * config, or `null` when no config was found and `cwd` was used
+     * as a fallback content_root. Lets callers distinguish
+     * "intentional fresh start" (config present, 0 data) from
+     * "misconfigured cwd" (no config, 0 data).
+     */
+    readonly configFile: string | null,
   ) {}
 
   static load(
@@ -94,7 +102,7 @@ export class GuildConfig implements GuildConfigProps {
           .filter((x: unknown): x is string => typeof x === 'string')
           .map((x: string) => resolveUnder(root, x))
       : [];
-    return new GuildConfig(root, contentRoot, paths, hostNames, lenses, doctorPlugins, onMalformed);
+    return new GuildConfig(root, contentRoot, paths, hostNames, lenses, doctorPlugins, onMalformed, configPath);
   }
 
   static default(
@@ -115,6 +123,7 @@ export class GuildConfig implements GuildConfigProps {
       [...DEFAULT_LENSES],
       [],
       onMalformed,
+      null,
     );
   }
 }

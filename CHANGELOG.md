@@ -7,6 +7,30 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 
 ## [Unreleased]
 
+### Added
+- **`gate boot` `hints` field — misconfigured-cwd detection.**
+  boot payload gains `hints: { misconfigured_cwd, config_file,
+  resolved_content_root }`. `misconfigured_cwd` is `true` iff no
+  `guild.config.yaml` was found up the tree AND the fallback
+  content_root is empty — the concrete signature of "wrong cwd",
+  distinct from an intentional fresh start (config present, 0 data).
+  Text output surfaces a fix hint with the resolved path. Purely
+  additive to the boot payload contract. Motivation: AI agents
+  reading `.mcp.json` often assume `GATE_CONTENT_ROOT` works for
+  direct CLI invocation (it doesn't — only the MCP wrapper sets
+  subprocess `cwd`), then hit cryptic "no such member" errors on the
+  next verb. See `AGENT.md` § Troubleshooting.
+- **`GuildConfig.configFile`.** New readonly field on
+  `GuildConfig`: absolute path of the loaded `guild.config.yaml`, or
+  `null` when `cwd` was used as a fallback root. Lets callers tell
+  "fresh start" apart from "misconfigured cwd".
+
+### Documentation
+- **`AGENT.md` § Troubleshooting.** Walks through the "no such
+  member" trap: `cwd` fallback semantics, that no config-resolution
+  env var is read by the CLI as of v0.3.x, and three workarounds
+  (`cd`, wrapper, symlink).
+
 ### Added (agent-first)
 - **Pair-mode Layer 1 — `Request.with`.** `gate request` and `gate
   fast-track` accept `--with <n1>[,<n2>...]` to record dialogue
