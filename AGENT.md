@@ -141,6 +141,41 @@ Explicit flags always win. `--executor` and `--auto-review` are never env-filled
 `gate show`, `gate voices`, `gate status` default to **JSON**.
 Add `--format text` for human-readable output.
 
+## Troubleshooting
+
+### `Invalid --from/--by/--with: "xxx" — no such member or host`
+
+gate resolves config by walking up from `cwd` looking for
+`guild.config.yaml`. If you run from outside your content_root,
+**the CLI silently falls back to `cwd` as the content_root** with
+zero members, and every actor name becomes "unknown".
+
+Fix one of:
+
+1. `cd <content_root>` before running (recommended for interactive use).
+2. Write a wrapper that `cd`s and then `exec`s `gate.mjs`
+   (recommended when another tool invokes gate from an arbitrary cwd,
+   e.g. MCP hosts, editor extensions, background daemons).
+3. Symlink `guild.config.yaml` into an ancestor of your working
+   directory.
+
+**As of v0.3.x, no env var (`GATE_CONTENT_ROOT`,
+`GUILD_CONFIG_DIR`, ...) is read by the CLI for config
+resolution.** If you see such a var in an MCP server config, it is
+handled by the wrapper that sets the subprocess `cwd` — not by gate
+itself. Calling `gate.mjs` directly with that env set has no
+effect. (Future versions may add env-based override; check the
+CHANGELOG before relying on either behavior.)
+
+This affects AI agents particularly often: an agent reading
+`.mcp.json` may assume the env works for direct CLI calls, and the
+error message ("no such member") points at the actor name rather
+than the real cause (cwd). `gate boot` surfaces this via
+`hints.misconfigured_cwd: true` (JSON) and a warning block
+(text) — it fires only when no `guild.config.yaml` was found
+AND the fallback content_root is empty, so intentional fresh
+starts are not flagged.
+
 ## Deep dives
 
 - [`docs/verbs.md`](./docs/verbs.md) — per-verb examples and design notes

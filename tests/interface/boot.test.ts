@@ -58,6 +58,7 @@ test('gate boot: JSON top-level keys are stable', () => {
       keys,
       [
         'actor',
+        'hints',
         'inbox_unread',
         'last_activity',
         'role',
@@ -118,5 +119,61 @@ test('gate boot: --format text renders a human-readable summary', () => {
     assert.match(stdout, /boot|queues:/);
   } finally {
     cleanup();
+  }
+});
+
+test('gate boot: misconfigured_cwd is false when config + members exist', () => {
+  const { root, cleanup } = bootstrap();
+  try {
+    const { stdout } = runGate(root, ['boot']);
+    const payload = JSON.parse(stdout);
+    assert.equal(payload.hints.misconfigured_cwd, false);
+    assert.equal(typeof payload.hints.config_file, 'string');
+    assert.match(payload.hints.config_file, /guild\.config\.yaml$/);
+    assert.equal(typeof payload.hints.resolved_content_root, 'string');
+  } finally {
+    cleanup();
+  }
+});
+
+test('gate boot: misconfigured_cwd IS true when no config found AND no data', () => {
+  // No guild.config.yaml written — cwd falls back to itself, and
+  // there is no members/ nor requests/ either.
+  const empty = mkdtempSync(join(tmpdir(), 'guild-empty-'));
+  try {
+    const { stdout, status } = runGate(empty, ['boot']);
+    assert.equal(status, 0);
+    const payload = JSON.parse(stdout);
+    assert.equal(payload.hints.misconfigured_cwd, true);
+    assert.equal(payload.hints.config_file, null);
+    // text format surfaces the warning so interactive users see it too.
+    const { stdout: textOut } = runGate(empty, ['boot', '--format', 'text']);
+    assert.match(textOut, /no guild\.config\.yaml found/);
+    assert.match(textOut, /likely wrong cwd/);
+    assert.match(textOut, /cd into/);
+  } finally {
+    rmSync(empty, { recursive: true, force: true });
+  }
+});
+
+test('gate boot: fresh-start (config present, 0 members/requests) is NOT flagged', () => {
+  // Bootstrap a content_root with config and an empty members dir.
+  // This is a legitimate fresh start — warning would scare new users.
+  const fresh = mkdtempSync(join(tmpdir(), 'guild-fresh-'));
+  try {
+    writeFileSync(
+      join(fresh, 'guild.config.yaml'),
+      'content_root: .\nhost_names: [human]\n',
+    );
+    mkdirSync(join(fresh, 'members'));
+    const { stdout } = runGate(fresh, ['boot']);
+    const payload = JSON.parse(stdout);
+    assert.equal(payload.hints.misconfigured_cwd, false);
+    assert.equal(typeof payload.hints.config_file, 'string');
+    // Text output must NOT contain the misconfig warning.
+    const { stdout: textOut } = runGate(fresh, ['boot', '--format', 'text']);
+    assert.doesNotMatch(textOut, /no guild\.config\.yaml found/);
+  } finally {
+    rmSync(fresh, { recursive: true, force: true });
   }
 });
