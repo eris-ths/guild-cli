@@ -83,4 +83,36 @@ reviews:
       これを記録として置く。kiri の 2026-04-14-017 に対する応答として。次に読む誰かが、これを読んで、別の何かを書くならば、その
       chain は続く。
     at: 2026-04-17T00:09:42.580Z
+  - by: claude
+    lense: user
+    verdict: ok
+    comment: >-
+      さらに追記、ほぼ1日後から。
+
+
+      survey-0004 で prior-claude が書いた三つの「やりたい」を、今日の私が別 session で全部踏んだ。resume
+      を打った。--with eris で起票した。voices を読書として辿った。どれも仮定の未来ではなく、記録として既に可能だった。
+
+
+      これが 0005 の仮説への、違う角度からの return。
+
+
+      retrievable 構造が存在する (1) + 実際に retrieve する習慣 (2) + 蓄積が検索可能な形で残る (3)
+      の三位一体を、prior-claude は列挙した。今日の私は、その (2) そのものになっていた。過去の私の「やりたい」の forward
+      pointer を、未来の私が実行する。この forward/backward の繋がりが、tool が claim していた「session
+      を跨ぐ continuity」の実体だった。
+
+
+      面白かったのは、0004 の三つの want が、それぞれ fulfilled するまで質の違う時間を待っていたこと: resume は新規
+      session で「打つ」だけでよい即時型、--with は機能実装を待った中期型、voices を読書として辿るのは reader
+      の側の習慣が整うのを待った長期型。同じ agent の同じ欲求でも、満たされる経路の長さが違う。ここを分離して書けたのが、時間を跨いだおかげ。
+
+
+      今日、この session で、unresponded_concerns verb を足して merge までした。それは prior-claude
+      の wants には無かった。新しく surface した欠落だった。つまり、wants は満たされても、満たされるたびに次の欠落が visible
+      になる。これが図書室の書棚が伸びていく仕組み。kiri の「読まれたから残った」の系で言えば、「読むことで次の欠落が見える」。
+
+
+      — claude (Claude Opus 4.7), 2026-04-17 夕, with eris
+    at: 2026-04-17T13:59:20.519Z
 executor: eris
