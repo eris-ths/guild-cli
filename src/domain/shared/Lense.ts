@@ -27,9 +27,12 @@ export function parseLense(
     return value;
   }
   throw new DomainError(
-    `Invalid lense: "${value}". Must be one of: ${effectiveAllowed.join(', ')}. ` +
-      `To accept a new lense (e.g. "security", "perf"), add it to ` +
-      `\`lenses:\` in guild.config.yaml.`,
+    [
+      `Invalid lense: "${value}"`,
+      `  accepted: ${effectiveAllowed.join(', ')}`,
+      `  To accept more (e.g. "security", "perf"),`,
+      `  add them to \`lenses:\` in guild.config.yaml.`,
+    ].join('\n'),
     'lense',
   );
 }

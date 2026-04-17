@@ -143,6 +143,7 @@ test('parseIssueSeverity error message lists canonical values + aliases', () => 
   } catch (err) {
     assert.ok(err instanceof DomainError);
     assert.match(err.message, /low, med, high, critical/);
-    assert.match(err.message, /medium.*med/);
+    // `s` flag so the dot matches across the newline-separated alias table
+    assert.match(err.message, /medium.*med/s);
   }
 });

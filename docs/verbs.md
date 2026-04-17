@@ -5,6 +5,12 @@
 > per verb; this file is for "I want to actually use this — show me a
 > real session and explain the surprising bits."
 >
+> **You probably don't need this yet.** If you've read
+> [`concepts-for-newcomers.md`](./concepts-for-newcomers.md)
+> (30 seconds) and can run `gate boot`, you're productive. Come back
+> when a specific verb starts behaving in a way that surprises you —
+> this cookbook is organized around those surprises.
+>
 > If a verb is missing here, see [`README.md` § Two CLIs](../README.md#two-clis)
 > for the full signature list.
 

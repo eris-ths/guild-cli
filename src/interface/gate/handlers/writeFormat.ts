@@ -43,7 +43,14 @@ export interface WriteResponse {
 }
 
 export interface SuggestedNext {
-  /** The verb an agent should invoke next, e.g. "review" or "execute". */
+  /**
+   * The verb an agent *might* invoke next (e.g. "review" or
+   * "execute"). This is a hint, not a directive — the field exists
+   * so orchestrators can chain tool calls without re-deriving
+   * state transitions locally. A caller who has other plans
+   * should feel free to ignore it; the lifecycle doesn't demand
+   * progression along this axis.
+   */
   verb: string;
   /** Arguments pre-filled from the record. Actor fields are hints,
    *  not assertions — the agent may override when it knows better. */
