@@ -315,8 +315,12 @@ function composeRestorationProseEn(ctx: {
       );
       lines.push(`  "${truncate(lastUtterance.comment, 240)}"`);
     } else {
+      const withHint =
+        lastUtterance.with && lastUtterance.with.length > 0
+          ? ` (shaped with ${lastUtterance.with.join(', ')})`
+          : '';
       lines.push(
-        `Your last voice (utterance, ${age}) was authoring req=${lastUtterance.requestId}:`,
+        `Your last voice (utterance, ${age}) was authoring req=${lastUtterance.requestId}${withHint}:`,
       );
       lines.push(`  action: ${truncate(lastUtterance.action, 120)}`);
       if (lastUtterance.completionNote) {
@@ -398,8 +402,12 @@ function composeRestorationProseJa(ctx: {
       );
       lines.push(`  「${truncate(lastUtterance.comment, 240)}」`);
     } else {
+      const withHint =
+        lastUtterance.with && lastUtterance.with.length > 0
+          ? `（${lastUtterance.with.join('、')} と一緒に）`
+          : '';
       lines.push(
-        `直近の発話 (utterance, ${age}): req=${lastUtterance.requestId} の起票:`,
+        `直近の発話 (utterance, ${age}): req=${lastUtterance.requestId} の起票${withHint}:`,
       );
       lines.push(`  action: ${truncate(lastUtterance.action, 120)}`);
       if (lastUtterance.completionNote) {

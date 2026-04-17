@@ -25,9 +25,11 @@ export async function reqCreate(c: C, args: ParsedArgs): Promise<number> {
   const executor = optionalOption(args, 'executor');
   const target = optionalOption(args, 'target');
   const autoReview = optionalOption(args, 'auto-review');
+  const withPartners = parseWithList(optionalOption(args, 'with'));
   if (executor !== undefined) input.executor = executor;
   if (target !== undefined) input.target = target;
   if (autoReview !== undefined) input.autoReview = autoReview;
+  if (withPartners.length > 0) input.with = withPartners;
   const r = await c.requestUC.create(input);
   emitWriteResponse(
     parseFormat(args),
@@ -144,6 +146,9 @@ function formatRequestText(r: Request): string {
   if (j['executor']) lines.push(`  executor: ${j['executor']}`);
   if (j['target']) lines.push(`  target:   ${j['target']}`);
   if (j['auto_review']) lines.push(`  reviewer: ${j['auto_review']}`);
+  if (Array.isArray(j['with']) && j['with'].length > 0) {
+    lines.push(`  with:     ${(j['with'] as string[]).join(', ')}`);
+  }
   lines.push(`  created:  ${j['created_at']}`);
   lines.push('');
   lines.push(`  action:   ${j['action']}`);
@@ -260,6 +265,20 @@ export async function reqFail(c: C, args: ParsedArgs): Promise<number> {
   return 0;
 }
 
+/**
+ * Parse `--with eris,alice` (comma-separated) into a clean string list.
+ * Empty entries and whitespace-only entries are dropped so
+ * `--with "eris, , alice"` behaves the way it reads. Exact name
+ * validation happens upstream (MemberName.of / assertActor).
+ */
+function parseWithList(raw: string | undefined): string[] {
+  if (raw === undefined) return [];
+  return raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
+
 // Resolve the closure reason for deny/fail accepting any of:
 //   --reason <s>    explicit & semantically precise
 //   --note <s>      muscle-memory parity with approve/execute/complete
@@ -280,6 +299,7 @@ export async function reqFastTrack(c: C, args: ParsedArgs): Promise<number> {
   const executor = optionalOption(args, 'executor') ?? from;
   const autoReview = optionalOption(args, 'auto-review');
   const note = optionalOption(args, 'note');
+  const withPartners = parseWithList(optionalOption(args, 'with'));
 
   const createInput: Parameters<typeof c.requestUC.create>[0] = {
     from,
@@ -288,6 +308,7 @@ export async function reqFastTrack(c: C, args: ParsedArgs): Promise<number> {
     executor,
   };
   if (autoReview !== undefined) createInput.autoReview = autoReview;
+  if (withPartners.length > 0) createInput.with = withPartners;
   const created = await c.requestUC.create(createInput);
   const id = created.id.value;
 

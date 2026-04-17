@@ -44,6 +44,7 @@ export class RequestUseCases {
     executor?: string;
     target?: string;
     autoReview?: string;
+    with?: readonly string[];
   }): Promise<Request> {
     const { requests, members, clock } = this.deps;
     const from = await assertActor(input.from, '--from', members);
@@ -52,6 +53,13 @@ export class RequestUseCases {
     }
     if (input.autoReview !== undefined) {
       await assertActor(input.autoReview, '--auto-review', members);
+    }
+    if (input.with !== undefined) {
+      // Every `with` entry must resolve to a member or host — pair
+      // partners are actors on the record, not free-form strings.
+      for (const partner of input.with) {
+        await assertActor(partner, '--with', members);
+      }
     }
 
     // Sequence allocation + create is TOCTOU: two concurrent calls may
@@ -71,6 +79,8 @@ export class RequestUseCases {
     if (input.target !== undefined) createArgs.target = input.target;
     if (input.autoReview !== undefined)
       createArgs.autoReview = input.autoReview;
+    if (input.with !== undefined && input.with.length > 0)
+      createArgs.with = input.with;
 
     for (let attempt = 0; attempt < 10; attempt++) {
       createArgs.id = RequestId.generate(now, seq);

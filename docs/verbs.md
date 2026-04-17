@@ -30,6 +30,46 @@ entries (`pending`, `approved`, `executing`, `completed`) with
 distinguish them from full-cycle transitions. `--auto-review` still
 works — it just moves the review from "blocking" to "after-the-fact."
 
+### Pair-mode: who were you with?
+
+`--with <n1>[,<n2>...]` on `gate request` / `gate fast-track`
+records the dialogue partners during the formation of a request.
+Empty / omitted = solo. Partners go through the same actor
+validation as `--from` / `--executor` (members or hosts).
+
+```bash
+gate request --from claude --with eris --action "..." --reason "..."
+gate fast-track --from claude --with "eris, alice" --action "..." --reason "..."
+```
+
+The field surfaces everywhere the author is visible:
+
+- `gate show <id>` — adds a `with: eris, alice` line
+- `gate voices <name>` / `gate tail` — appends `(with eris, alice)`
+  to the authored-utterance header
+- `gate resume --format text` — prose reads "shaped with eris, alice"
+  (or 「eris と一緒に」 in the ja locale)
+
+**Design note — this is Layer 1 of three.**
+- **Layer 1 (fact, implemented):** Request carries `with`. The
+  transient fact of formation: who was the partner in this one
+  decision. That is what this verb records.
+- **Layer 2 (kinship, deferred):** Member YAML could carry a
+  `kinship: [...]` field for durable "who I usually work with"
+  metadata. Not yet needed; will be added when real use surfaces
+  the demand.
+- **Layer 3 (policy, deferred):** `guild.config.yaml` could declare
+  content-root-level conventions (e.g. `pair_mode: { required: true }`).
+  Also deferred until need surfaces.
+
+The three layers are orthogonal. You can use Layer 1 without Layer
+2 or 3; you can add Layer 2 later without retrofitting Layer 1 on
+existing records (`with` is optional).
+
+**Author-self in `with` is dropped.** The record means "partners
+besides me", so listing yourself is silently removed rather than
+flagged as an error — the intent is usually a slip, not a mistake.
+
 ### Resume: picking up where the last session ended
 
 `gate resume` answers "what was I doing?" at the start of a new

@@ -46,6 +46,7 @@ const HELP = `gate — request lifecycle & dialogue CLI
 Requests:
   gate request --from <m> --action <a> --reason <r>
                  [--executor <m>] [--target <s>] [--auto-review <m>]
+                 [--with <n1>[,<n2>...]]
   gate pending [--for <m>]
   gate list --state <state> [--for <m>] [--from <m>]
                             [--executor <m>] [--auto-review <m>]
@@ -64,6 +65,7 @@ Requests:
                    [--comment <s> | --comment - | <comment>]
   gate fast-track --from <m> --action <a> --reason <r>
                   [--executor <m>] [--auto-review <m>] [--note <s>]
+                  [--with <n1>[,<n2>...]]
 
 Issues:
   gate issues add --from <m> --severity <s> --area <a> <text>

@@ -1,0 +1,39 @@
+id: 2026-04-16-0008
+from: claude
+action: "dogfood: --with の最初の実使用"
+reason: 実装後の最初の pair-mode 起票。eris との対話で形成された判断を記録として残す。この request 自身が --with
+  の感触を確かめる一次資料
+state: completed
+created_at: 2026-04-16T23:57:24.377Z
+status_log:
+  - state: pending
+    by: claude
+    at: 2026-04-16T23:57:24.377Z
+    note: created
+  - state: approved
+    by: claude
+    at: 2026-04-16T23:57:24.400Z
+    note: "fast-track: self-approved"
+  - state: executing
+    by: claude
+    at: 2026-04-16T23:57:24.415Z
+    note: "fast-track: self-executed"
+  - state: completed
+    by: claude
+    at: 2026-04-16T23:57:24.431Z
+reviews:
+  - by: devil
+    lense: devil
+    verdict: ok
+    comment: >
+      dogfood request として機能した。--with eris で正しく記録、show/voices/resume 全経路で
+      surface。感触面ok。
+
+
+      上位 request (0007) で挙げた concern は依然 open だが、この個別 dogfood request 自体は scope
+      内で目的達成。
+    at: 2026-04-17T00:00:03.331Z
+executor: claude
+auto_review: devil
+with:
+  - eris

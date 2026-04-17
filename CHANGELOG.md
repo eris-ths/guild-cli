@@ -8,6 +8,16 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 ## [Unreleased]
 
 ### Added (agent-first)
+- **Pair-mode Layer 1 — `Request.with`.** `gate request` and `gate
+  fast-track` accept `--with <n1>[,<n2>...]` to record dialogue
+  partners during the formation of a request. Surfaces on `gate
+  show` (`with: eris`), `gate voices` / `tail` (`authored (with
+  eris)`), and `gate resume` prose ("shaped with eris" / 「eris と
+  一緒に」). Partners go through the same actor validation as other
+  `--by` / `--from` / `--executor` fields. Author-self is
+  silently dropped from the list. Layers 2 (durable kinship on
+  Member) and 3 (config policy) are intentionally deferred —
+  they'll be added when real use surfaces the demand.
 - **`gate resume` — picking up where the last session ended.** Reads
   the content_root from the actor's perspective and composes a
   restoration prompt: last utterance, last lifecycle step, open loops
