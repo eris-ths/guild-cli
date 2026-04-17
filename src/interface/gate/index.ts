@@ -23,6 +23,9 @@ import {
 import { issuesCmd } from './handlers/issues.js';
 import { doctorCmd } from './handlers/doctor.js';
 import { repairCmd } from './handlers/repair.js';
+import { bootCmd } from './handlers/boot.js';
+import { schemaCmd } from './handlers/schema.js';
+import { resumeCmd } from './handlers/resume.js';
 import {
   msgSend,
   msgBroadcast,
@@ -43,6 +46,7 @@ const HELP = `gate — request lifecycle & dialogue CLI
 Requests:
   gate request --from <m> --action <a> --reason <r>
                  [--executor <m>] [--target <s>] [--auto-review <m>]
+                 [--with <n1>[,<n2>...]]
   gate pending [--for <m>]
   gate list --state <state> [--for <m>] [--from <m>]
                             [--executor <m>] [--auto-review <m>]
@@ -61,6 +65,7 @@ Requests:
                    [--comment <s> | --comment - | <comment>]
   gate fast-track --from <m> --action <a> --reason <r>
                   [--executor <m>] [--auto-review <m>] [--note <s>]
+                  [--with <n1>[,<n2>...]]
 
 Issues:
   gate issues add --from <m> --severity <s> --area <a> <text>
@@ -107,8 +112,22 @@ Status:
                        Agent orientation: pending/approved/executing
                        counts, open issues, unread inbox, last activity.
                        Default output is JSON (agent-first).
+  gate boot [--format json|text] [--tail <N>] [--utterances <N>]
+                       Single-command session bootstrap for agents.
+                       Returns identity + status + tail + your recent
+                       utterances + inbox unread as one JSON payload.
+                       GUILD_ACTOR optional (global view if unset).
+  gate resume [--format json|text]
+                       Reconstruct what the actor was doing when the
+                       last session ended. Returns last utterance,
+                       last transition, open loops (awaiting/
+                       executing/pending review/unreviewed), and a
+                       prose restoration note. Requires GUILD_ACTOR.
 
 Meta:
+  gate schema [--verb <name>] [--format json|text]
+                       Introspection: JSON Schema for every verb's
+                       inputs and outputs. Consumed by LLM tool layers.
   gate --version       Print version and exit
 `;
 
@@ -172,6 +191,12 @@ export async function main(argv: readonly string[]): Promise<number> {
         return await repairCmd(c, args);
       case 'status':
         return await statusCmd(c, args);
+      case 'boot':
+        return await bootCmd(c, args);
+      case 'resume':
+        return await resumeCmd(c, args);
+      case 'schema':
+        return await schemaCmd(c, args);
       default:
         process.stderr.write(`unknown command: ${cmd}\n${HELP}`);
         return 1;

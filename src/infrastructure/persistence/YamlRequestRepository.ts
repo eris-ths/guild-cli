@@ -333,6 +333,13 @@ function hydrate(
     if (typeof obj['auto_review'] === 'string')
       props.autoReview = MemberName.of(obj['auto_review']);
     if (typeof obj['target'] === 'string') props.target = obj['target'] as string;
+    if (Array.isArray(obj['with'])) {
+      const partners: MemberName[] = [];
+      for (const raw of obj['with'] as unknown[]) {
+        if (typeof raw === 'string') partners.push(MemberName.of(raw));
+      }
+      if (partners.length > 0) props.with = partners;
+    }
     // Legacy top-level closure keys (completion_note / deny_reason /
     // failure_reason) are no longer written separately — status_log[-1].note
     // is the single source of truth. Handle the three migration cases

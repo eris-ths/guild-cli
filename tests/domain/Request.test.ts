@@ -218,6 +218,73 @@ test('Request.toJSON derives deny_reason and failure_reason from status_log[-1].
   assert.equal(failed.toJSON()['completion_note'], undefined);
 });
 
+test('Request.create with `with` stores partners in order, dedupes, rejects self', () => {
+  const r = Request.create({
+    id: RequestId.generate(d, 1),
+    from: 'alice',
+    action: 'a',
+    reason: 'r',
+    with: ['eris', 'bob', 'eris', 'alice'], // duplicate eris, self alice
+  });
+  assert.deepEqual(
+    r.with.map((m) => m.value),
+    ['eris', 'bob'],
+    'duplicates dropped (first-wins), self removed',
+  );
+});
+
+test('Request.create with empty `with` leaves with unset', () => {
+  const r1 = Request.create({
+    id: RequestId.generate(d, 1),
+    from: 'alice',
+    action: 'a',
+    reason: 'r',
+    with: [],
+  });
+  assert.equal(r1.with.length, 0);
+  // Only-self input also collapses to empty
+  const r2 = Request.create({
+    id: RequestId.generate(d, 2),
+    from: 'alice',
+    action: 'a',
+    reason: 'r',
+    with: ['alice'],
+  });
+  assert.equal(r2.with.length, 0);
+});
+
+test('Request.toJSON emits `with` only when non-empty', () => {
+  const solo = Request.create({
+    id: RequestId.generate(d, 1),
+    from: 'alice',
+    action: 'a',
+    reason: 'r',
+  });
+  assert.equal(solo.toJSON()['with'], undefined);
+  const paired = Request.create({
+    id: RequestId.generate(d, 2),
+    from: 'alice',
+    action: 'a',
+    reason: 'r',
+    with: ['eris'],
+  });
+  assert.deepEqual(paired.toJSON()['with'], ['eris']);
+});
+
+test('Request.create rejects invalid `with` entries (same validation as other actor fields)', () => {
+  assert.throws(
+    () =>
+      Request.create({
+        id: RequestId.generate(d, 1),
+        from: 'alice',
+        action: 'a',
+        reason: 'r',
+        with: ['../bob'],
+      }),
+    DomainError,
+  );
+});
+
 test('Request.toJSON: closure-note derivation is single-sourced from status_log', () => {
   // The old duplication bug wrote the note into both props.completionNote
   // and status_log[-1].note. If someone mutates status_log out of band

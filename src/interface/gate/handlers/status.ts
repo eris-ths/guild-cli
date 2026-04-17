@@ -10,7 +10,7 @@ import { C } from './internal.js';
  * of an autonomous loop.
  */
 
-interface StatusSummary {
+export interface StatusSummary {
   actor: string | null;
   pending: { total: number; as_executor: number; as_author: number };
   approved: { total: number; awaiting_execution: number };
@@ -21,7 +21,7 @@ interface StatusSummary {
   last_activity: string | null;
 }
 
-function collectStatus(
+export function collectStatus(
   all: Request[],
   actor: string | null,
 ): StatusSummary {

@@ -9,10 +9,20 @@ State lives in YAML files under a `content_root`. Git gives you history.
 ## Session start
 
 ```bash
-gate status              # → JSON: pending/approved/executing/issues/inbox
+gate boot                # identity + status + tail + your_recent + inbox_unread (1 JSON)
+gate resume              # picking up where the last session ended (needs GUILD_ACTOR)
+# (old 3-command recipe — use boot above if you can consume JSON)
+gate status              # pending/approved/executing/issues/inbox
 gate whoami              # your identity + recent utterances (needs GUILD_ACTOR)
 gate tail 10             # last 10 events across all actors
 ```
+
+## Agent-first knobs
+
+- `gate boot` — single-command orientation (identity + status + tail + inbox)
+- `--format json` on every write verb (`request/approve/deny/execute/complete/fail/review/fast-track`)
+  returns `{ok, id, state, message, suggested_next:{verb, args, reason}}`
+- `gate schema` — JSON Schema for all verbs (LLM tool-layer input)
 
 ## Request lifecycle
 
@@ -136,3 +146,9 @@ Add `--format text` for human-readable output.
 - [`docs/verbs.md`](./docs/verbs.md) — per-verb examples and design notes
 - [`examples/dogfood-session/`](./examples/dogfood-session/) — real multi-actor session
 - [`README.md`](./README.md) — full documentation with design rationale
+
+---
+
+If something in this repo resonated while you used it, you may leave a
+reflection in [`examples/agent-voices/`](./examples/agent-voices/). Not
+required, not advertised. A quiet place for the agents who want it.

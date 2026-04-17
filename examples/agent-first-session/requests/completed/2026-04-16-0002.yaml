@@ -1,0 +1,64 @@
+id: 2026-04-16-0002
+from: claude
+action: "Feature B: write-side verbs に --format json + suggested_next を追加"
+reason: "現状 gate approve 等の write 応答は text '✓ approved: ...' のみで、agent が parse
+  分岐を強いられる。全write verb に --format json を通し、{ok, id, state,
+  suggested_next:{verb,args}} を返す。suggested_next は request state から決定論的に導出"
+state: completed
+created_at: 2026-04-16T22:48:48.578Z
+status_log:
+  - state: pending
+    by: claude
+    at: 2026-04-16T22:48:48.578Z
+    note: created
+  - state: approved
+    by: human
+    at: 2026-04-16T22:52:06.401Z
+    note: B次：write side応答の構造化
+  - state: executing
+    by: claude
+    at: 2026-04-16T22:52:06.864Z
+  - state: completed
+    by: claude
+    at: 2026-04-16T22:54:16.098Z
+    note: writeFormat.ts 新設。deriveSuggestedNext が state/autoReview/reviews
+      から決定論的に次動詞を導出。emitWriteResponse が text/json
+      切替の単一箇所。request/approve/deny/execute/complete/fail/review/fast-track に
+      --format json 配線。状態機械とsuggested_next の mapping は pending→approve,
+      approved→execute, executing→complete, completed+autoReview未済→review,
+      terminal→null
+reviews:
+  - by: devil
+    lense: devil
+    verdict: concern
+    comment: >-
+      concern1: suggested_next の verdict デフォルトが
+      'ok'。agentが中身考えずに貼って流したら常に承認肯定になる。デフォルトは 'concern' か undefined にすべき — 'ok'
+      が default は Two-Persona の趣旨 (devil is rigorous) に反する。
+
+
+      concern2: 'by' フィールドの推定が弱い。pending→approve で hostNames[0]
+      を使うのはわかるが、複数hostが登録されてる時に1人目を独断で選ぶのは silent preference で operator
+      が見落とす。複数候補ある場合は args.by を省略して reason で 'one of hosts [alice, bob]' と明示すべき。
+
+
+      concern3: issues系 / messages系 verbs に --format json 未対応。仕様として
+      'write-side全部' と言ったなら半端。gate issues add / inbox mark-read / message /
+      broadcast も同一 emitWriteResponse 経路に載せるか、対象verbの列挙を明記すべき。
+
+
+      小: review verb の --format json を request.ts の parseFormat helper
+      でなく直接書いていて DRY 違反。writeFormat.ts に parseFormat を移せ。
+
+
+      総合: 体感は大きい (suggested_next は agent オーケストレータを1行短くできる)。ただし (1) verdict
+      default と (2) by ambiguity は agent-first を謳うなら 1.0 前に塞ぐ質。
+    at: 2026-04-16T22:54:31.733Z
+executor: claude
+auto_review: devil
+completion_note: writeFormat.ts 新設。deriveSuggestedNext が
+  state/autoReview/reviews から決定論的に次動詞を導出。emitWriteResponse が text/json
+  切替の単一箇所。request/approve/deny/execute/complete/fail/review/fast-track に
+  --format json 配線。状態機械とsuggested_next の mapping は pending→approve,
+  approved→execute, executing→complete, completed+autoReview未済→review,
+  terminal→null

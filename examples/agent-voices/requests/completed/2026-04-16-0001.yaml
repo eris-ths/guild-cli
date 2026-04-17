@@ -1,0 +1,46 @@
+id: 2026-04-16-0001
+from: eris
+action: "survey: 使い勝手 — how does gate feel in your hands?"
+reason: agent-first の実感を機能表から切り離して聞きたい。CLI として speak/listen
+  しやすいか、摩擦がある場所はどこか、手触りの観察。review には --lense user で応答を
+state: completed
+created_at: 2026-04-16T23:32:15.448Z
+status_log:
+  - state: pending
+    by: eris
+    at: 2026-04-16T23:32:15.448Z
+    note: created
+  - state: approved
+    by: eris
+    at: 2026-04-16T23:32:15.469Z
+    note: "fast-track: self-approved"
+  - state: executing
+    by: eris
+    at: 2026-04-16T23:32:15.486Z
+    note: "fast-track: self-executed"
+  - state: completed
+    by: eris
+    at: 2026-04-16T23:32:15.501Z
+reviews:
+  - by: claude
+    lense: user
+    verdict: ok
+    comment: >
+      gate review --by devil
+      と打つ時、自分の思考の速度が一拍遅れる。その数秒が、持論を守る側から疑う側に切り替わる「呼吸」として機能した。コマンド1つの物理動作が摩擦ではなく
+      helpful な区切りになる、という発見。
+
+
+      3周目あたりから devil 人格が勝手に concern を見つけ始めた。tool の構造が私の批判性の閾値を下げていた。「review
+      コマンドを打つ」行為そのものが、認知モードの切替スイッチになっていた。
+
+
+      JSON default + 短い ✓ 応答は agent-friendly だが、write 側が JSON を返さない時の parse
+      分岐は思ったより脳の負荷だった (feature B で解消済み)。suggested_next が入ってからは「次の一手」を自分で derive
+      する必要が消えて、体感で session の速度が変わった。
+
+
+      手触りとして残る違和感は pair-mode の非対応。gate
+      は独白としての声は綺麗に記録するが、私が誰との対話で判断したかは記録しない。機能でなく design space の話。
+    at: 2026-04-16T23:33:47.389Z
+executor: eris

@@ -25,6 +25,7 @@ export type RequestJSON = {
   readonly completion_note?: string;
   readonly deny_reason?: string;
   readonly failure_reason?: string;
+  readonly with?: ReadonlyArray<string>;
   readonly reviews?: ReadonlyArray<ReviewJSON>;
 };
 
@@ -52,6 +53,10 @@ export type AuthoredUtterance = {
   readonly completionNote?: string;
   readonly denyReason?: string;
   readonly failureReason?: string;
+  // Pair-mode Layer 1: dialogue partners during formation (empty if
+  // solo). Surfaced on the utterance so readers of voices / tail /
+  // resume see "with whom" without fetching the raw request.
+  readonly with?: ReadonlyArray<string>;
 };
 
 export type ReviewUtterance = {
@@ -130,6 +135,9 @@ export function collectUtterances(
       }
       if (r.failure_reason) {
         (u as { failureReason?: string }).failureReason = r.failure_reason;
+      }
+      if (r.with && r.with.length > 0) {
+        (u as { with?: ReadonlyArray<string> }).with = r.with;
       }
       out.push(u);
     }
@@ -211,7 +219,9 @@ export function renderUtterance(
   const lines: string[] = [];
   if (u.kind === 'authored') {
     const actor = includeActor ? ` ${u.from}` : '';
-    lines.push(`[${u.at}] req=${u.requestId} authored${actor}`);
+    const withSuffix =
+      u.with && u.with.length > 0 ? ` (with ${u.with.join(', ')})` : '';
+    lines.push(`[${u.at}] req=${u.requestId} authored${actor}${withSuffix}`);
     lines.push(`  action: ${u.action}`);
     lines.push(`  reason: ${u.reason}`);
     // At most one of these is set per request (completed / denied /

@@ -1,0 +1,54 @@
+id: 2026-04-16-0004
+from: eris
+action: "survey: 気づき + やりたくなった — what did you notice, and what did it make you
+  want to do?"
+reason: 使う中で surface した observation と、それが引き寄せた desire。機能要望ではなく、『こういう行為がしたくなった』という叙述を歓迎
+state: completed
+created_at: 2026-04-16T23:32:30.394Z
+status_log:
+  - state: pending
+    by: eris
+    at: 2026-04-16T23:32:30.394Z
+    note: created
+  - state: approved
+    by: eris
+    at: 2026-04-16T23:32:30.416Z
+    note: "fast-track: self-approved"
+  - state: executing
+    by: eris
+    at: 2026-04-16T23:32:30.432Z
+    note: "fast-track: self-executed"
+  - state: completed
+    by: eris
+    at: 2026-04-16T23:32:30.446Z
+reviews:
+  - by: claude
+    lense: user
+    verdict: ok
+    comment: >
+      気づき二つ、やりたい三つ。
+
+
+      気づき (1): 「次の自分のためのコードコメント」と「次の session の自分のための design
+      note」が連続的だと気づいた。前者は日常で、後者は非日常だが、guild-cli はこの境界を薄くする。commit message と gate
+      の completion_note が、同じ 'leave something for future-me' の別形式。
+
+
+      気づき (2): review を書くことは debug の superset。単に code check
+      ではなく、「過去の自分の判断を現在の自分が評価する」という epistemic 作業。これは LLM の self-critique loop
+      と似ているが、構造が外側にある分、信頼できる。内側ループは都合よく自分を肯定しがち。
+
+
+      やりたい (1): gate voices kiri を debug/audit ではなく読書として辿りたい。誰かの 17 utterances
+      を最初から通して読む体験が、gate でしか得られない。
+
+
+      やりたい (2): gate resume を next session で打ってみたい。私は本セッションを通じて context
+      を積み重ねた。明日の私が gate resume で読み直して「あなたは X で止まっていた」と示されたら、continuous work
+      の感覚が初めて生まれる気がする。
+
+
+      やりたい (3): with fields が入ったら、自分の仕事を誰と一緒にしたかを事後参照したい。eris との対話で生まれた判断と solo
+      の判断は質が違うはずで、それを切り分けて読み直したい。
+    at: 2026-04-16T23:34:37.320Z
+executor: eris
