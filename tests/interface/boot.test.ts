@@ -156,6 +156,75 @@ test('gate boot: misconfigured_cwd IS true when no config found AND no data', ()
   }
 });
 
+test('gate boot: content_root_health reports clean when everything hydrates', () => {
+  const { root, cleanup } = bootstrap();
+  try {
+    const { stdout } = runGate(root, ['boot']);
+    const payload = JSON.parse(stdout);
+    const h = payload.hints.content_root_health;
+    assert.equal(h.malformed_count, 0);
+    assert.equal(h.fix_hint, null);
+    assert.ok(Array.isArray(h.areas));
+    // text output must NOT print the malformed-record warning block
+    const { stdout: textOut } = runGate(root, ['boot', '--format', 'text']);
+    assert.doesNotMatch(textOut, /malformed record/);
+  } finally {
+    cleanup();
+  }
+});
+
+test('gate boot: content_root_health surfaces malformed records with a fix hint', () => {
+  // Seed a request with an invalid lense so hydration fails;
+  // the ID pattern must match YamlRequestRepository's listAll filter
+  // (YYYY-MM-DD-NNN[N]), otherwise the file is filtered out before
+  // hydration even attempts it — a subtlety worth asserting against.
+  const { root, cleanup } = bootstrap();
+  try {
+    mkdirSync(join(root, 'requests', 'completed'), { recursive: true });
+    writeFileSync(
+      join(root, 'requests', 'completed', '2099-04-17-9999.yaml'),
+      [
+        'id: 2099-04-17-9999',
+        'created: 2099-04-17T10:00:00.000Z',
+        'from: alice',
+        'action: test',
+        'reason: malformed probe',
+        'executor_preferred: null',
+        'executor_actual: alice',
+        'contract: null',
+        'target: null',
+        'auto_review: null',
+        'status_log:',
+        '  - state: pending',
+        '    at: 2099-04-17T10:00:00.000Z',
+        '    by: alice',
+        '    note: probe',
+        'reviews:',
+        '  - by: alice',
+        '    at: 2099-04-17T10:00:01.000Z',
+        '    lense: not_a_real_lense',
+        '    verdict: ok',
+        '    comment: test',
+        '',
+      ].join('\n'),
+    );
+    const { stdout } = runGate(root, ['boot']);
+    const payload = JSON.parse(stdout);
+    const h = payload.hints.content_root_health;
+    assert.ok(h.malformed_count >= 1);
+    assert.ok(typeof h.fix_hint === 'string');
+    assert.match(h.fix_hint, /gate doctor/);
+    assert.match(h.fix_hint, /gate repair --apply/);
+    // text output surfaces the warning and the concrete fix commands
+    const { stdout: textOut } = runGate(root, ['boot', '--format', 'text']);
+    assert.match(textOut, /malformed record/);
+    assert.match(textOut, /gate doctor/);
+    assert.match(textOut, /gate repair --apply/);
+  } finally {
+    cleanup();
+  }
+});
+
 test('gate boot: fresh-start (config present, 0 members/requests) is NOT flagged', () => {
   // Bootstrap a content_root with config and an empty members dir.
   // This is a legitimate fresh start — warning would scare new users.
