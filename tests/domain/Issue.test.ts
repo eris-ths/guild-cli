@@ -6,6 +6,7 @@ import {
   IssueState,
   canTransitionIssue,
   assertIssueTransition,
+  parseIssueSeverity,
 } from '../../src/domain/issue/Issue.js';
 import { MemberName } from '../../src/domain/member/MemberName.js';
 import { DomainError } from '../../src/domain/shared/DomainError.js';
@@ -95,4 +96,53 @@ test('Issue.restore bypasses transition validation (historical truth)', () => {
   assert.equal(i.state, 'resolved');
   // But *new* transitions from that state must still follow the rules.
   assert.throws(() => i.setState('deferred'), DomainError);
+});
+
+// ── parseIssueSeverity — canonical + aliases + rejects ──
+
+test('parseIssueSeverity accepts all 4 canonical values', () => {
+  assert.equal(parseIssueSeverity('low'), 'low');
+  assert.equal(parseIssueSeverity('med'), 'med');
+  assert.equal(parseIssueSeverity('high'), 'high');
+  assert.equal(parseIssueSeverity('critical'), 'critical');
+});
+
+test('parseIssueSeverity normalizes alias inputs from other tools', () => {
+  // Jira/Linear/GitHub muscle memory
+  assert.equal(parseIssueSeverity('medium'), 'med');
+  assert.equal(parseIssueSeverity('mid'), 'med');
+  assert.equal(parseIssueSeverity('crit'), 'critical');
+  assert.equal(parseIssueSeverity('hi'), 'high');
+  assert.equal(parseIssueSeverity('lo'), 'low');
+  // single-letter shortcuts
+  assert.equal(parseIssueSeverity('l'), 'low');
+  assert.equal(parseIssueSeverity('m'), 'med');
+  assert.equal(parseIssueSeverity('h'), 'high');
+  assert.equal(parseIssueSeverity('c'), 'critical');
+});
+
+test('parseIssueSeverity is case-insensitive and trims whitespace', () => {
+  assert.equal(parseIssueSeverity('MEDIUM'), 'med');
+  assert.equal(parseIssueSeverity('Critical'), 'critical');
+  assert.equal(parseIssueSeverity('  high  '), 'high');
+});
+
+test('parseIssueSeverity rejects truly unknown values', () => {
+  assert.throws(() => parseIssueSeverity('watch'), DomainError);
+  assert.throws(() => parseIssueSeverity('p0'), DomainError);
+  assert.throws(() => parseIssueSeverity(''), DomainError);
+});
+
+test('parseIssueSeverity error message lists canonical values + aliases', () => {
+  // The error itself is the onboarding: a first-time user who typed
+  // `medium` and got rejected should learn the canonical set and the
+  // accepted aliases without having to read the source.
+  try {
+    parseIssueSeverity('p1');
+    assert.fail('expected throw');
+  } catch (err) {
+    assert.ok(err instanceof DomainError);
+    assert.match(err.message, /low, med, high, critical/);
+    assert.match(err.message, /medium.*med/);
+  }
 });

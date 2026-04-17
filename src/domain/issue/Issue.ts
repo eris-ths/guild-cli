@@ -83,11 +83,41 @@ export class IssueId {
   }
 }
 
+/**
+ * Common aliases mapped to canonical severities. Interface-layer
+ * convenience: users coming from Jira/Linear/GitHub reach for
+ * `medium` / `mid` / `crit` / `hi` before `med` / `critical` / `high`.
+ * The canonical set (`low | med | high | critical`) is unchanged;
+ * aliases are normalized on input so the domain invariant is
+ * preserved. Matching is case-insensitive after trim.
+ */
+const SEVERITY_ALIASES: Record<string, IssueSeverity> = {
+  medium: 'med',
+  mid: 'med',
+  m: 'med',
+  lo: 'low',
+  l: 'low',
+  hi: 'high',
+  h: 'high',
+  crit: 'critical',
+  c: 'critical',
+};
+
 export function parseIssueSeverity(value: string): IssueSeverity {
-  if ((ISSUE_SEVERITIES as readonly string[]).includes(value)) {
-    return value as IssueSeverity;
+  const normalized = value.trim().toLowerCase();
+  if ((ISSUE_SEVERITIES as readonly string[]).includes(normalized)) {
+    return normalized as IssueSeverity;
   }
-  throw new DomainError(`Invalid severity: "${value}"`, 'severity');
+  const aliased = SEVERITY_ALIASES[normalized];
+  if (aliased !== undefined) {
+    return aliased;
+  }
+  throw new DomainError(
+    `Invalid severity: "${value}". Must be one of: ${ISSUE_SEVERITIES.join(', ')} ` +
+      `(aliases accepted: medium→med, mid→med, crit→critical, hi→high, lo→low, ` +
+      `single-letter l/m/h/c, plus case variants).`,
+    'severity',
+  );
 }
 
 export function parseIssueState(value: string): IssueState {
