@@ -8,6 +8,23 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 ## [Unreleased]
 
 ### Added
+- **Message errors surface guild-flow hints.** Four error paths
+  around `gate message` / `gate inbox` now name a concrete next verb
+  instead of just rejecting:
+  - `send --to <host>` → "hosts don't have inboxes; share a
+    request / fast-track / issue instead, host can read via
+    tail/voices".
+  - `send --to <unknown>` → "not registered; `gate register --name
+    <raw>` (or check the spelling)".
+  - `inbox --for <host>` → "hosts observe via `gate tail` /
+    `gate voices` / `gate list`, not their own inbox".
+  - `inbox --for <unknown>` → register hint, same as send.
+  Each is vertical-formatted (same shape as severity/verdict/lense)
+  so the guidance is scannable. No domain change; existing
+  substring assertions in downstream tests continue to match
+  because the canonical phrase is preserved as a prefix.
+
+### Added
 - **`gate register` — one-shot member registration.** Writes
   `members/<name>.yaml` without the newcomer having to hand-author
   YAML, figure out the schema from `members.example/`, or risk a
