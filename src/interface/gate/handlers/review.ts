@@ -48,10 +48,23 @@ export async function reqReview(c: C, args: ParsedArgs): Promise<number> {
   }
 
   const updated = await c.requestUC.review({ id, by, lense, verdict, comment });
+  // Display the canonical verdict/lense (from the stored review)
+  // rather than the raw input: the user may have typed an alias
+  // (e.g. `--verdict concerned`, normalized to `concern` on save),
+  // and the success message should reflect the value that actually
+  // landed in YAML, not the input form.
+  //
+  // `reviews` is guaranteed non-empty here because `requestUC.review`
+  // just appended one. Fall back to the raw input only if that
+  // invariant ever breaks — the fallback won't be canonical but also
+  // won't crash.
+  const stored = updated.reviews[updated.reviews.length - 1];
+  const displayLense = stored?.lense ?? lense;
+  const displayVerdict = stored?.verdict ?? verdict;
   emitWriteResponse(
     parseFormat(args),
     updated,
-    `✓ review recorded: ${id} [${lense}/${verdict}]`,
+    `✓ review recorded: ${id} [${displayLense}/${displayVerdict}]`,
     c.config,
   );
   return 0;

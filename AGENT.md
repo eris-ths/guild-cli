@@ -1,10 +1,19 @@
 # guild-cli — agent quick reference
 
 > This is the short-form reference for AI agents.
-> For design rationale and onboarding, see [`README.md`](./README.md).
+> Brand-new to the concepts?
+> [`docs/concepts-for-newcomers.md`](./docs/concepts-for-newcomers.md)
+> is a 30-second map. Design rationale lives in
+> [`README.md`](./README.md).
 
 File-based coordination for AI agents. No daemon, no DB, no network.
 State lives in YAML files under a `content_root`. Git gives you history.
+
+**You don't need to read all of this to be productive.** The
+[Session start](#session-start) and [Agent-first knobs](#agent-first-knobs)
+sections are enough for most days. Sections further down
+(Diagnostic, Configuration, File layout, Troubleshooting) become
+useful when something breaks or you want to extend the system.
 
 ## Session start
 

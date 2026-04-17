@@ -73,7 +73,11 @@ const writeResponseSchema: JsonSchema = {
     message: str,
     suggested_next: {
       type: 'object',
-      description: 'null when the lifecycle has no deterministic next step',
+      description:
+        'Optional hint for the next verb a caller *might* invoke. ' +
+        'Derived deterministically from the post-mutation state — no LLM call. ' +
+        'Safe to ignore if you have other plans; this field is a convenience for ' +
+        'orchestrators, not a directive. null when the lifecycle has no obvious next step.',
       ...suggestedNextSchema,
     },
   },
