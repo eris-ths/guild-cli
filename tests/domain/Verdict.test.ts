@@ -25,3 +25,24 @@ test('parseLense accepts valid values', () => {
 test('parseLense rejects unknown', () => {
   assert.throws(() => parseLense('security'), DomainError);
 });
+
+test('parseLense accepts domain-specific lense when config lists it', () => {
+  const allowed = ['devil', 'layer', 'cognitive', 'user', 'security', 'perf'];
+  assert.equal(parseLense('security', allowed), 'security');
+  assert.equal(parseLense('perf', allowed), 'perf');
+  assert.equal(parseLense('user', allowed), 'user');
+});
+
+test('parseLense error message points users at guild.config.yaml', () => {
+  // The hint is the onboarding signal: surfacing the extension path
+  // in the error itself means a first-time user doesn't have to
+  // grep the source to learn domain lenses are possible.
+  try {
+    parseLense('security');
+    assert.fail('expected throw');
+  } catch (err) {
+    assert.ok(err instanceof DomainError);
+    assert.match(err.message, /guild\.config\.yaml/);
+    assert.match(err.message, /lenses:/);
+  }
+});

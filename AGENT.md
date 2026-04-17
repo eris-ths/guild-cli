@@ -46,7 +46,13 @@ gate fast-track --from <m> --action "..." --reason "..."   # one-shot create→c
 gate review <id> --by <m> --lense <l> --verdict <v> --comment "..."
 ```
 
-- Lenses: `devil | layer | cognitive | user` (configurable in guild.config.yaml)
+- Lenses: `devil | layer | cognitive | user` (configurable in guild.config.yaml).
+  The four defaults are meta-perspectives ("what breaks", "which
+  layer", "where you hesitate", "whose happiness"). Add
+  domain-specific lenses by listing them — e.g.
+  `lenses: [devil, layer, cognitive, user, security, perf, a11y]`
+  — so reviews can carry `--lense security` verdicts in addition to
+  the meta four.
 - Verdicts: `ok | concern | reject`
 - Reviews are append-only. Corrections are new entries, not edits.
 
