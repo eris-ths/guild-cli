@@ -228,6 +228,31 @@ const VERBS: readonly VerbSchema[] = [
     output: { type: 'array' },
   },
   {
+    name: 'register',
+    category: 'write',
+    summary:
+      'one-shot member registration. Writes members/<name>.yaml. ' +
+      'Category defaults to "professional"; aliases accepted (pro, prof, member → professional). ' +
+      '--dry-run previews the YAML without touching disk.',
+    input: {
+      type: 'object',
+      properties: {
+        name: {
+          type: 'string',
+          description: 'new member name (lowercase ASCII, 1-32 chars, matches /^[a-z][a-z0-9_-]{0,31}$/)',
+        },
+        category: strOpt(
+          'member category; defaults to "professional". Canonical: core/professional/assignee/trial/special/host. Host is NOT accepted via CLI (edit guild.config.yaml).',
+        ),
+        'display-name': strOpt('human-readable display label, optional'),
+        'dry-run': strOpt('preview the YAML without writing to disk'),
+        format: formatField,
+      },
+      required: ['name'],
+    },
+    output: { type: 'object' },
+  },
+  {
     name: 'request',
     category: 'write',
     summary: 'file a new request',

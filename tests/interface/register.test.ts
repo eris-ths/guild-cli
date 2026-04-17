@@ -1,0 +1,187 @@
+// gate register — onboarding's first verb.
+//
+// Registration was the first real wall a newcomer hit before
+// this verb existed (hand-author YAML, figure out the schema,
+// risk a typo). These tests pin the happy path plus every
+// friction surface: alias normalization, name collision, host
+// refusal, and dry-run parity with the real write.
+
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import {
+  mkdtempSync,
+  writeFileSync,
+  readFileSync,
+  existsSync,
+  rmSync,
+  mkdirSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const here = dirname(fileURLToPath(import.meta.url));
+const GATE = resolve(here, '../../../bin/gate.mjs');
+
+function bootstrap(): { root: string; cleanup: () => void } {
+  const root = mkdtempSync(join(tmpdir(), 'guild-register-'));
+  writeFileSync(
+    join(root, 'guild.config.yaml'),
+    'content_root: .\nhost_names: [human]\n',
+  );
+  mkdirSync(join(root, 'members'));
+  // Seed a pre-existing member so we can exercise the collision path.
+  writeFileSync(
+    join(root, 'members', 'alice.yaml'),
+    'name: alice\ncategory: professional\nactive: true\n',
+  );
+  return { root, cleanup: () => rmSync(root, { recursive: true, force: true }) };
+}
+
+function runGate(
+  cwd: string,
+  args: string[],
+  env: Record<string, string> = {},
+): { stdout: string; stderr: string; status: number } {
+  const result = spawnSync(process.execPath, [GATE, ...args], {
+    cwd,
+    env: { ...process.env, ...env },
+    encoding: 'utf8',
+  });
+  return {
+    stdout: result.stdout,
+    stderr: result.stderr,
+    status: result.status ?? -1,
+  };
+}
+
+test('register: happy path writes members/<name>.yaml with canonical fields', () => {
+  const { root, cleanup } = bootstrap();
+  try {
+    const { status, stdout } = runGate(root, [
+      'register',
+      '--name',
+      'klee',
+      '--display-name',
+      'Klee',
+    ]);
+    assert.equal(status, 0);
+    assert.match(stdout, /✓ registered: klee \[professional\]/);
+    const yaml = readFileSync(join(root, 'members', 'klee.yaml'), 'utf8');
+    assert.match(yaml, /name: klee/);
+    assert.match(yaml, /category: professional/);
+    assert.match(yaml, /active: true/);
+    assert.match(yaml, /displayName: Klee/);
+  } finally {
+    cleanup();
+  }
+});
+
+test('register: --category alias normalizes on write and in dry-run preview', () => {
+  const { root, cleanup } = bootstrap();
+  try {
+    // dry-run: preview must show canonical, not the raw alias.
+    const dry = runGate(root, [
+      'register',
+      '--name',
+      'tester',
+      '--category',
+      'pro',
+      '--dry-run',
+    ]);
+    assert.equal(dry.status, 0);
+    assert.match(dry.stdout, /category: "professional"/);
+    assert.ok(!existsSync(join(root, 'members', 'tester.yaml')));
+
+    // real: the YAML written must match what dry-run claimed.
+    const real = runGate(root, [
+      'register',
+      '--name',
+      'tester',
+      '--category',
+      'pro',
+    ]);
+    assert.equal(real.status, 0);
+    const yaml = readFileSync(join(root, 'members', 'tester.yaml'), 'utf8');
+    assert.match(yaml, /category: professional/);
+  } finally {
+    cleanup();
+  }
+});
+
+test('register: already-exists fails loudly instead of silently overwriting', () => {
+  const { root, cleanup } = bootstrap();
+  try {
+    const { status, stderr } = runGate(root, ['register', '--name', 'alice']);
+    assert.notEqual(status, 0);
+    assert.match(stderr, /Member "alice" already exists/);
+  } finally {
+    cleanup();
+  }
+});
+
+test('register: --category host is rejected (guild.config.yaml is the source of truth)', () => {
+  const { root, cleanup } = bootstrap();
+  try {
+    const { status, stderr } = runGate(root, [
+      'register',
+      '--name',
+      'foo',
+      '--category',
+      'host',
+    ]);
+    assert.notEqual(status, 0);
+    assert.match(stderr, /not registerable via CLI/);
+    assert.match(stderr, /guild\.config\.yaml/);
+    assert.ok(!existsSync(join(root, 'members', 'foo.yaml')));
+  } finally {
+    cleanup();
+  }
+});
+
+test('register: --dry-run does not touch disk and yields parseable JSON', () => {
+  const { root, cleanup } = bootstrap();
+  try {
+    const { status, stdout } = runGate(root, [
+      'register',
+      '--name',
+      'ghost',
+      '--dry-run',
+      '--format',
+      'json',
+    ]);
+    assert.equal(status, 0);
+    const payload = JSON.parse(stdout);
+    assert.equal(payload.ok, true);
+    assert.equal(payload.dry_run, true);
+    assert.equal(payload.preview.name, 'ghost');
+    assert.equal(payload.preview.category, 'professional');
+    assert.ok(!existsSync(join(root, 'members', 'ghost.yaml')));
+  } finally {
+    cleanup();
+  }
+});
+
+test('register: assertActor error surfaces the register hint', () => {
+  // The onboarding loop: an unregistered agent tries fast-track,
+  // the error tells them how to register. This is the whole reason
+  // assertActor carries the hint.
+  const { root, cleanup } = bootstrap();
+  try {
+    const { status, stderr } = runGate(root, [
+      'fast-track',
+      '--from',
+      'newcomer',
+      '--action',
+      'try',
+      '--reason',
+      'first touch',
+    ]);
+    assert.notEqual(status, 0);
+    assert.match(stderr, /no such member or host/);
+    assert.match(stderr, /gate register --name newcomer/);
+  } finally {
+    cleanup();
+  }
+});

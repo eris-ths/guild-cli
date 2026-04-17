@@ -8,6 +8,43 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 ## [Unreleased]
 
 ### Added
+- **`gate register` — one-shot member registration.** Writes
+  `members/<name>.yaml` without the newcomer having to hand-author
+  YAML, figure out the schema from `members.example/`, or risk a
+  typo. Category defaults to `professional` (the right bucket for
+  most agents), aliases accepted (`pro`, `prof`, `member` →
+  `professional`, `assigned` → `assignee`, `try`/`tryout` →
+  `trial`). `--dry-run` previews the YAML without touching disk,
+  showing the canonical category so what you see is what gets
+  written. Already-existing names fail loudly rather than silently
+  overwriting. `--category host` is rejected — hosts are declared
+  in `guild.config.yaml` directly, not registered at runtime.
+  JSON output mirrors the write-response shape with
+  `suggested_next: { verb: "boot", ... }` pointing the orchestrator
+  at the next obvious step.
+- **`assertActor` surfaces the register hint.** When an unknown
+  actor is passed to `--from` / `--by` / `--executor` / etc, the
+  error now includes `gate register --name <raw>` as a concrete
+  way out. This is the onboarding loop's keystone: newcomers
+  hitting the wall learn the one-command unlock from the error
+  itself.
+- **`MemberCategory` accepts aliases with a vertical-format error.**
+  Same pattern as severity/verdict — interface-layer convenience,
+  domain invariant unchanged. The rejection error walks the canonical
+  set and the alias table in a scannable table and gently suggests
+  "professional" as the default for most agents.
+- **Concept doc gains "30-second first touch".** `docs/concepts-for-newcomers.md`
+  now leads with the three commands a newcomer needs to exist in a
+  content_root: `register` → `boot` → `fast-track`. Everything else
+  is positioned as "what unlocks as you keep using it."
+- **AGENT.md session-start block** now shows `gate register` as the
+  first-time step before the recurring `boot` / `resume` loop, so an
+  AI agent's first read of the quick reference includes the
+  registration path.
+- **`gate schema`** lists `register` as a first-class verb so LLM
+  tool layers can invoke it without out-of-band knowledge.
+
+### Added
 - **`parseVerdict` accepts grammatical and muscle-memory aliases.**
   `approve`/`approved`/`pass`/`lgtm`/`yes` → `ok`,
   `concerned`/`concerning`/`worried`/`warn` → `concern`,

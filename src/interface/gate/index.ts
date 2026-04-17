@@ -26,6 +26,7 @@ import { repairCmd } from './handlers/repair.js';
 import { bootCmd } from './handlers/boot.js';
 import { schemaCmd } from './handlers/schema.js';
 import { resumeCmd } from './handlers/resume.js';
+import { reqRegister } from './handlers/register.js';
 import {
   msgSend,
   msgBroadcast,
@@ -42,6 +43,16 @@ export {
 } from './handlers/request.js';
 
 const HELP = `gate — request lifecycle & dialogue CLI
+
+Getting started:
+  gate register --name <n> [--category <c>] [--display-name <s>]
+                 [--dry-run] [--format json|text]
+                       Register yourself (or another member) as an
+                       actor. Category defaults to "professional";
+                       aliases accepted (pro, prof, member). Host is
+                       NOT registerable via CLI — edit
+                       guild.config.yaml directly. --dry-run shows
+                       the YAML that would be written.
 
 Requests:
   gate request --from <m> --action <a> --reason <r>
@@ -161,6 +172,8 @@ export async function main(argv: readonly string[]): Promise<number> {
         return await reqTail(c, args);
       case 'whoami':
         return await reqWhoami(c, args);
+      case 'register':
+        return await reqRegister(c, args);
       case 'chain':
         return await reqChain(c, args);
       case 'approve':

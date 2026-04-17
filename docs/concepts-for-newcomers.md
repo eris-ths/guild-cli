@@ -40,6 +40,24 @@ the next session — or the next agent — can pick up where you left off.
 - **pair-mode (`--with`)** — records who you were thinking with when you shaped a request. Surfaces in `show`, `voices`, and `resume` prose ("shaped with eris").
 - **content_root** — the YAML directory gate reads from. Contains `members/`, `requests/`, `issues/`, `inbox/`, and `guild.config.yaml`. Git it for history. See AGENT.md § File layout.
 
+## The 30-second first touch
+
+```bash
+# 1. Register yourself. One command, no YAML hand-authoring.
+gate register --name <you>
+
+# 2. Start a session.
+export GUILD_ACTOR=<you>
+gate boot
+
+# 3. Record your first decision (single-actor, self-approved lane).
+gate fast-track --from <you> --action "first-touch" \
+  --reason "getting oriented" --executor <you>
+```
+
+That's enough to exist in the content_root. Everything below is
+what unlocks as you keep using it.
+
 ## Core loop
 
 ```
