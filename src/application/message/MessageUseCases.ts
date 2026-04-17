@@ -40,11 +40,35 @@ export class MessageUseCases {
   }): Promise<void> {
     const from = await assertActor(input.from, '--from', this.deps.members);
     // --to must be a real registered member — we can't deliver to a host
-    // name because there's no inbox file for them.
-    const toMember = await this.deps.members.findByName(MemberName.of(input.to));
+    // name because there's no inbox file for them. Two distinct
+    // onboarding cues live here: if the target is a registered host,
+    // nudge toward guild-style "share a request they can see"; if it
+    // just doesn't exist yet, point at `gate register`.
+    const toName = MemberName.of(input.to);
+    const toMember = await this.deps.members.findByName(toName);
     if (!toMember) {
+      const hosts = await this.deps.members.listHostNames();
+      if (hosts.includes(toName.value)) {
+        throw new DomainError(
+          [
+            `Cannot message host "${toName.value}" — hosts do not have inboxes.`,
+            `  Hosts are content_root operators, not message recipients.`,
+            `  Share what you want to say where the host will see it:`,
+            `    gate request --from ${from.value} --action ... --reason ...`,
+            `    gate fast-track --from ${from.value} --action ... --reason ...`,
+            `    gate issues add --from ${from.value} --severity low --area ... "..."`,
+            `  The host can then read the guild via \`gate tail\` or \`gate voices\`.`,
+          ].join('\n'),
+          'to',
+        );
+      }
       throw new DomainError(
-        `recipient is not a registered member: ${input.to}`,
+        [
+          `Recipient "${toName.value}" is not a registered member.`,
+          `  If they should exist, register them:`,
+          `    gate register --name ${toName.value}`,
+          `  Or double-check the spelling — names are lowercase ASCII (see members/).`,
+        ].join('\n'),
         'to',
       );
     }
@@ -137,11 +161,25 @@ export class MessageUseCases {
     const hosts = await this.deps.members.listHostNames();
     if (hosts.includes(name)) {
       throw new DomainError(
-        `hosts do not have inboxes (${name} is a host; only registered members receive messages)`,
+        [
+          `"${name}" is a host, not a member — hosts do not have inboxes.`,
+          `  To observe the guild activity instead:`,
+          `    gate tail                # last events across all actors`,
+          `    gate voices <member>     # one actor's utterances`,
+          `    gate list --state <s>    # requests in a given state`,
+        ].join('\n'),
         'for',
       );
     }
-    throw new DomainError(`not a registered member: ${name}`, 'for');
+    throw new DomainError(
+      [
+        `"${name}" is not a registered member.`,
+        `  Register first:`,
+        `    gate register --name ${name}`,
+        `  Or pick an existing member (ls members/).`,
+      ].join('\n'),
+      'for',
+    );
   }
 }
 

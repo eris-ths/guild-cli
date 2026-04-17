@@ -226,6 +226,25 @@ test('inbox for host name gives descriptive error', async () => {
   );
 });
 
+test('inbox for host surfaces guild-observation hints (tail / voices / list)', async () => {
+  // The hint is the onboarding signal: someone who ran `gate inbox
+  // --for <host>` almost certainly wants to see guild activity, and
+  // the error should say what the right verb is. Pinned so this
+  // guidance can't silently regress.
+  const { uc, members } = build();
+  members.add('kiri');
+  members.setHosts(['human']);
+  await assert.rejects(
+    () => uc.inbox('human'),
+    (e: unknown) => {
+      assert.ok(e instanceof DomainError);
+      assert.match(e.message, /gate tail/);
+      assert.match(e.message, /gate voices/);
+      return true;
+    },
+  );
+});
+
 test('inbox for unknown-and-not-host gives plain error', async () => {
   const { uc, members } = build();
   members.add('kiri');
@@ -234,6 +253,53 @@ test('inbox for unknown-and-not-host gives plain error', async () => {
     (e: unknown) => {
       assert.ok(e instanceof DomainError);
       assert.match(e.message, /not a registered member/);
+      return true;
+    },
+  );
+});
+
+test('inbox for unknown surfaces the gate register hint', async () => {
+  const { uc, members } = build();
+  members.add('kiri');
+  await assert.rejects(
+    () => uc.inbox('newcomer'),
+    (e: unknown) => {
+      assert.ok(e instanceof DomainError);
+      assert.match(e.message, /gate register --name newcomer/);
+      return true;
+    },
+  );
+});
+
+test('send to host is rejected with share-a-request hint', async () => {
+  // A host cannot receive a message directly — that's the existing
+  // behaviour. The new hint tells the sender what to do instead:
+  // share a request/issue where the host can see it via tail/voices.
+  const { uc, members } = build();
+  members.add('kiri');
+  members.setHosts(['human']);
+  await assert.rejects(
+    () => uc.send({ from: 'kiri', to: 'human', text: 'hi' }),
+    (e: unknown) => {
+      assert.ok(e instanceof DomainError);
+      assert.match(e.message, /Cannot message host/);
+      assert.match(e.message, /gate request/);
+      assert.match(e.message, /gate fast-track/);
+      assert.match(e.message, /gate issues add/);
+      return true;
+    },
+  );
+});
+
+test('send to unknown recipient surfaces the gate register hint', async () => {
+  const { uc, members } = build();
+  members.add('kiri');
+  await assert.rejects(
+    () => uc.send({ from: 'kiri', to: 'ghost', text: 'hi' }),
+    (e: unknown) => {
+      assert.ok(e instanceof DomainError);
+      assert.match(e.message, /not a registered member/);
+      assert.match(e.message, /gate register --name ghost/);
       return true;
     },
   );
