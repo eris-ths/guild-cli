@@ -37,6 +37,25 @@ interface BootPayload {
   your_recent: ReturnType<typeof collectUtterances> | null;
   inbox_unread: Array<{ at: string; from: string; text: string; type: string }>;
   last_activity: string | null;
+  /**
+   * Diagnostic hints to help agents detect misconfiguration early.
+   *
+   * `misconfigured_cwd`: true iff NO `guild.config.yaml` was found up
+   * the tree AND the fallback content_root has zero data. This is
+   * the actionable signal: the caller almost certainly ran gate from
+   * the wrong directory. Intentional fresh starts (new content_root
+   * bootstrapped with an explicit config file) are NOT flagged.
+   *
+   * `config_file`: absolute path to the `guild.config.yaml` in use,
+   * or `null` when cwd is being used as a fallback root.
+   *
+   * `resolved_content_root`: absolute path gate is reading data from.
+   */
+  hints: {
+    misconfigured_cwd: boolean;
+    config_file: string | null;
+    resolved_content_root: string;
+  };
 }
 
 export async function bootCmd(c: C, args: ParsedArgs): Promise<number> {
@@ -53,9 +72,11 @@ export async function bootCmd(c: C, args: ParsedArgs): Promise<number> {
   // Resolve role without rejecting when GUILD_ACTOR is unset — boot
   // must always succeed, even without identity, so unknown-identity
   // sessions can still use it for orientation.
+  // Load members unconditionally: we need the count for fresh-root
+  // detection below, and the cost (YAML directory scan) is bounded.
+  const members = await c.memberUC.list();
   let role: BootPayload['role'] = null;
   if (actor) {
-    const members = await c.memberUC.list();
     const actorLower = actor.toLowerCase();
     const isMember = members.some((m) => m.name.value === actorLower);
     const isHost = c.config.hostNames.includes(actorLower);
@@ -101,6 +122,16 @@ export async function bootCmd(c: C, args: ParsedArgs): Promise<number> {
     ? collectUtterances(allJson, { name: actor, limit: personalLimit, order: 'desc' })
     : null;
 
+  // Misconfigured-cwd detection: warn ONLY when no config file was
+  // found AND the fallback content_root is empty. This distinguishes
+  // "cwd is wrong" (no config + no data → cryptic "no such member"
+  // errors incoming) from "intentional fresh start" (explicit config
+  // present + no data yet → do not scare the user).
+  const misconfiguredCwd =
+    c.config.configFile === null &&
+    members.length === 0 &&
+    allRequests.length === 0;
+
   const payload: BootPayload = {
     actor,
     role,
@@ -109,6 +140,11 @@ export async function bootCmd(c: C, args: ParsedArgs): Promise<number> {
     your_recent: yourRecent,
     inbox_unread: inboxUnread,
     last_activity: status.last_activity,
+    hints: {
+      misconfigured_cwd: misconfiguredCwd,
+      config_file: c.config.configFile,
+      resolved_content_root: c.config.contentRoot,
+    },
   };
 
   if (format === 'json') {
@@ -125,6 +161,22 @@ function renderBootText(p: BootPayload): string {
     lines.push(`── you are ${p.actor} (${p.role}) ──`);
   } else {
     lines.push('── boot (no GUILD_ACTOR; global view) ──');
+  }
+  if (p.hints.misconfigured_cwd) {
+    lines.push('');
+    lines.push(
+      `⚠️  no guild.config.yaml found, falling back to cwd`,
+    );
+    lines.push(`   resolved: ${p.hints.resolved_content_root}`);
+    lines.push(
+      `   (0 members, 0 requests — likely wrong cwd, not a fresh start)`,
+    );
+    lines.push(
+      `   fix: cd into the directory that contains guild.config.yaml,`,
+    );
+    lines.push(
+      `        or use a wrapper that cd's before invoking gate.mjs.`,
+    );
   }
   lines.push('');
   lines.push(
