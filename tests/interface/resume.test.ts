@@ -93,27 +93,14 @@ test('gate resume: mid-execution → executing loop + complete suggestion', () =
       '--reason', 'because',
       '--executor', 'claude',
     ]);
-    runGate(root, ['approve', '2026-04-16-0001', '--by', 'eris'].concat([]), {});
-    // Advance to executing. Note: the generated id is deterministic
-    // only by date, which the test uses the current date for — so
-    // we discover the id from `gate pending` to avoid date fragility.
+    // Discover the just-minted id rather than hardcoding a date —
+    // `gate request` generates `<today>-<seq>` and the test must
+    // run on any day.
     const pending = runGate(root, ['pending', '--format', 'text']);
-    const match = pending.stdout.match(/(\d{4}-\d{2}-\d{2}-\d{4})/);
-    const id = match?.[1];
-    if (!id) {
-      // A different test already ran and consumed sequence numbers.
-      // Collect approved instead.
-      const approvedList = runGate(root, ['list', '--state', 'approved', '--format', 'text']);
-      const m2 = approvedList.stdout.match(/(\d{4}-\d{2}-\d{2}-\d{4})/);
-      assert.ok(m2, 'could not locate any id for the test request');
-    }
-    // Re-run the full sequence deterministically now that we know the id
-    // shape (we'll just walk pending→approved→executing for the one id).
-    const listApproved = runGate(root, ['list', '--state', 'approved', '--format', 'text']);
-    const firstId =
-      listApproved.stdout.match(/(\d{4}-\d{2}-\d{2}-\d{4})/)?.[1] ?? id;
-    assert.ok(firstId);
-    runGate(root, ['execute', firstId!, '--by', 'claude']);
+    const id = pending.stdout.match(/(\d{4}-\d{2}-\d{2}-\d{4})/)?.[1];
+    assert.ok(id, 'expected a pending request after gate request');
+    runGate(root, ['approve', id!, '--by', 'eris']);
+    runGate(root, ['execute', id!, '--by', 'claude']);
 
     const { stdout } = runGate(root, ['resume'], { GUILD_ACTOR: 'claude' });
     const payload = JSON.parse(stdout);
