@@ -8,6 +8,21 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 ## [Unreleased]
 
 ### Added
+- **`gate boot` reports `content_root_health`.** boot payload
+  gains `hints.content_root_health` with `malformed_count`, a
+  per-area breakdown (`members` / `requests` / `issues` with
+  totals and malformed counts), and a `fix_hint` naming the
+  exact two commands to reach for when anything is malformed
+  (`gate doctor` to inspect, `gate doctor --format json | gate repair --apply`
+  to quarantine). Text output adds a corresponding warning
+  block when `malformed_count > 0`; clean roots stay silent.
+  Catches test leftovers and schema-drifted records in the
+  orientation moment, so the recurring hydration warning on
+  every subsequent verb becomes a named one-command fix
+  instead of background noise. The malformed probe is wrapped
+  in try/catch so a failing diagnostic can never break boot.
+
+### Added
 - **Message errors surface guild-flow hints.** Four error paths
   around `gate message` / `gate inbox` now name a concrete next verb
   instead of just rejecting:
