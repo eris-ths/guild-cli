@@ -75,6 +75,7 @@ test('gate resume: fresh actor with no activity → empty loops, "arriving fresh
     assert.equal(payload.actor, 'claude');
     assert.equal(payload.last_context.last_utterance, null);
     assert.deepEqual(payload.last_context.open_loops, []);
+    assert.deepEqual(payload.unresponded_concerns, []);
     assert.equal(payload.suggested_next, null);
     assert.match(payload.restoration_prose, /arriving fresh/i);
   } finally {
@@ -150,6 +151,58 @@ test('gate resume: pending review → pending_review loop + review suggestion wi
       undefined,
       'review suggestion must NOT pre-fill verdict — same guard as writeFormat',
     );
+  } finally {
+    cleanup();
+  }
+});
+
+test('gate resume: unresponded concern on completed request surfaces in payload + prose', () => {
+  // End-to-end: claude authors a fast-track, alice leaves a concern
+  // with no follow-up, resume as claude surfaces the concern.
+  const { root, cleanup } = bootstrap();
+  try {
+    runGuild(root, ['new', '--name', 'claude', '--category', 'professional']);
+    runGuild(root, ['new', '--name', 'alice', '--category', 'professional']);
+    runGate(root, [
+      'fast-track',
+      '--from', 'claude',
+      '--action', 'propose refactor',
+      '--reason', 'tech debt',
+      '--auto-review', 'alice',
+    ]);
+    const list = runGate(root, ['list', '--state', 'completed', '--format', 'text']);
+    const id = list.stdout.match(/(\d{4}-\d{2}-\d{2}-\d{4})/)?.[1];
+    assert.ok(id);
+    runGate(root, [
+      'review', id!,
+      '--by', 'alice',
+      '--lense', 'devil',
+      '--verdict', 'concern',
+      '--comment', 'edge case X breaks this',
+    ]);
+
+    const { stdout } = runGate(root, ['resume'], { GUILD_ACTOR: 'claude' });
+    const payload = JSON.parse(stdout);
+    assert.equal(payload.unresponded_concerns.length, 1);
+    const entry = payload.unresponded_concerns[0];
+    assert.equal(entry.request_id, id);
+    assert.equal(entry.concerns.length, 1);
+    assert.equal(entry.concerns[0].lense, 'devil');
+    assert.equal(entry.concerns[0].verdict, 'concern');
+    assert.equal(entry.concerns[0].by, 'alice');
+    assert.match(payload.restoration_prose, /Unresponded concerns/i);
+
+    // Follow-up request from claude mentioning the id should close it.
+    runGate(root, [
+      'fast-track',
+      '--from', 'claude',
+      '--action', 'respond',
+      '--reason', `addressing ${id}`,
+    ]);
+    const after = JSON.parse(
+      runGate(root, ['resume'], { GUILD_ACTOR: 'claude' }).stdout,
+    );
+    assert.deepEqual(after.unresponded_concerns, []);
   } finally {
     cleanup();
   }
