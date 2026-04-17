@@ -42,6 +42,11 @@ live — on disk, in YAML, across sessions, across models. No daemon,
 no DB, no network. The `content_root` you work in is the whole world.
 
 > 日本語の概要は [`README.ja.md`](./README.ja.md) を参照してください。
+>
+> **New to the concepts?** Read
+> [`docs/concepts-for-newcomers.md`](./docs/concepts-for-newcomers.md)
+> first — a 30-second map from Jira / Linear / ADR / PR review to
+> the guild-cli vocabulary.
 
 ### What you can do with it
 
