@@ -8,6 +8,25 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 ## [Unreleased]
 
 ### Added
+- **`parseIssueSeverity` accepts common aliases.** `medium`, `mid`,
+  `crit`, `hi`, `lo`, and single-letter shortcuts (`l`/`m`/`h`/`c`)
+  now normalize to the canonical 4 values. Matching is case-
+  insensitive after trim. The canonical set (`low | med | high |
+  critical`) is unchanged — this is interface-layer convenience for
+  muscle memory from Jira/Linear/GitHub. The rejection error now
+  lists both the canonical values and the accepted aliases so a
+  first-time user who typed `medium` and got rejected learns the
+  extension without reading source.
+- **`parseLense` error points at `guild.config.yaml`.** When a
+  domain-specific lense (`security`, `perf`, ...) is rejected
+  because the config didn't opt into it, the error now names the
+  exact extension path (`lenses:` in `guild.config.yaml`). The
+  extension mechanism has always existed; this just surfaces it
+  in the moment of friction.
+- **`AGENT.md` documents domain-specific lenses.** Example
+  `lenses: [..., security, perf, a11y]` with an explanation that
+  the four defaults are meta-perspectives and domain lenses layer
+  on top.
 - **`gate boot` `hints` field — misconfigured-cwd detection.**
   boot payload gains `hints: { misconfigured_cwd, config_file,
   resolved_content_root }`. `misconfigured_cwd` is `true` iff no
