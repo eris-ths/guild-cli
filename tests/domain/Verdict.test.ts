@@ -43,7 +43,8 @@ test('parseVerdict rejects truly unknown values with an informative error', () =
   } catch (err) {
     assert.ok(err instanceof DomainError);
     assert.match(err.message, /ok, concern, reject/);
-    assert.match(err.message, /concerned.*concern/);
+    // `s` flag so the dot matches across the newline-separated alias table
+    assert.match(err.message, /concerned.*concern/s);
   }
 });
 

@@ -50,10 +50,15 @@ export function parseVerdict(value: string): Verdict {
     return aliased;
   }
   throw new DomainError(
-    `Invalid verdict: "${value}". Must be one of: ${VERDICTS.join(', ')} ` +
-      `(aliases accepted: approve/approved/pass/lgtm→ok, ` +
-      `concerned/warn/worried→concern, rejected/block/veto→reject, ` +
-      `plus case variants).`,
+    [
+      `Invalid verdict: "${value}"`,
+      `  canonical values: ${VERDICTS.join(', ')}`,
+      `  aliases:`,
+      `    ok      ← approve, approved, pass, passed, lgtm, yes, y`,
+      `    concern ← concerned, concerning, worried, worry, warn, warning`,
+      `    reject  ← rejected, block, blocked, no, n, veto`,
+      `  (case-insensitive, whitespace trimmed)`,
+    ].join('\n'),
     'verdict',
   );
 }

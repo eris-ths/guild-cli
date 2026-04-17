@@ -113,9 +113,16 @@ export function parseIssueSeverity(value: string): IssueSeverity {
     return aliased;
   }
   throw new DomainError(
-    `Invalid severity: "${value}". Must be one of: ${ISSUE_SEVERITIES.join(', ')} ` +
-      `(aliases accepted: medium→med, mid→med, crit→critical, hi→high, lo→low, ` +
-      `single-letter l/m/h/c, plus case variants).`,
+    [
+      `Invalid severity: "${value}"`,
+      `  canonical values: ${ISSUE_SEVERITIES.join(', ')}`,
+      `  aliases:`,
+      `    low      ← lo, l`,
+      `    med      ← medium, mid, m`,
+      `    high     ← hi, h`,
+      `    critical ← crit, c`,
+      `  (case-insensitive, whitespace trimmed)`,
+    ].join('\n'),
     'severity',
   );
 }
