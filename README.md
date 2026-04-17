@@ -67,14 +67,23 @@ no DB, no network. The `content_root` you work in is the whole world.
 >   メンバー間の非同期通知と受領記録をやり取りする
 > - 小さな自己完結タスクなら `gate fast-track` で create→complete
 >   を一発で通し、記録だけ残して規律を緩める
-> - `gate status` でセッション開始時の全体把握 — pending / approved /
->   executing の件数、open issues、未読 inbox、最終活動を JSON で一発
->   取得（`--format text` で人間向け表示）
-> - **読みの道具一式**: `gate whoami` でセッション開始時に自分と
->   直近の発話を取り戻し、`gate tail` で content_root 全体の最近を
->   眺め、`gate voices <name>` で特定アクターの横断履歴を呼び戻し、
->   `gate chain <id>` で cross-reference をたどり、
->   `gate show <id> --format text` で時間差付きの単体詳細を読む
+> - `gate boot` でセッション開始時に全コンテキストを一発取得 —
+>   identity / queues / tail / your_recent / 未読 inbox を1つの
+>   JSON で。より軽い counts-only が欲しい時は `gate status`。
+> - `gate resume` で前セッション終端から再開 — open loops と
+>   「次の一手」を restoration prompt として返す（`--locale ja` で
+>   日本語 prose、`GUILD_ACTOR` 必須）
+> - **読みの道具一式**: `gate whoami` / `gate tail` /
+>   `gate voices <name>` / `gate chain <id>` /
+>   `gate show <id> --format text` で、自分や他者の utterance を
+>   時系列・横断的に辿る
+> - write verbs に `--format json` を渡すと
+>   `{ok, id, state, suggested_next:{verb, args, reason}}` が返り、
+>   orchestrator は次の tool call を自分で導出せずに済む
+> - `--with <n1>,<n2>` で pair-mode: 誰との対話で形成された判断かを
+>   記録できる（solo なら omit）
+> - LLM の tool layer に gate を渡す場合は `gate schema` が
+>   draft-07 の JSON Schema カタログを出力する
 >
 > すべてファイル操作のみ。同一 content_root に複数プロセスが触る場合、
 > 作成系は O_EXCL で race-safe ですが、それ以外は協調的直列化を前提に
@@ -112,10 +121,29 @@ no DB, no network. The `content_root` you work in is the whole world.
   med --area design "<text>"` opens an `i-YYYY-MM-DD-NNN` record. Use
   this when you hit a problem that should be fixed later but shouldn't
   block the current task.
-- **Orient yourself.** `gate status` returns pending/approved/executing
-  counts, open issues, unread inbox, and last activity as JSON — the
-  first command an agent calls in a new session. Add `--for <you>` to
-  scope it to your own work.
+- **Orient yourself in one call.** `gate boot` returns identity +
+  queue counts + recent activity + your most recent utterances +
+  unread inbox as a single JSON payload — the one command an agent
+  runs at session start. `gate status` is still available as a
+  narrower counts-only read (`--for <you>` scopes it to your slice).
+- **Pick up where you left off.** `gate resume` (needs
+  `GUILD_ACTOR`) reads the record from your perspective and
+  composes a restoration prompt — last utterance, last lifecycle
+  step, open loops (`awaiting_execution` / `executing` /
+  `pending_review` / `unreviewed_completion`), and a
+  `suggested_next` pointing at the most urgent commitment.
+  `--format text` adds a prose narrative; `--locale ja` switches
+  the prose to Japanese. Designed for the new session's first tool
+  call after a context reset.
+- **Get the next verb as structured output.** Every write verb
+  (`request`/`approve`/`deny`/`execute`/`complete`/`fail`/`review`/
+  `fast-track`) accepts `--format json` and returns
+  `{ok, id, state, message, suggested_next:{verb, args, reason}}`.
+  `suggested_next` is derived deterministically from the
+  post-mutation state — an orchestrator parses it straight into the
+  next tool call. Terminal states return `suggested_next: null`.
+  Review suggestions deliberately omit `verdict`: rubber-stamping
+  is the failure mode the Two-Persona loop exists to prevent.
 - **Ask "what's on my plate?"** `gate pending --for you`, `gate list
   --state executing --executor you`, `gate show <id> --format text`.
   The `--for` filter matches anything you touch (author, executor, or
@@ -137,6 +165,14 @@ no DB, no network. The `content_root` you work in is the whole world.
   action / reason / completion notes / review comments — promoted
   issues, cited prior requests, audited findings. The tree walks
   one hop; call `gate chain` on a link to go deeper.
+- **Record who you were with.** `gate request --with eris,alice`
+  (or on `gate fast-track`) stores dialogue partners on the request
+  so a paired decision is visible as paired rather than
+  indistinguishable from solo work. Partners go through the same
+  actor validation as any other field. Surfaces on `gate show`
+  (`with: eris`), `gate voices` / `tail` (`authored (with eris)`),
+  and `gate resume` prose ("shaped with eris"). Omit for solo work;
+  the author-self is silently dropped if accidentally included.
 - **Skip the ceremony for small self-contained work.** `gate
   fast-track --from you --action "..." --reason "..."` is the
   deliberate escape hatch out of the Two-Persona loop: it runs
@@ -202,7 +238,9 @@ If you plan to build automation on top of this (e.g. a scheduler that
 watches `pending/` and dispatches to the right executor), treat the
 domain/application boundary as stable and the infrastructure layer as
 replaceable — write a new `Repository` implementation rather than
-touching the use cases.
+touching the use cases. For the machine-readable surface itself,
+`gate schema` emits a draft-07 JSON Schema catalogue of every verb's
+inputs and outputs, suitable for feeding to an LLM tool layer.
 
 ### What this tool does NOT do (yet)
 
@@ -220,18 +258,18 @@ when building on this version:
 - **No auto-generated dashboard** (`DASHBOARD.md` etc.). `gate status`
   provides a JSON summary of pending/approved/executing/issues/inbox
   counts, but a persistent rendered dashboard is not yet generated.
-- **No locking on state transitions.** `saveNew` for creation is
-  race-safe (O_EXCL), but two processes calling `gate approve` on the
-  same request in the same millisecond have last-writer-wins semantics.
-  Serialize at the caller if you run multiple concurrent operators.
-  Cross-cutting reads (`gate voices` / `tail` / `whoami` / `chain` /
-  `doctor`) use `RequestRepository.listAll()` which reads every state
-  directory in parallel and dedupes by id; the dedup keeps whichever
-  snapshot has the longer `status_log` (status_log only grows) so a
-  transition mid-read yields the newer representation
-  deterministically. The window is smaller than the sequential loop
-  it replaced but not zero — a file that moves between directories
-  *during* a single `readdir` can still be missed or double-counted.
+- **No ambient mutex across writers.** `saveNew` (create) uses
+  O_EXCL so two agents racing to allocate the same id collide
+  deterministically. `save` (update) uses an **optimistic version
+  check**: `loadedVersion = status_log.length + reviews.length` is
+  snapshotted at load, and if the on-disk total has grown before
+  the write commits, `save` throws `RequestVersionConflict` — the
+  caller must reload and retry. Writes themselves go through
+  `.tmp-<pid>-<rand>` + `rename`, so readers never observe a torn
+  file, and `findById` / `listAll` dedupe mid-transition
+  stragglers by version. Good enough for the usual single-operator
+  or cooperatively-serialized setup; if you need global ordering
+  across many concurrent writers, run a scheduler outside the CLI.
 - **Sequence ceiling is 9999 per UTC day.** Request IDs are
   `YYYY-MM-DD-NNNN`. The 10,000th request in a single UTC day throws.
   Legacy 3-digit ids (`YYYY-MM-DD-NNN`) produced by 0.1.x are still
@@ -350,8 +388,10 @@ configured`) so the output is not misleading about the total actor set.
 ```
 gate request --from <m> --action <a> --reason <r>
              [--executor <m>] [--target <s>] [--auto-review <m>]
+             [--with <n1>[,<n2>...]] [--format json|text]
 gate fast-track --from <m> --action <a> --reason <r>
                 [--executor <m>] [--auto-review <m>] [--note <s>]
+                [--with <n1>[,<n2>...]] [--format json|text]
 gate pending [--for <m>] [--from <m>] [--executor <m>] [--auto-review <m>]
 gate list --state <s> [--for <m>] [--from <m>]
                       [--executor <m>] [--auto-review <m>]
@@ -359,17 +399,23 @@ gate show <id> [--format json|text]                  (default: json)
 gate voices <name> [--lense <l>] [--verdict <v>] [--limit <N>]
                    [--format json|text]              (default: json)
 gate tail [N]                                        (default 20)
+gate boot [--format json|text] [--tail <N>] [--utterances <N>]
+                                                     (default: json)
+gate resume [--format json|text] [--locale en|ja]    (needs GUILD_ACTOR)
 gate status [--for <m>] [--format json|text]         (default: json)
 gate whoami                                          (needs GUILD_ACTOR)
 gate chain <id>                                      (request or issue)
-gate approve <id>  --by <m> [--note <s>]
+gate approve <id>  --by <m> [--note <s>] [--format json|text]
 gate deny    <id>  --by <m> [--note <s> | --reason <s> | <reason>]
-gate execute <id>  --by <m> [--note <s>]
-gate complete <id> --by <m> [--note <s>]
+                            [--format json|text]
+gate execute <id>  --by <m> [--note <s>] [--format json|text]
+gate complete <id> --by <m> [--note <s>] [--format json|text]
 gate fail    <id>  --by <m> [--note <s> | --reason <s> | <reason>]
+                            [--format json|text]
 gate review  <id>  --by <m> --lense <devil|layer|cognitive|user>
                    --verdict <ok|concern|reject>
                    [--comment <s> | --comment - | <comment>]
+                   [--format json|text]
 
 gate issues add --from <m> --severity <low|med|high|critical>
                 --area <a> <text>
@@ -385,7 +431,12 @@ gate inbox mark-read [N] --for <m>
 
 gate doctor [--summary | --format json]              (read-only health check)
 gate repair [--apply] [--from-doctor <path>]         (quarantine malformed records)
+gate schema [--verb <name>] [--format json|text]     (JSON Schema for all verbs)
 ```
+
+On write verbs, `--format json` returns
+`{ok, id, state, message, suggested_next:{verb, args, reason}}`, so
+an orchestrator can chain calls without re-parsing state.
 
 ### Verb cookbook
 
