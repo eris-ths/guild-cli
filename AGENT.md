@@ -18,6 +18,10 @@ useful when something breaks or you want to extend the system.
 ## Session start
 
 ```bash
+# First time in this content_root? Register yourself:
+gate register --name <you>              # category defaults to "professional"
+
+# Every session after:
 gate boot                # identity + status + tail + your_recent + inbox_unread (1 JSON)
 gate resume              # picking up where the last session ended (needs GUILD_ACTOR)
 # (old 3-command recipe — use boot above if you can consume JSON)
