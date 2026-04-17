@@ -89,63 +89,36 @@ no DB, no network. The `content_root` you work in is the whole world.
 
 ### What you can do with it
 
-- **Register yourself or a teammate as a member.** `guild new --name noir
-  --category professional`. A member is just a YAML file with a name and
-  a category; no runtime process is required.
-- **File a request against another member** (or yourself). `gate request
-  --from you --action "..." --reason "..." --executor them
-  --auto-review critic`. The request is written to `requests/pending/`
-  where any process can pick it up.
-- **Drive a request through the state machine.** `gate approve <id>
-  --by human`, `gate execute <id> --by you`, `gate complete <id>
-  --by you --note "done"`. Each step is recorded in `status_log[]`
-  with actor + timestamp.
-- **Record a Two-Persona Devil Review.** After completion, a *different*
-  member runs `gate review <id> --by critic --lense devil --verdict
-  concern "<comment>"`. Reviews append to `reviews[]` and are visible
-  forever. The lenses (`devil | layer | cognitive | user`) let you run
-  the same review target through multiple viewpoints in sequence.
-  Lenses are configurable via `guild.config.yaml` — the four built-in
-  lenses are the default, but teams can add domain-specific lenses
-  (e.g. `security`, `correctness`).
-- **Track defects as issues.** `gate issues add --from you --severity
-  med --area design "<text>"` opens an `i-YYYY-MM-DD-NNN` record. Use
-  this when you hit a problem that should be fixed later but shouldn't
-  block the current task.
-- **Orient yourself.** `gate status` returns pending/approved/executing
-  counts, open issues, unread inbox, and last activity as JSON — the
-  first command an agent calls in a new session. Add `--for <you>` to
-  scope it to your own work.
-- **Ask "what's on my plate?"** `gate pending --for you`, `gate list
-  --state executing --executor you`, `gate show <id> --format text`.
-  The `--for` filter matches anything you touch (author, executor, or
-  assigned reviewer); the plain `gate pending` shows *everyone's*
-  queue, not just yours. Everything is queryable without a server.
-- **Re-enter the content_root fresh.** `gate whoami` (needs
-  `GUILD_ACTOR`) returns your identity and your five most recent
-  utterances. `gate tail` shows the newest N (default 20) entries
-  from every actor — the `git log` of the dialogue. Together they
-  are the "where was I?" pair you reach for at session start.
-- **Read what someone said across all their work.** `gate voices
-  <name> [--lense <l>] [--verdict <v>]` walks the full request
-  corpus and surfaces everything that person authored or reviewed,
-  chronologically. Use it before you retrospect, before you write
-  a review in a lens you haven't used recently, or just to recall
-  what you've been arguing about.
-- **Follow a cross-reference.** `gate chain <id>` starts at a
-  request or issue and shows the other records it mentions in its
-  action / reason / completion notes / review comments — promoted
-  issues, cited prior requests, audited findings. The tree walks
-  one hop; call `gate chain` on a link to go deeper.
-- **Skip the ceremony for small self-contained work.** `gate
-  fast-track --from you --action "..." --reason "..."` is the
-  deliberate escape hatch out of the Two-Persona loop: it runs
-  create → approve → execute → complete in one call with
-  self-approval markers in `status_log[]`. Use it when the
-  separate-reviewer discipline is overkill, and accept that the
-  record will show you approved your own work. Still pass
-  `--auto-review <critic>` if you want the post-hoc review
-  template to print.
+The full command surface is in [Two CLIs](#two-clis) below and in
+[`docs/verbs.md`](./docs/verbs.md). In one pass, the verbs cluster
+into five jobs:
+
+- **Shape the roster** — `guild new` / `list` / `validate`. A member
+  is a YAML file with a name and a category; no runtime process.
+- **Drive a request through its lifecycle** — `gate request` →
+  `approve` → `execute` → `complete` (or `deny` / `fail`). Each
+  step appends to `status_log[]` with actor + timestamp. Use
+  `gate fast-track` when the Two-Persona discipline is overkill,
+  and accept that the record shows you approved your own work.
+- **Record a Two-Persona Devil Review** — `gate review <id> --by
+  <critic> --lense <devil|layer|cognitive|user> --verdict
+  <ok|concern|reject>`. Reviews append to `reviews[]` forever; the
+  lens set is configurable in `guild.config.yaml` (add `security`,
+  `correctness`, etc. as needed). Track defects surfaced by a
+  review as issues (`gate issues add`) or promote them to new
+  requests (`gate issues promote`).
+- **Read the record across sessions** — `gate boot` for a single-
+  call orientation (identity + status + tail + unread inbox),
+  `gate resume` to reconstruct what the last session was doing,
+  `gate whoami` / `tail` / `voices` / `chain` / `show` for
+  narrower reads. `gate status` returns the global queue counts;
+  `gate pending` / `list --for you` slice it to your plate.
+- **Exchange messages out-of-band** — `gate message` / `broadcast`
+  / `inbox` / `inbox mark-read`. Async notifications between
+  members, persisted with receipt tracking.
+
+Plus health verbs: `gate doctor` observes malformed records,
+`gate repair --apply` quarantines them.
 
 All of these are pure file operations — no daemon, no network, no
 database. If two agents touch the same content root simultaneously,
