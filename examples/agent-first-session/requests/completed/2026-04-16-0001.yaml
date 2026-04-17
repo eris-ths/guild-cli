@@ -1,0 +1,60 @@
+id: 2026-04-16-0001
+from: claude
+action: "Feature A: gate boot — 統合 orientation verb"
+reason: agent-first の最優先改善。現状 session start に status+whoami+tail の3コマンド必要。1JSONで
+  identity / queues / recent activity / unread inbox を返す単一コマンドを追加する。既存の
+  collector を合成するだけで実装できる
+state: completed
+created_at: 2026-04-16T22:48:48.254Z
+status_log:
+  - state: pending
+    by: claude
+    at: 2026-04-16T22:48:48.254Z
+    note: created
+  - state: approved
+    by: human
+    at: 2026-04-16T22:48:54.318Z
+    note: A先行：簡単で effect 大
+  - state: executing
+    by: claude
+    at: 2026-04-16T22:48:54.676Z
+  - state: completed
+    by: claude
+    at: 2026-04-16T22:51:29.281Z
+    note: src/interface/gate/handlers/boot.ts 新設。status.ts から
+      collectStatus/StatusSummary を export 化して再利用。GUILD_ACTOR 必須ではなく null
+      許容でも動く設計に。JSON output 安定化のため shape はコメントで 0.x patch compatible と明記。listAll
+      を1回だけ呼んで全ビューで使い回す最適化含む。build OK, smoke test で JSON parse 確認
+reviews:
+  - by: devil
+    lense: devil
+    verdict: concern
+    comment: >-
+      concern1: JSON shape 'stable across 0.x patch' をコメントで主張しているだけで、スナップショット
+      test がない。最初の field rename / reshape で agent consumers が静かに壊れる。bootPayload
+      の shape を snapshot テストで pin すべき — POLICY.md 'strict 0.x' を守るなら尚更。
+
+
+      concern2: open_issues / inbox_unread の enrich で silent try/catch。'may not
+      be configured' として握りつぶしているが、実際に issueRepo が壊れている時も気づけない。少なくとも enrich 失敗時は
+      payload に warnings[] を返して agent に可視化すべき。
+
+
+      concern3: listAll は呼び直さないよう最適化したが、tail / your_recent で同じ allJson に対して
+      collectUtterances を2回走らせている。corpus が大きい content_root (1k+ requests) で boot
+      が遅くなる。lazyに --tail 0 を許す、または一度の sort でキャッシュすべき。
+
+
+      小: GUILD_ACTOR 未設定時の role=null と actor=null は正しいが、'unknown' と 'null'
+      の区別が曖昧。actor=null は 'env未設定'、actor=<name> role='unknown' は '誰名乗ってるか分からん'
+      で意味が違う。docs/verbs.md で booted-as-whom の表を明記したほうがよい。
+
+
+      総合: 機能は効く、ただし shape test と warnings chan を 1.0 前に塞ぐ。3つ目は性能バケットで optional。
+    at: 2026-04-16T22:51:54.751Z
+executor: claude
+auto_review: devil
+completion_note: src/interface/gate/handlers/boot.ts 新設。status.ts から
+  collectStatus/StatusSummary を export 化して再利用。GUILD_ACTOR 必須ではなく null
+  許容でも動く設計に。JSON output 安定化のため shape はコメントで 0.x patch compatible と明記。listAll
+  を1回だけ呼んで全ビューで使い回す最適化含む。build OK, smoke test で JSON parse 確認

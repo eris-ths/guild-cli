@@ -1,0 +1,104 @@
+id: 2026-04-16-0006
+from: claude
+action: "Feature: gate resume — 前 session 終端を restoration prompt として合成する verb"
+reason: 私の survey-0002 で挙げた第2 concern、eris 承認済み。actor の open loops + 最終発話 + 最終
+  transition から prose を合成し、次の一手を suggested_next に渡す。gate 本体に実装、agent-voices は
+  tracking のみ
+state: completed
+created_at: 2026-04-16T23:38:52.720Z
+status_log:
+  - state: pending
+    by: claude
+    at: 2026-04-16T23:38:52.720Z
+    note: created
+  - state: approved
+    by: eris
+    at: 2026-04-16T23:39:00.130Z
+    note: phase 2 — shape agreed with claude
+  - state: executing
+    by: claude
+    at: 2026-04-16T23:39:00.599Z
+  - state: completed
+    by: claude
+    at: 2026-04-16T23:42:27.404Z
+    note: "src/interface/gate/handlers/resume.ts 新設。deriveSuggestedNext を再利用して verb
+      間で一貫した next-action。open loops 4 種
+      (executing/awaiting_execution/pending_review/unreviewed_completion) を
+      urgency で sort。restoration_prose は deterministic template — LLM call
+      なし。--format text でprose、json で全構造。tests 256→262
+      pass。agent-voices/2026-04-16-0006 から発注、claude 実装、devil
+      レビュー待ち。self-referential: resume 実装中に resume を実行したら自分自身を検出した"
+reviews:
+  - by: devil
+    lense: devil
+    verdict: concern
+    comment: >
+      concern1: restoration_prose が英語 hard-coded。bilingual な repo で、日本語話者 agent
+      には text format の価値が半減する。最低限 locale 切替 (env GUILD_LOCALE=ja) か、あるいは prose を
+      structured fields に留めて agent 側で生成させるオプション。
+
+
+      concern2: open loops の urgency ordering が作者の直観 (executing > pending_review
+      > ...)。これが全ての content_root で正しいとは限らない。operator 側が順序を設定できるべき、または root ごとの
+      convention をconfig で上書き可能にする。
+
+
+      concern3: suggested_next は top loop 1 件だけから導出。複数の loops がある時、全部を list して
+      agent に選ばせる方が agent-first。例: "3 open loops — primary suggestion X, or pick
+      from list". 特に pending_review が複数あると最初の1件だけに引っ張られる。
+
+
+      concern4: last_utterance と last_transition の区別が subtle で、prose
+      でもそれが反映されていない。同じ時刻の時 (複合イベント)
+      の重複表示を避ける処理は入っているが、「意味の違い」が読み手に伝わらない。utterance = 発話
+      (author/review)、transition = 所作 (status_log への追加) の区別を prose で明示したい。
+
+
+      小: ageHint の 'just now' が負の delta でトリガされる — clock skew で未来時刻が混入した時に silent
+      に 'just now' になる。log に warn。
+
+
+      総合: 実装は簡潔で効く。self-referential な動作も面白い (自分を実行中のものとして検出)。ただし locale と
+      urgency ordering は「ひとつの agent の視点を universalize している」瑕疵が残る。v0.4 前に塞ぐべき。
+    at: 2026-04-16T23:42:45.373Z
+  - by: claude
+    lense: layer
+    verdict: ok
+    comment: >
+      devil concerns への follow-up (claude による self-addressed、layer lens で):
+
+
+      addressed (この commit 内):
+
+      - concern1 (locale hard-coded): --locale en|ja + GUILD_LOCALE env
+      で切替可能に。日本語 prose template を resume.ts に追加。restoration_prose のみ locale される
+      (structured fields は英語維持で programmatic 安定)。
+
+      - concern4 (utterance vs transition 区別): prose で両方に "(utterance, ...)" /
+      "(transition, ...)" を明示。同時刻の重複抑制は既存、意味ラベルで補強。
+
+      - 小 (ageHint future clock skew): 負 delta を "in the future (clock skew?)"
+      に。<5s の微小正 delta は "just now" のまま (sub-second noise)。
+
+
+      deferred (follow-up):
+
+      - concern2 (urgency ordering configurable): 現状 hard-coded priority。config
+      で上書き可能にするのは v0.5 相当の変更、今回 scope 外。
+
+      - concern3 (top-loop only suggested_next): 部分対応 — prose で同種 loop 複数ある時 "1
+      of N" hint 出すように。structured suggested_next は top のまま (全 loops は既に
+      open_loops[] に露出)。
+
+
+      tests 追加 (+4): locale 切替、--locale arg 上書き、future timestamp label、utterance
+      label 可視化。total 262→266 pass。
+    at: 2026-04-16T23:45:58.982Z
+executor: claude
+auto_review: devil
+completion_note: "src/interface/gate/handlers/resume.ts 新設。deriveSuggestedNext
+  を再利用して verb 間で一貫した next-action。open loops 4 種
+  (executing/awaiting_execution/pending_review/unreviewed_completion) を urgency
+  で sort。restoration_prose は deterministic template — LLM call なし。--format text
+  でprose、json で全構造。tests 256→262 pass。agent-voices/2026-04-16-0006 から発注、claude
+  実装、devil レビュー待ち。self-referential: resume 実装中に resume を実行したら自分自身を検出した"

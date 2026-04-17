@@ -4,6 +4,7 @@ import {
   optionalOption,
 } from '../../shared/parseArgs.js';
 import { C, readStdin, readCommentViaEditor } from './internal.js';
+import { emitWriteResponse, parseFormat } from './writeFormat.js';
 
 export async function reqReview(c: C, args: ParsedArgs): Promise<number> {
   const id = args.positional[0];
@@ -46,7 +47,12 @@ export async function reqReview(c: C, args: ParsedArgs): Promise<number> {
     );
   }
 
-  await c.requestUC.review({ id, by, lense, verdict, comment });
-  process.stdout.write(`✓ review recorded: ${id} [${lense}/${verdict}]\n`);
+  const updated = await c.requestUC.review({ id, by, lense, verdict, comment });
+  emitWriteResponse(
+    parseFormat(args),
+    updated,
+    `✓ review recorded: ${id} [${lense}/${verdict}]`,
+    c.config,
+  );
   return 0;
 }

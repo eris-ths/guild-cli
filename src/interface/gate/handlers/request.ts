@@ -6,6 +6,7 @@ import {
 import { Request } from '../../../domain/request/Request.js';
 import { formatDelta } from '../voices.js';
 import { C } from './internal.js';
+import { emitWriteResponse, parseFormat } from './writeFormat.js';
 
 export async function reqCreate(c: C, args: ParsedArgs): Promise<number> {
   const from = requireOption(
@@ -24,11 +25,18 @@ export async function reqCreate(c: C, args: ParsedArgs): Promise<number> {
   const executor = optionalOption(args, 'executor');
   const target = optionalOption(args, 'target');
   const autoReview = optionalOption(args, 'auto-review');
+  const withPartners = parseWithList(optionalOption(args, 'with'));
   if (executor !== undefined) input.executor = executor;
   if (target !== undefined) input.target = target;
   if (autoReview !== undefined) input.autoReview = autoReview;
+  if (withPartners.length > 0) input.with = withPartners;
   const r = await c.requestUC.create(input);
-  process.stdout.write(`✓ created: ${r.id.value} (state=pending)\n`);
+  emitWriteResponse(
+    parseFormat(args),
+    r,
+    `✓ created: ${r.id.value} (state=pending)`,
+    c.config,
+  );
   return 0;
 }
 
@@ -138,6 +146,9 @@ function formatRequestText(r: Request): string {
   if (j['executor']) lines.push(`  executor: ${j['executor']}`);
   if (j['target']) lines.push(`  target:   ${j['target']}`);
   if (j['auto_review']) lines.push(`  reviewer: ${j['auto_review']}`);
+  if (Array.isArray(j['with']) && j['with'].length > 0) {
+    lines.push(`  with:     ${(j['with'] as string[]).join(', ')}`);
+  }
   lines.push(`  created:  ${j['created_at']}`);
   lines.push('');
   lines.push(`  action:   ${j['action']}`);
@@ -192,8 +203,8 @@ export async function reqApprove(c: C, args: ParsedArgs): Promise<number> {
   if (!id) throw new Error('Usage: gate approve <id> --by <m>');
   const by = requireOption(args, 'by', '--by required', 'GUILD_ACTOR');
   const note = optionalOption(args, 'note');
-  await c.requestUC.approve(id, by, note);
-  process.stdout.write(`✓ approved: ${id}\n`);
+  const r = await c.requestUC.approve(id, by, note);
+  emitWriteResponse(parseFormat(args), r, `✓ approved: ${id}`, c.config);
   return 0;
 }
 
@@ -206,8 +217,8 @@ export async function reqDeny(c: C, args: ParsedArgs): Promise<number> {
     );
   }
   const by = requireOption(args, 'by', '--by required', 'GUILD_ACTOR');
-  await c.requestUC.deny(id, by, reason);
-  process.stdout.write(`✓ denied: ${id}\n`);
+  const r = await c.requestUC.deny(id, by, reason);
+  emitWriteResponse(parseFormat(args), r, `✓ denied: ${id}`, c.config);
   return 0;
 }
 
@@ -216,8 +227,8 @@ export async function reqExecute(c: C, args: ParsedArgs): Promise<number> {
   if (!id) throw new Error('Usage: gate execute <id> --by <m>');
   const by = requireOption(args, 'by', '--by required', 'GUILD_ACTOR');
   const note = optionalOption(args, 'note');
-  await c.requestUC.execute(id, by, note);
-  process.stdout.write(`✓ executing: ${id}\n`);
+  const r = await c.requestUC.execute(id, by, note);
+  emitWriteResponse(parseFormat(args), r, `✓ executing: ${id}`, c.config);
   return 0;
 }
 
@@ -227,15 +238,16 @@ export async function reqComplete(c: C, args: ParsedArgs): Promise<number> {
   const by = requireOption(args, 'by', '--by required', 'GUILD_ACTOR');
   const note = optionalOption(args, 'note');
   const r = await c.requestUC.complete(id, by, note);
-  process.stdout.write(`✓ completed: ${id}\n`);
+  const extraLines: string[] = [];
   if (r.autoReview) {
     const reviewer = r.autoReview.value;
     const tpl =
       `gate review ${id} --by ${reviewer} --lense devil ` +
       `--verdict <ok|concern|reject> "<comment>"`;
-    process.stdout.write(`→ auto-review pending for: ${reviewer}\n`);
-    process.stdout.write(`  ${tpl}\n`);
+    extraLines.push(`→ auto-review pending for: ${reviewer}`);
+    extraLines.push(`  ${tpl}`);
   }
+  emitWriteResponse(parseFormat(args), r, `✓ completed: ${id}`, c.config, extraLines);
   return 0;
 }
 
@@ -248,9 +260,23 @@ export async function reqFail(c: C, args: ParsedArgs): Promise<number> {
     );
   }
   const by = requireOption(args, 'by', '--by required', 'GUILD_ACTOR');
-  await c.requestUC.fail(id, by, reason);
-  process.stdout.write(`✓ failed: ${id}\n`);
+  const r = await c.requestUC.fail(id, by, reason);
+  emitWriteResponse(parseFormat(args), r, `✓ failed: ${id}`, c.config);
   return 0;
+}
+
+/**
+ * Parse `--with eris,alice` (comma-separated) into a clean string list.
+ * Empty entries and whitespace-only entries are dropped so
+ * `--with "eris, , alice"` behaves the way it reads. Exact name
+ * validation happens upstream (MemberName.of / assertActor).
+ */
+function parseWithList(raw: string | undefined): string[] {
+  if (raw === undefined) return [];
+  return raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
 }
 
 // Resolve the closure reason for deny/fail accepting any of:
@@ -273,6 +299,7 @@ export async function reqFastTrack(c: C, args: ParsedArgs): Promise<number> {
   const executor = optionalOption(args, 'executor') ?? from;
   const autoReview = optionalOption(args, 'auto-review');
   const note = optionalOption(args, 'note');
+  const withPartners = parseWithList(optionalOption(args, 'with'));
 
   const createInput: Parameters<typeof c.requestUC.create>[0] = {
     from,
@@ -281,6 +308,7 @@ export async function reqFastTrack(c: C, args: ParsedArgs): Promise<number> {
     executor,
   };
   if (autoReview !== undefined) createInput.autoReview = autoReview;
+  if (withPartners.length > 0) createInput.with = withPartners;
   const created = await c.requestUC.create(createInput);
   const id = created.id.value;
 
@@ -288,15 +316,22 @@ export async function reqFastTrack(c: C, args: ParsedArgs): Promise<number> {
   await c.requestUC.execute(id, executor, 'fast-track: self-executed');
   const completed = await c.requestUC.complete(id, executor, note);
 
-  process.stdout.write(`✓ fast-tracked: ${id} (pending→completed)\n`);
+  const extraLines: string[] = [];
   if (completed.autoReview) {
     const reviewer = completed.autoReview.value;
     const tpl =
       `gate review ${id} --by ${reviewer} --lense devil ` +
       `--verdict <ok|concern|reject> "<comment>"`;
-    process.stdout.write(`→ auto-review pending for: ${reviewer}\n`);
-    process.stdout.write(`  ${tpl}\n`);
+    extraLines.push(`→ auto-review pending for: ${reviewer}`);
+    extraLines.push(`  ${tpl}`);
   }
+  emitWriteResponse(
+    parseFormat(args),
+    completed,
+    `✓ fast-tracked: ${id} (pending→completed)`,
+    c.config,
+    extraLines,
+  );
   return 0;
 }
 

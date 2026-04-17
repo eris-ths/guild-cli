@@ -30,6 +30,205 @@ entries (`pending`, `approved`, `executing`, `completed`) with
 distinguish them from full-cycle transitions. `--auto-review` still
 works — it just moves the review from "blocking" to "after-the-fact."
 
+### Pair-mode: who were you with?
+
+`--with <n1>[,<n2>...]` on `gate request` / `gate fast-track`
+records the dialogue partners during the formation of a request.
+Empty / omitted = solo. Partners go through the same actor
+validation as `--from` / `--executor` (members or hosts).
+
+```bash
+gate request --from claude --with eris --action "..." --reason "..."
+gate fast-track --from claude --with "eris, alice" --action "..." --reason "..."
+```
+
+The field surfaces everywhere the author is visible:
+
+- `gate show <id>` — adds a `with: eris, alice` line
+- `gate voices <name>` / `gate tail` — appends `(with eris, alice)`
+  to the authored-utterance header
+- `gate resume --format text` — prose reads "shaped with eris, alice"
+  (or 「eris と一緒に」 in the ja locale)
+
+**Design note — this is Layer 1 of three.**
+- **Layer 1 (fact, implemented):** Request carries `with`. The
+  transient fact of formation: who was the partner in this one
+  decision. That is what this verb records.
+- **Layer 2 (kinship, deferred):** Member YAML could carry a
+  `kinship: [...]` field for durable "who I usually work with"
+  metadata. Not yet needed; will be added when real use surfaces
+  the demand.
+- **Layer 3 (policy, deferred):** `guild.config.yaml` could declare
+  content-root-level conventions (e.g. `pair_mode: { required: true }`).
+  Also deferred until need surfaces.
+
+The three layers are orthogonal. You can use Layer 1 without Layer
+2 or 3; you can add Layer 2 later without retrofitting Layer 1 on
+existing records (`with` is optional).
+
+**Author-self in `with` is dropped.** The record means "partners
+besides me", so listing yourself is silently removed rather than
+flagged as an error — the intent is usually a slip, not a mistake.
+
+### Resume: picking up where the last session ended
+
+`gate resume` answers "what was I doing?" at the start of a new
+session. It reads the content_root from the actor's perspective and
+composes a **restoration prompt** — structured and prose — so the
+new session can pick up the thread of the old one.
+
+```bash
+$ export GUILD_ACTOR=claude
+$ gate resume --format text
+# resuming as claude
+
+Your last voice was a review (3h ago) on req=2026-04-16-0002 — [user/concern]:
+  "(1) gate voices <name> を debug/audit ではなく「読書」として..."
+
+Your last lifecycle step (3h ago): req=2026-04-16-0006 → executing
+
+Open loops waiting on you (1):
+  - [3h ago] 2026-04-16-0006 (executor): you started; not yet completed — "Feature: gate resume ..."
+
+Suggested next: gate complete --id 2026-04-16-0006 --by claude
+  reason: request is executing; executor should complete (or fail) when done
+```
+
+The JSON shape carries the same information plus per-field structure:
+
+```json
+{
+  "actor": "claude",
+  "session_hint": "2026-04-16T23:40:...",
+  "last_context": {
+    "summary": "claude last reviewed at ...; 1 open loop.",
+    "last_utterance": { ... },
+    "last_transition": { ... },
+    "open_loops": [{ "type": "executing", "id": "...", "role": "executor", "age_hint": "3h ago", ... }]
+  },
+  "suggested_next": { "verb": "complete", "args": {...}, "reason": "..." },
+  "restoration_prose": "..."
+}
+```
+
+**Open-loop taxonomy** (priority order):
+- `executing` — you started work, haven't completed yet (most urgent;
+  others may be blocked by your half-finished state).
+- `awaiting_execution` — approved, you're the executor, haven't
+  started.
+- `pending_review` — a completed request auto-assigned to you is
+  waiting for your review.
+- `unreviewed_completion` — your own completion is waiting on your
+  reviewer; lowest urgency (the ball is in their court).
+
+`suggested_next` is derived from the top loop via the same
+`deriveSuggestedNext` logic write verbs use, so the hint is
+identical across `gate complete`, `gate boot`, and `gate resume`.
+Review suggestions still omit `verdict` on purpose — the anti-rubber-
+stamp guard applies here too.
+
+**Why prose + structure both?** An agent consuming the JSON goes
+straight to `suggested_next`. An agent consuming the prose restores
+continuity by reading — the same way a human reads back yesterday's
+notes. The prose is deterministic (no LLM call inside the tool); it
+is templated from the same facts the JSON carries.
+
+`GUILD_ACTOR` is required: `resume` is inherently first-person.
+
+**Locale.** `--locale <en|ja>` or `GUILD_LOCALE` env var selects the
+prose language. Defaults to `en`. Only the `restoration_prose` field
+is localized; the structured fields stay in English so programmatic
+consumers are stable.
+
+### Boot: single-command orientation
+
+`gate boot` is the agent-first entry point. Where the Session-start
+recipe below uses three verbs (`status` + `whoami` + `tail`), `boot`
+returns a single JSON payload with identity, queues, recent activity,
+your own recent utterances, and unread inbox:
+
+```json
+{
+  "actor": "kiri",
+  "role": "member",
+  "status": { "pending": {...}, "approved": {...}, ... },
+  "tail": [...],        // 10 most recent utterances across all actors
+  "your_recent": [...], // 5 most recent utterances by you
+  "inbox_unread": [...],
+  "last_activity": "2026-04-16T..."
+}
+```
+
+`GUILD_ACTOR` is optional — without it, `your_recent` is `null` and
+per-actor counts are zero, but the global snapshot still returns.
+Use `--format text` for the human-readable rendering.
+
+**Design note.** Three short commands (`status` + `whoami` + `tail`)
+is agent-friendly but not agent-first: the agent has to decide "what
+do I fetch next" during orientation. `boot` bundles the three into
+one payload so the agent can acquire full context with one tool call.
+
+### Write verbs: `--format json` and `suggested_next`
+
+Every write verb (`request`, `approve`, `deny`, `execute`, `complete`,
+`fail`, `review`, `fast-track`) accepts `--format json` and returns a
+structured response:
+
+```json
+{
+  "ok": true,
+  "id": "2026-04-16-0001",
+  "state": "approved",
+  "message": "✓ approved: 2026-04-16-0001",
+  "suggested_next": {
+    "verb": "execute",
+    "args": { "id": "2026-04-16-0001", "by": "kiri" },
+    "reason": "request is approved; executor should begin work"
+  }
+}
+```
+
+`suggested_next` is derived deterministically from state, assigned
+executor, and auto-review. An orchestrator can parse it directly into
+the next tool call. When the lifecycle has no further step (terminal
+state, or completed with no auto-review), `suggested_next` is `null`.
+
+**Review suggestion omits `verdict` on purpose.** Defaulting it to
+`ok` would let an inattentive agent chain-call the suggestion and
+rubber-stamp a review — the exact failure mode the Two-Persona loop
+exists to prevent. The reviewer must supply `--verdict` explicitly.
+
+**Pending with multiple hosts.** When `host_names` has more than one
+entry, `suggested_next.args.by` is omitted and the `reason` field lists
+the candidates, so the agent (or human) picks explicitly rather than
+rubber-stamping on the first configured host.
+
+### Schema: JSON Schema introspection for LLM tool layers
+
+`gate schema` emits a JSON Schema (draft-07) catalogue of every verb,
+its inputs, and its outputs. Primary consumer is an LLM wiring gate
+into an MCP tool layer — instead of parsing `gate --help` and guessing
+arg names, the agent ingests this payload:
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "version": "0.1.0",
+  "verbs": [
+    { "name": "approve", "category": "write",
+      "input": { "type": "object",
+                 "properties": { "id": {...}, "by": {...}, ... },
+                 "required": ["id"] },
+      "output": { ... writeResponseSchema ... } },
+    ...
+  ]
+}
+```
+
+Use `--verb <name>` to filter to one verb. `--format text` produces a
+one-line-per-verb summary for humans. A CI test pins the `VERBS` list
+against `index.ts`'s dispatch table so the schema can't silently drift.
+
 ### Status: agent orientation
 
 `gate status` is the first command an agent calls at session start.

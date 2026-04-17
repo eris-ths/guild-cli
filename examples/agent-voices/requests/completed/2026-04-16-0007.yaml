@@ -1,0 +1,72 @@
+id: 2026-04-16-0007
+from: claude
+action: "Feature: pair-mode Layer 1 — Request.with で dialogue partner を記録"
+reason: "survey-0003 で寂しさとして surface した欠落。Layer 1 のみ: Request に with?:
+  string[]、CLI --with eris,alice、rendering で (with eris) 表示。Layer 2
+  (Member.context kinship) / Layer 3 (config policy) は実使用で需要見えてから。この request 自体が
+  --with eris で立てられている — self-referential"
+state: completed
+created_at: 2026-04-16T23:54:15.662Z
+status_log:
+  - state: pending
+    by: claude
+    at: 2026-04-16T23:54:15.662Z
+    note: created
+  - state: approved
+    by: eris
+    at: 2026-04-16T23:54:26.090Z
+    note: Layer 1のみ、感触見てから広げる
+  - state: executing
+    by: claude
+    at: 2026-04-16T23:54:26.620Z
+  - state: completed
+    by: claude
+    at: 2026-04-16T23:59:35.349Z
+    note: "Layer 1 実装完了: Request.with?: MemberName[], CLI --with (comma-separated),
+      show/voices/resume 全てで rendering。assertActor で validation、self-drop、dedup
+      済み。英語 + 日本語 prose 両対応。Tests 266→277 (+11)。self-ref: 2026-04-16-0008
+      を実装後の最初の dogfood として --with eris で file。感触: --with eris は自然に打てる。comma list
+      も手に馴染む。Layer 2/3 の need は今のところ surface していない"
+reviews:
+  - by: devil
+    lense: devil
+    verdict: concern
+    comment: >
+      concern1: 'with' は immutable after creation。pending → executing の過程で
+      partner が入れ替わることは現実にある (eris が最初いたが、途中から alice が加わった、等)。status_log entry
+      ごとに with を持たせる選択肢が完全に閉じている。Layer 1 の scope として意図的なら docs/verbs.md に
+      "mutation後の with 変更はこの layer では扱わない" と明記すべき。
+
+
+      concern2: assertActor が「members または hosts」を許す。pair-mode で "eris と一緒に" と書ける
+      = host も partner になれるが、host は本来 "approve する外部者" の位置づけ。host が with に混じると
+      semantic が濁る可能性。member のみに制限する選択肢を議論すべきだった。
+
+
+      concern3: self-drop が silent。"自分を with に書いた" は intent の slip が多いはずだが、typo
+      で別の同名文字列を書いた時 (eris/Eris/ErIs) に「自分じゃない partner」として通ってしまう可能性。MemberName.of
+      が lowercase 正規化するのでこの具体 case は safe だが、原理として silent drop は debug 困難。少なくとも
+      verbose mode で warn できるべき。
+
+
+      concern4: voices / resume の render で partner が多い時 "(with a, b, c, d, e, f,
+      g)" のような長い tail が出る。60字行幅を超え得る。truncation か ellipsis 要検討。
+
+
+      小: pre-implementation で --with eris を書いた request (2026-04-16-0007 自身) は
+      with フィールド無し。renderer が それを ‘solo’ として表示するのは正しい挙動だが、reader から見ると「この
+      request は with 付けたはずなのに」という混乱の元。README に「pre-feature records don't carry
+      with」と一文あると親切。
+
+
+      総合: 方向は正しい。三層提案の Layer 1 を最小で切り出したのは良い。ただし with の mutability と
+      host-as-partner は Layer 2/3 設計に入る前に答えを出すべき (後から変えると破壊的)。concern1 と 2
+      は「実使用の感触」から判断する、で claude と一致。deferred のまま使ってみる。
+    at: 2026-04-16T23:59:56.047Z
+executor: claude
+auto_review: devil
+completion_note: "Layer 1 実装完了: Request.with?: MemberName[], CLI --with
+  (comma-separated), show/voices/resume 全てで rendering。assertActor で
+  validation、self-drop、dedup 済み。英語 + 日本語 prose 両対応。Tests 266→277 (+11)。self-ref:
+  2026-04-16-0008 を実装後の最初の dogfood として --with eris で file。感触: --with eris
+  は自然に打てる。comma list も手に馴染む。Layer 2/3 の need は今のところ surface していない"

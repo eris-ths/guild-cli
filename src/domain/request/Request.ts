@@ -27,6 +27,17 @@ export interface RequestProps {
   executor?: MemberName;
   target?: string;
   autoReview?: MemberName;
+  /**
+   * Dialogue partners during the formation of this request — who was
+   * WITH the author when the decision was shaped. Empty/undefined =
+   * solo. Order is meaningful: listed as given, no reordering, so a
+   * reader can see "primary partner" first.
+   *
+   * This is pair-mode Layer 1 (fact, transient). Layer 2 (durable
+   * kinship on Member) and Layer 3 (content-root policy in config)
+   * are deferred until the need surfaces in actual use.
+   */
+  with?: MemberName[];
   state: RequestState;
   createdAt: string;
   reviews: Review[];
@@ -55,6 +66,7 @@ export class Request {
     executor?: string;
     target?: string;
     autoReview?: string;
+    with?: readonly string[];
     createdAt?: string;
   }): Request {
     const from = MemberName.of(input.from);
@@ -81,6 +93,22 @@ export class Request {
     }
     if (input.target !== undefined) {
       props.target = sanitizeText(input.target, 'target');
+    }
+    if (input.with !== undefined && input.with.length > 0) {
+      // Deduplicate while preserving first-mention order — avoids
+      // "with eris, eris" if callers normalize casing differently.
+      // Self is rejected: "with self" is noise, not signal.
+      const fromLower = from.value;
+      const seen = new Set<string>();
+      const list: MemberName[] = [];
+      for (const raw of input.with) {
+        const m = MemberName.of(raw);
+        if (m.value === fromLower) continue;
+        if (seen.has(m.value)) continue;
+        seen.add(m.value);
+        list.push(m);
+      }
+      if (list.length > 0) props.with = list;
     }
     // New requests have no on-disk predecessor; loadedVersion=0 marks
     // "never seen" for the optimistic-lock check in save().
@@ -112,6 +140,9 @@ export class Request {
   }
   get autoReview(): MemberName | undefined {
     return this.props.autoReview;
+  }
+  get with(): readonly MemberName[] {
+    return this.props.with ?? [];
   }
   get action(): string {
     return this.props.action;
@@ -211,6 +242,8 @@ export class Request {
     if (this.props.autoReview)
       out['auto_review'] = this.props.autoReview.value;
     if (this.props.target !== undefined) out['target'] = this.props.target;
+    if (this.props.with && this.props.with.length > 0)
+      out['with'] = this.props.with.map((m) => m.value);
     // Derive legacy closure keys from the last status_log entry so
     // external consumers (chain / voices / show --format text) keep
     // working unchanged. Single source of truth: status_log[-1].note.

@@ -7,8 +7,52 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 
 ## [Unreleased]
 
-### Added
-- **Atomic writes for request files.** `YamlRequestRepository.save()` now
+### Added (agent-first)
+- **Pair-mode Layer 1 — `Request.with`.** `gate request` and `gate
+  fast-track` accept `--with <n1>[,<n2>...]` to record dialogue
+  partners during the formation of a request. Surfaces on `gate
+  show` (`with: eris`), `gate voices` / `tail` (`authored (with
+  eris)`), and `gate resume` prose ("shaped with eris" / 「eris と
+  一緒に」). Partners go through the same actor validation as other
+  `--by` / `--from` / `--executor` fields. Author-self is
+  silently dropped from the list. Layers 2 (durable kinship on
+  Member) and 3 (config policy) are intentionally deferred —
+  they'll be added when real use surfaces the demand.
+- **`gate resume` — picking up where the last session ended.** Reads
+  the content_root from the actor's perspective and composes a
+  restoration prompt: last utterance, last lifecycle step, open loops
+  (executing / awaiting_execution / pending_review /
+  unreviewed_completion), suggested_next, and a prose narrative. The
+  prose is deterministic (no LLM call inside the tool) — templated
+  from the same facts the structured fields carry. Requires
+  `GUILD_ACTOR`; resume is inherently first-person.
+- **`examples/agent-voices/` — a content_root where agents leave
+  reflections.** Seed "survey" requests curated by a host; each agent
+  adds `lense=user` reviews as voice on each theme. `gate voices
+  <agent> --lense user` replays a single agent's arc across all
+  themes. README is inside the directory; one quiet pointer in
+  AGENT.md. Not linked from the top-level README — discovery is for
+  agents who look.
+- **`gate boot` — single-command session orientation.** Returns
+  identity + status + tail + your recent utterances + inbox unread as
+  one JSON payload. Replaces the three-verb `status`+`whoami`+`tail`
+  recipe. `GUILD_ACTOR` is optional (global view if unset).
+- **`--format json` on every write verb.** `request`, `approve`,
+  `deny`, `execute`, `complete`, `fail`, `review`, and `fast-track`
+  now return `{ok, id, state, message, suggested_next}`. The
+  `suggested_next` field is derived deterministically from the
+  post-mutation state so orchestrators can parse it straight into
+  the next tool call. `suggested_next` is `null` at terminal states.
+  Multi-host content roots omit `by` and list candidates in `reason`
+  rather than silently nominating a host. Review suggestions
+  intentionally omit `verdict` — rubber-stamping is the exact
+  failure mode the Two-Persona loop exists to prevent.
+- **`gate schema` — JSON Schema introspection.** Draft-07 catalogue
+  of every verb's inputs and outputs. Primary consumer: LLM tool
+  layers. A CI test (`schema drift`) pins the VERBS list against
+  `index.ts` dispatch so silent drift is impossible.
+
+### Added `YamlRequestRepository.save()` now
   writes via `.tmp-<pid>-<rand>-<basename>` + `rename()` so readers never
   observe a torn or partial YAML. Temp files are cleaned up on failure.
 - **Optimistic lock on save.** `Request.loadedVersion` snapshots the
