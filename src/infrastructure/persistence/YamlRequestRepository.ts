@@ -344,6 +344,9 @@ function hydrate(
       }
       if (partners.length > 0) props.with = partners;
     }
+    if (typeof obj['promoted_from'] === 'string') {
+      props.promotedFrom = obj['promoted_from'] as string;
+    }
     // Legacy top-level closure keys (completion_note / deny_reason /
     // failure_reason) are no longer written separately — status_log[-1].note
     // is the single source of truth. Handle the three migration cases

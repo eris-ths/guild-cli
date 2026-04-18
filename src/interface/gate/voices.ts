@@ -44,6 +44,10 @@ export type RequestJSON = {
   readonly with?: ReadonlyArray<string>;
   readonly reviews?: ReadonlyArray<ReviewJSON>;
   readonly status_log?: ReadonlyArray<StatusLogEntryJSON>;
+  // Tool-generated structured link to the source issue when this
+  // request came from `gate issues promote`. Used by chain as a
+  // text-independent forward/inbound ref path.
+  readonly promoted_from?: string;
 };
 
 export type ReviewJSON = {

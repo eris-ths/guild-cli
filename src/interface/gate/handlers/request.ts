@@ -169,6 +169,9 @@ function formatRequestText(r: Request): string {
   if (Array.isArray(j['with']) && j['with'].length > 0) {
     lines.push(`  with:     ${(j['with'] as string[]).join(', ')}`);
   }
+  if (j['promoted_from']) {
+    lines.push(`  promoted_from: ${j['promoted_from']}`);
+  }
   lines.push(`  created:  ${j['created_at']}`);
   lines.push('');
   pushMultilineField(lines, '  action:   ', String(j['action']));

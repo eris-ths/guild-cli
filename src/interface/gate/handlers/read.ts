@@ -246,6 +246,27 @@ export async function reqChain(c: C, args: ParsedArgs): Promise<number> {
   const linkedRequestIds = refs.requestIds.filter((id) => id !== rootId);
   const linkedIssueIds = refs.issueIds.filter((id) => id !== rootId);
 
+  // Structured forward link: a request root that was promoted from
+  // an issue carries `promoted_from: <issue-id>` independent of its
+  // action/reason text. Add that issue to the forward-referenced
+  // list so chain surfaces the link even when --action and --reason
+  // were both overridden at promote time (the narrow case where the
+  // text-mention scan can't reach). Dedup against linkedIssueIds so
+  // the default case (text mentions i-X + structured field = i-X)
+  // doesn't render the same issue twice.
+  if (!isIssueId) {
+    const rootReq = requestById.get(rootId);
+    const rootRj = rootReq?.toJSON() as unknown as RequestJSON | undefined;
+    const structuredIssue = rootRj?.promoted_from;
+    if (
+      structuredIssue !== undefined &&
+      structuredIssue !== rootId &&
+      !linkedIssueIds.includes(structuredIssue)
+    ) {
+      linkedIssueIds.push(structuredIssue);
+    }
+  }
+
   // Inbound references: scan every other record's text for rootId so
   // an issue that was promoted to a request can `gate chain` the
   // resolving request, not just the other way around. Without this
@@ -271,10 +292,18 @@ export async function reqChain(c: C, args: ParsedArgs): Promise<number> {
         : {}),
     });
     const inboundRefs = extractReferences(text);
-    if (
+    const textMentions =
       inboundRefs.requestIds.includes(rootId) ||
-      inboundRefs.issueIds.includes(rootId)
-    ) {
+      inboundRefs.issueIds.includes(rootId);
+    // Structured inbound: a request whose `promoted_from` equals the
+    // current issue root is linked via the tool-generated field even
+    // if its overridden text doesn't mention the issue id. Issue
+    // roots are the only ones that can catch this kind of link;
+    // request roots have their own forward promoted_from handled
+    // above.
+    const structuredInbound =
+      isIssueId && rj.promoted_from === rootId;
+    if (textMentions || structuredInbound) {
       inboundRequestRecords.push(r);
     }
   }
