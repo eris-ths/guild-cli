@@ -297,3 +297,39 @@ test('gate resume: utterance vs transition are labeled distinctly in prose', () 
     cleanup();
   }
 });
+
+test('resume: empty-path prose points at gate boot for cross-actor signals (en)', () => {
+  // A fresh actor (no utterances, no transitions, no loops) shouldn't
+  // walk away from resume thinking there's nothing for them — resume
+  // is same-actor-continuation-only, so cross-actor work (inbox
+  // unread, --with assignments) lives in boot. Pin the empty-path
+  // fallback so that scope boundary stays visible to readers.
+  const { root, cleanup } = bootstrap();
+  try {
+    const { stdout } = runGate(root, ['resume', '--format', 'text'], {
+      GUILD_ACTOR: 'freshface',
+    });
+    assert.match(stdout, /Nothing is waiting/);
+    assert.match(stdout, /gate boot/);
+    assert.match(stdout, /cross-actor/);
+  } finally {
+    cleanup();
+  }
+});
+
+test('resume: empty-path prose points at gate boot (ja)', () => {
+  // Same invariant, Japanese prose path.
+  const { root, cleanup } = bootstrap();
+  try {
+    const { stdout } = runGate(
+      root,
+      ['resume', '--format', 'text', '--locale', 'ja'],
+      { GUILD_ACTOR: 'freshface' },
+    );
+    assert.match(stdout, /待ちなし/);
+    assert.match(stdout, /gate boot/);
+    assert.match(stdout, /cross-actor/);
+  } finally {
+    cleanup();
+  }
+});

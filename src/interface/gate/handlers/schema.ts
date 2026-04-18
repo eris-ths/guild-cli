@@ -123,7 +123,8 @@ const VERBS: readonly VerbSchema[] = [
   {
     name: 'resume',
     category: 'read',
-    summary: 'restoration prompt: last utterance, last transition, open loops, suggested next',
+    summary:
+      'same-actor continuation: last utterance, last transition, open loops, suggested next. Does not surface cross-actor signals (inbox, --with); for orientation after a handoff, use `gate boot` instead.',
     input: {
       type: 'object',
       properties: {

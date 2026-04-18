@@ -154,6 +154,9 @@ Status:
                        last transition, open loops (awaiting/
                        executing/pending review/unreviewed), and a
                        prose restoration note. Requires GUILD_ACTOR.
+                       Same-actor continuation only — for a newcomer
+                       arriving via handoff, use 'gate boot' to see
+                       cross-actor signals (inbox, --with assignments).
 
 Meta:
   gate schema [--verb <name>] [--format json|text]
