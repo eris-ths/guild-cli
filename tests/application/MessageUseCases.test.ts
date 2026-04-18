@@ -46,6 +46,7 @@ class FakeNotifier implements NotificationPort {
   // `readMarks[i]` tracks whether posted[i] has been flipped to read.
   readMarks: boolean[] = [];
   readAtStamps: (string | undefined)[] = [];
+  readByStamps: (string | undefined)[] = [];
   failFor: Set<string> = new Set();
   async post(n: Notification): Promise<void> {
     if (this.failFor.has(n.to.value)) {
@@ -54,6 +55,7 @@ class FakeNotifier implements NotificationPort {
     this.posted.push(n);
     this.readMarks.push(false);
     this.readAtStamps.push(undefined);
+    this.readByStamps.push(undefined);
   }
   async listFor(member: MemberName): Promise<InboxMessage[]> {
     const out: InboxMessage[] = [];
@@ -70,6 +72,8 @@ class FakeNotifier implements NotificationPort {
       };
       const readAt = this.readAtStamps[i];
       if (readAt !== undefined) msg.readAt = readAt;
+      const readBy = this.readByStamps[i];
+      if (readBy !== undefined) msg.readBy = readBy;
       out.push(msg);
     }
     return out;
@@ -77,6 +81,7 @@ class FakeNotifier implements NotificationPort {
   async markRead(
     member: MemberName,
     readAt: string,
+    readBy: string,
     index?: number,
   ): Promise<MarkReadResult> {
     // Map the recipient's 1-based index into the underlying flat
@@ -107,6 +112,7 @@ class FakeNotifier implements NotificationPort {
       }
       this.readMarks[i] = true;
       this.readAtStamps[i] = readAt;
+      this.readByStamps[i] = readBy;
       marked++;
     }
     return { marked, alreadyRead, total };
@@ -344,7 +350,7 @@ test('markRead with index marks just that message (1-based)', async () => {
   await uc.send({ from: 'kiri', to: 'noir', text: 'two' });
   await uc.send({ from: 'kiri', to: 'noir', text: 'three' });
 
-  const result = await uc.markRead('noir', 2);
+  const result = await uc.markRead('noir', undefined, 2);
   assert.equal(result.marked, 1);
   assert.equal(result.alreadyRead, 0);
   assert.equal(result.total, 3);
@@ -362,7 +368,7 @@ test('markRead with out-of-range index throws DomainError', async () => {
   await uc.send({ from: 'kiri', to: 'noir', text: 'one' });
 
   await assert.rejects(
-    () => uc.markRead('noir', 5),
+    () => uc.markRead('noir', undefined, 5),
     (e: unknown) => {
       assert.ok(e instanceof DomainError);
       assert.match(e.message, /out of range/);
@@ -380,6 +386,32 @@ test('markRead for empty inbox returns zeros without error', async () => {
   assert.equal(result.marked, 0);
   assert.equal(result.alreadyRead, 0);
   assert.equal(result.total, 0);
+});
+
+test('markRead defaults read_by to the inbox owner (self-read)', async () => {
+  const { uc, members, notifier } = build();
+  members.add('kiri');
+  members.add('noir');
+  await uc.send({ from: 'kiri', to: 'noir', text: 'one' });
+  await uc.markRead('noir');
+  const msgs = await uc.inbox('noir');
+  assert.equal(msgs[0]!.readBy, 'noir');
+  void notifier;
+});
+
+test('markRead records read_by when a different actor reads on behalf', async () => {
+  // The audit trail must distinguish "sentinel acknowledged this"
+  // from "eris ran mark-read --for sentinel". Without read_by the
+  // two cases are indistinguishable in YAML.
+  const { uc, members } = build();
+  members.add('eris');
+  members.add('sentinel');
+  members.add('noir');
+  await uc.send({ from: 'noir', to: 'sentinel', text: 'hello' });
+  await uc.markRead('sentinel', 'eris');
+  const msgs = await uc.inbox('sentinel');
+  assert.equal(msgs[0]!.read, true);
+  assert.equal(msgs[0]!.readBy, 'eris');
 });
 
 test('markRead for host name raises the inbox-owner error', async () => {

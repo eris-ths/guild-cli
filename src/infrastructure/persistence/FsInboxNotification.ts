@@ -64,6 +64,7 @@ export class FsInboxNotification implements NotificationPort {
   async markRead(
     member: MemberName,
     readAt: string,
+    readBy: string,
     index?: number,
   ): Promise<MarkReadResult> {
     const rel = `${member.value}.yaml`;
@@ -103,6 +104,11 @@ export class FsInboxNotification implements NotificationPort {
       // receipt" from "read three days later". The post timestamp
       // (at) is preserved untouched.
       entry['read_at'] = readAt;
+      // read_by records who actually ran the mark — usually the inbox
+      // owner, but may differ when `--for <other>` is used. Without
+      // this, an eris-as-sentinel mark-read is indistinguishable from
+      // a real sentinel acknowledgment.
+      entry['read_by'] = readBy;
       marked++;
     }
 
@@ -124,6 +130,7 @@ function normalizeMessage(raw: Record<string, unknown>): InboxMessage {
     read: raw['read'] === true,
   };
   if (typeof raw['read_at'] === 'string') msg.readAt = raw['read_at'];
+  if (typeof raw['read_by'] === 'string') msg.readBy = raw['read_by'];
   if (typeof raw['related'] === 'string') msg.related = raw['related'];
   return msg;
 }

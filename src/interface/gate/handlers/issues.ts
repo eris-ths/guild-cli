@@ -3,12 +3,15 @@ import {
   requireOption,
   optionalOption,
 } from '../../shared/parseArgs.js';
-import { C, truncateCodePoints } from './internal.js';
+import { C, readStdin, truncateCodePoints } from './internal.js';
 
 export async function issuesCmd(c: C, args: ParsedArgs): Promise<number> {
   const sub = args.positional[0];
   if (sub === 'promote') {
     return await issuesPromote(c, args);
+  }
+  if (sub === 'note') {
+    return await issuesNote(c, args);
   }
   if (sub === 'add') {
     const from = requireOption(args, 'from', '--from required', 'GUILD_ACTOR');
@@ -28,6 +31,12 @@ export async function issuesCmd(c: C, args: ParsedArgs): Promise<number> {
       process.stdout.write(
         `${j['id']} [${j['severity']}/${j['area']}] ${j['state']} — ${j['text']}\n`,
       );
+      const notes = Array.isArray(j['notes']) ? j['notes'] : [];
+      for (const n of notes as Array<Record<string, unknown>>) {
+        process.stdout.write(
+          `  └ note by ${n['by']} at ${n['at']}: ${n['text']}\n`,
+        );
+      }
     }
     return 0;
   }
@@ -103,6 +112,46 @@ async function issuesPromote(c: C, args: ParsedArgs): Promise<number> {
   }
   process.stdout.write(
     `✓ promoted ${id} → ${req.id.value} (issue resolved)\n`,
+  );
+  return 0;
+}
+
+async function issuesNote(c: C, args: ParsedArgs): Promise<number> {
+  // Issues are otherwise immutable by design: the original severity /
+  // area / text freeze the first-frame record. A `note` is the
+  // escape hatch for revised understanding — "severity should be med
+  // in hindsight", "actually not reproducible on macOS", "see i-...
+  // for the follow-up". Append-only, no edit, no delete.
+  const id = args.positional[1];
+  if (!id) {
+    throw new Error(
+      'Usage: gate issues note <id> --by <m> [--text <s> | --text - | <text>]',
+    );
+  }
+  const by = requireOption(args, 'by', '--by required', 'GUILD_ACTOR');
+  // Text resolution mirrors `gate review --comment`:
+  //   --text <s>       inline short note
+  //   --text -         STDIN until EOF
+  //   <positional>     everything after the id
+  const textOpt = optionalOption(args, 'text');
+  const positional = args.positional.slice(2).join(' ');
+  let text: string;
+  if (textOpt === '-') {
+    text = (await readStdin()).trim();
+  } else if (textOpt !== undefined) {
+    text = textOpt;
+  } else {
+    text = positional;
+  }
+  if (!text.trim()) {
+    throw new Error(
+      'note text is required (use --text <s>, --text - for STDIN, ' +
+        'or pass as positional argument)',
+    );
+  }
+  const { note } = await c.issueUC.addNote({ id, by, text });
+  process.stdout.write(
+    `✓ note added to ${id} by ${note.by} at ${note.at}\n`,
   );
   return 0;
 }
