@@ -5,7 +5,7 @@ import {
 } from '../../shared/parseArgs.js';
 import { Request } from '../../../domain/request/Request.js';
 import { formatDelta } from '../voices.js';
-import { C, readStdin } from './internal.js';
+import { C, readStdin, resolveInvokedBy } from './internal.js';
 import { emitWriteResponse, parseFormat } from './writeFormat.js';
 
 export async function reqCreate(c: C, args: ParsedArgs): Promise<number> {
@@ -170,8 +170,11 @@ function formatRequestText(r: Request): string {
       const at = String(entry['at']);
       const note = entry['note'] ? ` — ${entry['note']}` : '';
       const delta = prevAt ? ` (${formatDelta(prevAt, at)})` : '';
+      const invokedBy = entry['invoked_by']
+        ? ` [invoked_by=${entry['invoked_by']}]`
+        : '';
       lines.push(
-        `    ${at}  ${entry['state']}  by ${entry['by']}${delta}${note}`,
+        `    ${at}  ${entry['state']}  by ${entry['by']}${invokedBy}${delta}${note}`,
       );
       prevAt = at;
     }
@@ -189,8 +192,11 @@ function formatRequestText(r: Request): string {
     for (const rv of reviews as Array<Record<string, unknown>>) {
       const at = String(rv['at']);
       const delta = prevAt ? ` (${formatDelta(prevAt, at)})` : '';
+      const invokedBy = rv['invoked_by']
+        ? ` [invoked_by=${rv['invoked_by']}]`
+        : '';
       lines.push(
-        `    [${rv['lense']}/${rv['verdict']}] by ${rv['by']} at ${at}${delta}`,
+        `    [${rv['lense']}/${rv['verdict']}] by ${rv['by']}${invokedBy} at ${at}${delta}`,
       );
       const comment = String(rv['comment'] ?? '');
       for (const line of comment.split('\n')) {
@@ -207,7 +213,8 @@ export async function reqApprove(c: C, args: ParsedArgs): Promise<number> {
   if (!id) throw new Error('Usage: gate approve <id> --by <m>');
   const by = requireOption(args, 'by', '--by required', 'GUILD_ACTOR');
   const note = optionalOption(args, 'note');
-  const r = await c.requestUC.approve(id, by, note);
+  const invokedBy = resolveInvokedBy(by, 'approve', id);
+  const r = await c.requestUC.approve(id, by, note, invokedBy);
   emitWriteResponse(parseFormat(args), r, `✓ approved: ${id}`, c.config);
   return 0;
 }
@@ -221,7 +228,8 @@ export async function reqDeny(c: C, args: ParsedArgs): Promise<number> {
     );
   }
   const by = requireOption(args, 'by', '--by required', 'GUILD_ACTOR');
-  const r = await c.requestUC.deny(id, by, reason);
+  const invokedBy = resolveInvokedBy(by, 'deny', id);
+  const r = await c.requestUC.deny(id, by, reason, invokedBy);
   emitWriteResponse(parseFormat(args), r, `✓ denied: ${id}`, c.config);
   return 0;
 }
@@ -231,7 +239,8 @@ export async function reqExecute(c: C, args: ParsedArgs): Promise<number> {
   if (!id) throw new Error('Usage: gate execute <id> --by <m>');
   const by = requireOption(args, 'by', '--by required', 'GUILD_ACTOR');
   const note = optionalOption(args, 'note');
-  const r = await c.requestUC.execute(id, by, note);
+  const invokedBy = resolveInvokedBy(by, 'execute', id);
+  const r = await c.requestUC.execute(id, by, note, invokedBy);
   emitWriteResponse(parseFormat(args), r, `✓ executing: ${id}`, c.config);
   return 0;
 }
@@ -241,7 +250,8 @@ export async function reqComplete(c: C, args: ParsedArgs): Promise<number> {
   if (!id) throw new Error('Usage: gate complete <id> --by <m>');
   const by = requireOption(args, 'by', '--by required', 'GUILD_ACTOR');
   const note = optionalOption(args, 'note');
-  const r = await c.requestUC.complete(id, by, note);
+  const invokedBy = resolveInvokedBy(by, 'complete', id);
+  const r = await c.requestUC.complete(id, by, note, invokedBy);
   const extraLines: string[] = [];
   if (r.autoReview) {
     const reviewer = r.autoReview.value;
@@ -264,7 +274,8 @@ export async function reqFail(c: C, args: ParsedArgs): Promise<number> {
     );
   }
   const by = requireOption(args, 'by', '--by required', 'GUILD_ACTOR');
-  const r = await c.requestUC.fail(id, by, reason);
+  const invokedBy = resolveInvokedBy(by, 'fail', id);
+  const r = await c.requestUC.fail(id, by, reason, invokedBy);
   emitWriteResponse(parseFormat(args), r, `✓ failed: ${id}`, c.config);
   return 0;
 }
@@ -321,9 +332,21 @@ export async function reqFastTrack(c: C, args: ParsedArgs): Promise<number> {
   const created = await c.requestUC.create(createInput);
   const id = created.id.value;
 
-  await c.requestUC.approve(id, from, 'fast-track: self-approved');
-  await c.requestUC.execute(id, executor, 'fast-track: self-executed');
-  const completed = await c.requestUC.complete(id, executor, note);
+  // Fast-track is one user-facing command even though it executes
+  // three transitions. Resolve the invoker once (which also prints
+  // the delegation notice exactly once) and pass it to each step.
+  const invokedByFrom = resolveInvokedBy(from, 'fast-track', id);
+  // `executor` may legitimately differ from `from`; when it does we
+  // don't emit a second notice here — the env actor vs executor
+  // mismatch is the same delegation already surfaced above.
+  const envActor = process.env['GUILD_ACTOR'];
+  const invokedByExec =
+    envActor && envActor.length > 0 && envActor !== executor
+      ? envActor
+      : undefined;
+  await c.requestUC.approve(id, from, 'fast-track: self-approved', invokedByFrom);
+  await c.requestUC.execute(id, executor, 'fast-track: self-executed', invokedByExec);
+  const completed = await c.requestUC.complete(id, executor, note, invokedByExec);
 
   const extraLines: string[] = [];
   if (completed.autoReview) {

@@ -17,6 +17,16 @@ export interface StatusLogEntry {
   by: string;
   at: string;
   note?: string;
+  /**
+   * Actual invoker when different from `by`. Mirrors inbox.read_by:
+   * `by` is to whom the act is attributed (the member on record);
+   * `invoked_by` is who actually ran the CLI command. Typically this
+   * is the AI agent proxying for a human operator — without the
+   * field, "eris approved" and "an AI approved on eris's behalf"
+   * are indistinguishable in YAML. Undefined when the two agree
+   * (the common case, so existing records stay byte-identical).
+   */
+  invokedBy?: string;
 }
 
 export interface RequestProps {
@@ -176,24 +186,24 @@ export class Request {
     return computeVersion(this.props.statusLog.length, this.props.reviews.length);
   }
 
-  approve(by: MemberName, note?: string): void {
-    this.transition('approved', by, note);
+  approve(by: MemberName, note?: string, invokedBy?: string): void {
+    this.transition('approved', by, note, invokedBy);
   }
 
-  deny(by: MemberName, reason: string): void {
-    this.transition('denied', by, reason);
+  deny(by: MemberName, reason: string, invokedBy?: string): void {
+    this.transition('denied', by, reason, invokedBy);
   }
 
-  execute(by: MemberName, note?: string): void {
-    this.transition('executing', by, note);
+  execute(by: MemberName, note?: string, invokedBy?: string): void {
+    this.transition('executing', by, note, invokedBy);
   }
 
-  complete(by: MemberName, note?: string): void {
-    this.transition('completed', by, note);
+  complete(by: MemberName, note?: string, invokedBy?: string): void {
+    this.transition('completed', by, note, invokedBy);
   }
 
-  fail(by: MemberName, reason: string): void {
-    this.transition('failed', by, reason);
+  fail(by: MemberName, reason: string, invokedBy?: string): void {
+    this.transition('failed', by, reason, invokedBy);
   }
 
   addReview(review: Review): void {
@@ -207,6 +217,7 @@ export class Request {
     to: RequestState,
     by: MemberName,
     note?: string,
+    invokedBy?: string,
   ): void {
     assertTransition(this.props.state, to);
     this.props.state = to;
@@ -224,6 +235,12 @@ export class Request {
     if (note !== undefined) {
       entry.note = sanitizeText(note, 'note');
     }
+    // Only stamp `invoked_by` when it genuinely differs from `by` —
+    // a same-actor invocation is the common case and would just clutter
+    // YAML with redundant fields.
+    if (invokedBy !== undefined && invokedBy !== by.value) {
+      entry.invokedBy = invokedBy;
+    }
     this.props.statusLog.push(entry);
   }
 
@@ -235,7 +252,7 @@ export class Request {
       reason: this.props.reason,
       state: this.props.state,
       created_at: this.props.createdAt,
-      status_log: this.props.statusLog,
+      status_log: this.props.statusLog.map((e) => statusLogEntryToJSON(e)),
       reviews: this.props.reviews.map((r) => r.toJSON()),
     };
     if (this.props.executor) out['executor'] = this.props.executor.value;
@@ -255,6 +272,21 @@ export class Request {
     }
     return out;
   }
+}
+
+// Serialize a status_log entry with the wire-level field names
+// (snake_case). The camelCase `invokedBy` lives in memory only so
+// consumers reading YAML / JSON see `invoked_by` consistently with
+// `read_by` on inbox entries.
+function statusLogEntryToJSON(e: StatusLogEntry): Record<string, unknown> {
+  const out: Record<string, unknown> = {
+    state: e.state,
+    by: e.by,
+    at: e.at,
+  };
+  if (e.note !== undefined) out['note'] = e.note;
+  if (e.invokedBy !== undefined) out['invoked_by'] = e.invokedBy;
+  return out;
 }
 
 /**
