@@ -305,3 +305,79 @@ test('Request.toJSON: closure-note derivation is single-sourced from status_log'
   });
   assert.equal(r.toJSON()['completion_note'], 'log-wins');
 });
+
+// ── invoked_by: agent proxy vs on-record actor ──
+
+test('Request.approve stamps invoked_by when it differs from by', () => {
+  const r = mkReq();
+  r.approve(MemberName.of('alice'), 'ok', 'claude');
+  const log = r.toJSON()['status_log'] as Array<Record<string, unknown>>;
+  const last = log[log.length - 1]!;
+  assert.equal(last['by'], 'alice');
+  assert.equal(last['invoked_by'], 'claude');
+});
+
+test('Request.approve omits invoked_by when it equals by (no clutter)', () => {
+  const r = mkReq();
+  r.approve(MemberName.of('alice'), 'ok', 'alice');
+  const log = r.toJSON()['status_log'] as Array<Record<string, unknown>>;
+  const last = log[log.length - 1]!;
+  assert.equal(last['by'], 'alice');
+  assert.equal('invoked_by' in last, false);
+});
+
+test('Request.approve without invokedBy emits no invoked_by key', () => {
+  const r = mkReq();
+  r.approve(MemberName.of('alice'), 'ok');
+  const log = r.toJSON()['status_log'] as Array<Record<string, unknown>>;
+  const last = log[log.length - 1]!;
+  assert.equal('invoked_by' in last, false);
+});
+
+test('Review.create stamps invoked_by when it differs from by', () => {
+  const review = Review.create({
+    by: 'alice',
+    lense: 'devil',
+    verdict: 'ok',
+    comment: 'looks fine',
+    invokedBy: 'claude',
+  });
+  const j = review.toJSON();
+  assert.equal(j['by'], 'alice');
+  assert.equal(j['invoked_by'], 'claude');
+});
+
+test('Review.create omits invoked_by when it equals by', () => {
+  const review = Review.create({
+    by: 'alice',
+    lense: 'devil',
+    verdict: 'ok',
+    comment: 'looks fine',
+    invokedBy: 'alice',
+  });
+  const j = review.toJSON();
+  assert.equal('invoked_by' in j, false);
+});
+
+test('Request restore preserves invoked_by round-trip', () => {
+  const r = Request.restore({
+    id: RequestId.generate(d, 1),
+    from: MemberName.of('alice'),
+    action: 'a',
+    reason: 'r',
+    state: 'approved',
+    createdAt: '2026-04-14T00:00:00.000Z',
+    statusLog: [
+      { state: 'pending', by: 'alice', at: '2026-04-14T00:00:00.000Z' },
+      {
+        state: 'approved',
+        by: 'alice',
+        at: '2026-04-14T00:00:01.000Z',
+        invokedBy: 'claude',
+      },
+    ],
+    reviews: [],
+  });
+  const log = r.toJSON()['status_log'] as Array<Record<string, unknown>>;
+  assert.equal(log[1]!['invoked_by'], 'claude');
+});

@@ -48,6 +48,32 @@ export async function readStdin(): Promise<string> {
   return Buffer.concat(chunks).toString('utf8');
 }
 
+/**
+ * Return the value of GUILD_ACTOR when it differs from `by`, and also
+ * print a one-line delegation notice to stderr. Returns undefined
+ * when the two match (the common self-invocation case) — callers
+ * should pass that straight through to the use case, which in turn
+ * only stamps `invoked_by` on the status_log entry when it's set.
+ *
+ * Mirrors the inbox `read_by` pattern: `by` is who the act is
+ * attributed to, GUILD_ACTOR is who actually ran the CLI command,
+ * and the trail keeps both honest when they disagree.
+ */
+export function resolveInvokedBy(
+  by: string,
+  verb: string,
+  id: string,
+): string | undefined {
+  const envActor = process.env['GUILD_ACTOR'];
+  if (!envActor || envActor.length === 0) return undefined;
+  if (envActor === by) return undefined;
+  process.stderr.write(
+    `# ${verb} ${id}: invoked by ${envActor} on behalf of ${by} ` +
+      `(invoked_by recorded as ${envActor})\n`,
+  );
+  return envActor;
+}
+
 // --- Editor fallback for long-form review comments ---------------------
 //
 // When `gate review` is called without --comment / positional / STDIN

@@ -11,6 +11,8 @@ export interface ReviewProps {
   verdict: Verdict;
   comment: string;
   at: string;
+  /** See StatusLogEntry.invokedBy — same semantics here. */
+  invokedBy?: string;
 }
 
 export class Review {
@@ -22,6 +24,7 @@ export class Review {
     verdict: string;
     comment: string;
     at?: string;
+    invokedBy?: string;
     allowedLenses?: readonly string[];
   }): Review {
     const by = MemberName.of(input.by);
@@ -29,7 +32,11 @@ export class Review {
     const verdict = parseVerdict(input.verdict);
     const comment = sanitizeComment(input.comment);
     const at = input.at ?? new Date().toISOString();
-    return new Review({ by, lense, verdict, comment, at });
+    const props: ReviewProps = { by, lense, verdict, comment, at };
+    if (input.invokedBy !== undefined && input.invokedBy !== by.value) {
+      props.invokedBy = input.invokedBy;
+    }
+    return new Review(props);
   }
 
   get by(): MemberName {
@@ -48,14 +55,22 @@ export class Review {
     return this.props.at;
   }
 
+  get invokedBy(): string | undefined {
+    return this.props.invokedBy;
+  }
+
   toJSON(): Record<string, unknown> {
-    return {
+    const out: Record<string, unknown> = {
       by: this.props.by.value,
       lense: this.props.lense,
       verdict: this.props.verdict,
       comment: this.props.comment,
       at: this.props.at,
     };
+    if (this.props.invokedBy !== undefined) {
+      out['invoked_by'] = this.props.invokedBy;
+    }
+    return out;
   }
 }
 

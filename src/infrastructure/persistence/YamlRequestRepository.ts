@@ -270,6 +270,8 @@ function hydrate(
           comment: String(ro['comment'] ?? ''),
         };
         if (typeof ro['at'] === 'string') rc.at = ro['at'] as string;
+        if (typeof ro['invoked_by'] === 'string')
+          rc.invokedBy = ro['invoked_by'] as string;
         // Hydrate with config lenses so custom lenses in saved data are accepted
         if (allowedLenses) rc.allowedLenses = allowedLenses;
         reviews.push(Review.create(rc));
@@ -293,6 +295,8 @@ function hydrate(
           at: String(so['at'] ?? new Date().toISOString()),
         };
         if (typeof so['note'] === 'string') entry.note = so['note'] as string;
+        if (typeof so['invoked_by'] === 'string')
+          entry.invokedBy = so['invoked_by'] as string;
         statusLog.push(entry);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);

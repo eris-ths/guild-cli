@@ -8,6 +8,20 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 ## [Unreleased]
 
 ### Added
+- **`invoked_by` on status_log and reviews.** When `GUILD_ACTOR`
+  differs from the explicit `--by` (an AI agent acting on a
+  human's behalf), write verbs (`approve` / `deny` / `execute` /
+  `complete` / `fail` / `review` / `fast-track`) record
+  `invoked_by: <GUILD_ACTOR>` on the status_log entry (or review)
+  and print a one-line delegation notice to stderr. The on-record
+  actor (`by`) still wins for attribution; `invoked_by` preserves
+  the delegation so "eris approved" and "an AI approved on eris's
+  behalf" stop being indistinguishable in YAML. Same pattern as
+  inbox `read_by`. Omitted when `by` and the invoker agree (no
+  YAML clutter for the self-invocation common case). `gate show
+  --format text` renders `[invoked_by=<actor>]` inline on the
+  matching log entry or review header.
+
 - **`gate issues note <id>`.** Append-only annotation for existing
   issues. The original `severity` / `area` / `text` stay immutable
   by design (Two-Persona Devil: the first-frame record is preserved,

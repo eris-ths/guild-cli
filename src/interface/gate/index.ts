@@ -104,6 +104,14 @@ Environment:
                        (export it in your shell profile or direnv).
                        Automations should continue to pass --from / --by
                        explicitly.
+                       When GUILD_ACTOR differs from the explicit --by
+                       (e.g. an AI agent acting for a human), write
+                       verbs record invoked_by=<GUILD_ACTOR> on the
+                       status_log entry (or review) and print a
+                       one-line delegation notice to stderr. The on-
+                       record actor (--by) still wins for attribution;
+                       invoked_by preserves the delegation for audits.
+                       Same pattern as inbox read_by.
 
 Diagnostic / Repair:
   gate doctor [--summary | --format json]
