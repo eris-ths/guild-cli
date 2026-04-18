@@ -7,6 +7,29 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 
 ## [Unreleased]
 
+### Changed
+- **`invoked_by` surfaces on authored utterances in `gate voices` /
+  `gate tail` / `gate resume`.** #43 stamped the creator's invoker
+  onto `status_log[0]`, but the read paths for authored utterances
+  (vs review utterances, handled in #41) still hid it. The gap
+  surfaced by dogfooding: `GUILD_ACTOR=claude gate request --from eris`
+  showed up on `gate show` but vanished on `gate voices eris` and
+  in resume's "Your last voice was authoring req=X" prose. Now:
+  - `gate voices` / `gate tail` render `[invoked_by=<actor>]` on
+    the authored header (same shape as the review branch);
+  - `gate resume` prose (en + ja) appends `(invoked by <actor>)` /
+    `（<actor> が代行）`;
+  - `AuthoredUtterance` gains an optional `invokedBy`, lifted from
+    `status_log[0].invoked_by` at collection time;
+  - `RequestJSON` gains an optional `status_log` projection so
+    voices can read it without pulling in the full domain object.
+  Same-actor creation is untouched.
+- **`gate show --format text` pads the state column in `status_log`.**
+  Ragged widths (`pending` 7ch vs `executing` 9ch) made the `by X`
+  column shift per row. Padded per-render to the max state length
+  in *this* log, so logs that never reached executing/completed
+  stay compact.
+
 ### Added
 - **`invoked_by` extended to every proxy-eligible write verb.** Previously
   scoped to the five transitions + `review` + `fast-track` (#39). Dogfooding
