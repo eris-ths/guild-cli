@@ -85,7 +85,8 @@ Requests:
                   [--with <n1>[,<n2>...]]
 
 Issues:
-  gate issues add --from <m> --severity <s> --area <a> <text>
+  gate issues add --from <m> --severity <s> --area <a>
+                  [--text <s> | --text - | <text>]
   gate issues list [--state <s>]
   gate issues resolve|defer|start|reopen <id>
   gate issues note <id> --by <m> [--text <s> | --text - | <text>]
@@ -93,8 +94,8 @@ Issues:
                                       [--action <a>] [--reason <r>]
 
 Messages:
-  gate message --from <m> --to <m> --text <s>
-  gate broadcast --from <m> --text <s>
+  gate message --from <m> --to <m> [--text <s> | --text -]
+  gate broadcast --from <m> [--text <s> | --text -]
   gate inbox --for <m> [--unread]
   gate inbox mark-read [N] [--for <m>]
 

@@ -24,8 +24,39 @@ export async function issuesCmd(c: C, args: ParsedArgs): Promise<number> {
     const from = requireOption(args, 'from', '--from required', 'GUILD_ACTOR');
     const severity = requireOption(args, 'severity', '--severity required');
     const area = requireOption(args, 'area', '--area required');
-    const text = args.positional.slice(1).join(' ');
-    if (!text) throw new Error('Usage: gate issues add ... <text>');
+    // Text resolution mirrors `gate issues note`:
+    //   --text <s>       inline short text
+    //   --text -         STDIN until EOF
+    //   <positional>     everything after `add` (legacy / short form)
+    // Before this, `issues add` accepted only the positional form
+    // while `issues note` had all three — asymmetry that users hit
+    // as soon as they reached for the muscle-memory they'd just built.
+    const textOpt = optionalOption(args, 'text');
+    const positional = args.positional.slice(1).join(' ');
+    let text: string;
+    if (textOpt === '-') {
+      text = (await readStdin()).trim();
+    } else if (textOpt !== undefined) {
+      text = textOpt;
+    } else {
+      text = positional;
+    }
+    if (!text.trim()) {
+      // If args.options.text landed as boolean, the user did pass
+      // --text but with a value that began with "--" and the parser
+      // refused it. Point at the POSIX escape valves, same hint shape
+      // as `gate issues note`.
+      const hint =
+        args.options['text'] === true
+          ? '\n  (Your --text value began with "--" and was not consumed. ' +
+            'Use --text=<value> or put "-- <value>" after the other flags.)'
+          : '';
+      throw new Error(
+        'Usage: gate issues add --from <m> --severity <s> --area <a> ' +
+          '[--text <s> | --text - | <text>]' +
+          hint,
+      );
+    }
     // Proxy creation: derive pre-save (id unknown), emit notice after
     // the issue is allocated. Same pattern as gate request.
     const invokedBy = deriveInvokedBy(from);
