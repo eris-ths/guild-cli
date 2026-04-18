@@ -158,6 +158,27 @@ function sanitizeText(raw: unknown, field: string): string {
   return cleaned;
 }
 
+/**
+ * An append-only annotation on an existing issue. Notes exist because
+ * the original `text`, `severity`, and `area` fields are immutable by
+ * design (Two-Persona Devil: the earlier frame of the problem is
+ * preserved, not overwritten). But the *understanding* of an issue
+ * evolves — severity re-evaluations, cross-references to related
+ * issues, a "I tried this and it didn't repro" follow-up. Without a
+ * notes mechanism those updates have to spawn a whole new issue that
+ * references the old one, which is heavy and fragments the audit
+ * trail.
+ *
+ * Notes are strictly additive: the tool exposes no edit or delete.
+ */
+export interface IssueNote {
+  by: string;
+  text: string;
+  at: string;
+}
+
+const MAX_NOTES = 50;
+
 export interface IssueProps {
   id: IssueId;
   from: MemberName;
@@ -166,6 +187,8 @@ export interface IssueProps {
   text: string;
   state: IssueState;
   createdAt: string;
+  /** Optional — historical YAML pre-dates notes; restore backfills []. */
+  notes?: IssueNote[];
 }
 
 export class Issue {
@@ -187,6 +210,7 @@ export class Issue {
       text: sanitizeText(input.text, 'text'),
       state: 'open',
       createdAt: input.createdAt ?? new Date().toISOString(),
+      notes: [],
     });
   }
 
@@ -198,7 +222,9 @@ export class Issue {
    * state, the operator must fix the YAML by hand.
    */
   static restore(props: IssueProps): Issue {
-    return new Issue({ ...props });
+    // Older on-disk issues have no `notes` array. Treat missing as
+    // empty so hydration of historical YAML keeps working.
+    return new Issue({ ...props, notes: props.notes ?? [] });
   }
 
   get id(): IssueId {
@@ -219,8 +245,31 @@ export class Issue {
     this.props.state = next;
   }
 
+  get notes(): readonly IssueNote[] {
+    return this.props.notes ?? [];
+  }
+
+  addNote(by: string, text: string, at?: string): IssueNote {
+    // `notes` is optional on IssueProps so historical YAML can restore
+    // without an explicit empty array; lazily initialize on first add.
+    if (!this.props.notes) this.props.notes = [];
+    if (this.props.notes.length >= MAX_NOTES) {
+      throw new DomainError(
+        `Too many notes on ${this.props.id.value} (max ${MAX_NOTES})`,
+        'notes',
+      );
+    }
+    const note: IssueNote = {
+      by: MemberName.of(by).value,
+      text: sanitizeText(text, 'note'),
+      at: at ?? new Date().toISOString(),
+    };
+    this.props.notes.push(note);
+    return note;
+  }
+
   toJSON(): Record<string, unknown> {
-    return {
+    const out: Record<string, unknown> = {
       id: this.props.id.value,
       from: this.props.from.value,
       severity: this.props.severity,
@@ -229,5 +278,12 @@ export class Issue {
       state: this.props.state,
       created_at: this.props.createdAt,
     };
+    // Backward compat: omit the `notes` key when empty so pre-notes
+    // YAML stays byte-identical after a round-trip through restore/save.
+    const notes = this.props.notes;
+    if (notes && notes.length > 0) {
+      out['notes'] = notes.map((n) => ({ ...n }));
+    }
+    return out;
   }
 }

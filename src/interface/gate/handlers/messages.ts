@@ -76,7 +76,9 @@ export async function msgInbox(c: C, args: ParsedArgs): Promise<number> {
     const related = m.related ? ` (ref: ${m.related})` : '';
     const readTag = m.read
       ? m.readAt
-        ? ` (read ${m.readAt})`
+        ? m.readBy && m.readBy !== forName
+          ? ` (read ${m.readAt} by ${m.readBy})`
+          : ` (read ${m.readAt})`
         : ' (read)'
       : ' (unread)';
     process.stdout.write(
@@ -104,7 +106,21 @@ async function msgInboxMarkRead(c: C, args: ParsedArgs): Promise<number> {
     index = parsed;
   }
 
-  const result = await c.messageUC.markRead(forName, index);
+  // The actor that ran the command (GUILD_ACTOR), which can legitimately
+  // differ from the inbox owner when `--for <other>` is used. We pass
+  // both so the audit trail records "who read for whom". Fall back to
+  // the inbox owner when GUILD_ACTOR is unset — same-actor self-reader
+  // is the common case, and stamping `read_by: <owner>` is correct.
+  const envActor = process.env['GUILD_ACTOR'];
+  const by = envActor && envActor.length > 0 ? envActor : forName;
+  const result = await c.messageUC.markRead(forName, by, index);
+  if (by !== forName) {
+    // Surface the delegation so the operator sees that the trail will
+    // say "by=<actor> for=<owner>" rather than a plain self-read.
+    process.stderr.write(
+      `# mark-read by ${by} on behalf of ${forName} (read_by recorded as ${by})\n`,
+    );
+  }
   if (result.total === 0) {
     process.stdout.write(`(inbox empty for ${forName})\n`);
     return 0;

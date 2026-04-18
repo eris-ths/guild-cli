@@ -5,7 +5,7 @@ import {
 } from '../../shared/parseArgs.js';
 import { Request } from '../../../domain/request/Request.js';
 import { formatDelta } from '../voices.js';
-import { C } from './internal.js';
+import { C, readStdin } from './internal.js';
 import { emitWriteResponse, parseFormat } from './writeFormat.js';
 
 export async function reqCreate(c: C, args: ParsedArgs): Promise<number> {
@@ -16,7 +16,11 @@ export async function reqCreate(c: C, args: ParsedArgs): Promise<number> {
     'GUILD_ACTOR',
   );
   const action = requireOption(args, 'action', '--action required');
-  const reason = requireOption(args, 'reason', '--reason required');
+  let reason = requireOption(args, 'reason', '--reason required');
+  // `--reason -` reads from stdin — parity with `gate review --comment -`.
+  // Trim because heredoc / echo append a trailing newline that clutters
+  // the rendered status_log note.
+  if (reason === '-') reason = (await readStdin()).trim();
   const input: Parameters<typeof c.requestUC.create>[0] = {
     from,
     action,
@@ -210,7 +214,7 @@ export async function reqApprove(c: C, args: ParsedArgs): Promise<number> {
 
 export async function reqDeny(c: C, args: ParsedArgs): Promise<number> {
   const id = args.positional[0];
-  const reason = resolveReason(args, 'deny');
+  const reason = await resolveReason(args, 'deny');
   if (!id || !reason) {
     throw new Error(
       'Usage: gate deny <id> --by <m> [--note <s> | --reason <s> | <reason>]',
@@ -253,7 +257,7 @@ export async function reqComplete(c: C, args: ParsedArgs): Promise<number> {
 
 export async function reqFail(c: C, args: ParsedArgs): Promise<number> {
   const id = args.positional[0];
-  const reason = resolveReason(args, 'fail');
+  const reason = await resolveReason(args, 'fail');
   if (!id || !reason) {
     throw new Error(
       'Usage: gate fail <id> --by <m> [--note <s> | --reason <s> | <reason>]',
@@ -281,13 +285,17 @@ function parseWithList(raw: string | undefined): string[] {
 
 // Resolve the closure reason for deny/fail accepting any of:
 //   --reason <s>    explicit & semantically precise
+//   --reason -      STDIN (parity with `gate review --comment -`)
 //   --note <s>      muscle-memory parity with approve/execute/complete
+//   --note -        STDIN
 //   <positional>    legacy form retained for back-compat
 // Explicit options take precedence over positional.
-function resolveReason(args: ParsedArgs, _verb: string): string {
+async function resolveReason(args: ParsedArgs, _verb: string): Promise<string> {
   const reasonOpt = optionalOption(args, 'reason');
   const noteOpt = optionalOption(args, 'note');
+  if (reasonOpt === '-') return (await readStdin()).trim();
   if (reasonOpt !== undefined && reasonOpt.trim()) return reasonOpt;
+  if (noteOpt === '-') return (await readStdin()).trim();
   if (noteOpt !== undefined && noteOpt.trim()) return noteOpt;
   return args.positional.slice(1).join(' ');
 }
@@ -295,7 +303,8 @@ function resolveReason(args: ParsedArgs, _verb: string): string {
 export async function reqFastTrack(c: C, args: ParsedArgs): Promise<number> {
   const from = requireOption(args, 'from', '--from required', 'GUILD_ACTOR');
   const action = requireOption(args, 'action', '--action required');
-  const reason = requireOption(args, 'reason', '--reason required');
+  let reason = requireOption(args, 'reason', '--reason required');
+  if (reason === '-') reason = (await readStdin()).trim();
   const executor = optionalOption(args, 'executor') ?? from;
   const autoReview = optionalOption(args, 'auto-review');
   const note = optionalOption(args, 'note');

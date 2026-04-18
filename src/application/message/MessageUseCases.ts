@@ -142,15 +142,23 @@ export class MessageUseCases {
    * trace that "I received this and acknowledged it". The --unread
    * filter on `gate inbox` depends on this verb existing to be
    * meaningful.
+   *
+   * `by` is the actor that ran the command — stored alongside
+   * `read_at` so audits can distinguish "sentinel read this" from
+   * "eris marked it read on sentinel's behalf". Defaults to the
+   * inbox owner when omitted (typical self-reader case).
    */
   async markRead(
     name: string,
+    by?: string,
     index?: number,
   ): Promise<MarkReadResult> {
     await this.assertInboxOwner(name);
+    const actor = by ?? name;
     return this.deps.notifier.markRead(
       MemberName.of(name),
       this.deps.clock.now().toISOString(),
+      actor,
       index,
     );
   }

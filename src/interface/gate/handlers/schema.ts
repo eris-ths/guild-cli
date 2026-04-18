@@ -206,11 +206,17 @@ const VERBS: readonly VerbSchema[] = [
   {
     name: 'list',
     category: 'read',
-    summary: 'filter requests by state + optional actor filters',
+    summary:
+      'filter requests by state + optional actor filters. Requires --state; for counts across every state use `status`.',
     input: {
       type: 'object',
       properties: {
-        state: { type: 'string', enum: ['pending', 'approved', 'executing', 'completed', 'failed', 'denied'] },
+        state: {
+          type: 'string',
+          enum: ['pending', 'approved', 'executing', 'completed', 'failed', 'denied'],
+          description:
+            'required. Contents of one state. `status` is the sibling verb that returns counts across every state.',
+        },
         for: str,
         from: str,
         executor: str,
@@ -379,11 +385,16 @@ const VERBS: readonly VerbSchema[] = [
   {
     name: 'issues',
     category: 'write',
-    summary: 'subcommands: add|list|resolve|defer|start|reopen|promote',
+    summary: 'subcommands: add|list|note|resolve|defer|start|reopen|promote',
     input: {
       type: 'object',
       properties: {
-        subcommand: { type: 'string', enum: ['add', 'list', 'resolve', 'defer', 'start', 'reopen', 'promote'] },
+        subcommand: {
+          type: 'string',
+          enum: ['add', 'list', 'note', 'resolve', 'defer', 'start', 'reopen', 'promote'],
+          description:
+            "`note` appends an annotation without mutating severity/area/text — the issue record is otherwise immutable.",
+        },
       },
     },
     output: { type: 'object' },

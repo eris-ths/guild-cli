@@ -48,6 +48,21 @@ export async function reqReview(c: C, args: ParsedArgs): Promise<number> {
   }
 
   const updated = await c.requestUC.review({ id, by, lense, verdict, comment });
+  // Self-review warning. The tool permits `--by` to equal the
+  // request author (the YAML is just an append-only record and
+  // doesn't know intent), but the Two-Persona Devil frame is
+  // undermined when the critic is the author. We surface a stderr
+  // marker rather than reject — history may need self-annotations
+  // (e.g. "I want to flag this myself") and the caller's own
+  // judgement wins. The warning exists so the choice is visible in
+  // the session transcript and not silently laundered into YAML.
+  if (updated.from.value === by) {
+    process.stderr.write(
+      `⚠ self-review: ${by} reviewed their own request ${id}. ` +
+        `The Two-Persona Devil frame expects a different voice — ` +
+        `consider asking another member to review instead.\n`,
+    );
+  }
   // Display the canonical verdict/lense (from the stored review)
   // rather than the raw input: the user may have typed an alias
   // (e.g. `--verdict concerned`, normalized to `concern` on save),

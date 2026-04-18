@@ -133,6 +133,48 @@ test('parseIssueSeverity rejects truly unknown values', () => {
   assert.throws(() => parseIssueSeverity(''), DomainError);
 });
 
+// ── addNote — append-only annotations ──
+
+test('Issue.addNote appends and does not mutate original text/severity', () => {
+  const i = mkIssue();
+  const note = i.addNote('eris', 'sev should probably be med, not low');
+  assert.equal(i.notes.length, 1);
+  assert.equal(note.by, 'eris');
+  assert.equal(i.notes[0]!.text, 'sev should probably be med, not low');
+  // Original fact-of-record stays untouched — the note is the
+  // revision mechanism, not an edit.
+  const j = i.toJSON();
+  assert.equal(j['severity'], 'med');
+  assert.equal(j['text'], 'something is broken');
+  assert.ok(Array.isArray(j['notes']));
+});
+
+test('Issue.addNote rejects empty text (domain sanitization)', () => {
+  const i = mkIssue();
+  assert.throws(() => i.addNote('eris', '   '), DomainError);
+});
+
+test('Issue.addNote preserves order across multiple calls', () => {
+  const i = mkIssue();
+  i.addNote('eris', 'first');
+  i.addNote('noir', 'second');
+  i.addNote('eris', 'third');
+  assert.deepEqual(
+    i.notes.map((n) => n.text),
+    ['first', 'second', 'third'],
+  );
+  assert.deepEqual(
+    i.notes.map((n) => n.by),
+    ['eris', 'noir', 'eris'],
+  );
+});
+
+test('Issue.toJSON omits `notes` when empty (backward-compat)', () => {
+  const i = mkIssue();
+  const j = i.toJSON();
+  assert.equal('notes' in j, false);
+});
+
 test('parseIssueSeverity error message lists canonical values + aliases', () => {
   // The error itself is the onboarding: a first-time user who typed
   // `medium` and got rejected should learn the canonical set and the
