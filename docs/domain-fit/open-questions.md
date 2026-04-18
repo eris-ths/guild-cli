@@ -197,6 +197,77 @@ specifically because of the mirror effect, not because of the
 deliberative-work features. Would reframe gate as a reflection
 tool that happens to also model deliberation.
 
+## Q6. Output schema coverage — do we fill out `show` / `chain` / other read verbs?
+
+**The tension**: `gate schema` enumerates **input** shapes
+(flag names, types, required-vs-optional) for every verb, but
+stops at `output: { type: 'object' }` for 9 of 27 verbs —
+including the two most LLM-valuable read paths, `show` and
+`chain`. A programmatic consumer building a tool wrapper has no
+way to know what fields come back from the payload; they have
+to read `Request.toJSON` (or `Issue.toJSON`) in the domain code
+to discover the shape. Legitimate gap.
+
+**Options explored**:
+
+- **A. Generate schemas from domain types.** zod / io-ts /
+  TypeScript-AST walk at build time. Truth locality collapses
+  to 1 source; zero drift. Cost: build and maintain a
+  generator, integrate with CI, pay the complexity surface.
+
+- **B. Hand-write output schemas, add CI smoke test.**
+  Enumerate fields in `schema.ts`; add a test asserting
+  `Object.keys(record.toJSON())` is a subset of the declared
+  schema properties. Catches "forgot to add on a new PR"
+  mismatches. Does NOT catch renames (a test can't know what
+  the old name used to be).
+
+- **C. Leave bare (current).** `output: { type: 'object' }`
+  stands. Consumers read domain code for the actual shape.
+  Zero maintenance cost. Zero drift risk (nothing to drift).
+
+- **D. Selective coverage (`show` + `chain` only).** Write
+  output schemas only for the two highest-value read paths;
+  leave others bare. Combines B's CI guardrail for the covered
+  subset with C's laziness for the rest.
+
+**Current lean**: **C for now, with a positive commitment to
+move to D when specific triggers fire.** Not a "don't do it"
+— an explicit "not yet". Reasons:
+
+1. guild-cli is in rapid iteration. 18 domain-touching PRs
+   landed in a single session; roughly a third added fields
+   that would have required a parallel `schema.ts` update
+   under B or D. The iteration velocity is itself load-bearing
+   for where the tool is in its lifecycle.
+
+2. "Hand-maintained" is a design stance (`schema.ts`
+   docstring): one source of truth per concern, legible by
+   hand. Output schemas would introduce a second source that
+   must stay in sync with `Request.toJSON` — violates the
+   stance for a benefit no current consumer has asked for.
+
+3. No concrete failure report. The gap is theoretical.
+   Deciding to absorb maintenance cost preemptively trades
+   real velocity for hypothetical benefit.
+
+**What would settle it** (triggers to revisit):
+
+- An MCP tool layer or external LLM wrapper actually consumes
+  `gate schema` and reports the missing output shapes as a
+  blocker (not a nice-to-have).
+- Domain field-addition frequency drops — stability phase
+  reached — making D's maintenance tax small.
+- A user building against gate programmatically files an
+  issue / PR saying "I couldn't figure out what fields `show`
+  returns without reading `Request.ts`."
+
+When any of the three fires, D is the right move (cover
+`show` + `chain` first, extend as asked). Until then, "read
+`Request.toJSON` for ground truth" is honest, lazy-in-the-good-
+way, and preserves the iteration speed that matters more at
+this stage.
+
 ---
 
 ## Adding a new question
