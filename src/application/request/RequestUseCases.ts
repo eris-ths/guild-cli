@@ -45,6 +45,7 @@ export class RequestUseCases {
     target?: string;
     autoReview?: string;
     with?: readonly string[];
+    invokedBy?: string;
   }): Promise<Request> {
     const { requests, members, clock } = this.deps;
     const from = await assertActor(input.from, '--from', members);
@@ -81,6 +82,7 @@ export class RequestUseCases {
       createArgs.autoReview = input.autoReview;
     if (input.with !== undefined && input.with.length > 0)
       createArgs.with = input.with;
+    if (input.invokedBy !== undefined) createArgs.invokedBy = input.invokedBy;
 
     for (let attempt = 0; attempt < 10; attempt++) {
       createArgs.id = RequestId.generate(now, seq);

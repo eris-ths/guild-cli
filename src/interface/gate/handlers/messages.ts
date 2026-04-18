@@ -3,19 +3,24 @@ import {
   requireOption,
   optionalOption,
 } from '../../shared/parseArgs.js';
-import { C } from './internal.js';
+import { C, deriveInvokedBy, emitInvokedByNotice } from './internal.js';
 
 export async function msgSend(c: C, args: ParsedArgs): Promise<number> {
   const from = requireOption(args, 'from', '--from required', 'GUILD_ACTOR');
   const to = requireOption(args, 'to', '--to required');
   const text = requireOption(args, 'text', '--text required');
   const type = optionalOption(args, 'type');
+  const invokedBy = deriveInvokedBy(from);
   await c.messageUC.send({
     from,
     to,
     text,
     ...(type !== undefined ? { type } : {}),
+    ...(invokedBy !== undefined ? { invokedBy } : {}),
   });
+  if (invokedBy !== undefined) {
+    emitInvokedByNotice(from, invokedBy, 'message →', to);
+  }
   process.stdout.write(`✓ message sent: ${from} → ${to}\n`);
   return 0;
 }
@@ -24,10 +29,15 @@ export async function msgBroadcast(c: C, args: ParsedArgs): Promise<number> {
   const from = requireOption(args, 'from', '--from required', 'GUILD_ACTOR');
   const text = requireOption(args, 'text', '--text required');
   const type = optionalOption(args, 'type');
+  const invokedBy = deriveInvokedBy(from);
+  if (invokedBy !== undefined) {
+    emitInvokedByNotice(from, invokedBy, 'broadcast from', from);
+  }
   const { delivered, failed } = await c.messageUC.broadcast({
     from,
     text,
     ...(type !== undefined ? { type } : {}),
+    ...(invokedBy !== undefined ? { invokedBy } : {}),
   });
   if (delivered.length === 0 && failed.length === 0) {
     process.stdout.write(
@@ -81,8 +91,12 @@ export async function msgInbox(c: C, args: ParsedArgs): Promise<number> {
           : ` (read ${m.readAt})`
         : ' (read)'
       : ' (unread)';
+    // Show invoked_by on the sender side so a recipient can tell a
+    // ghost-sent message from a hand-typed one at a glance. The
+    // mark-read side already has its own "by ..." marker on readTag.
+    const sendProxy = m.invokedBy ? ` [invoked_by=${m.invokedBy}]` : '';
     process.stdout.write(
-      `  ${idx}. [${m.at}] ${m.type} from ${m.from}${related}${readTag}\n  ${m.text}\n`,
+      `  ${idx}. [${m.at}] ${m.type} from ${m.from}${sendProxy}${related}${readTag}\n  ${m.text}\n`,
     );
   }
   return 0;

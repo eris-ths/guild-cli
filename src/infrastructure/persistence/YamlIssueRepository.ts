@@ -108,7 +108,7 @@ function hydrate(
   const obj = data as Record<string, unknown>;
   try {
     const id = IssueId.of(obj['id']);
-    const issue = Issue.restore({
+    const restoreInput: Parameters<typeof Issue.restore>[0] = {
       id,
       from: MemberName.of(obj['from']),
       severity: parseIssueSeverity(String(obj['severity'])),
@@ -117,7 +117,11 @@ function hydrate(
       state: parseIssueState(String(obj['state'] ?? 'open')),
       createdAt: String(obj['created_at'] ?? new Date().toISOString()),
       notes: hydrateNotes(obj['notes'], source, onMalformed),
-    });
+    };
+    if (typeof obj['invoked_by'] === 'string') {
+      restoreInput.invokedBy = obj['invoked_by'];
+    }
+    const issue = Issue.restore(restoreInput);
     return issue;
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -154,7 +158,9 @@ function hydrateNotes(
       );
       continue;
     }
-    out.push({ by, text, at });
+    const note: IssueNote = { by, text, at };
+    if (typeof r['invoked_by'] === 'string') note.invokedBy = r['invoked_by'];
+    out.push(note);
   }
   return out;
 }

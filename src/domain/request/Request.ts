@@ -78,11 +78,31 @@ export class Request {
     autoReview?: string;
     with?: readonly string[];
     createdAt?: string;
+    /**
+     * Actual CLI invoker when different from `from`. Same invariant
+     * as status_log transitions: stamped only when the two diverge
+     * (typical case = an AI agent filing on a human's behalf), so
+     * same-actor creation leaves the initial status_log entry
+     * byte-identical to pre-invariant YAML.
+     */
+    invokedBy?: string;
   }): Request {
     const from = MemberName.of(input.from);
     const action = sanitizeText(input.action, 'action');
     const reason = sanitizeText(input.reason, 'reason');
     const createdAt = input.createdAt ?? new Date().toISOString();
+    const initialEntry: StatusLogEntry = {
+      state: 'pending',
+      by: from.value,
+      at: createdAt,
+      note: 'created',
+    };
+    if (
+      input.invokedBy !== undefined &&
+      input.invokedBy !== from.value
+    ) {
+      initialEntry.invokedBy = input.invokedBy;
+    }
     const props: RequestProps = {
       id: input.id,
       from,
@@ -91,9 +111,7 @@ export class Request {
       state: 'pending',
       createdAt,
       reviews: [],
-      statusLog: [
-        { state: 'pending', by: from.value, at: createdAt, note: 'created' },
-      ],
+      statusLog: [initialEntry],
     };
     if (input.executor !== undefined) {
       props.executor = MemberName.of(input.executor);

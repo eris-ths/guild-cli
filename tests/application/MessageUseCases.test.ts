@@ -427,3 +427,42 @@ test('markRead for host name raises the inbox-owner error', async () => {
     },
   );
 });
+
+// ── invoked_by on send / broadcast ──
+
+test('send stamps invoked_by on the Notification when differs from from', () => {
+  const { uc, members, notifier } = build();
+  members.add('eris');
+  members.add('noir');
+  return uc
+    .send({ from: 'eris', to: 'noir', text: 'hi', invokedBy: 'claude' })
+    .then(() => {
+      assert.equal(notifier.posted[0]!.invokedBy, 'claude');
+    });
+});
+
+test('send drops invoked_by when it equals from (no clutter)', () => {
+  const { uc, members, notifier } = build();
+  members.add('eris');
+  members.add('noir');
+  return uc
+    .send({ from: 'eris', to: 'noir', text: 'hi', invokedBy: 'eris' })
+    .then(() => {
+      assert.equal(notifier.posted[0]!.invokedBy, undefined);
+    });
+});
+
+test('broadcast stamps invoked_by on every fan-out envelope', () => {
+  const { uc, members, notifier } = build();
+  members.add('eris');
+  members.add('noir');
+  members.add('rin');
+  return uc
+    .broadcast({ from: 'eris', text: 'hi', invokedBy: 'claude' })
+    .then(() => {
+      assert.equal(notifier.posted.length, 2);
+      for (const p of notifier.posted) {
+        assert.equal(p.invokedBy, 'claude');
+      }
+    });
+});

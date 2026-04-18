@@ -27,6 +27,7 @@ export class IssueUseCases {
     severity: string;
     area: string;
     text: string;
+    invokedBy?: string;
   }): Promise<Issue> {
     await assertActor(input.from, '--from', this.members);
     const now = this.clock.now();
@@ -35,14 +36,18 @@ export class IssueUseCases {
       .padStart(2, '0')}-${now.getUTCDate().toString().padStart(2, '0')}`;
     let seq = await this.issues.nextSequence(key);
     for (let attempt = 0; attempt < 10; attempt++) {
-      const issue = Issue.create({
+      const createInput: Parameters<typeof Issue.create>[0] = {
         id: IssueId.generate(now, seq),
         from: input.from,
         severity: input.severity,
         area: input.area,
         text: input.text,
         createdAt: now.toISOString(),
-      });
+      };
+      if (input.invokedBy !== undefined) {
+        createInput.invokedBy = input.invokedBy;
+      }
+      const issue = Issue.create(createInput);
       try {
         await this.issues.saveNew(issue);
         return issue;
@@ -97,12 +102,18 @@ export class IssueUseCases {
     id: string;
     by: string;
     text: string;
+    invokedBy?: string;
   }): Promise<{ issue: Issue; note: IssueNote }> {
     await assertActor(input.by, '--by', this.members);
     const issueId = IssueId.of(input.id);
     const issue = await this.issues.findById(issueId);
     if (!issue) throw new DomainError(`Issue not found: ${input.id}`, 'id');
-    const note = issue.addNote(input.by, input.text, this.clock.now().toISOString());
+    const note = issue.addNote(
+      input.by,
+      input.text,
+      this.clock.now().toISOString(),
+      input.invokedBy,
+    );
     await this.issues.save(issue);
     return { issue, note };
   }

@@ -381,3 +381,42 @@ test('Request restore preserves invoked_by round-trip', () => {
   const log = r.toJSON()['status_log'] as Array<Record<string, unknown>>;
   assert.equal(log[1]!['invoked_by'], 'claude');
 });
+
+// ── invoked_by on Request.create (initial status_log entry) ──
+
+test('Request.create stamps invoked_by on initial status_log when differs from from', () => {
+  const r = Request.create({
+    id: RequestId.generate(d, 1),
+    from: 'alice',
+    action: 'a',
+    reason: 'r',
+    invokedBy: 'claude',
+  });
+  const log = r.toJSON()['status_log'] as Array<Record<string, unknown>>;
+  assert.equal(log[0]!['by'], 'alice');
+  assert.equal(log[0]!['invoked_by'], 'claude');
+});
+
+test('Request.create omits invoked_by on initial entry when equals from', () => {
+  const r = Request.create({
+    id: RequestId.generate(d, 1),
+    from: 'alice',
+    action: 'a',
+    reason: 'r',
+    invokedBy: 'alice',
+  });
+  const log = r.toJSON()['status_log'] as Array<Record<string, unknown>>;
+  assert.equal(log[0]!['by'], 'alice');
+  assert.equal('invoked_by' in log[0]!, false);
+});
+
+test('Request.create without invokedBy leaves initial entry clean', () => {
+  const r = Request.create({
+    id: RequestId.generate(d, 1),
+    from: 'alice',
+    action: 'a',
+    reason: 'r',
+  });
+  const log = r.toJSON()['status_log'] as Array<Record<string, unknown>>;
+  assert.equal('invoked_by' in log[0]!, false);
+});
