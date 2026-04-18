@@ -439,3 +439,101 @@ test('renderUtterance authored: multi-line reason indents continuation lines', (
   // value column, not hang off the left margin.
   assert.match(text, /  reason: first paragraph\n          second paragraph/);
 });
+
+// ── invoked_by on authored utterances (from status_log[0]) ──
+
+test('collectUtterances: authored utterance lifts invoked_by from status_log[0]', () => {
+  const reqs: RequestJSON[] = [
+    {
+      id: '2026-04-18-0099',
+      from: 'eris',
+      action: 'proxy create',
+      reason: 'r',
+      created_at: '2026-04-18T00:00:00.000Z',
+      status_log: [
+        {
+          state: 'pending',
+          by: 'eris',
+          at: '2026-04-18T00:00:00.000Z',
+          note: 'created',
+          invoked_by: 'claude',
+        },
+      ],
+    },
+  ];
+  const [u] = collectUtterances(reqs, { name: 'eris' });
+  assert.ok(u);
+  assert.equal(u.kind, 'authored');
+  if (u.kind === 'authored') {
+    assert.equal(u.invokedBy, 'claude');
+  }
+});
+
+test('collectUtterances: authored utterance leaves invokedBy undefined when not proxied', () => {
+  const reqs: RequestJSON[] = [
+    {
+      id: '2026-04-18-0099',
+      from: 'eris',
+      action: 'self',
+      reason: 'r',
+      created_at: '2026-04-18T00:00:00.000Z',
+      status_log: [
+        { state: 'pending', by: 'eris', at: '2026-04-18T00:00:00.000Z' },
+      ],
+    },
+  ];
+  const [u] = collectUtterances(reqs, { name: 'eris' });
+  assert.ok(u);
+  if (u.kind === 'authored') assert.equal(u.invokedBy, undefined);
+});
+
+test('renderUtterance authored: shows [invoked_by=<actor>] when present', () => {
+  const reqs: RequestJSON[] = [
+    {
+      id: '2026-04-18-0099',
+      from: 'eris',
+      action: 'x',
+      reason: 'r',
+      created_at: '2026-04-18T00:00:00.000Z',
+      status_log: [
+        {
+          state: 'pending',
+          by: 'eris',
+          at: '2026-04-18T00:00:00.000Z',
+          invoked_by: 'claude',
+        },
+      ],
+    },
+  ];
+  const [u] = collectUtterances(reqs, { name: 'eris' });
+  assert.ok(u);
+  const text = renderUtterance(u, true);
+  assert.match(text, /authored eris \[invoked_by=claude\]/);
+});
+
+test('renderUtterance authored: shows invoked_by even when includeActor=false', () => {
+  // voices groups by actor so `from` is redundant — but the proxy
+  // invoker is NOT redundant in that view. Mirrors the review branch.
+  const reqs: RequestJSON[] = [
+    {
+      id: '2026-04-18-0099',
+      from: 'eris',
+      action: 'x',
+      reason: 'r',
+      created_at: '2026-04-18T00:00:00.000Z',
+      status_log: [
+        {
+          state: 'pending',
+          by: 'eris',
+          at: '2026-04-18T00:00:00.000Z',
+          invoked_by: 'claude',
+        },
+      ],
+    },
+  ];
+  const [u] = collectUtterances(reqs, { name: 'eris' });
+  assert.ok(u);
+  const text = renderUtterance(u, false);
+  assert.match(text, /\[invoked_by=claude\]/);
+  assert.equal(/authored eris /.test(text), false);
+});

@@ -363,8 +363,11 @@ function composeRestorationProseEn(ctx: {
   if (lastUtterance) {
     const age = ageHint(lastUtterance.at, new Date().toISOString());
     if (lastUtterance.kind === 'review') {
+      const proxyHint = lastUtterance.invokedBy
+        ? ` (invoked by ${lastUtterance.invokedBy})`
+        : '';
       lines.push(
-        `Your last voice (utterance, ${age}) was a review on req=${lastUtterance.requestId} — [${lastUtterance.lense}/${lastUtterance.verdict}]:`,
+        `Your last voice (utterance, ${age}) was a review on req=${lastUtterance.requestId} — [${lastUtterance.lense}/${lastUtterance.verdict}]${proxyHint}:`,
       );
       lines.push(`  "${truncate(lastUtterance.comment, 240)}"`);
     } else {
@@ -372,8 +375,11 @@ function composeRestorationProseEn(ctx: {
         lastUtterance.with && lastUtterance.with.length > 0
           ? ` (shaped with ${lastUtterance.with.join(', ')})`
           : '';
+      const proxyHint = lastUtterance.invokedBy
+        ? ` (invoked by ${lastUtterance.invokedBy})`
+        : '';
       lines.push(
-        `Your last voice (utterance, ${age}) was authoring req=${lastUtterance.requestId}${withHint}:`,
+        `Your last voice (utterance, ${age}) was authoring req=${lastUtterance.requestId}${proxyHint}${withHint}:`,
       );
       lines.push(`  action: ${truncate(lastUtterance.action, 120)}`);
       if (lastUtterance.completionNote) {
@@ -478,8 +484,11 @@ function composeRestorationProseJa(ctx: {
   if (lastUtterance) {
     const age = ageHint(lastUtterance.at, new Date().toISOString());
     if (lastUtterance.kind === 'review') {
+      const proxyHint = lastUtterance.invokedBy
+        ? `（${lastUtterance.invokedBy} が代行）`
+        : '';
       lines.push(
-        `直近の発話 (utterance, ${age}): req=${lastUtterance.requestId} へのレビュー — [${lastUtterance.lense}/${lastUtterance.verdict}]:`,
+        `直近の発話 (utterance, ${age}): req=${lastUtterance.requestId} へのレビュー — [${lastUtterance.lense}/${lastUtterance.verdict}]${proxyHint}:`,
       );
       lines.push(`  「${truncate(lastUtterance.comment, 240)}」`);
     } else {
@@ -487,8 +496,11 @@ function composeRestorationProseJa(ctx: {
         lastUtterance.with && lastUtterance.with.length > 0
           ? `（${lastUtterance.with.join('、')} と一緒に）`
           : '';
+      const proxyHint = lastUtterance.invokedBy
+        ? `（${lastUtterance.invokedBy} が代行）`
+        : '';
       lines.push(
-        `直近の発話 (utterance, ${age}): req=${lastUtterance.requestId} の起票${withHint}:`,
+        `直近の発話 (utterance, ${age}): req=${lastUtterance.requestId} の起票${proxyHint}${withHint}:`,
       );
       lines.push(`  action: ${truncate(lastUtterance.action, 120)}`);
       if (lastUtterance.completionNote) {

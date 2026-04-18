@@ -187,6 +187,15 @@ function formatRequestText(r: Request): string {
   if (log.length > 0) {
     lines.push('');
     lines.push(`  status_log (${log.length}):`);
+    // Pad the state column to the max width in *this* log so the
+    // `by X` column doesn't shuffle column-wise per row. Computed
+    // per-render rather than hard-coded to the REQUEST_STATES max,
+    // so logs that never reached executing/completed stay compact.
+    const stateWidth = Math.max(
+      ...(log as Array<Record<string, unknown>>).map(
+        (e) => String(e['state']).length,
+      ),
+    );
     let prevAt: string | undefined;
     for (const entry of log as Array<Record<string, unknown>>) {
       const at = String(entry['at']);
@@ -195,8 +204,9 @@ function formatRequestText(r: Request): string {
       const invokedBy = entry['invoked_by']
         ? ` [invoked_by=${entry['invoked_by']}]`
         : '';
+      const state = String(entry['state']).padEnd(stateWidth);
       lines.push(
-        `    ${at}  ${entry['state']}  by ${entry['by']}${invokedBy}${delta}${note}`,
+        `    ${at}  ${state}  by ${entry['by']}${invokedBy}${delta}${note}`,
       );
       prevAt = at;
     }

@@ -16,6 +16,22 @@
  * the full domain constructor chain.
  */
 
+/**
+ * Structural projection of what voices reads off a Request. The
+ * optional `status_log` lets collectUtterances surface the creator's
+ * `invoked_by` on AuthoredUtterance — the actual field lives on
+ * status_log[0] (the "created" entry), and we don't want to hoist
+ * it to a flat top-level key because the derivation is already
+ * first-class in the on-disk YAML.
+ */
+export type StatusLogEntryJSON = {
+  readonly state: string;
+  readonly by: string;
+  readonly at: string;
+  readonly note?: string;
+  readonly invoked_by?: string;
+};
+
 export type RequestJSON = {
   readonly id: string;
   readonly from: string;
@@ -27,6 +43,7 @@ export type RequestJSON = {
   readonly failure_reason?: string;
   readonly with?: ReadonlyArray<string>;
   readonly reviews?: ReadonlyArray<ReviewJSON>;
+  readonly status_log?: ReadonlyArray<StatusLogEntryJSON>;
 };
 
 export type ReviewJSON = {
@@ -50,6 +67,11 @@ export type AuthoredUtterance = {
   // utterances from every actor and the reader needs to see who said
   // what without looking up the id.
   readonly from: string;
+  // Actual CLI invoker when the creation was proxied (GUILD_ACTOR
+  // differed from --from). Same semantic as ReviewUtterance.invokedBy;
+  // the source is the `invoked_by` field on the status_log[0] entry.
+  // Undefined for the self-invocation common case.
+  readonly invokedBy?: string;
   readonly action: string;
   readonly reason: string;
   // Any closure text the lifecycle ended on. Only one of these is
@@ -132,6 +154,14 @@ export function collectUtterances(
         action: r.action,
         reason: r.reason,
       };
+      // Creator's invoked_by lives on status_log[0] (the "created"
+      // entry). Lift it onto the utterance so tail / voices / resume
+      // surface proxy-authoring the same way they already surface
+      // proxy-reviews. Guarded so pre-invoked_by records stay clean.
+      const createdEntry = r.status_log?.[0];
+      if (createdEntry && createdEntry.invoked_by !== undefined) {
+        (u as { invokedBy?: string }).invokedBy = createdEntry.invoked_by;
+      }
       // Pick whichever closure field the lifecycle produced. A request
       // can only be in one terminal state at a time, so at most one of
       // these is set.
@@ -263,7 +293,12 @@ export function renderUtterance(
     const actor = includeActor ? ` ${u.from}` : '';
     const withSuffix =
       u.with && u.with.length > 0 ? ` (with ${u.with.join(', ')})` : '';
-    lines.push(`[${u.at}] req=${u.requestId} authored${actor}${withSuffix}`);
+    // Always show `[invoked_by=<actor>]` when present, even when
+    // includeActor=false (voices groups by actor so `from` is
+    // redundant, but the proxy invoker isn't). Matches the review
+    // branch's treatment.
+    const proxy = u.invokedBy ? ` [invoked_by=${u.invokedBy}]` : '';
+    lines.push(`[${u.at}] req=${u.requestId} authored${actor}${proxy}${withSuffix}`);
     pushMultilineField(lines, '  action: ', u.action);
     pushMultilineField(lines, '  reason: ', u.reason);
     // At most one of these is set per request (completed / denied /
