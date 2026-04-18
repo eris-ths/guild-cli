@@ -8,6 +8,18 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 ## [Unreleased]
 
 ### Changed
+- **`gate resume` documents its same-actor scope and points at
+  `gate boot` when nothing is waiting.** Surfaced by a handoff
+  dogfood: a newcomer running resume as a first command saw
+  "Nothing is waiting" and walked away, not realizing their inbox
+  had 3 unread + they were named as --with on two pending
+  requests. resume's scope is "same-actor continuation" by
+  design; the orientation lens is boot. Pinned that boundary in
+  three places — schema summary, `gate --help` entry, and the
+  module JSDoc — and added a fallback line to the empty-path
+  prose (en + ja) so a newcomer who ran resume as part of a
+  handoff learns to try boot. No functional change to what
+  resume computes; this is a scope-clarification polish.
 - **User-facing errors no longer leak the `DomainError:` class prefix.**
   Errors from the domain layer used to come through the CLI as
   `error: DomainError: Request not found: ... (id)`. The

@@ -30,6 +30,22 @@ import { UnrespondedConcernsEntry } from '../../../application/concern/Unrespond
  * GUILD_ACTOR is required (resume is inherently first-person). The
  * actor may be a member, a host, or a name not otherwise in the
  * record — we report what we find.
+ *
+ * Scope — same-actor continuation, not full orientation:
+ *   resume reconstructs what THIS actor was doing. It intentionally
+ *   does not surface cross-actor signals:
+ *     - inbox unread (boot surfaces this)
+ *     - requests where the actor is named in `--with` but didn't
+ *       author or execute (pair-mode receiver)
+ *   These are orientation concerns, and the orientation lens is
+ *   `gate boot`. Resume's empty-path prose points at boot so a
+ *   newcomer who ran resume as part of a handoff learns the right
+ *   verb to reach for.
+ *
+ *   Requests where the actor IS executor (`approved` → waiting to
+ *   start, `executing` → waiting to complete) ARE surfaced as open
+ *   loops even when the actor never authored — those are direct
+ *   next-actions, not cross-actor signals.
  */
 
 interface OpenLoop {
@@ -463,6 +479,16 @@ function composeRestorationProseEn(ctx: {
     lines.push(
       'Nothing is waiting — pick up fresh work (`gate pending`) or file a new request.',
     );
+    // resume is a same-actor continuation lens: it reconstructs what
+    // THIS actor was doing. Cross-actor signals (inbox unread,
+    // named-as-`--with` on someone else's request, etc.) are not part
+    // of its scope by design. Point at `gate boot` so a newcomer who
+    // ran resume as part of a handoff doesn't walk away thinking
+    // there's no work — the incoming work is in boot's orientation
+    // payload.
+    lines.push(
+      'If you just arrived on this content_root, try `gate boot` — it surfaces cross-actor work (inbox, assignments, pair-mode partners) that resume does not.',
+    );
   }
 
   return lines.join('\n');
@@ -582,6 +608,9 @@ function composeRestorationProseJa(ctx: {
     lines.push('');
     lines.push(
       '待ちなし — `gate pending` で新しい仕事を拾うか、`gate request` で起票を。',
+    );
+    lines.push(
+      'この content_root に初めて降り立ったのなら `gate boot` を — resume が見ていない cross-actor の信号 (inbox、アサイン、pair-mode) が見える。',
     );
   }
 
