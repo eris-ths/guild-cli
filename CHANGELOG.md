@@ -7,6 +7,29 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 
 ## [Unreleased]
 
+### Added
+- **`gate chain <id>` walks inbound references too.** Previously
+  only forward: chain scanned the root's own text and listed the
+  ids it mentioned. Chain in reverse (who mentions ME) was silent,
+  so an issue promoted to a request could be followed
+  request→issue but not issue→request. Now renders up to four
+  sections — `referenced issues`, `referenced requests`,
+  `referenced by issues`, `referenced by requests` — joined by
+  standard tree glyphs. O(N) scan over the corpus; typical
+  content_root size makes this cheap.
+
+### Changed
+- **`gate chain` sees issue notes.** `gatherIssueText` now
+  includes every note body in addition to the immutable `text`
+  field, so a cross-reference added post-hoc as a note is visible
+  to chain the same way it is to show/list. Same-shape fix that
+  joins with the inbound walk — an issue that got a late "see
+  2026-04-18-0003" note is now reachable from both directions.
+- **`gate chain` empty-state phrasing.** Updated from "no cross-
+  referenced records in action/reason/notes/reviews" (one-sided)
+  to "no cross-referenced records; nothing references this
+  either" (bidirectional), matching the new semantic.
+
 ### Changed
 - **`invoked_by` surfaces on authored utterances in `gate voices` /
   `gate tail` / `gate resume`.** #43 stamped the creator's invoker

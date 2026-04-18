@@ -158,3 +158,31 @@ test('extractReferences: end-to-end via gatherRequestText', () => {
     'i-2026-04-14-006',
   ]);
 });
+
+// ── gatherIssueText: now includes notes so cross-refs added
+//    post-hoc as annotations are still scannable. ──
+
+test('gatherIssueText: without notes returns bare text (backward compat)', () => {
+  const result = gatherIssueText({ text: 'original problem' });
+  assert.equal(result, 'original problem');
+});
+
+test('gatherIssueText: with notes concatenates text + every note body', () => {
+  const result = gatherIssueText({
+    text: 'original problem',
+    notes: [
+      { text: 'see 2026-04-14-001' },
+      { text: 'also i-2026-04-14-003' },
+    ],
+  });
+  // Join order preserves note order; extractReferences reads the
+  // full joined string.
+  assert.match(result, /original problem/);
+  assert.match(result, /2026-04-14-001/);
+  assert.match(result, /i-2026-04-14-003/);
+});
+
+test('gatherIssueText: empty notes array is same as no notes', () => {
+  const result = gatherIssueText({ text: 'x', notes: [] });
+  assert.equal(result, 'x');
+});
