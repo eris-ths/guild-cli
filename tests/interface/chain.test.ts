@@ -186,3 +186,99 @@ test('gatherIssueText: empty notes array is same as no notes', () => {
   const result = gatherIssueText({ text: 'x', notes: [] });
   assert.equal(result, 'x');
 });
+
+// ── bidirectional mention dedup ──
+// End-to-end: when two requests reference each other, chain renders
+// the other one once (under "referenced") with a ↔ marker, not twice
+// (once under "referenced" and once under "referenced by").
+
+import { spawnSync as _spawnSync } from 'node:child_process';
+import {
+  mkdtempSync as _mkdtempSync,
+  writeFileSync as _writeFileSync,
+  rmSync as _rmSync,
+  mkdirSync as _mkdirSync,
+} from 'node:fs';
+import { tmpdir as _tmpdir } from 'node:os';
+import { join as _join, resolve as _resolve, dirname as _dirname } from 'node:path';
+import { fileURLToPath as _fileURLToPath } from 'node:url';
+
+const _here = _dirname(_fileURLToPath(import.meta.url));
+const _GATE = _resolve(_here, '../../../bin/gate.mjs');
+
+function _bootstrap(): { root: string; cleanup: () => void } {
+  const root = _mkdtempSync(_join(_tmpdir(), 'guild-chain-bidir-'));
+  _writeFileSync(
+    _join(root, 'guild.config.yaml'),
+    'content_root: .\nhost_names: [human]\n',
+  );
+  for (const d of ['members', 'requests', 'issues', 'inbox']) {
+    _mkdirSync(_join(root, d));
+  }
+  _writeFileSync(
+    _join(root, 'members', 'mia.yaml'),
+    'name: mia\ncategory: professional\nactive: true\n',
+  );
+  return { root, cleanup: () => _rmSync(root, { recursive: true, force: true }) };
+}
+
+function _runGate(cwd: string, args: string[]): { stdout: string; status: number } {
+  const r = _spawnSync(process.execPath, [_GATE, ...args], {
+    cwd,
+    env: { ...process.env, GUILD_ACTOR: 'mia' },
+    encoding: 'utf8',
+  });
+  return { stdout: r.stdout, status: r.status ?? -1 };
+}
+
+test('chain: bidirectional text-mention renders once with ↔ marker, not twice', () => {
+  const { root, cleanup } = _bootstrap();
+  try {
+    // r1 and r2 mention each other in their text.
+    _runGate(root, ['request', '--from', 'mia', '--action', 'v1', '--reason', 'r']);
+    _runGate(root, ['deny', '2026-04-18-0001', '--by', 'mia',
+      '--reason', 'refiled as 2026-04-18-0002']);
+    _runGate(root, ['request', '--from', 'mia', '--action',
+      'v2 from 2026-04-18-0001', '--reason', 'response to critique']);
+    const { stdout } = _runGate(root, ['chain', '2026-04-18-0002']);
+    // Count only tree-entry lines (those starting with tree glyphs);
+    // the root header ALSO mentions v1 in its action text (because
+    // v2's action was "v2 from 2026-04-18-0001"), and that's not a
+    // dedup concern.
+    const entryLines = stdout
+      .split('\n')
+      .filter((l) => /^[│├└ ]/.test(l) && /2026-04-18-0001/.test(l));
+    assert.equal(
+      entryLines.length,
+      1,
+      `expected 1 tree entry for v1, got ${entryLines.length}:\n${stdout}`,
+    );
+    assert.match(entryLines[0]!, /↔ 2026-04-18-0001/);
+    // "referenced by requests" section should NOT appear (dedupped
+    // into the forward section).
+    assert.equal(/referenced by requests/.test(stdout), false);
+  } finally {
+    cleanup();
+  }
+});
+
+test('chain: one-way reference shows no ↔ marker', () => {
+  const { root, cleanup } = _bootstrap();
+  try {
+    _runGate(root, ['request', '--from', 'mia', '--action', 'target', '--reason', 'r']);
+    // Only r2 mentions r1 (not vice versa).
+    _runGate(root, ['request', '--from', 'mia', '--action',
+      'refers to 2026-04-18-0001', '--reason', 'one-way']);
+    const { stdout: forwardOut } = _runGate(root, ['chain', '2026-04-18-0002']);
+    // r2's chain: r1 is referenced (not bidirectional).
+    assert.match(forwardOut, /referenced requests/);
+    assert.equal(/↔/.test(forwardOut), false);
+
+    const { stdout: inboundOut } = _runGate(root, ['chain', '2026-04-18-0001']);
+    // r1's chain: r2 mentions it (inbound, not bidirectional).
+    assert.match(inboundOut, /referenced by requests/);
+    assert.equal(/↔/.test(inboundOut), false);
+  } finally {
+    cleanup();
+  }
+});

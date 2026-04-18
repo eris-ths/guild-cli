@@ -270,3 +270,78 @@ test('gate issues add --text <value-starting-with--> surfaces the POSIX escape h
     cleanup();
   }
 });
+
+// ── positional `-` as stdin sentinel (symmetry with --comment -/--text -) ──
+
+test('gate review <id> ... - reads stdin (positional sentinel)', () => {
+  const { root, cleanup } = bootstrap();
+  try {
+    // Pre-create a target request for review.
+    runGate(
+      root,
+      ['request', '--from', 'eris', '--action', 'x', '--reason', 'r'],
+      { env: { GUILD_ACTOR: 'eris' } },
+    );
+    const { status } = runGate(
+      root,
+      [
+        'review',
+        '2026-04-18-0001',
+        '--by',
+        'claude',
+        '--lense',
+        'devil',
+        '--verdict',
+        'ok',
+        '-',
+      ],
+      { input: 'stdin review body\n', env: { GUILD_ACTOR: 'claude' } },
+    );
+    assert.equal(status, 0);
+    // Assert via gate show that the comment landed (not literal "-").
+    const { stdout } = runGate(root, ['show', '2026-04-18-0001', '--format', 'text']);
+    assert.match(stdout, /stdin review body/);
+    assert.equal(/\[devil\/ok\] by claude.*\n\s+-\n/.test(stdout), false);
+  } finally {
+    cleanup();
+  }
+});
+
+test('gate issues note <id> ... - reads stdin (positional sentinel)', () => {
+  const { root, cleanup } = bootstrap();
+  try {
+    runGate(
+      root,
+      ['issues', 'add', '--from', 'eris', '--severity', 'low', '--area', 'x',
+       '--text', 'seed'],
+      { env: { GUILD_ACTOR: 'eris' } },
+    );
+    const { status } = runGate(
+      root,
+      ['issues', 'note', 'i-2026-04-18-0001', '--by', 'eris', '-'],
+      { input: 'stdin note body\n', env: { GUILD_ACTOR: 'eris' } },
+    );
+    assert.equal(status, 0);
+    const { stdout } = runGate(root, ['issues', 'list']);
+    assert.match(stdout, /stdin note body/);
+  } finally {
+    cleanup();
+  }
+});
+
+test('gate issues add ... - reads stdin (positional sentinel, symmetric to note)', () => {
+  const { root, cleanup } = bootstrap();
+  try {
+    const { status } = runGate(
+      root,
+      ['issues', 'add', '--from', 'eris', '--severity', 'low', '--area', 'x',
+       '-'],
+      { input: 'stdin issue body\n', env: { GUILD_ACTOR: 'eris' } },
+    );
+    assert.equal(status, 0);
+    const { stdout } = runGate(root, ['issues', 'list']);
+    assert.match(stdout, /stdin issue body/);
+  } finally {
+    cleanup();
+  }
+});

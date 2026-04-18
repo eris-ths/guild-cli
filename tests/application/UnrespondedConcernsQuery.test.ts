@@ -332,3 +332,80 @@ test('self-review on own request still counts as a concern to track', () => {
   const out = computeUnrespondedConcerns([target], [], 'claude', BASE_DATE.getTime(), 30);
   assert.equal(out.length, 1);
 });
+
+// ── temporal guard: a record that PRE-dates the concern can't be a follow-up ──
+
+test('follow-up that pre-dates the concern is NOT counted (temporal guard)', () => {
+  // The failure mode this pins: v1 was denied with a deny_reason that
+  // happens to mention v2's id (because the deny already announced
+  // "I'll refile as <id>"). Then v2 is created, reviewed, concerned.
+  // Without the temporal guard, v1's earlier mention of v2.id would
+  // falsely count as "follow-up exists" and the concern on v2 would
+  // be hidden. With the guard, the earlier mention is ignored and
+  // the concern surfaces.
+  //
+  // Timeline:
+  //   T0: v1 denied, deny_reason mentions v2.id
+  //   T1: v2 created
+  //   T2: concern on v2 (later than T0)
+  // A legitimate follow-up would need to be created AFTER T2.
+  const v2 = makeRequest({
+    seq: 2,
+    from: 'mia',
+    action: 'v2',
+    createdAt: daysAgo(2),
+    reviews: [
+      // concern is 1 day after v2 creation (2 days ago)
+      { by: 'rev', lense: 'devil', verdict: 'concern', at: daysAgo(1) },
+    ],
+  });
+  const v1 = makeRequest({
+    seq: 1,
+    from: 'mia',
+    action: 'v1',
+    reason: `refiled as ${v2.id.value}`,
+    createdAt: daysAgo(3), // v1 pre-dates v2 AND its concern
+  });
+  const out = computeUnrespondedConcerns(
+    [v1, v2],
+    [],
+    'mia',
+    BASE_DATE.getTime(),
+    30,
+  );
+  // The concern on v2 must surface: v1 is too old to count as a
+  // follow-up to it.
+  assert.equal(out.length, 1);
+  assert.equal(out[0]!.request_id, v2.id.value);
+});
+
+test('follow-up that post-dates the concern IS counted (baseline still works)', () => {
+  // Sanity: the temporal guard shouldn't break the happy path where
+  // a legitimate later follow-up exists.
+  const earlier = makeRequest({
+    seq: 1,
+    from: 'mia',
+    action: 'earlier',
+    createdAt: daysAgo(3),
+    reviews: [
+      { by: 'rev', lense: 'devil', verdict: 'concern', at: daysAgo(3) },
+    ],
+  });
+  const later = makeRequest({
+    seq: 2,
+    from: 'mia',
+    action: 'response referencing earlier',
+    reason: `addresses ${earlier.id.value}`,
+    createdAt: daysAgo(1), // created AFTER the concern on `earlier`
+  });
+  const out = computeUnrespondedConcerns(
+    [earlier, later],
+    [],
+    'mia',
+    BASE_DATE.getTime(),
+    30,
+  );
+  // The earlier request's concern was followed up by the later one,
+  // so it should NOT surface.
+  assert.equal(out.length, 0);
+});

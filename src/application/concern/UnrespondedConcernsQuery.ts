@@ -108,7 +108,30 @@ export function computeUnrespondedConcerns(
     }
     if (concerns.length === 0) continue;
 
-    if (hasFollowUp(r.id.value, authorshipSet, allRequests, allIssues)) {
+    // Follow-up detection is temporal: a record mentioning R.id that
+    // was created BEFORE the latest concern can't be a response to
+    // it (the concern didn't exist yet when the referrer was written).
+    // Without this guard, iteration flows like v1-denied-mentioning-v2
+    // followed by a concern on v2 would falsely mark the concern as
+    // "responded" because the v1 deny happens to mention v2.id —
+    // even though the deny pre-dates the concern by seconds. The
+    // latest concern's `at` is the correct cutoff: a follow-up must
+    // know about ALL concerns on the request to credibly respond to
+    // the set (the all-or-nothing semantic documented above).
+    const latestConcernAtMs = concerns.reduce((max, c) => {
+      const t = Date.parse(c.at);
+      return Number.isFinite(t) && t > max ? t : max;
+    }, 0);
+
+    if (
+      hasFollowUp(
+        r.id.value,
+        authorshipSet,
+        allRequests,
+        allIssues,
+        latestConcernAtMs,
+      )
+    ) {
       continue;
     }
 
@@ -153,27 +176,39 @@ function latestAt(entry: UnrespondedConcernsEntry): number {
 
 /**
  * Return true if any request or issue other than `targetId`, authored
- * by someone in `authorshipSet`, mentions `targetId` in its free text.
- * This is the "follow-up exists" check. Does NOT try to detect whether
- * the follow-up actually addresses the concerns — that is the reader's
- * judgment, documented as a deliberate limitation.
+ * by someone in `authorshipSet`, mentions `targetId` in its free text
+ * AND was created after `afterMs`. This is the "follow-up exists"
+ * check. Does NOT try to detect whether the follow-up actually
+ * addresses the concerns — that is the reader's judgment, documented
+ * as a deliberate limitation. The temporal guard (`afterMs`) prevents
+ * referrers that pre-date the concern from being falsely counted.
  */
 function hasFollowUp(
   targetId: string,
   authorshipSet: ReadonlySet<string>,
   allRequests: ReadonlyArray<Request>,
   allIssues: ReadonlyArray<Issue>,
+  afterMs: number,
 ): boolean {
   for (const r of allRequests) {
     if (r.id.value === targetId) continue;
     if (!authorshipSet.has(r.from.value)) continue;
+    if (!isAfter(r.statusLog[0]?.at, afterMs)) continue;
     if (proseMentionsId(gatherRequestProse(r), targetId)) return true;
   }
   for (const i of allIssues) {
     if (!authorshipSet.has(i.from.value)) continue;
+    const iJson = i.toJSON() as Record<string, unknown>;
+    if (!isAfter(iJson['created_at'], afterMs)) continue;
     if (proseMentionsId(i.text, targetId)) return true;
   }
   return false;
+}
+
+function isAfter(at: unknown, afterMs: number): boolean {
+  if (typeof at !== 'string') return false;
+  const t = Date.parse(at);
+  return Number.isFinite(t) && t > afterMs;
 }
 
 function gatherRequestProse(r: Request): string {

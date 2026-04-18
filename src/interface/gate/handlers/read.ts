@@ -329,15 +329,51 @@ export async function reqChain(c: C, args: ParsedArgs): Promise<number> {
     }
   }
 
-  type Resolved<T> = { id: string; record: T | undefined };
+  // Bidirectional dedup: when record X appears on both sides (root
+  // mentions X AND X mentions root), render it once in the forward
+  // section with a `↔` marker rather than twice (once under
+  // "referenced X" and again under "referenced by X"). The
+  // bidirectional mark is NOT the same information as the pair of
+  // one-way marks; it's tighter — "they know about each other" —
+  // and that's usually what the reader cares about.
+  const inboundRequestIdSet = new Set(
+    inboundRequestRecords.map((r) => r.id.value),
+  );
+  const inboundIssueIdSet = new Set(
+    inboundIssueRecords.map((i) => i.id.value),
+  );
+  const bidirRequestIds = new Set(
+    linkedRequestIds.filter((id) => inboundRequestIdSet.has(id)),
+  );
+  const bidirIssueIds = new Set(
+    linkedIssueIds.filter((id) => inboundIssueIdSet.has(id)),
+  );
+
+  type Resolved<T> = {
+    id: string;
+    record: T | undefined;
+    bidirectional: boolean;
+  };
   const linkedRequests: Array<Resolved<ReturnType<typeof requestById.get>>> =
-    linkedRequestIds.map((id) => ({ id, record: requestById.get(id) }));
+    linkedRequestIds.map((id) => ({
+      id,
+      record: requestById.get(id),
+      bidirectional: bidirRequestIds.has(id),
+    }));
   const linkedIssues: Array<Resolved<ReturnType<typeof issueById.get>>> =
-    linkedIssueIds.map((id) => ({ id, record: issueById.get(id) }));
+    linkedIssueIds.map((id) => ({
+      id,
+      record: issueById.get(id),
+      bidirectional: bidirIssueIds.has(id),
+    }));
   const inboundRequests: Array<Resolved<ReturnType<typeof requestById.get>>> =
-    inboundRequestRecords.map((r) => ({ id: r.id.value, record: r }));
+    inboundRequestRecords
+      .filter((r) => !bidirRequestIds.has(r.id.value))
+      .map((r) => ({ id: r.id.value, record: r, bidirectional: false }));
   const inboundIssues: Array<Resolved<ReturnType<typeof issueById.get>>> =
-    inboundIssueRecords.map((i) => ({ id: i.id.value, record: i }));
+    inboundIssueRecords
+      .filter((i) => !bidirIssueIds.has(i.id.value))
+      .map((i) => ({ id: i.id.value, record: i, bidirectional: false }));
 
   process.stdout.write(`${rootHeader}\n`);
 
@@ -385,18 +421,23 @@ export async function reqChain(c: C, args: ParsedArgs): Promise<number> {
       const item = sorted[i]!;
       const last = i === sorted.length - 1;
       const glyph = last ? '└──' : '├──';
+      // `↔` prefix signals "root and this record reference each
+      // other"; no prefix means "one-way in this direction only."
+      // The marker is short on purpose — readers scan a tree, not a
+      // paragraph.
+      const bidirMark = item.bidirectional ? '↔ ' : '';
       if (item.record) {
         const j = item.record.toJSON();
         const summary =
           section.kind === 'issue'
-            ? `${item.id}  [${j['severity']}/${j['area']}]  ${j['state']}` +
+            ? `${bidirMark}${item.id}  [${j['severity']}/${j['area']}]  ${j['state']}` +
               `  ${truncateCodePoints(String(j['text'] ?? ''), 70)}`
-            : `${item.id}  [${j['state']}]  from=${j['from']}` +
+            : `${bidirMark}${item.id}  [${j['state']}]  from=${j['from']}` +
               `  ${truncateCodePoints(String(j['action'] ?? ''), 70)}`;
         process.stdout.write(`${childPrefix}${glyph} ${summary}\n`);
       } else {
         process.stdout.write(
-          `${childPrefix}${glyph} ${item.id}  (referenced but not found)\n`,
+          `${childPrefix}${glyph} ${bidirMark}${item.id}  (referenced but not found)\n`,
         );
       }
     }

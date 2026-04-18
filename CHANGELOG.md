@@ -7,6 +7,31 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 
 ## [Unreleased]
 
+### Fixed
+- **`unresponded_concerns` no longer counts pre-dating mentions as
+  follow-ups.** `UnrespondedConcernsQuery.hasFollowUp` was checking
+  "does any authored record mention this id?" without a temporal
+  guard. Concrete failure: v1 denied with reason mentioning v2.id
+  ("refile as v2"), then v2 reviewed with a concern — the earlier
+  v1 deny's mention of v2.id falsely counted as a follow-up, so the
+  concern was hidden from resume. With the guard, a referring record
+  is only counted as a follow-up if its `created_at` post-dates the
+  latest concern on the request. Surfaced by a review-mode dogfood
+  where concerns were legitimately open but invisible.
+- **Positional `-` now triggers the stdin sentinel on `gate review`,
+  `gate issues note`, and `gate issues add`.** Previously `--comment -`
+  / `--text -` read stdin but writing the sentinel as a trailing
+  positional (`gate review ... --verdict X - <<EOF`) stored the
+  literal `"-"` as the body — a natural shape that silently dropped
+  the heredoc. Positional `-` now reads stdin the same way as the
+  explicit flag forms.
+- **`gate chain` dedupes bidirectional mentions and marks them with
+  `↔`.** Two records that mention each other in their text used to
+  appear in BOTH "referenced" and "referenced by" sections — the
+  same record rendered twice. Now bidirectional refs appear once,
+  in the forward section, prefixed with `↔` to signal mutual
+  reference. One-way refs stay as before.
+
 ### Added
 - **`gate issues promote` writes a structured `promoted_from` field
   on the created request.** The default `--action` / `--reason`

@@ -33,6 +33,12 @@ export async function reqReview(c: C, args: ParsedArgs): Promise<number> {
     comment = await readStdin();
   } else if (commentOpt !== undefined) {
     comment = commentOpt;
+  } else if (positional === '-') {
+    // Positional `-` gets the same stdin-sentinel treatment as
+    // `--comment -`. Symmetry: users reach for `gate review <id> ...
+    // - <<EOF` naturally (same shape as `--comment -`); the literal
+    // "-" as a comment body is almost never what anyone means.
+    comment = await readStdin();
   } else if (positional) {
     comment = positional;
   } else if (process.stdin.isTTY) {
