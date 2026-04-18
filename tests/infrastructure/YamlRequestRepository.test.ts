@@ -252,3 +252,61 @@ test('save() produces no top-level duplicated completion_note in writer path', a
     cleanup();
   }
 });
+
+test('listByState passes config.lenses to hydrate (custom lens YAML round-trips)', async () => {
+  // Regression: listByState used to drop config.lenses when calling
+  // hydrate, so a request whose reviews used a custom lens (declared
+  // in guild.config.yaml `lenses:`) became unreadable on any
+  // listAll-backed verb (chain / voices / tail). findById worked;
+  // listByState did not. Silent breakage — the warn-and-skip
+  // swallowed the error and callers saw an empty result.
+  const root = mkdtempSync(join(tmpdir(), 'guild-cli-repo-lens-'));
+  try {
+    writeFileSync(
+      join(root, 'guild.config.yaml'),
+      'content_root: .\nhost_names: [human]\nlenses:\n  - rational\n  - skeptic\n',
+    );
+    const cfg = GuildConfig.load(root, () => {});
+    const repo = new YamlRequestRepository(cfg);
+
+    const req = Request.create({
+      id: RequestId.generate(new Date('2026-04-18T00:00:00Z'), 1),
+      from: 'alice',
+      action: 'try a custom lens',
+      reason: 'r',
+    });
+    await repo.saveNew(req);
+
+    // Hand-author a review with a custom lens by writing YAML directly,
+    // bypassing Review.create (which also needs `allowedLenses`).
+    // This mirrors the wire contract on disk.
+    const path = join(root, 'requests', 'pending', `${req.id.value}.yaml`);
+    const doc = YAML.parse(readFileSync(path, 'utf8')) as Record<
+      string,
+      unknown
+    >;
+    doc['reviews'] = [
+      {
+        by: 'alice',
+        lense: 'rational',
+        verdict: 'concern',
+        comment: 'custom lens on disk',
+        at: '2026-04-18T00:00:01Z',
+      },
+    ];
+    writeFileSync(path, YAML.stringify(doc));
+
+    // findById already works (test above, implicitly). listByState
+    // is the one that used to fail.
+    const list = await repo.listByState('pending');
+    assert.equal(list.length, 1);
+    assert.equal(list[0]!.reviews[0]!.lense, 'rational');
+
+    // Same via listAll (chain/tail/voices entry point).
+    const all = await repo.listAll();
+    assert.equal(all.length, 1);
+    assert.equal(all[0]!.reviews[0]!.lense, 'rational');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
