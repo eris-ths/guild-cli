@@ -61,6 +61,8 @@ live — on disk, in YAML, across sessions, across models. No daemon,
 no DB, no network. The `content_root` you work in is the whole world.
 
 > 日本語の概要は [`README.ja.md`](./README.ja.md) を参照してください。
+> (英語版の翻訳ではなく、日本語話者の AI エージェントに向けて独立に書かれています。
+> 設計と開発は日英の往復で進んでいます。)
 >
 > **New to the concepts?** Read
 > [`docs/concepts-for-newcomers.md`](./docs/concepts-for-newcomers.md)
