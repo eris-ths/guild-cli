@@ -45,13 +45,27 @@ interface OpenLoop {
   readonly since: string;
 }
 
+// Wire-format projection of StatusLogEntry for JSON emission. The
+// in-memory field is `invokedBy` (camelCase); every YAML / JSON
+// surface uses `invoked_by` (snake_case). Request.toJSON already
+// does this conversion for status_log; resume has its own payload
+// shape and needs the same flattening.
+interface TransitionJSON {
+  state: string;
+  by: string;
+  at: string;
+  note?: string;
+  invoked_by?: string;
+  request_id: string;
+}
+
 interface ResumePayload {
   actor: string;
   session_hint: string | null;
   last_context: {
     summary: string;
     last_utterance: Utterance | null;
-    last_transition: (StatusLogEntry & { request_id: string }) | null;
+    last_transition: TransitionJSON | null;
     open_loops: OpenLoop[];
   };
   // Deliberately a sibling of `last_context`, not merged into
@@ -170,7 +184,8 @@ export async function resumeCmd(c: C, args: ParsedArgs): Promise<number> {
     last_context: {
       summary,
       last_utterance: lastUtterance,
-      last_transition: lastTransition,
+      last_transition:
+        lastTransition === null ? null : transitionToJSON(lastTransition),
       open_loops: openLoops,
     },
     unresponded_concerns: unrespondedConcerns,
@@ -184,6 +199,20 @@ export async function resumeCmd(c: C, args: ParsedArgs): Promise<number> {
     process.stdout.write(restorationProse + '\n');
   }
   return 0;
+}
+
+function transitionToJSON(
+  entry: StatusLogEntry & { request_id: string },
+): TransitionJSON {
+  const out: TransitionJSON = {
+    state: entry.state,
+    by: entry.by,
+    at: entry.at,
+    request_id: entry.request_id,
+  };
+  if (entry.note !== undefined) out.note = entry.note;
+  if (entry.invokedBy !== undefined) out.invoked_by = entry.invokedBy;
+  return out;
 }
 
 function findLastTransition(
@@ -360,9 +389,12 @@ function composeRestorationProseEn(ctx: {
     (!lastUtterance || lastTransition.at !== lastUtterance.at)
   ) {
     const age = ageHint(lastTransition.at, new Date().toISOString());
+    const proxy = lastTransition.invokedBy
+      ? ` (invoked by ${lastTransition.invokedBy})`
+      : '';
     lines.push('');
     lines.push(
-      `Your last lifecycle step (transition, ${age}): req=${lastTransition.request_id} → ${lastTransition.state}${lastTransition.note ? ` — ${truncate(lastTransition.note, 180)}` : ''}`,
+      `Your last lifecycle step (transition, ${age}): req=${lastTransition.request_id} → ${lastTransition.state}${proxy}${lastTransition.note ? ` — ${truncate(lastTransition.note, 180)}` : ''}`,
     );
   }
 
@@ -472,9 +504,12 @@ function composeRestorationProseJa(ctx: {
     (!lastUtterance || lastTransition.at !== lastUtterance.at)
   ) {
     const age = ageHint(lastTransition.at, new Date().toISOString());
+    const proxy = lastTransition.invokedBy
+      ? `（${lastTransition.invokedBy} が代行）`
+      : '';
     lines.push('');
     lines.push(
-      `直近の所作 (transition, ${age}): req=${lastTransition.request_id} → ${lastTransition.state}${lastTransition.note ? ` — ${truncate(lastTransition.note, 180)}` : ''}`,
+      `直近の所作 (transition, ${age}): req=${lastTransition.request_id} → ${lastTransition.state}${proxy}${lastTransition.note ? ` — ${truncate(lastTransition.note, 180)}` : ''}`,
     );
   }
 

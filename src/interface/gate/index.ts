@@ -186,12 +186,10 @@ export async function main(argv: readonly string[]): Promise<number> {
         // first-time users actually have is "which verb do I want?"
         const state = optionalOption(args, 'state');
         if (state === undefined) {
-          const states = REQUEST_STATES.join('|');
           process.stderr.write(
-            `gate list needs --state <s> (${states}).\n` +
-              '  For just counts across every state, use:  gate status\n' +
-              '  For the contents of one state,     use:  gate list --state <s>\n' +
-              `  States: ${REQUEST_STATES.join(' | ')}\n`,
+            `gate list needs --state <s> (${REQUEST_STATES.join(' | ')}).\n` +
+              '  For counts across every state:  gate status\n' +
+              '  For the contents of one state:  gate list --state <s>\n',
           );
           return 1;
         }

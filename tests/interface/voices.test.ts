@@ -287,3 +287,112 @@ test('renderUtterance: authored text includes closure labels when present', () =
   const text = renderUtterance(authored, false);
   assert.match(text, /denied: scope creep/);
 });
+
+
+// ── invoked_by on review utterances ──
+//
+// When a review was recorded by GUILD_ACTOR acting on another
+// member's behalf, Review.toJSON stamps `invoked_by` on the wire.
+// voices must carry that through so tail / whoami / voices readers
+// see the proxy, not just `show <id>`.
+
+test('collectUtterances: review invoked_by flows onto the utterance', () => {
+  const proxied: RequestJSON[] = [
+    {
+      id: '2026-04-18-0001',
+      from: 'eris',
+      action: 'do thing',
+      reason: 'because',
+      created_at: '2026-04-18T00:00:00.000Z',
+      reviews: [
+        {
+          by: 'sentinel',
+          lense: 'devil',
+          verdict: 'ok',
+          comment: 'looks fine',
+          at: '2026-04-18T01:00:00.000Z',
+          invoked_by: 'claude',
+        },
+      ],
+    },
+  ];
+  const [u] = collectUtterances(proxied, { name: 'sentinel' });
+  assert.ok(u);
+  assert.equal(u.kind, 'review');
+  if (u.kind === 'review') {
+    assert.equal(u.invokedBy, 'claude');
+  }
+});
+
+test('collectUtterances: review without invoked_by leaves invokedBy undefined', () => {
+  const [u] = collectUtterances(corpus, { name: 'noir', lense: 'devil' });
+  assert.ok(u);
+  if (u.kind === 'review') {
+    assert.equal(u.invokedBy, undefined);
+  }
+});
+
+test('renderUtterance: review shows [invoked_by=<actor>] when proxied', () => {
+  const proxied: RequestJSON[] = [
+    {
+      id: '2026-04-18-0001',
+      from: 'eris',
+      action: 'do thing',
+      reason: 'because',
+      created_at: '2026-04-18T00:00:00.000Z',
+      reviews: [
+        {
+          by: 'sentinel',
+          lense: 'devil',
+          verdict: 'concern',
+          comment: 'hmm',
+          at: '2026-04-18T01:00:00.000Z',
+          invoked_by: 'claude',
+        },
+      ],
+    },
+  ];
+  const [u] = collectUtterances(proxied, { name: 'sentinel' });
+  assert.ok(u);
+  const text = renderUtterance(u, true);
+  assert.match(text, /\[devil\/concern\] by sentinel \[invoked_by=claude\]/);
+});
+
+test('renderUtterance: review omits [invoked_by=...] when same-actor', () => {
+  // Pinned so we don't start emitting redundant markers on the
+  // self-invoke common case.
+  const [u] = collectUtterances(corpus, { name: 'noir', lense: 'devil' });
+  assert.ok(u);
+  const text = renderUtterance(u, true);
+  assert.equal(/invoked_by/.test(text), false);
+});
+
+test('renderUtterance: invoked_by shows even when includeActor=false (voices grouping)', () => {
+  // voices groups by actor so `by <name>` is redundant — but the
+  // proxy invoker is NOT redundant in that context. Pinned so we
+  // don't accidentally suppress it alongside the actor label.
+  const proxied: RequestJSON[] = [
+    {
+      id: '2026-04-18-0001',
+      from: 'eris',
+      action: 'do thing',
+      reason: 'because',
+      created_at: '2026-04-18T00:00:00.000Z',
+      reviews: [
+        {
+          by: 'sentinel',
+          lense: 'devil',
+          verdict: 'ok',
+          comment: 'fine',
+          at: '2026-04-18T01:00:00.000Z',
+          invoked_by: 'claude',
+        },
+      ],
+    },
+  ];
+  const [u] = collectUtterances(proxied, { name: 'sentinel' });
+  assert.ok(u);
+  const text = renderUtterance(u, false);
+  assert.match(text, /\[invoked_by=claude\]/);
+  assert.equal(/by sentinel/.test(text), false);
+});

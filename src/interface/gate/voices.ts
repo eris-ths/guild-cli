@@ -35,6 +35,11 @@ export type ReviewJSON = {
   readonly verdict: string;
   readonly comment: string;
   readonly at: string;
+  // Actual invoker when different from `by`. Persisted by Review.toJSON
+  // in snake_case; voices surfaces it so a reviewer who ghost-wrote
+  // through an AI agent is visible in tail / whoami / voices instead
+  // of only in `gate show <id>`.
+  readonly invoked_by?: string;
 };
 
 export type AuthoredUtterance = {
@@ -65,6 +70,9 @@ export type ReviewUtterance = {
   readonly requestId: string;
   // Who wrote the review. Same rationale as AuthoredUtterance.from.
   readonly by: string;
+  // Actual CLI invoker when different from `by` (typically an AI
+  // agent acting on the member's behalf). Undefined when they agree.
+  readonly invokedBy?: string;
   // The action of the containing request, so the reader has context
   // for what the review was *about* without chasing the id.
   readonly action: string;
@@ -148,7 +156,7 @@ export function collectUtterances(
       if (filter.verdict !== undefined && rv.verdict !== filter.verdict) {
         continue;
       }
-      out.push({
+      const reviewUtterance: ReviewUtterance = {
         kind: 'review',
         at: rv.at,
         requestId: r.id,
@@ -157,7 +165,11 @@ export function collectUtterances(
         lense: rv.lense,
         verdict: rv.verdict,
         comment: rv.comment,
-      });
+      };
+      if (rv.invoked_by !== undefined) {
+        (reviewUtterance as { invokedBy?: string }).invokedBy = rv.invoked_by;
+      }
+      out.push(reviewUtterance);
     }
   }
 
@@ -230,9 +242,14 @@ export function renderUtterance(
     if (u.denyReason) lines.push(`  denied: ${u.denyReason}`);
     if (u.failureReason) lines.push(`  failed: ${u.failureReason}`);
   } else {
+    // Always expose `invoked_by` when present, even when includeActor
+    // is false (voices groups by actor, so the `by` is redundant —
+    // but the proxy-invoker isn't). Keeps the stream honest about
+    // who actually ran the command vs who the act is attributed to.
     const actor = includeActor ? ` by ${u.by}` : '';
+    const proxy = u.invokedBy ? ` [invoked_by=${u.invokedBy}]` : '';
     lines.push(
-      `[${u.at}] req=${u.requestId} [${u.lense}/${u.verdict}]${actor}`,
+      `[${u.at}] req=${u.requestId} [${u.lense}/${u.verdict}]${actor}${proxy}`,
     );
     lines.push(`  re: ${u.action}`);
     for (const line of u.comment.split('\n')) {
