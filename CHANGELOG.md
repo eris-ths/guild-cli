@@ -7,6 +7,28 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 
 ## [Unreleased]
 
+### Fixed
+- **`gate message --text -` and `gate broadcast --text -` now read
+  from stdin (med, silent data loss regression).** `gate issues
+  note --text -` worked. `gate request --reason -` / `deny` /
+  `fail` / `review --comment -` all worked. But `message` and
+  `broadcast` silently stored the literal `-` as the body.
+  Heredoc-piped handoff notes dropped their content with no
+  error to show for it — a direct hit on the "the record is the
+  truth" invariant. Ported the same `--text -` sentinel as
+  `issues note`.
+
+### Added
+- **`gate issues add` now accepts `--text <s>` / `--text -` (low,
+  symmetry).** Pre-fix the verb accepted text only as the
+  positional argument, while the sibling `gate issues note` had
+  all three routes. Users who built muscle memory on `note`
+  bounced off `add`. Now symmetrical: `--text <s>` inline,
+  `--text -` for stdin, positional remains as the backward-
+  compat legacy form. Missing-text error lists all three routes
+  and carries the same POSIX escape hint (`--text=<value>` / `--`
+  separator) as `issues note` when a flag value begins with `--`.
+
 ### Added
 - **`gate board` — "what's in flight" view.** New read verb that
   answers "what's happening right now" in one call, grouping

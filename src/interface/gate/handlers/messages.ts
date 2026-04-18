@@ -3,12 +3,23 @@ import {
   requireOption,
   optionalOption,
 } from '../../shared/parseArgs.js';
-import { C, deriveInvokedBy, emitInvokedByNotice } from './internal.js';
+import {
+  C,
+  deriveInvokedBy,
+  emitInvokedByNotice,
+  readStdin,
+} from './internal.js';
 
 export async function msgSend(c: C, args: ParsedArgs): Promise<number> {
   const from = requireOption(args, 'from', '--from required', 'GUILD_ACTOR');
   const to = requireOption(args, 'to', '--to required');
-  const text = requireOption(args, 'text', '--text required');
+  let text = requireOption(args, 'text', '--text required');
+  // `--text -` reads from stdin — same sentinel as `gate issues note
+  // --text -` and `gate review --comment -`. Heredoc bodies for long
+  // handoff messages landed as literal "-" until this; that was
+  // silent data loss, since the record-is-truth invariant broke
+  // without any error to show for it.
+  if (text === '-') text = (await readStdin()).trim();
   const type = optionalOption(args, 'type');
   const invokedBy = deriveInvokedBy(from);
   await c.messageUC.send({
@@ -27,7 +38,8 @@ export async function msgSend(c: C, args: ParsedArgs): Promise<number> {
 
 export async function msgBroadcast(c: C, args: ParsedArgs): Promise<number> {
   const from = requireOption(args, 'from', '--from required', 'GUILD_ACTOR');
-  const text = requireOption(args, 'text', '--text required');
+  let text = requireOption(args, 'text', '--text required');
+  if (text === '-') text = (await readStdin()).trim();
   const type = optionalOption(args, 'type');
   const invokedBy = deriveInvokedBy(from);
   if (invokedBy !== undefined) {
