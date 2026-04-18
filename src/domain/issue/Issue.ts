@@ -170,11 +170,15 @@ function sanitizeText(raw: unknown, field: string): string {
  * trail.
  *
  * Notes are strictly additive: the tool exposes no edit or delete.
+ * `invokedBy` mirrors the status_log / review field: stamped only
+ * when GUILD_ACTOR differs from the nominal `by`, so same-actor
+ * notes stay byte-identical to pre-invariant records.
  */
 export interface IssueNote {
   by: string;
   text: string;
   at: string;
+  invokedBy?: string;
 }
 
 const MAX_NOTES = 50;
@@ -189,6 +193,8 @@ export interface IssueProps {
   createdAt: string;
   /** Optional — historical YAML pre-dates notes; restore backfills []. */
   notes?: IssueNote[];
+  /** See IssueNote.invokedBy — same invariant on the creation act. */
+  invokedBy?: string;
 }
 
 export class Issue {
@@ -201,17 +207,26 @@ export class Issue {
     area: string;
     text: string;
     createdAt?: string;
+    invokedBy?: string;
   }): Issue {
-    return new Issue({
+    const from = MemberName.of(input.from);
+    const props: IssueProps = {
       id: input.id,
-      from: MemberName.of(input.from),
+      from,
       severity: parseIssueSeverity(input.severity),
       area: parseArea(input.area),
       text: sanitizeText(input.text, 'text'),
       state: 'open',
       createdAt: input.createdAt ?? new Date().toISOString(),
       notes: [],
-    });
+    };
+    if (
+      input.invokedBy !== undefined &&
+      input.invokedBy !== from.value
+    ) {
+      props.invokedBy = input.invokedBy;
+    }
+    return new Issue(props);
   }
 
   /**
@@ -249,7 +264,12 @@ export class Issue {
     return this.props.notes ?? [];
   }
 
-  addNote(by: string, text: string, at?: string): IssueNote {
+  addNote(
+    by: string,
+    text: string,
+    at?: string,
+    invokedBy?: string,
+  ): IssueNote {
     // `notes` is optional on IssueProps so historical YAML can restore
     // without an explicit empty array; lazily initialize on first add.
     if (!this.props.notes) this.props.notes = [];
@@ -259,11 +279,15 @@ export class Issue {
         'notes',
       );
     }
+    const byName = MemberName.of(by).value;
     const note: IssueNote = {
-      by: MemberName.of(by).value,
+      by: byName,
       text: sanitizeText(text, 'note'),
       at: at ?? new Date().toISOString(),
     };
+    if (invokedBy !== undefined && invokedBy !== byName) {
+      note.invokedBy = invokedBy;
+    }
     this.props.notes.push(note);
     return note;
   }
@@ -278,12 +302,30 @@ export class Issue {
       state: this.props.state,
       created_at: this.props.createdAt,
     };
+    if (this.props.invokedBy !== undefined) {
+      out['invoked_by'] = this.props.invokedBy;
+    }
     // Backward compat: omit the `notes` key when empty so pre-notes
     // YAML stays byte-identical after a round-trip through restore/save.
     const notes = this.props.notes;
     if (notes && notes.length > 0) {
-      out['notes'] = notes.map((n) => ({ ...n }));
+      out['notes'] = notes.map((n) => noteToJSON(n));
     }
     return out;
   }
+}
+
+/**
+ * Wire-format projection of an IssueNote. `invokedBy` in memory →
+ * `invoked_by` on disk, matching the snake_case convention used by
+ * status_log / reviews. Only emitted when present.
+ */
+function noteToJSON(n: IssueNote): Record<string, unknown> {
+  const out: Record<string, unknown> = {
+    by: n.by,
+    text: n.text,
+    at: n.at,
+  };
+  if (n.invokedBy !== undefined) out['invoked_by'] = n.invokedBy;
+  return out;
 }

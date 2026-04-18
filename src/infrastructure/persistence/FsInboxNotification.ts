@@ -44,6 +44,7 @@ export class FsInboxNotification implements NotificationPort {
       read: false,
     };
     if (n.related !== undefined) entry['related'] = n.related;
+    if (n.invokedBy !== undefined) entry['invoked_by'] = n.invokedBy;
     file.messages.push(entry);
     if (file.messages.length > MAX_INBOX_SIZE) {
       file.messages = file.messages.slice(-MAX_INBOX_SIZE);
@@ -131,6 +132,7 @@ function normalizeMessage(raw: Record<string, unknown>): InboxMessage {
   };
   if (typeof raw['read_at'] === 'string') msg.readAt = raw['read_at'];
   if (typeof raw['read_by'] === 'string') msg.readBy = raw['read_by'];
+  if (typeof raw['invoked_by'] === 'string') msg.invokedBy = raw['invoked_by'];
   if (typeof raw['related'] === 'string') msg.related = raw['related'];
   return msg;
 }

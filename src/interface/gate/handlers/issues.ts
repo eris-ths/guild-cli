@@ -3,7 +3,14 @@ import {
   requireOption,
   optionalOption,
 } from '../../shared/parseArgs.js';
-import { C, readStdin, truncateCodePoints } from './internal.js';
+import {
+  C,
+  readStdin,
+  truncateCodePoints,
+  deriveInvokedBy,
+  emitInvokedByNotice,
+  resolveInvokedBy,
+} from './internal.js';
 
 export async function issuesCmd(c: C, args: ParsedArgs): Promise<number> {
   const sub = args.positional[0];
@@ -19,7 +26,20 @@ export async function issuesCmd(c: C, args: ParsedArgs): Promise<number> {
     const area = requireOption(args, 'area', '--area required');
     const text = args.positional.slice(1).join(' ');
     if (!text) throw new Error('Usage: gate issues add ... <text>');
-    const i = await c.issueUC.add({ from, severity, area, text });
+    // Proxy creation: derive pre-save (id unknown), emit notice after
+    // the issue is allocated. Same pattern as gate request.
+    const invokedBy = deriveInvokedBy(from);
+    const addInput: Parameters<typeof c.issueUC.add>[0] = {
+      from,
+      severity,
+      area,
+      text,
+    };
+    if (invokedBy !== undefined) addInput.invokedBy = invokedBy;
+    const i = await c.issueUC.add(addInput);
+    if (invokedBy !== undefined) {
+      emitInvokedByNotice(from, invokedBy, 'issues add', i.id.value);
+    }
     process.stdout.write(`✓ issue: ${i.id.value}\n`);
     return 0;
   }
@@ -28,13 +48,19 @@ export async function issuesCmd(c: C, args: ParsedArgs): Promise<number> {
     const items = await c.issueUC.list(state);
     for (const i of items) {
       const j = i.toJSON();
+      const proxyTag = j['invoked_by']
+        ? ` [invoked_by=${j['invoked_by']}]`
+        : '';
       process.stdout.write(
-        `${j['id']} [${j['severity']}/${j['area']}] ${j['state']} — ${j['text']}\n`,
+        `${j['id']} [${j['severity']}/${j['area']}] ${j['state']} from=${j['from']}${proxyTag} — ${j['text']}\n`,
       );
       const notes = Array.isArray(j['notes']) ? j['notes'] : [];
       for (const n of notes as Array<Record<string, unknown>>) {
+        const noteProxy = n['invoked_by']
+          ? ` [invoked_by=${n['invoked_by']}]`
+          : '';
         process.stdout.write(
-          `  └ note by ${n['by']} at ${n['at']}: ${n['text']}\n`,
+          `  └ note by ${n['by']}${noteProxy} at ${n['at']}: ${n['text']}\n`,
         );
       }
     }
@@ -92,11 +118,20 @@ async function issuesPromote(c: C, args: ParsedArgs): Promise<number> {
   };
   if (executor !== undefined) input.executor = executor;
   if (autoReview !== undefined) input.autoReview = autoReview;
+  // Promote creates a request on `from`'s behalf; when GUILD_ACTOR
+  // differs, the invariant applies the same way as plain `gate
+  // request`. Stamp invoked_by on the created request so proxy-
+  // promotion is visible in the new request's initial status_log.
+  const invokedByPromote = deriveInvokedBy(from);
+  if (invokedByPromote !== undefined) input.invokedBy = invokedByPromote;
 
   // Non-atomic by design: create request first, then resolve issue.
   // If the second step fails we emit the request id so the operator
   // knows the partial state and can manually resolve the issue.
   const req = await c.requestUC.create(input);
+  if (invokedByPromote !== undefined) {
+    emitInvokedByNotice(from, invokedByPromote, 'issues promote', req.id.value);
+  }
   try {
     await c.issueUC.setState(id, 'resolved');
   } catch (e) {
@@ -159,7 +194,14 @@ async function issuesNote(c: C, args: ParsedArgs): Promise<number> {
         hint,
     );
   }
-  const { note } = await c.issueUC.addNote({ id, by, text });
+  const invokedBy = resolveInvokedBy(by, 'issues note', id);
+  const addNoteInput: Parameters<typeof c.issueUC.addNote>[0] = {
+    id,
+    by,
+    text,
+  };
+  if (invokedBy !== undefined) addNoteInput.invokedBy = invokedBy;
+  const { note } = await c.issueUC.addNote(addNoteInput);
   process.stdout.write(
     `✓ note added to ${id} by ${note.by} at ${note.at}\n`,
   );
