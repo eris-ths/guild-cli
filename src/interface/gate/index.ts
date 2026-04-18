@@ -247,8 +247,13 @@ export async function main(argv: readonly string[]): Promise<number> {
         return 1;
     }
   } catch (e) {
+    // The `error:` prefix gives the CLI-universal "this failed" cue;
+    // prepending "DomainError:" on top leaked an internal class name
+    // into user-facing output without adding information. Keep the
+    // field suffix (`(id)`, `(from)`, etc.) — that actually names
+    // which flag was bad.
     const msg = e instanceof DomainError
-      ? `DomainError: ${e.message}${e.field ? ` (${e.field})` : ''}`
+      ? `${e.message}${e.field ? ` (${e.field})` : ''}`
       : e instanceof Error
         ? e.message
         : String(e);
