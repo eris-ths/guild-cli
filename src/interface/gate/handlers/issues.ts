@@ -146,6 +146,13 @@ async function issuesPromote(c: C, args: ParsedArgs): Promise<number> {
     from,
     action,
     reason,
+    // Structured link to the source issue. The default action/reason
+    // already mention the issue id textually, but --action and
+    // --reason can both be overridden — in which case the textual
+    // link disappears and chain would lose the connection. This
+    // field carries the tool-generated link independent of text
+    // content, so chain can walk it regardless of overrides.
+    promotedFrom: id,
   };
   if (executor !== undefined) input.executor = executor;
   if (autoReview !== undefined) input.autoReview = autoReview;

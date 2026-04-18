@@ -46,6 +46,10 @@ export class RequestUseCases {
     autoReview?: string;
     with?: readonly string[];
     invokedBy?: string;
+    /** Issue id this request was promoted from (via `gate issues
+     *  promote`). Tool-generated structured link surviving any
+     *  --action / --reason overrides. */
+    promotedFrom?: string;
   }): Promise<Request> {
     const { requests, members, clock } = this.deps;
     const from = await assertActor(input.from, '--from', members);
@@ -83,6 +87,8 @@ export class RequestUseCases {
     if (input.with !== undefined && input.with.length > 0)
       createArgs.with = input.with;
     if (input.invokedBy !== undefined) createArgs.invokedBy = input.invokedBy;
+    if (input.promotedFrom !== undefined)
+      createArgs.promotedFrom = input.promotedFrom;
 
     for (let attempt = 0; attempt < 10; attempt++) {
       createArgs.id = RequestId.generate(now, seq);

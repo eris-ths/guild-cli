@@ -420,3 +420,48 @@ test('Request.create without invokedBy leaves initial entry clean', () => {
   const log = r.toJSON()['status_log'] as Array<Record<string, unknown>>;
   assert.equal('invoked_by' in log[0]!, false);
 });
+
+// ── promoted_from: structured link to source issue ──
+
+test('Request.create with promotedFrom stores the id on the aggregate', () => {
+  const r = Request.create({
+    id: RequestId.generate(d, 1),
+    from: 'alice',
+    action: 'whatever',
+    reason: 'whatever',
+    promotedFrom: 'i-2026-04-14-0001',
+  });
+  assert.equal(r.promotedFrom, 'i-2026-04-14-0001');
+  assert.equal(r.toJSON()['promoted_from'], 'i-2026-04-14-0001');
+});
+
+test('Request.toJSON omits promoted_from when not set (pre-promote requests byte-identical)', () => {
+  const r = Request.create({
+    id: RequestId.generate(d, 1),
+    from: 'alice',
+    action: 'a',
+    reason: 'r',
+  });
+  assert.equal('promoted_from' in r.toJSON(), false);
+});
+
+test('Request.restore preserves promotedFrom on round-trip', () => {
+  // Simulates the repo rehydrating a request that was promoted.
+  // The field must survive load → toJSON without needing domain
+  // logic to re-infer it from text.
+  const r = Request.restore({
+    id: RequestId.generate(d, 1),
+    from: MemberName.of('alice'),
+    action: 'custom title (no id mention)',
+    reason: 'custom reason (no id mention)',
+    state: 'pending',
+    createdAt: '2026-04-14T00:00:00.000Z',
+    statusLog: [
+      { state: 'pending', by: 'alice', at: '2026-04-14T00:00:00.000Z' },
+    ],
+    reviews: [],
+    promotedFrom: 'i-2026-04-14-0007',
+  });
+  assert.equal(r.promotedFrom, 'i-2026-04-14-0007');
+  assert.equal(r.toJSON()['promoted_from'], 'i-2026-04-14-0007');
+});

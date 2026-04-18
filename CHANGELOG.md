@@ -7,6 +7,24 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 
 ## [Unreleased]
 
+### Added
+- **`gate issues promote` writes a structured `promoted_from` field
+  on the created request.** The default `--action` / `--reason`
+  templates mention the source issue id textually, and chain picks
+  that up via its text-scan. But both flags can be overridden — in
+  that narrow case the textual link disappears and chain would lose
+  the connection. The new `promoted_from: <issue-id>` field on the
+  request carries the tool-generated link independent of text
+  content, so chain walks it as a separate-from-text reference path
+  regardless of overrides. The field is omitted on non-promoted
+  requests so existing YAML stays byte-identical; `gate show
+  --format text` renders it on a dedicated line; `chain` dedupes
+  against text-mention hits so default-promote output doesn't
+  surface the same issue twice. Added as the first example of a
+  tool-generated structured relationship (alongside `executor`,
+  `auto_review`, `with`) — user-authored references still use the
+  general text-mention channel. (#47 neighborhood.)
+
 ### Fixed
 - **Custom lenses (configured in `guild.config.yaml`) no longer break
   `listAll`-backed read verbs.** `findById` correctly passed
