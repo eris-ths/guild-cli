@@ -140,6 +140,45 @@ test('register: --category host is rejected (guild.config.yaml is the source of 
   }
 });
 
+test('register: --name that collides with host_names is rejected (guards the host/member single-role invariant)', () => {
+  // Complement to the `--category host` guard above: that one catches
+  // the "trying to create a host via --category" path; this one
+  // catches "trying to create a member with a name already claimed
+  // as a host". Both end up as the same invariant violation from
+  // downstream verbs (which name resolves to which role?), so both
+  // must be rejected pre-save.
+  const { root, cleanup } = bootstrap();
+  try {
+    const { status, stderr } = runGate(root, ['register', '--name', 'human']);
+    assert.notEqual(status, 0);
+    assert.match(stderr, /already declared as a host/);
+    assert.match(stderr, /host_names:/);
+    assert.ok(!existsSync(join(root, 'members', 'human.yaml')));
+  } finally {
+    cleanup();
+  }
+});
+
+test('register: host/member collision fires before --dry-run (disk untouched either way)', () => {
+  // Pin the ordering: the host check must happen before the dry-run
+  // branch, otherwise `register --name <host> --dry-run` would
+  // produce a preview that cannot ever be committed — a confusing
+  // dead-end. Test that the error surfaces regardless of --dry-run.
+  const { root, cleanup } = bootstrap();
+  try {
+    const { status, stderr } = runGate(root, [
+      'register',
+      '--name',
+      'human',
+      '--dry-run',
+    ]);
+    assert.notEqual(status, 0);
+    assert.match(stderr, /already declared as a host/);
+  } finally {
+    cleanup();
+  }
+});
+
 test('register: --dry-run does not touch disk and yields parseable JSON', () => {
   const { root, cleanup } = bootstrap();
   try {

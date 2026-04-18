@@ -7,6 +7,17 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 
 ## [Unreleased]
 
+### Fixed
+- **`gate register --name <x>` now rejects `x` already in `host_names`.**
+  The existing guards blocked `--category host` and duplicate-member
+  names but missed the third way to create the same collision:
+  registering a plain member whose name is already a host in
+  `guild.config.yaml`. Post-fix, all three entry points end up at
+  the same invariant "a single name cannot be both a host and a
+  member," which is what downstream verbs assume when they resolve
+  an actor's role. Error names both remediation paths (pick a
+  different --name, or remove from `host_names:`).
+
 ### Changed
 - **`gate resume` documents its same-actor scope and points at
   `gate boot` when nothing is waiting.** Surfaced by a handoff
