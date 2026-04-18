@@ -38,6 +38,11 @@ export async function issuesCmd(c: C, args: ParsedArgs): Promise<number> {
       text = (await readStdin()).trim();
     } else if (textOpt !== undefined) {
       text = textOpt;
+    } else if (positional === '-') {
+      // Symmetry with `--text -`. `gate issues add ... -` with a
+      // heredoc attached reads the body from stdin, same as the
+      // explicit flag form.
+      text = (await readStdin()).trim();
     } else {
       text = positional;
     }
@@ -213,6 +218,10 @@ async function issuesNote(c: C, args: ParsedArgs): Promise<number> {
     text = (await readStdin()).trim();
   } else if (textOpt !== undefined) {
     text = textOpt;
+  } else if (positional === '-') {
+    // Symmetry with `--text -`. A lone `-` as positional argument
+    // means "read the note body from stdin," same as in review.
+    text = (await readStdin()).trim();
   } else {
     text = positional;
   }
