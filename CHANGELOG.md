@@ -7,6 +7,15 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 
 ## [Unreleased]
 
+### Changed
+- **Chain documentation refreshed to match bidirectional walk.**
+  `gate schema --verb chain` previously read "walk cross-references
+  one hop from id" — stale since #45 added inbound refs. LLM tool
+  layers consuming the schema would have built their wrapper docs
+  off the one-sided summary. Updated schema summary, `gate --help`
+  entry, and the chain module's JSDoc so every surface names the
+  forward-and-inbound behavior consistently.
+
 ### Added
 - **`gate chain <id>` walks inbound references too.** Previously
   only forward: chain scanned the root's own text and listed the

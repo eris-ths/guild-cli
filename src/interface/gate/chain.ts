@@ -1,10 +1,15 @@
 /**
  * Helpers for `gate chain <id>`.
  *
- * The "chain" is a one-hop neighborhood graph around a root record:
- * given a request or issue id, find every other request or issue it
- * mentions in its free-text fields (action, reason, closure notes,
- * review comments, issue text).
+ * The "chain" is a one-hop neighborhood graph around a root record,
+ * walked in both directions:
+ *
+ *   forward  — ids the root mentions in its own free-text fields
+ *              (request: action / reason / closure notes / review
+ *              comments; issue: text + per-note bodies).
+ *   inbound  — records elsewhere that mention the root id. Computed
+ *              in the handler (reqChain) by scanning every other
+ *              record's text with the same helpers below.
  *
  * The id-scanner itself (`extractReferences`) lives in
  * `domain/shared/extractReferences.ts` — it is reused by the
