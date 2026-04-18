@@ -2,6 +2,7 @@ import YAML from 'yaml';
 import {
   Issue,
   IssueId,
+  IssueNote,
   IssueState,
   parseIssueSeverity,
   parseIssueState,
@@ -115,6 +116,7 @@ function hydrate(
       text: String(obj['text']),
       state: parseIssueState(String(obj['state'] ?? 'open')),
       createdAt: String(obj['created_at'] ?? new Date().toISOString()),
+      notes: hydrateNotes(obj['notes'], source, onMalformed),
     });
     return issue;
   } catch (e) {
@@ -126,4 +128,33 @@ function hydrate(
     );
     return null;
   }
+}
+
+function hydrateNotes(
+  raw: unknown,
+  source: string,
+  onMalformed: OnMalformed,
+): IssueNote[] {
+  if (!Array.isArray(raw)) return [];
+  const out: IssueNote[] = [];
+  for (let i = 0; i < raw.length; i++) {
+    const entry = raw[i];
+    if (!entry || typeof entry !== 'object') {
+      onMalformed(source, `notes[${i}] is not a mapping; skipping`);
+      continue;
+    }
+    const r = entry as Record<string, unknown>;
+    const by = typeof r['by'] === 'string' ? r['by'] : '';
+    const text = typeof r['text'] === 'string' ? r['text'] : '';
+    const at = typeof r['at'] === 'string' ? r['at'] : '';
+    if (!by || !text || !at) {
+      onMalformed(
+        source,
+        `notes[${i}] missing required fields (by/text/at); skipping`,
+      );
+      continue;
+    }
+    out.push({ by, text, at });
+  }
+  return out;
 }

@@ -8,6 +8,45 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 ## [Unreleased]
 
 ### Added
+- **`gate issues note <id>`.** Append-only annotation for existing
+  issues. The original `severity` / `area` / `text` stay immutable
+  by design (Two-Persona Devil: the first-frame record is preserved,
+  not overwritten) — but the *understanding* of an issue evolves, and
+  without a notes mechanism users had to spawn a whole new issue that
+  referenced the old one just to say "sev should be med in hindsight"
+  or "not reproducible on macOS". Notes take `--by <m>`, `--text <s>`,
+  `--text -` (STDIN), or a positional; they appear under the parent
+  issue in `gate issues list` as `└ note by <who> at <when>: <text>`.
+  No edit, no delete — still append-only.
+- **`read_by` on inbox mark-read.** Mark-read now records the actor
+  that ran the command alongside `read_at`, so audits can distinguish
+  "sentinel acknowledged this" from "eris marked it read on sentinel's
+  behalf" (`--for <other>`). When `GUILD_ACTOR` differs from the inbox
+  owner, stderr surfaces a `# mark-read by <actor> on behalf of
+  <owner>` line so the delegation is visible in the session transcript.
+  `gate inbox` display now shows `(read <at> by <actor>)` when read_by
+  differs from the owner; identical reads stay formatted as before.
+- **`--reason -` reads from STDIN.** `gate request`, `gate deny`,
+  `gate fail`, and `gate fast-track` now accept `--reason -` the same
+  way `gate review --comment -` already did. Long multi-line reasons
+  can come from `$(cat reason.txt)` or a heredoc without shell
+  quoting gymnastics. `--note -` on deny/fail works too for
+  muscle-memory parity.
+
+### Changed
+- **`gate list` without `--state` points at `status`.** The error that
+  used to read `Missing --state` now spells out the list-vs-status
+  distinction: `status` for counts across every state, `list --state
+  <s>` for the contents of one. First-time users who reach for `gate
+  list` to "see everything" get the right verb in one hop instead of
+  reading `--help` twice. Schema entry gets the same clarification.
+- **`gate review` warns on self-review.** When `--by` equals the
+  request author, a `⚠ self-review` line prints to stderr. The review
+  still lands (history may legitimately need self-annotations), but
+  the Two-Persona Devil frame expects a different voice, and the
+  warning makes the choice visible in the transcript instead of
+  silently laundering it into YAML.
+
 - **`gate boot` reports `content_root_health`.** boot payload
   gains `hints.content_root_health` with `malformed_count`, a
   per-area breakdown (`members` / `requests` / `issues` with

@@ -22,6 +22,15 @@ export interface InboxMessage {
   read: boolean;
   /** ISO-8601 timestamp when mark-read was applied. Undefined until read. */
   readAt?: string;
+  /**
+   * Actor who ran `mark-read`. Usually equals the inbox owner, but may
+   * differ when someone else uses `--for <other>` (e.g. a human
+   * operator acknowledging on an AI's behalf). Recorded so that
+   * "sentinel acknowledged this" vs "eris marked it read for sentinel"
+   * stays distinguishable in audits. Undefined for messages read
+   * before this field was introduced.
+   */
+  readBy?: string;
   related?: string;
 }
 
@@ -47,11 +56,17 @@ export interface NotificationPort {
    * message is marked. Already-read messages are left alone
    * (idempotent) and counted separately.
    *
+   * `readBy` is the actor that issued the mark — usually equal to
+   * `member`, but may differ when one actor acknowledges on another's
+   * behalf via `--for`. Persisted alongside `readAt` so the trace
+   * stays honest about who did the reading.
+   *
    * Throws `DomainError` if `index` is out of range.
    */
   markRead(
     member: MemberName,
     readAt: string,
+    readBy: string,
     index?: number,
   ): Promise<MarkReadResult>;
 }

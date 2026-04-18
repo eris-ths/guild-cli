@@ -1,6 +1,7 @@
 import {
   Issue,
   IssueId,
+  IssueNote,
   IssueState,
   parseIssueState,
 } from '../../domain/issue/Issue.js';
@@ -84,6 +85,26 @@ export class IssueUseCases {
     issue.setState(parseIssueState(state) as IssueState);
     await this.issues.save(issue);
     return issue;
+  }
+
+  /**
+   * Append a note (free-form comment) to an existing issue. The issue's
+   * original severity/area/text remain immutable — notes are the
+   * mechanism for revised understanding, follow-up observations, or
+   * cross-references without destroying the first-frame record.
+   */
+  async addNote(input: {
+    id: string;
+    by: string;
+    text: string;
+  }): Promise<{ issue: Issue; note: IssueNote }> {
+    await assertActor(input.by, '--by', this.members);
+    const issueId = IssueId.of(input.id);
+    const issue = await this.issues.findById(issueId);
+    if (!issue) throw new DomainError(`Issue not found: ${input.id}`, 'id');
+    const note = issue.addNote(input.by, input.text, this.clock.now().toISOString());
+    await this.issues.save(issue);
+    return { issue, note };
   }
 }
 

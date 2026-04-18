@@ -1,6 +1,7 @@
 import { buildContainer } from '../shared/container.js';
-import { parseArgs, requireOption } from '../shared/parseArgs.js';
+import { parseArgs, optionalOption } from '../shared/parseArgs.js';
 import { DomainError } from '../../domain/shared/DomainError.js';
+import { REQUEST_STATES } from '../../domain/request/RequestState.js';
 import { getPackageVersion, isVersionFlag } from '../shared/version.js';
 import {
   reqCreate,
@@ -82,6 +83,7 @@ Issues:
   gate issues add --from <m> --severity <s> --area <a> <text>
   gate issues list [--state <s>]
   gate issues resolve|defer|start|reopen <id>
+  gate issues note <id> --by <m> [--text <s> | --text - | <text>]
   gate issues promote <id> --from <m> [--executor <m>] [--auto-review <m>]
                                       [--action <a>] [--reason <r>]
 
@@ -161,7 +163,21 @@ export async function main(argv: readonly string[]): Promise<number> {
       case 'pending':
         return await reqList(c, 'pending', args);
       case 'list': {
-        const state = requireOption(args, 'state', 'gate list --state <s>');
+        // `gate list` without --state is a common first-try ("show me
+        // everything"). Rather than just erroring on the missing flag,
+        // spell out the list vs status distinction — the question most
+        // first-time users actually have is "which verb do I want?"
+        const state = optionalOption(args, 'state');
+        if (state === undefined) {
+          const states = REQUEST_STATES.join('|');
+          process.stderr.write(
+            `gate list needs --state <s> (${states}).\n` +
+              '  For just counts across every state, use:  gate status\n' +
+              '  For the contents of one state,     use:  gate list --state <s>\n' +
+              `  States: ${REQUEST_STATES.join(' | ')}\n`,
+          );
+          return 1;
+        }
         return await reqList(c, state, args);
       }
       case 'show':
