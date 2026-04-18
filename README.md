@@ -34,6 +34,7 @@ the value you're getting is worth the reading.
 | 10 min | [`AGENT.md`](./AGENT.md) | you're an AI agent about to run `gate` and want the verb map |
 | 30 min | **this README** (below) | you want the design rationale, first-time setup, verb cookbook |
 | 1 hour | [`docs/verbs.md`](./docs/verbs.md) + [`examples/dogfood-session/`](./examples/dogfood-session/) | you're adopting this seriously and want to see real sessions |
+| working notes | [`docs/domain-fit/`](./docs/domain-fit/) | you're curious whether gate fits a non-standard domain (story, meeting, research, post-mortem, etc.) |
 | when needed | [`POLICY.md`](./POLICY.md) / [`SECURITY.md`](./SECURITY.md) | you're embedding guild-cli and need the stability / threat contract |
 
 If a layer is enough for what you're doing, stop there. Nothing
