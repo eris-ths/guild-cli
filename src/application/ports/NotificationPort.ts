@@ -7,6 +7,14 @@ export interface Notification {
   text: string;
   related?: string;
   at?: string;
+  /**
+   * Actual CLI invoker when different from `from`. Mirrors the
+   * `read_by` pattern on the receive side: `from` is who the
+   * message is attributed to (the member on record); `invokedBy`
+   * is who actually ran `gate message` / `gate broadcast`. Only
+   * stamped when they disagree.
+   */
+  invokedBy?: string;
 }
 
 /**
@@ -31,6 +39,13 @@ export interface InboxMessage {
    * before this field was introduced.
    */
   readBy?: string;
+  /**
+   * Actor who ran `gate message` / `gate broadcast` when different
+   * from `from`. Same invariant as the rest: stamped only when they
+   * disagree. Receivers can see which messages were ghost-sent
+   * without having to chase the sender's status log.
+   */
+  invokedBy?: string;
   related?: string;
 }
 

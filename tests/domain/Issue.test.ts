@@ -189,3 +189,45 @@ test('parseIssueSeverity error message lists canonical values + aliases', () => 
     assert.match(err.message, /medium.*med/s);
   }
 });
+
+// ── invoked_by on Issue.create + Issue.addNote ──
+
+test('Issue.create stamps invoked_by when differs from from', () => {
+  const i = Issue.create({
+    id: IssueId.generate(d, 1),
+    from: 'alice',
+    severity: 'med',
+    area: 'core',
+    text: 'x',
+    invokedBy: 'claude',
+  });
+  assert.equal(i.toJSON()['invoked_by'], 'claude');
+});
+
+test('Issue.create omits invoked_by when equals from', () => {
+  const i = Issue.create({
+    id: IssueId.generate(d, 1),
+    from: 'alice',
+    severity: 'med',
+    area: 'core',
+    text: 'x',
+    invokedBy: 'alice',
+  });
+  assert.equal('invoked_by' in i.toJSON(), false);
+});
+
+test('Issue.addNote stamps invoked_by when differs from by', () => {
+  const i = mkIssue();
+  const note = i.addNote('eris', 'n', undefined, 'claude');
+  assert.equal(note.invokedBy, 'claude');
+  const j = i.toJSON();
+  const notes = j['notes'] as Array<Record<string, unknown>>;
+  assert.equal(notes[0]!['invoked_by'], 'claude');
+});
+
+test('Issue.addNote omits invoked_by when equals by', () => {
+  const i = mkIssue();
+  i.addNote('eris', 'n', undefined, 'eris');
+  const notes = i.toJSON()['notes'] as Array<Record<string, unknown>>;
+  assert.equal('invoked_by' in notes[0]!, false);
+});

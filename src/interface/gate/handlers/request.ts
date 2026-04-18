@@ -5,7 +5,13 @@ import {
 } from '../../shared/parseArgs.js';
 import { Request } from '../../../domain/request/Request.js';
 import { formatDelta, pushMultilineField } from '../voices.js';
-import { C, readStdin, resolveInvokedBy } from './internal.js';
+import {
+  C,
+  readStdin,
+  deriveInvokedBy,
+  emitInvokedByNotice,
+  resolveInvokedBy,
+} from './internal.js';
 import { emitWriteResponse, parseFormat } from './writeFormat.js';
 
 export async function reqCreate(c: C, args: ParsedArgs): Promise<number> {
@@ -34,7 +40,17 @@ export async function reqCreate(c: C, args: ParsedArgs): Promise<number> {
   if (target !== undefined) input.target = target;
   if (autoReview !== undefined) input.autoReview = autoReview;
   if (withPartners.length > 0) input.with = withPartners;
+  // Request creation is a proxy-eligible verb same as approve/review:
+  // when GUILD_ACTOR differs from --from, the agent is filing on a
+  // member's behalf. Derive the invoker pre-create so it lands on
+  // the initial status_log entry; emit the stderr notice after the
+  // id is allocated.
+  const invokedBy = deriveInvokedBy(from);
+  if (invokedBy !== undefined) input.invokedBy = invokedBy;
   const r = await c.requestUC.create(input);
+  if (invokedBy !== undefined) {
+    emitInvokedByNotice(from, invokedBy, 'request', r.id.value);
+  }
   emitWriteResponse(
     parseFormat(args),
     r,

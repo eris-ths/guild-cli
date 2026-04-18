@@ -8,6 +8,26 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 ## [Unreleased]
 
 ### Added
+- **`invoked_by` extended to every proxy-eligible write verb.** Previously
+  scoped to the five transitions + `review` + `fast-track` (#39). Dogfooding
+  surfaced the gap — `GUILD_ACTOR=X gate request --from Y` was silently
+  attributed to Y with no audit trail of X. The invariant now applies to:
+  - `gate request` — initial `pending` status_log entry stamps `invoked_by`
+  - `gate issues add` — issue-level `invoked_by` on the first-frame record
+  - `gate issues note` — per-note `invoked_by`
+  - `gate issues promote` — the created request's initial status_log entry
+  - `gate message` — per-notification envelope
+  - `gate broadcast` — every fan-out envelope
+  Each verb also emits the standard one-line stderr delegation notice.
+  Omitted from YAML when `invokedBy` equals the nominal actor, so
+  same-actor invocations stay byte-identical. `gate issues list` renders
+  `[invoked_by=<actor>]` on the issue header and on each note; `gate
+  inbox` shows it alongside the sender on every incoming message.
+
+  A shared helper pair (`deriveInvokedBy` + `emitInvokedByNotice`) lets
+  creation paths (id unknown until save) defer the stderr notice until
+  after the record is allocated. The existing `resolveInvokedBy` wrapper
+  is unchanged for same-id call sites.
 - **`gate boot` emits `suggested_next` for pre-onboarding shapes.** When
   the caller has no identity yet, boot now prescribes a concrete first
   action instead of handing back a silent empty payload. Three branches:

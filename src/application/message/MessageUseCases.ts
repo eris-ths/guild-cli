@@ -37,6 +37,7 @@ export class MessageUseCases {
     text: string;
     type?: string;
     related?: string;
+    invokedBy?: string;
   }): Promise<void> {
     const from = await assertActor(input.from, '--from', this.deps.members);
     // --to must be a real registered member — we can't deliver to a host
@@ -73,12 +74,17 @@ export class MessageUseCases {
       );
     }
     const text = sanitizeMessageText(input.text);
+    const invokedBy =
+      input.invokedBy !== undefined && input.invokedBy !== from.value
+        ? input.invokedBy
+        : undefined;
     await this.deps.notifier.post({
       from: from.value,
       to: toMember.name,
       type: input.type ?? 'message',
       text,
       ...(input.related !== undefined ? { related: input.related } : {}),
+      ...(invokedBy !== undefined ? { invokedBy } : {}),
       at: this.deps.clock.now().toISOString(),
     });
   }
@@ -95,6 +101,7 @@ export class MessageUseCases {
     from: string;
     text: string;
     type?: string;
+    invokedBy?: string;
   }): Promise<BroadcastResult> {
     const from = await assertActor(input.from, '--from', this.deps.members);
     const text = sanitizeMessageText(input.text);
@@ -103,6 +110,10 @@ export class MessageUseCases {
       .filter((m) => m.active && m.name.value !== from.value)
       .map((m) => m.name);
     const now = this.deps.clock.now().toISOString();
+    const invokedBy =
+      input.invokedBy !== undefined && input.invokedBy !== from.value
+        ? input.invokedBy
+        : undefined;
     const delivered: string[] = [];
     const failed: Array<{ to: string; error: string }> = [];
     for (const to of targets) {
@@ -113,6 +124,7 @@ export class MessageUseCases {
           type: input.type ?? 'broadcast',
           text,
           at: now,
+          ...(invokedBy !== undefined ? { invokedBy } : {}),
         });
         delivered.push(to.value);
       } catch (e) {
