@@ -8,6 +8,14 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 ## [Unreleased]
 
 ### Changed
+- **User-facing errors no longer leak the `DomainError:` class prefix.**
+  Errors from the domain layer used to come through the CLI as
+  `error: DomainError: Request not found: ... (id)`. The
+  `DomainError:` prefix was pure noise for the end user — the `error:`
+  cue is the universal CLI "this failed" marker, and naming the
+  internal class on top added no information. Dropped. The field
+  suffix (`(id)`, `(from)`, etc.) stays, because that actually names
+  which flag was bad.
 - **Chain documentation refreshed to match bidirectional walk.**
   `gate schema --verb chain` previously read "walk cross-references
   one hop from id" — stale since #45 added inbound refs. LLM tool
