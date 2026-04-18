@@ -8,6 +8,15 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 ## [Unreleased]
 
 ### Fixed
+- **Custom lenses (configured in `guild.config.yaml`) no longer break
+  `listAll`-backed read verbs.** `findById` correctly passed
+  `config.lenses` to the hydrator, but `listByState` did not — so a
+  review with a custom lens (e.g. `rational`, `emotional`) wrote
+  fine, showed fine via `gate show`, but then `gate chain` / `gate
+  voices` / `gate tail` hit hydrate failure with "Invalid lense" and
+  silently dropped the record. Surfaced by dogfooding gate in
+  solo-journal mode with a `rational / emotional / future-self /
+  skeptic` lens set. One-line fix at the call site.
 - **`gate message --text -` and `gate broadcast --text -` now read
   from stdin (med, silent data loss regression).** `gate issues
   note --text -` worked. `gate request --reason -` / `deny` /

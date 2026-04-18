@@ -65,7 +65,7 @@ export class YamlRequestRepository implements RequestRepository {
       const absSource = join(this.config.paths.requests, rel);
       const parsed = parseYamlSafe(raw, absSource, this.config.onMalformed);
       if (parsed === undefined) continue;
-      const r = hydrate(parsed, state, absSource, this.config.onMalformed);
+      const r = hydrate(parsed, state, absSource, this.config.onMalformed, this.config.lenses);
       if (r) out.push(r);
     }
     return out;
