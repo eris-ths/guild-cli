@@ -224,7 +224,8 @@ export async function reqDeny(c: C, args: ParsedArgs): Promise<number> {
   const reason = await resolveReason(args, 'deny');
   if (!id || !reason) {
     throw new Error(
-      'Usage: gate deny <id> --by <m> [--note <s> | --reason <s> | <reason>]',
+      'Usage: gate deny <id> --by <m> [--note <s> | --reason <s> | <reason>]' +
+        dashedValueHint(args, ['reason', 'note']),
     );
   }
   const by = requireOption(args, 'by', '--by required', 'GUILD_ACTOR');
@@ -270,7 +271,8 @@ export async function reqFail(c: C, args: ParsedArgs): Promise<number> {
   const reason = await resolveReason(args, 'fail');
   if (!id || !reason) {
     throw new Error(
-      'Usage: gate fail <id> --by <m> [--note <s> | --reason <s> | <reason>]',
+      'Usage: gate fail <id> --by <m> [--note <s> | --reason <s> | <reason>]' +
+        dashedValueHint(args, ['reason', 'note']),
     );
   }
   const by = requireOption(args, 'by', '--by required', 'GUILD_ACTOR');
@@ -278,6 +280,22 @@ export async function reqFail(c: C, args: ParsedArgs): Promise<number> {
   const r = await c.requestUC.fail(id, by, reason, invokedBy);
   emitWriteResponse(parseFormat(args), r, `✓ failed: ${id}`, c.config);
   return 0;
+}
+
+// Append a short hint to usage errors when one of the string-valued
+// flags landed as boolean (meaning the user passed a value that began
+// with "--" and the parser refused to consume it). Parallels the same
+// hint added inline in requireOption. Returns an empty string when no
+// flag is in that state, so the usage message stays clean in the
+// common forgot-the-arg case.
+function dashedValueHint(args: ParsedArgs, keys: readonly string[]): string {
+  const tripped = keys.filter((k) => args.options[k] === true);
+  if (tripped.length === 0) return '';
+  const pairs = tripped.map((k) => `--${k}=<value>`).join(' / ');
+  return (
+    `\n  (Your ${tripped.map((k) => '--' + k).join(' / ')} value began with "--" ` +
+    `and was not consumed. Use ${pairs} or put "-- <value>" after the other flags.)`
+  );
 }
 
 /**

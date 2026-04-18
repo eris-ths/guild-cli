@@ -7,6 +7,28 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 
 ## [Unreleased]
 
+### Fixed
+- **Values beginning with `--` can now be passed to every flag.** The
+  arg parser refuses to consume a next-token that starts with `--`
+  (it can't tell a literal from a genuine next flag without per-flag
+  metadata), which made notes like `gate issues note <id> --by eris
+  --text "--reason - 実装済"` silently drop the value. Same shape
+  affected every STDIN-accepting verb (`gate request --reason`,
+  `gate deny --reason`, `gate fail --reason`, `gate review --comment`,
+  `gate issues note --text`) whenever the literal itself started
+  with `--`. The fix is twofold:
+  - **POSIX `--` end-of-options separator.** After a bare `--`, every
+    remaining token becomes positional, even if it starts with `--`:
+    `gate issues note <id> --by eris -- "--reason - foo"`.
+  - **Clearer errors.** When a value-expecting flag lands as boolean
+    (the surface symptom of this ambiguity), the error now names the
+    two escape valves — `--key=<value>` and `-- <value>` — so the
+    user isn't left staring at "text is required" after they did
+    pass text.
+
+  `--key=<value>` always worked and is pinned with a regression test.
+  `gate --help` gains a short "Values beginning with `--`" section.
+
 ### Added
 - **`invoked_by` on status_log and reviews.** When `GUILD_ACTOR`
   differs from the explicit `--by` (an AI agent acting on a

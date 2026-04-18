@@ -97,6 +97,15 @@ States: pending | approved | executing | completed | failed | denied
 Verdicts: ok | concern | reject
 Lenses: devil | layer | cognitive | user (configurable via guild.config.yaml)
 
+Values beginning with "--":
+  Bare \`--key <value>\` will not consume a value that itself starts
+  with "--" (the parser can't tell it from the next flag). Use either
+  form below to pass such literals:
+    --key=<value>                            # inline, any content
+    ... -- <value> [<value>...]              # POSIX end-of-options marker
+  Example:
+    gate issues note <id> --by eris -- "the --reason - sentinel is cool"
+
 Environment:
   GUILD_ACTOR=<name>   If set, used as the default for --from / --by /
                        --for when those flags are omitted. Explicit flags

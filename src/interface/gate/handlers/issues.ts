@@ -144,9 +144,19 @@ async function issuesNote(c: C, args: ParsedArgs): Promise<number> {
     text = positional;
   }
   if (!text.trim()) {
+    // If args.options.text landed as boolean, the user did pass --text
+    // but with a value that began with "--" and the parser refused it.
+    // Point at the POSIX escape valves explicitly — the stock error
+    // wouldn't explain why the value they typed vanished.
+    const hint =
+      args.options['text'] === true
+        ? '\n  (Your --text value began with "--" and was not consumed. ' +
+          'Use --text=<value> or put "-- <value>" after the other flags.)'
+        : '';
     throw new Error(
       'note text is required (use --text <s>, --text - for STDIN, ' +
-        'or pass as positional argument)',
+        'or pass as positional argument)' +
+        hint,
     );
   }
   const { note } = await c.issueUC.addNote({ id, by, text });

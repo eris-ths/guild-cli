@@ -41,9 +41,15 @@ export async function reqReview(c: C, args: ParsedArgs): Promise<number> {
     comment = '';
   }
   if (!comment.trim()) {
+    const hint =
+      args.options['comment'] === true
+        ? '\n  (Your --comment value began with "--" and was not consumed. ' +
+          'Use --comment=<value> or put "-- <value>" after the other flags.)'
+        : '';
     throw new Error(
       'review comment is required (use --comment <s>, --comment - for STDIN, ' +
-        'a positional argument, or run interactively so $EDITOR opens)',
+        'a positional argument, or run interactively so $EDITOR opens)' +
+        hint,
     );
   }
 
