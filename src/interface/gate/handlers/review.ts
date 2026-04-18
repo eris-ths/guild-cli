@@ -3,7 +3,7 @@ import {
   requireOption,
   optionalOption,
 } from '../../shared/parseArgs.js';
-import { C, readStdin, readCommentViaEditor } from './internal.js';
+import { C, readStdin, readCommentViaEditor, resolveInvokedBy } from './internal.js';
 import { emitWriteResponse, parseFormat } from './writeFormat.js';
 
 export async function reqReview(c: C, args: ParsedArgs): Promise<number> {
@@ -47,7 +47,15 @@ export async function reqReview(c: C, args: ParsedArgs): Promise<number> {
     );
   }
 
-  const updated = await c.requestUC.review({ id, by, lense, verdict, comment });
+  const invokedBy = resolveInvokedBy(by, 'review', id);
+  const updated = await c.requestUC.review({
+    id,
+    by,
+    lense,
+    verdict,
+    comment,
+    ...(invokedBy !== undefined ? { invokedBy } : {}),
+  });
   // Self-review warning. The tool permits `--by` to equal the
   // request author (the YAML is just an append-only record and
   // doesn't know intent), but the Two-Persona Devil frame is

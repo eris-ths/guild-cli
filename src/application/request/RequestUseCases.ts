@@ -124,42 +124,67 @@ export class RequestUseCases {
     return this.deps.requests.findById(RequestId.of(id));
   }
 
-  async approve(id: string, by: string, note?: string): Promise<Request> {
+  async approve(
+    id: string,
+    by: string,
+    note?: string,
+    invokedBy?: string,
+  ): Promise<Request> {
     const req = await this.loadOrThrow(id);
     const actor = await assertActor(by, '--by', this.deps.members);
-    req.approve(actor, note);
+    req.approve(actor, note, invokedBy);
     await this.deps.requests.save(req);
     return req;
   }
 
-  async deny(id: string, by: string, reason: string): Promise<Request> {
+  async deny(
+    id: string,
+    by: string,
+    reason: string,
+    invokedBy?: string,
+  ): Promise<Request> {
     const req = await this.loadOrThrow(id);
     const actor = await assertActor(by, '--by', this.deps.members);
-    req.deny(actor, reason);
+    req.deny(actor, reason, invokedBy);
     await this.deps.requests.save(req);
     return req;
   }
 
-  async execute(id: string, by: string, note?: string): Promise<Request> {
+  async execute(
+    id: string,
+    by: string,
+    note?: string,
+    invokedBy?: string,
+  ): Promise<Request> {
     const req = await this.loadOrThrow(id);
     const actor = await assertActor(by, '--by', this.deps.members);
-    req.execute(actor, note);
+    req.execute(actor, note, invokedBy);
     await this.deps.requests.save(req);
     return req;
   }
 
-  async complete(id: string, by: string, note?: string): Promise<Request> {
+  async complete(
+    id: string,
+    by: string,
+    note?: string,
+    invokedBy?: string,
+  ): Promise<Request> {
     const req = await this.loadOrThrow(id);
     const actor = await assertActor(by, '--by', this.deps.members);
-    req.complete(actor, note);
+    req.complete(actor, note, invokedBy);
     await this.deps.requests.save(req);
     return req;
   }
 
-  async fail(id: string, by: string, reason: string): Promise<Request> {
+  async fail(
+    id: string,
+    by: string,
+    reason: string,
+    invokedBy?: string,
+  ): Promise<Request> {
     const req = await this.loadOrThrow(id);
     const actor = await assertActor(by, '--by', this.deps.members);
-    req.fail(actor, reason);
+    req.fail(actor, reason, invokedBy);
     await this.deps.requests.save(req);
     return req;
   }
@@ -170,6 +195,7 @@ export class RequestUseCases {
     lense: string;
     verdict: string;
     comment: string;
+    invokedBy?: string;
   }): Promise<Request> {
     const req = await this.loadOrThrow(input.id);
     await assertActor(input.by, '--by', this.deps.members);
@@ -179,6 +205,7 @@ export class RequestUseCases {
       verdict: input.verdict,
       comment: input.comment,
       at: this.deps.clock.now().toISOString(),
+      ...(input.invokedBy !== undefined ? { invokedBy: input.invokedBy } : {}),
       ...(this.deps.allowedLenses ? { allowedLenses: this.deps.allowedLenses } : {}),
     });
     req.addReview(review);
