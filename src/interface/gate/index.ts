@@ -67,7 +67,8 @@ Requests:
                      [--format json|text]          (default: json)
   gate tail [N]                                   (default 20)
   gate whoami                                     (needs GUILD_ACTOR)
-  gate chain <id>                                 (request or issue)
+  gate chain <id>                                 (request or issue;
+                                                   forward refs + inbound)
   gate approve <id> --by <m> [--note <s>]
   gate deny <id> --by <m> [--note <s> | --reason <s> | <reason>]
   gate execute <id> --by <m> [--note <s>]

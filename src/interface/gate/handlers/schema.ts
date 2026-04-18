@@ -195,7 +195,8 @@ const VERBS: readonly VerbSchema[] = [
   {
     name: 'chain',
     category: 'read',
-    summary: 'walk cross-references one hop from id',
+    summary:
+      'walk cross-references one hop in both directions (forward: ids the root mentions; inbound: records that mention the root)',
     input: {
       type: 'object',
       properties: { id: idStr },
