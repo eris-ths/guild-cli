@@ -4,6 +4,19 @@ import { collectStatus, StatusSummary } from './status.js';
 import { collectUtterances } from '../voices.js';
 
 /**
+ * Next-step hint embedded in boot. Mirrors the SuggestedNext shape
+ * used by write responses (see writeFormat.ts) so orchestrators can
+ * dispatch against the same consumer. Null when boot has no
+ * prescription — e.g. the caller is already a registered member
+ * with no outstanding state.
+ */
+interface BootSuggestedNext {
+  verb: string;
+  args: Record<string, string>;
+  reason: string;
+}
+
+/**
  * gate boot [--format json|text] [--tail <N>] [--utterances <N>]
  *
  * Single-command session orientation for agents. Composes the
@@ -69,6 +82,20 @@ interface BootPayload {
       fix_hint: string | null;
     };
   };
+  /**
+   * First-step prescription for the caller. Populated when boot can
+   * infer an obvious "do this next" — typically pre-onboarding (no
+   * GUILD_ACTOR, or GUILD_ACTOR set to an unregistered name) where
+   * new agents need a signpost toward `gate register`. Null once the
+   * caller has an identity and no outstanding bootstrap work.
+   *
+   * Note: this is orientation-time guidance, distinct from the
+   * write-response `suggested_next` that follows a transition. Kept
+   * as a sibling field on the boot payload rather than merged with
+   * `hints` because it's directive (a verb to call), not diagnostic
+   * (a condition to notice).
+   */
+  suggested_next: BootSuggestedNext | null;
 }
 
 export async function bootCmd(c: C, args: ParsedArgs): Promise<number> {
@@ -185,6 +212,8 @@ export async function bootCmd(c: C, args: ParsedArgs): Promise<number> {
     // Diagnostic errored — skip health, keep boot usable.
   }
 
+  const suggestedNext = deriveBootSuggestedNext(actor, role, members);
+
   const payload: BootPayload = {
     actor,
     role,
@@ -199,6 +228,7 @@ export async function bootCmd(c: C, args: ParsedArgs): Promise<number> {
       resolved_content_root: c.config.contentRoot,
       content_root_health: contentRootHealth,
     },
+    suggested_next: suggestedNext,
   };
 
   if (format === 'json') {
@@ -207,6 +237,59 @@ export async function bootCmd(c: C, args: ParsedArgs): Promise<number> {
     process.stdout.write(renderBootText(payload));
   }
   return 0;
+}
+
+/**
+ * Derive the orientation-time "do this next" hint. Fires only in the
+ * pre-onboarding shapes where a newcomer would otherwise stare at an
+ * empty payload with no signpost:
+ *
+ *   - actor=null + no members exist → suggest `register` (fresh root)
+ *   - actor=null + members exist    → suggest exporting GUILD_ACTOR
+ *                                     (returning user just forgot)
+ *   - role='unknown'                → suggest `register` with the
+ *                                     name they already set
+ *
+ * Returns null for registered members and hosts — they have no
+ * unambiguous next action from boot alone.
+ */
+function deriveBootSuggestedNext(
+  actor: string | null,
+  role: BootPayload['role'],
+  members: ReadonlyArray<{ name: { value: string } }>,
+): BootSuggestedNext | null {
+  if (actor === null) {
+    if (members.length === 0) {
+      return {
+        verb: 'register',
+        args: { name: '<your-name>' },
+        reason:
+          'No GUILD_ACTOR and no members on this content_root — register yourself to join.',
+      };
+    }
+    // Members exist; this is most likely a returning session that
+    // just hasn't exported GUILD_ACTOR yet. Name a few concrete
+    // options so the hint is actionable.
+    const sample = members.slice(0, 3).map((m) => m.name.value);
+    return {
+      verb: 'export',
+      args: { GUILD_ACTOR: '<your-name>' },
+      reason:
+        `No GUILD_ACTOR set. Existing members: ${sample.join(', ')}` +
+        (members.length > 3 ? ` (+${members.length - 3} more)` : '') +
+        `. Export GUILD_ACTOR=<your-name>, or run gate register --name <your-name> if new.`,
+    };
+  }
+  if (role === 'unknown') {
+    return {
+      verb: 'register',
+      args: { name: actor },
+      reason:
+        `GUILD_ACTOR=${actor} but "${actor}" is not a registered member or host. ` +
+        `Run gate register --name ${actor} to create the member file.`,
+    };
+  }
+  return null;
 }
 
 function renderBootText(p: BootPayload): string {
@@ -283,6 +366,23 @@ function renderBootText(p: BootPayload): string {
         lines.push(`  ${u.at}  req=${u.requestId}  authored`);
       }
     }
+  }
+  if (p.suggested_next) {
+    lines.push('');
+    // Render the hint as a concrete shell command so the reader can
+    // copy-paste. `export` is special-cased because it's a shell
+    // builtin, not a gate subcommand.
+    const n = p.suggested_next;
+    if (n.verb === 'export') {
+      const [k, v] = Object.entries(n.args)[0] ?? ['GUILD_ACTOR', '<your-name>'];
+      lines.push(`→ next: export ${k}=${v}`);
+    } else {
+      const argsStr = Object.entries(n.args)
+        .map(([k, v]) => `--${k} ${v}`)
+        .join(' ');
+      lines.push(`→ next: gate ${n.verb}${argsStr ? ' ' + argsStr : ''}`);
+    }
+    lines.push(`  (${n.reason})`);
   }
   return lines.join('\n') + '\n';
 }

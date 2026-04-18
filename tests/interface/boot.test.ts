@@ -63,6 +63,7 @@ test('gate boot: JSON top-level keys are stable', () => {
         'last_activity',
         'role',
         'status',
+        'suggested_next',
         'tail',
         'your_recent',
       ],
@@ -244,5 +245,60 @@ test('gate boot: fresh-start (config present, 0 members/requests) is NOT flagged
     assert.doesNotMatch(textOut, /no guild\.config\.yaml found/);
   } finally {
     rmSync(fresh, { recursive: true, force: true });
+  }
+});
+
+test('gate boot: suggested_next=register when no actor and no members', () => {
+  const root = mkdtempSync(join(tmpdir(), 'guild-boot-fresh-'));
+  writeFileSync(join(root, 'guild.config.yaml'), 'content_root: .\n');
+  mkdirSync(join(root, 'members'));
+  try {
+    const { stdout } = runGate(root, ['boot']);
+    const payload = JSON.parse(stdout);
+    assert.equal(payload.actor, null);
+    assert.equal(payload.suggested_next?.verb, 'register');
+    const { stdout: textOut } = runGate(root, ['boot', '--format', 'text']);
+    assert.match(textOut, /gate register --name/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('gate boot: suggested_next=export when no actor but members exist', () => {
+  // Returning-user case: members exist, but GUILD_ACTOR isn't set.
+  // The hint names existing members and the export path.
+  const { root, cleanup } = bootstrap();
+  try {
+    const { stdout } = runGate(root, ['boot']);
+    const payload = JSON.parse(stdout);
+    assert.equal(payload.suggested_next?.verb, 'export');
+    assert.match(payload.suggested_next?.reason ?? '', /alice/);
+  } finally {
+    cleanup();
+  }
+});
+
+test('gate boot: suggested_next=register when GUILD_ACTOR set but unregistered', () => {
+  const { root, cleanup } = bootstrap();
+  try {
+    const { stdout } = runGate(root, ['boot'], { GUILD_ACTOR: 'newbie' });
+    const payload = JSON.parse(stdout);
+    assert.equal(payload.role, 'unknown');
+    assert.equal(payload.suggested_next?.verb, 'register');
+    assert.equal(payload.suggested_next?.args?.name, 'newbie');
+  } finally {
+    cleanup();
+  }
+});
+
+test('gate boot: suggested_next=null for registered member', () => {
+  const { root, cleanup } = bootstrap();
+  try {
+    const { stdout } = runGate(root, ['boot'], { GUILD_ACTOR: 'alice' });
+    const payload = JSON.parse(stdout);
+    assert.equal(payload.role, 'member');
+    assert.equal(payload.suggested_next, null);
+  } finally {
+    cleanup();
   }
 });

@@ -186,6 +186,36 @@ export function collectUtterances(
 }
 
 /**
+ * Push a single `label: value` field where `value` may contain
+ * newlines, aligning continuation lines with the start of the
+ * value column so the output reads as one structured field rather
+ * than a field with a stray paragraph hanging off the left margin.
+ *
+ * `labelWithPadding` is the full prefix including leading indent
+ * and trailing space padding (e.g. `"  action:   "`). Continuation
+ * lines receive the same width in spaces. Single-line values are
+ * a no-op so existing single-line rendering stays byte-identical.
+ *
+ * Shared between `gate show --format text` and `gate voices` /
+ * `gate tail` renderers so multi-line reasons read the same way
+ * everywhere.
+ */
+export function pushMultilineField(
+  lines: string[],
+  labelWithPadding: string,
+  body: string,
+): void {
+  const parts = body.split('\n');
+  const head = parts[0] ?? '';
+  lines.push(labelWithPadding + head);
+  if (parts.length === 1) return;
+  const continuationIndent = ' '.repeat(labelWithPadding.length);
+  for (let i = 1; i < parts.length; i++) {
+    lines.push(continuationIndent + parts[i]);
+  }
+}
+
+/**
  * Render a chronological delta between two ISO-8601 timestamps in a
  * compact human-readable form. Returns an empty string if the inputs
  * are unparseable or if `curr` precedes `prev` (which shouldn't happen
@@ -234,13 +264,13 @@ export function renderUtterance(
     const withSuffix =
       u.with && u.with.length > 0 ? ` (with ${u.with.join(', ')})` : '';
     lines.push(`[${u.at}] req=${u.requestId} authored${actor}${withSuffix}`);
-    lines.push(`  action: ${u.action}`);
-    lines.push(`  reason: ${u.reason}`);
+    pushMultilineField(lines, '  action: ', u.action);
+    pushMultilineField(lines, '  reason: ', u.reason);
     // At most one of these is set per request (completed / denied /
     // failed are mutually exclusive terminal states).
-    if (u.completionNote) lines.push(`  note:   ${u.completionNote}`);
-    if (u.denyReason) lines.push(`  denied: ${u.denyReason}`);
-    if (u.failureReason) lines.push(`  failed: ${u.failureReason}`);
+    if (u.completionNote) pushMultilineField(lines, '  note:   ', u.completionNote);
+    if (u.denyReason) pushMultilineField(lines, '  denied: ', u.denyReason);
+    if (u.failureReason) pushMultilineField(lines, '  failed: ', u.failureReason);
   } else {
     // Always expose `invoked_by` when present, even when includeActor
     // is false (voices groups by actor, so the `by` is redundant —

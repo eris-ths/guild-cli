@@ -4,7 +4,7 @@ import {
   optionalOption,
 } from '../../shared/parseArgs.js';
 import { Request } from '../../../domain/request/Request.js';
-import { formatDelta } from '../voices.js';
+import { formatDelta, pushMultilineField } from '../voices.js';
 import { C, readStdin, resolveInvokedBy } from './internal.js';
 import { emitWriteResponse, parseFormat } from './writeFormat.js';
 
@@ -155,11 +155,17 @@ function formatRequestText(r: Request): string {
   }
   lines.push(`  created:  ${j['created_at']}`);
   lines.push('');
-  lines.push(`  action:   ${j['action']}`);
-  lines.push(`  reason:   ${j['reason']}`);
-  if (j['completion_note']) lines.push(`  note:     ${j['completion_note']}`);
-  if (j['deny_reason']) lines.push(`  denied:   ${j['deny_reason']}`);
-  if (j['failure_reason']) lines.push(`  failed:   ${j['failure_reason']}`);
+  pushMultilineField(lines, '  action:   ', String(j['action']));
+  pushMultilineField(lines, '  reason:   ', String(j['reason']));
+  if (j['completion_note']) {
+    pushMultilineField(lines, '  note:     ', String(j['completion_note']));
+  }
+  if (j['deny_reason']) {
+    pushMultilineField(lines, '  denied:   ', String(j['deny_reason']));
+  }
+  if (j['failure_reason']) {
+    pushMultilineField(lines, '  failed:   ', String(j['failure_reason']));
+  }
 
   const log = Array.isArray(j['status_log']) ? j['status_log'] : [];
   if (log.length > 0) {
