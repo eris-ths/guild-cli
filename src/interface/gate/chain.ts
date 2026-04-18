@@ -41,6 +41,20 @@ export function gatherRequestText(r: {
   return parts.join('\n');
 }
 
-export function gatherIssueText(i: { text: string }): string {
-  return i.text;
+/**
+ * Same treatment for issues: their notes (the #38 append-only
+ * annotations) can reference other records too. Without pulling
+ * note text into the scan, a cross-reference added post-hoc as
+ * "see i-..." would be invisible to `gate chain`, even though
+ * show/list render it.
+ */
+export function gatherIssueText(i: {
+  text: string;
+  notes?: ReadonlyArray<{ text: string }>;
+}): string {
+  const parts: string[] = [i.text];
+  if (i.notes) {
+    for (const n of i.notes) parts.push(n.text);
+  }
+  return parts.join('\n');
 }

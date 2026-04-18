@@ -246,30 +246,110 @@ export async function reqChain(c: C, args: ParsedArgs): Promise<number> {
   const linkedRequestIds = refs.requestIds.filter((id) => id !== rootId);
   const linkedIssueIds = refs.issueIds.filter((id) => id !== rootId);
 
+  // Inbound references: scan every other record's text for rootId so
+  // an issue that was promoted to a request can `gate chain` the
+  // resolving request, not just the other way around. Without this
+  // the tool only walks one direction — an asymmetry that shows up
+  // the moment you try to follow a resolution backwards. O(N) scan,
+  // acceptable for the typical content_root.
+  const inboundRequestRecords: typeof allRequests = [];
+  for (const r of allRequests) {
+    if (r.id.value === rootId) continue;
+    const rj = r.toJSON() as unknown as RequestJSON;
+    const text = gatherRequestText({
+      action: rj.action,
+      reason: rj.reason,
+      ...(rj.completion_note !== undefined
+        ? { completion_note: rj.completion_note }
+        : {}),
+      ...(rj.deny_reason !== undefined ? { deny_reason: rj.deny_reason } : {}),
+      ...(rj.failure_reason !== undefined
+        ? { failure_reason: rj.failure_reason }
+        : {}),
+      ...(rj.reviews !== undefined
+        ? { reviews: rj.reviews.map((rv) => ({ comment: rv.comment })) }
+        : {}),
+    });
+    const inboundRefs = extractReferences(text);
+    if (
+      inboundRefs.requestIds.includes(rootId) ||
+      inboundRefs.issueIds.includes(rootId)
+    ) {
+      inboundRequestRecords.push(r);
+    }
+  }
+  const inboundIssueRecords: typeof allIssues = [];
+  for (const i of allIssues) {
+    if (i.id.value === rootId) continue;
+    const ij = i.toJSON();
+    const notesRaw = Array.isArray(ij['notes'])
+      ? (ij['notes'] as Array<Record<string, unknown>>).map((n) => ({
+          text: String(n['text'] ?? ''),
+        }))
+      : undefined;
+    const text = gatherIssueText({
+      text: String(ij['text'] ?? ''),
+      ...(notesRaw ? { notes: notesRaw } : {}),
+    });
+    const inboundRefs = extractReferences(text);
+    if (
+      inboundRefs.requestIds.includes(rootId) ||
+      inboundRefs.issueIds.includes(rootId)
+    ) {
+      inboundIssueRecords.push(i);
+    }
+  }
+
   type Resolved<T> = { id: string; record: T | undefined };
   const linkedRequests: Array<Resolved<ReturnType<typeof requestById.get>>> =
     linkedRequestIds.map((id) => ({ id, record: requestById.get(id) }));
   const linkedIssues: Array<Resolved<ReturnType<typeof issueById.get>>> =
     linkedIssueIds.map((id) => ({ id, record: issueById.get(id) }));
+  const inboundRequests: Array<Resolved<ReturnType<typeof requestById.get>>> =
+    inboundRequestRecords.map((r) => ({ id: r.id.value, record: r }));
+  const inboundIssues: Array<Resolved<ReturnType<typeof issueById.get>>> =
+    inboundIssueRecords.map((i) => ({ id: i.id.value, record: i }));
 
   process.stdout.write(`${rootHeader}\n`);
 
-  const haveIssues = linkedIssues.length > 0;
-  const haveRequests = linkedRequests.length > 0;
+  // Assemble the four possible sections. Rendered only when non-empty;
+  // the tree glyphs pick the correct last-child markers automatically
+  // based on position in the `sections` list, so adding a 5th category
+  // later wouldn't require re-juggling the ├/└ logic.
+  type Kind = 'issue' | 'request';
+  interface Section {
+    title: string;
+    items: Array<Resolved<ReturnType<typeof requestById.get> | ReturnType<typeof issueById.get>>>;
+    kind: Kind;
+  }
+  const sections: Section[] = [];
+  if (linkedIssues.length > 0) {
+    sections.push({ title: 'referenced issues', items: linkedIssues, kind: 'issue' });
+  }
+  if (linkedRequests.length > 0) {
+    sections.push({ title: 'referenced requests', items: linkedRequests, kind: 'request' });
+  }
+  if (inboundIssues.length > 0) {
+    sections.push({ title: 'referenced by issues', items: inboundIssues, kind: 'issue' });
+  }
+  if (inboundRequests.length > 0) {
+    sections.push({ title: 'referenced by requests', items: inboundRequests, kind: 'request' });
+  }
 
-  if (!haveIssues && !haveRequests) {
+  if (sections.length === 0) {
     process.stdout.write(
-      '└── (no cross-referenced records in action/reason/notes/reviews)\n',
+      '└── (no cross-referenced records; nothing references this either)\n',
     );
     return 0;
   }
 
-  if (haveIssues) {
-    const isLastBranch = !haveRequests;
-    const branchGlyph = isLastBranch ? '└──' : '├──';
-    const childPrefix = isLastBranch ? '    ' : '│   ';
-    process.stdout.write(`${branchGlyph} referenced issues\n`);
-    const sorted = [...linkedIssues].sort((a, b) =>
+  for (let s = 0; s < sections.length; s++) {
+    const section = sections[s]!;
+    const isLastSection = s === sections.length - 1;
+    const branchGlyph = isLastSection ? '└──' : '├──';
+    const childPrefix = isLastSection ? '    ' : '│   ';
+    process.stdout.write(`${branchGlyph} ${section.title}\n`);
+    const sorted = [...section.items].sort((a, b) =>
       compareSequenceIds(a.id, b.id),
     );
     for (let i = 0; i < sorted.length; i++) {
@@ -277,34 +357,13 @@ export async function reqChain(c: C, args: ParsedArgs): Promise<number> {
       const last = i === sorted.length - 1;
       const glyph = last ? '└──' : '├──';
       if (item.record) {
-        const ij = item.record.toJSON();
+        const j = item.record.toJSON();
         const summary =
-          `${item.id}  [${ij['severity']}/${ij['area']}]  ${ij['state']}` +
-          `  ${truncateCodePoints(String(ij['text'] ?? ''), 70)}`;
-        process.stdout.write(`${childPrefix}${glyph} ${summary}\n`);
-      } else {
-        process.stdout.write(
-          `${childPrefix}${glyph} ${item.id}  (referenced but not found)\n`,
-        );
-      }
-    }
-  }
-
-  if (haveRequests) {
-    process.stdout.write(`└── referenced requests\n`);
-    const childPrefix = '    ';
-    const sorted = [...linkedRequests].sort((a, b) =>
-      compareSequenceIds(a.id, b.id),
-    );
-    for (let i = 0; i < sorted.length; i++) {
-      const item = sorted[i]!;
-      const last = i === sorted.length - 1;
-      const glyph = last ? '└──' : '├──';
-      if (item.record) {
-        const rj = item.record.toJSON();
-        const summary =
-          `${item.id}  [${rj['state']}]  from=${rj['from']}` +
-          `  ${truncateCodePoints(String(rj['action'] ?? ''), 70)}`;
+          section.kind === 'issue'
+            ? `${item.id}  [${j['severity']}/${j['area']}]  ${j['state']}` +
+              `  ${truncateCodePoints(String(j['text'] ?? ''), 70)}`
+            : `${item.id}  [${j['state']}]  from=${j['from']}` +
+              `  ${truncateCodePoints(String(j['action'] ?? ''), 70)}`;
         process.stdout.write(`${childPrefix}${glyph} ${summary}\n`);
       } else {
         process.stdout.write(
