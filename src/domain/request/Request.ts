@@ -48,6 +48,16 @@ export interface RequestProps {
    * are deferred until the need surfaces in actual use.
    */
   with?: MemberName[];
+  /**
+   * Tool-generated structured link to the issue this request was
+   * promoted from (via `gate issues promote`). Populated by the
+   * promote orchestration; undefined for plain `gate request`.
+   * Distinct from text mentions in action/reason: chain uses this
+   * as a separate-from-text-scan reference path so the link
+   * survives full overrides of --action AND --reason. Same shape as
+   * other tool-generated relationship fields (executor, autoReview).
+   */
+  promotedFrom?: string;
   state: RequestState;
   createdAt: string;
   reviews: Review[];
@@ -86,6 +96,9 @@ export class Request {
      * byte-identical to pre-invariant YAML.
      */
     invokedBy?: string;
+    /** See RequestProps.promotedFrom — issue id this request was
+     *  promoted from. Populated by `gate issues promote` only. */
+    promotedFrom?: string;
   }): Request {
     const from = MemberName.of(input.from);
     const action = sanitizeText(input.action, 'action');
@@ -138,6 +151,9 @@ export class Request {
       }
       if (list.length > 0) props.with = list;
     }
+    if (input.promotedFrom !== undefined) {
+      props.promotedFrom = input.promotedFrom;
+    }
     // New requests have no on-disk predecessor; loadedVersion=0 marks
     // "never seen" for the optimistic-lock check in save().
     return new Request(props, 0);
@@ -168,6 +184,9 @@ export class Request {
   }
   get autoReview(): MemberName | undefined {
     return this.props.autoReview;
+  }
+  get promotedFrom(): string | undefined {
+    return this.props.promotedFrom;
   }
   get with(): readonly MemberName[] {
     return this.props.with ?? [];
@@ -279,6 +298,8 @@ export class Request {
     if (this.props.target !== undefined) out['target'] = this.props.target;
     if (this.props.with && this.props.with.length > 0)
       out['with'] = this.props.with.map((m) => m.value);
+    if (this.props.promotedFrom !== undefined)
+      out['promoted_from'] = this.props.promotedFrom;
     // Derive legacy closure keys from the last status_log entry so
     // external consumers (chain / voices / show --format text) keep
     // working unchanged. Single source of truth: status_log[-1].note.
