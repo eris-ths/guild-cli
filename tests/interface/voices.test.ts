@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   collectUtterances,
+  pushMultilineField,
   renderUtterance,
   RequestJSON,
 } from '../../src/interface/gate/voices.js';
@@ -395,4 +396,46 @@ test('renderUtterance: invoked_by shows even when includeActor=false (voices gro
   const text = renderUtterance(u, false);
   assert.match(text, /\[invoked_by=claude\]/);
   assert.equal(/by sentinel/.test(text), false);
+});
+
+// ── pushMultilineField: continuation indent for multi-line values ──
+
+test('pushMultilineField: single-line value is unchanged from a plain push', () => {
+  // Byte-identical when there are no newlines — ensures we don't
+  // regress the common short-value case where no indent work is needed.
+  const lines: string[] = [];
+  pushMultilineField(lines, '  reason: ', 'short text');
+  assert.deepEqual(lines, ['  reason: short text']);
+});
+
+test('pushMultilineField: multi-line value aligns continuation lines with value column', () => {
+  const lines: string[] = [];
+  pushMultilineField(lines, '  reason:   ', 'first\nsecond\nthird');
+  // '  reason:   ' is 12 chars, so continuation lines must be indented
+  // by 12 spaces so they align with the start of "first".
+  assert.deepEqual(lines, [
+    '  reason:   first',
+    '            second',
+    '            third',
+  ]);
+});
+
+test('renderUtterance authored: multi-line reason indents continuation lines', () => {
+  // Regression: pre-fix, multi-line reasons started each continuation
+  // line at column 0, breaking the visual grouping of the field.
+  const reqs: RequestJSON[] = [
+    {
+      id: '2026-04-18-0099',
+      from: 'alice',
+      action: 'ship',
+      reason: 'first paragraph\nsecond paragraph',
+      created_at: '2026-04-18T00:00:00.000Z',
+    },
+  ];
+  const [u] = collectUtterances(reqs, { name: 'alice' });
+  assert.ok(u);
+  const text = renderUtterance(u, true);
+  // The 'second paragraph' line must be indented to align with the
+  // value column, not hang off the left margin.
+  assert.match(text, /  reason: first paragraph\n          second paragraph/);
 });

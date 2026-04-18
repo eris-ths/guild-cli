@@ -7,6 +7,29 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 
 ## [Unreleased]
 
+### Added
+- **`gate boot` emits `suggested_next` for pre-onboarding shapes.** When
+  the caller has no identity yet, boot now prescribes a concrete first
+  action instead of handing back a silent empty payload. Three branches:
+  - `GUILD_ACTOR` unset, no members on this content_root → `register`
+    (fresh root, new agent);
+  - `GUILD_ACTOR` unset, members exist → `export GUILD_ACTOR=<...>`
+    with a short list of existing member names (returning user);
+  - `GUILD_ACTOR` set but unknown to the guild → `register --name
+    <that-name>` (they already picked a handle; just file the record).
+  Registered members and hosts get `suggested_next: null` — boot has
+  no unambiguous next action for them. Text format renders a `→ next:`
+  line with the exact shell command to paste.
+
+### Changed
+- **Multi-line values in `gate show --format text` / `gate voices` /
+  `gate tail` align continuation lines with the value column.** Long
+  `--reason` heredocs used to lose their indent on the second line
+  onward, which broke the visual grouping of the field. Applied to
+  `action`, `reason`, `completion_note`, `deny_reason`, and
+  `failure_reason` via a shared `pushMultilineField` helper so all
+  three read paths stay in lockstep.
+
 ### Changed
 - **`invoked_by` surfaces in `gate voices`, `gate tail`, and `gate resume`.**
   Previously `gate show <id>` was the only read path that rendered
