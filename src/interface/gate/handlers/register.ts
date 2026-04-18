@@ -55,10 +55,26 @@ export async function reqRegister(c: C, args: ParsedArgs): Promise<number> {
     );
   }
 
+  const parsedName = MemberName.of(name);
+
+  // Host/member name collision check. `host_names` in
+  // guild.config.yaml reserves those identifiers for the content-root
+  // operator role; making a member with the same name would give the
+  // identifier two meanings (host AND member) with no way for downstream
+  // verbs to resolve which applies. Reject the same way `--category host`
+  // is rejected — both guard the same invariant: hosts are config-only.
+  if (c.config.hostNames.includes(parsedName.value)) {
+    throw new Error(
+      `"${parsedName.value}" is already declared as a host in guild.config.yaml.\n` +
+        `  Hosts and members are different roles; a single name cannot be both.\n` +
+        `  Either pick a different --name, or remove "${parsedName.value}" from ` +
+        `host_names: in guild.config.yaml before registering as a member.`,
+    );
+  }
+
   // Pre-flight: does the name already resolve to a member?
   // If it does, this is almost always a typo, not an intentional
   // overwrite — fail loud rather than silently replace a record.
-  const parsedName = MemberName.of(name);
   const existing = await c.memberUC.show(parsedName.value);
   if (existing) {
     throw new Error(
