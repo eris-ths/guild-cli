@@ -7,6 +7,22 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 
 ## [Unreleased]
 
+### Changed
+- **`invoked_by` surfaces in `gate voices`, `gate tail`, and `gate resume`.**
+  Previously `gate show <id>` was the only read path that rendered
+  `invoked_by`, so an AI agent that ghost-wrote ten operations on a
+  member's behalf was invisible in the streams where people actually
+  read their activity. voices and tail now append `[invoked_by=<actor>]`
+  to review lines when the proxy differs from `by`; resume's
+  `last_transition` JSON emits `invoked_by` (snake_case, matching
+  `status_log` on the wire) and the restoration prose names the
+  proxy ("invoked by claude" / "claude が代行"). Same-actor
+  invocations stay unchanged — no clutter for the common case.
+- **`gate list` without `--state` prints a tighter hint.** The prior
+  version listed the state enum twice (once inline, once on a
+  "States:" line); collapsed to one listing, and trimmed the
+  "For X, use" phrasing so the hint is 3 lines instead of 5.
+
 ### Fixed
 - **Values beginning with `--` can now be passed to every flag.** The
   arg parser refuses to consume a next-token that starts with `--`
