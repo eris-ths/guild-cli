@@ -236,6 +236,24 @@ const VERBS: readonly VerbSchema[] = [
     output: { type: 'array' },
   },
   {
+    name: 'board',
+    category: 'read',
+    summary:
+      "what's in flight: pending + approved + executing, grouped by state. Sibling to status (counts) and list (single state). Terminal states (completed/failed/denied) and issues are out of scope.",
+    input: {
+      type: 'object',
+      properties: { for: str, format: formatField },
+    },
+    output: {
+      type: 'object',
+      properties: {
+        pending: { type: 'array' },
+        approved: { type: 'array' },
+        executing: { type: 'array' },
+      },
+    },
+  },
+  {
     name: 'register',
     category: 'write',
     summary:

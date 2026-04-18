@@ -22,6 +22,7 @@ import {
   reqChain,
 } from './handlers/read.js';
 import { issuesCmd } from './handlers/issues.js';
+import { boardCmd } from './handlers/board.js';
 import { doctorCmd } from './handlers/doctor.js';
 import { repairCmd } from './handlers/repair.js';
 import { bootCmd } from './handlers/boot.js';
@@ -60,6 +61,9 @@ Requests:
                  [--executor <m>] [--target <s>] [--auto-review <m>]
                  [--with <n1>[,<n2>...]]
   gate pending [--for <m>]
+  gate board [--for <m>] [--format json|text]
+                       What's in flight: pending + approved +
+                       executing, grouped by state.
   gate list --state <state> [--for <m>] [--from <m>]
                             [--executor <m>] [--auto-review <m>]
   gate show <id> [--format json|text]          (default: json)
@@ -183,6 +187,8 @@ export async function main(argv: readonly string[]): Promise<number> {
         return await reqCreate(c, args);
       case 'pending':
         return await reqList(c, 'pending', args);
+      case 'board':
+        return await boardCmd(c, args);
       case 'list': {
         // `gate list` without --state is a common first-try ("show me
         // everything"). Rather than just erroring on the missing flag,

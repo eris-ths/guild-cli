@@ -7,6 +7,23 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 
 ## [Unreleased]
 
+### Added
+- **`gate board` — "what's in flight" view.** New read verb that
+  answers "what's happening right now" in one call, grouping
+  pending + approved + executing rows under per-state headers.
+  Surfaces the question that `gate status` gave counts for and
+  `gate list --state <s>` gave single-state contents for, without
+  requiring three commands to see the whole board. Terminal states
+  (completed / failed / denied) and issues are out of scope: "in
+  flight" means "someone could still act on this." Filters mirror
+  `gate list`: `--for <m>` narrows each section to rows naming
+  that actor; GUILD_ACTOR is applied implicitly when `--for` is
+  omitted (same pattern, same stderr notice). Empty sections still
+  render their header so the board shape stays stable across calls.
+  JSON emits `{ pending: [...], approved: [...], executing: [...] }`
+  with a stable key set — consumers can rely on all three arrays
+  being present even when empty.
+
 ### Fixed
 - **`gate register --name <x>` now rejects `x` already in `host_names`.**
   The existing guards blocked `--category host` and duplicate-member
