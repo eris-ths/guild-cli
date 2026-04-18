@@ -74,9 +74,13 @@ export function emitInvokedByNotice(
   verb: string,
   target: string,
 ): void {
+  // The prefix "invoked by X on behalf of Y" already names both the
+  // real hand (X) and the on-record attribution (Y); the earlier
+  // "(invoked_by recorded as X)" suffix only restated X. Dropped to
+  // keep the line tight — the fact that invoked_by is persisted is
+  // part of the contract, not something to re-announce on every call.
   process.stderr.write(
-    `# ${verb} ${target}: invoked by ${invokedBy} on behalf of ${by} ` +
-      `(invoked_by recorded as ${invokedBy})\n`,
+    `# ${verb} ${target}: invoked by ${invokedBy} on behalf of ${by}\n`,
   );
 }
 
