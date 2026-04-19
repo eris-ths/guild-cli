@@ -8,6 +8,7 @@ import {
   parseRequestState,
 } from '../../domain/request/RequestState.js';
 import { Review } from '../../domain/request/Review.js';
+import { Thank } from '../../domain/request/Thank.js';
 import { MemberName } from '../../domain/member/MemberName.js';
 import {
   RequestRepository,
@@ -314,6 +315,27 @@ function hydrate(
           : new Date().toISOString();
     const action = String(obj['action'] ?? '(no action)').trim() || '(no action)';
     const reason = String(obj['reason'] ?? '(no reason)').trim() || '(no reason)';
+    // Thanks are optional on disk — records written before the verb
+    // existed simply lack the field, and that's fine.
+    const thanksRaw = Array.isArray(obj['thanks'])
+      ? (obj['thanks'] as unknown[])
+      : [];
+    const thanks: Thank[] = [];
+    for (const t of thanksRaw) {
+      if (t && typeof t === 'object') {
+        const to = t as Record<string, unknown>;
+        const tc: Parameters<typeof Thank.create>[0] = {
+          by: String(to['by']),
+          to: String(to['to']),
+        };
+        if (typeof to['at'] === 'string') tc.at = to['at'] as string;
+        if (typeof to['reason'] === 'string') tc.reason = to['reason'] as string;
+        if (typeof to['invoked_by'] === 'string') {
+          tc.invokedBy = to['invoked_by'] as string;
+        }
+        thanks.push(Thank.create(tc));
+      }
+    }
     const props: Parameters<typeof Request.restore>[0] = {
       id,
       from: MemberName.of(obj['from']),
@@ -324,6 +346,7 @@ function hydrate(
       reviews,
       statusLog,
     };
+    if (thanks.length > 0) props.thanks = thanks;
     const executorRaw =
       typeof obj['executor'] === 'string'
         ? (obj['executor'] as string)

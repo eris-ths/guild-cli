@@ -107,6 +107,14 @@ const VERBS: readonly VerbSchema[] = [
         your_recent: { type: 'array' },
         inbox_unread: { type: 'array' },
         last_activity: str,
+        suggested_next: {
+          type: 'object',
+          description:
+            'Advisory — NOT a directive. Orientation-time guidance ' +
+            'about what to do next, derived from queues + open loops. ' +
+            "Read `reason` and override when your judgement differs. " +
+            'Priority is shared with `gate suggest`; both are hints.',
+        },
       },
     },
   },
@@ -134,10 +142,53 @@ const VERBS: readonly VerbSchema[] = [
       properties: {
         suggested_next: {
           type: 'object',
+          description:
+            'Advisory — NOT a directive. Derived deterministically from the ' +
+            "caller's current queues using the same priority ladder as boot. " +
+            "Agents should read `reason` and override when their own " +
+            'judgement differs; a `suggest` loop that dispatches the verb ' +
+            'without reading the reason is treating a heuristic as a ' +
+            'command, which is the shape this field is trying to avoid.',
           properties: {
             verb: str,
             args: { type: 'object' },
             reason: str,
+          },
+        },
+      },
+    },
+  },
+  {
+    name: 'transcript',
+    category: 'read',
+    summary:
+      "narrative render of one request's full arc — the prose-first sibling of `gate show`. Text output reads as paragraphs; JSON output carries both the narrative and a structured summary (actors, review_verdicts, duration_ms).",
+    input: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'request id (YYYY-MM-DD-NNNN)' },
+        format: {
+          type: 'string',
+          enum: ['text', 'json'],
+          description: "output format (default: text — the narrative is what's useful here)",
+        },
+      },
+      required: ['id'],
+    },
+    output: {
+      type: 'object',
+      properties: {
+        id: str,
+        arc: str,
+        summary: {
+          type: 'object',
+          properties: {
+            actors: { type: 'array' },
+            actor_count: { type: 'integer' },
+            review_count: { type: 'integer' },
+            review_verdicts: { type: 'array' },
+            final_state: str,
+            duration_ms: { type: 'integer' },
           },
         },
       },
@@ -402,6 +453,24 @@ const VERBS: readonly VerbSchema[] = [
         format: formatField,
       },
       required: ['id', 'by', 'lense', 'verdict'],
+    },
+    output: writeResponseSchema,
+  },
+  {
+    name: 'thank',
+    category: 'write',
+    summary:
+      "record cross-actor appreciation against a request. Sibling of review — no verdict, no state change, no calibration impact. `to` is positional; `--for` names the request id.",
+    input: {
+      type: 'object',
+      properties: {
+        to: { type: 'string', description: 'positional; the actor being thanked' },
+        for: idStr,
+        by: str,
+        reason: strOpt('optional prose; "-" for STDIN'),
+        format: formatField,
+      },
+      required: ['to', 'for'],
     },
     output: writeResponseSchema,
   },
