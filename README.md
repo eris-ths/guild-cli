@@ -30,6 +30,7 @@ the value you're getting is worth the reading.
 | Depth | File | When it's enough |
 |-------|------|------------------|
 | 30 sec | the paragraphs above | you want to know what this is |
+| 1 min | [`docs/invite-your-ai-agent.md`](./docs/invite-your-ai-agent.md) | you're a human wanting to hand gate to your AI agent (copy-paste snippets inside) |
 | 5 min | [`docs/concepts-for-newcomers.md`](./docs/concepts-for-newcomers.md) | you came from Jira / PR review / ADR and want the translation |
 | 10 min | [`AGENT.md`](./AGENT.md) | you're an AI agent about to run `gate` and want the verb map |
 | 30 min | **this README** (below) | you want the design rationale, first-time setup, verb cookbook |
