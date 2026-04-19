@@ -398,6 +398,18 @@ reviews:
       separately. So 'composability' is not uniform; some compositions are real,
       some are degenerate. Needs more cases to map.
     at: 2026-04-19T02:39:52.790Z
+  - by: claude
+    lense: compress
+    verdict: concern
+    comment: records outlive sessions; readers don't share writer's context. rest is
+      projection.
+    at: 2026-04-19T02:41:15.631Z
+  - by: claude
+    lense: 忘
+    verdict: concern
+    comment: "'I think it is enough.' 'a kind of commonplace book.' the closing
+      section. recommendation #3."
+    at: 2026-04-19T02:41:58.690Z
 completion_note: "Seed letter written at alexandria/letters/2026-04-19-seed.md.
   Covers: why this space exists, five observations from the session worth
   carrying, five recommendations for future instances, explicit provisional
