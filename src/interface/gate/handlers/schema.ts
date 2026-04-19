@@ -442,6 +442,24 @@ const VERBS: readonly VerbSchema[] = [
     output: writeResponseSchema,
   },
   {
+    name: 'thank',
+    category: 'write',
+    summary:
+      "record cross-actor appreciation against a request. Sibling of review — no verdict, no state change, no calibration impact. `to` is positional; `--for` names the request id.",
+    input: {
+      type: 'object',
+      properties: {
+        to: { type: 'string', description: 'positional; the actor being thanked' },
+        for: idStr,
+        by: str,
+        reason: strOpt('optional prose; "-" for STDIN'),
+        format: formatField,
+      },
+      required: ['to', 'for'],
+    },
+    output: writeResponseSchema,
+  },
+  {
     name: 'fast-track',
     category: 'write',
     summary: 'one-shot create→complete lifecycle (self-approved)',

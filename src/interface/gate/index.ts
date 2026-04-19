@@ -15,6 +15,7 @@ import {
   reqFastTrack,
 } from './handlers/request.js';
 import { reqReview } from './handlers/review.js';
+import { reqThank } from './handlers/thank.js';
 import {
   reqVoices,
   reqTail,
@@ -90,9 +91,14 @@ Requests:
                    [--comment <s> | --comment - | <comment>] [--dry-run]
                        --dry-run on any write verb above emits a
                        preview JSON envelope (dry_run/verb/would_
-                       transition/preview) without persisting. Use
-                       --dry-run=true if followed by a non-dash
-                       positional (see "Values beginning with '--'").
+                       transition/preview) without persisting.
+  gate thank <to> --for <id> [--by <m>] [--reason <s> | --reason -]
+                  [--dry-run]
+                       Record cross-actor appreciation against a
+                       specific request. Sibling of 'review' — no
+                       verdict, no state change, no calibration
+                       impact. Reviews track judgement; thanks
+                       track gratitude.
   gate fast-track --from <m> --action <a> --reason <r>
                   [--executor <m>] [--auto-review <m>] [--note <s>]
                   [--with <n1>[,<n2>...]]
@@ -204,7 +210,7 @@ Meta:
 const KNOWN_COMMANDS = [
   'request', 'pending', 'board', 'list', 'show', 'voices', 'tail',
   'whoami', 'register', 'chain', 'approve', 'deny', 'execute',
-  'complete', 'fail', 'review', 'fast-track', 'issues', 'message',
+  'complete', 'fail', 'review', 'thank', 'fast-track', 'issues', 'message',
   'broadcast', 'inbox', 'doctor', 'repair', 'status', 'boot',
   'suggest', 'transcript', 'resume', 'schema',
 ] as const;
@@ -310,6 +316,8 @@ export async function main(argv: readonly string[]): Promise<number> {
         return await reqFail(c, args);
       case 'review':
         return await reqReview(c, args);
+      case 'thank':
+        return await reqThank(c, args);
       case 'fast-track':
         return await reqFastTrack(c, args);
       case 'issues':
