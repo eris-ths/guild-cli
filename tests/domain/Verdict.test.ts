@@ -78,3 +78,16 @@ test('parseLense error message points users at guild.config.yaml', () => {
     assert.match(err.message, /lenses:/);
   }
 });
+
+test('parseLense non-strict returns unknown value without throwing', () => {
+  // Permissive mode for hydration: a lense that was valid when
+  // written stays loadable if the config has since been pruned.
+  // Prevents historical records from becoming invisible when a
+  // content_root evolves its lense vocabulary. See Lense.ts
+  // docstring for the motivation; alexandria/issues/i-0005 is
+  // the concrete case that surfaced the gap.
+  assert.equal(parseLense('retired_lense', ['devil', 'layer'], false), 'retired_lense');
+  // Still strict by default — write paths keep their guarantee.
+  assert.throws(() => parseLense('retired_lense', ['devil', 'layer']), DomainError);
+  assert.throws(() => parseLense('retired_lense', ['devil', 'layer'], true), DomainError);
+});

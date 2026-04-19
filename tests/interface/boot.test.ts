@@ -175,10 +175,15 @@ test('gate boot: content_root_health reports clean when everything hydrates', ()
 });
 
 test('gate boot: content_root_health surfaces malformed records with a fix hint', () => {
-  // Seed a request with an invalid lense so hydration fails;
-  // the ID pattern must match YamlRequestRepository's listAll filter
-  // (YYYY-MM-DD-NNN[N]), otherwise the file is filtered out before
-  // hydration even attempts it — a subtlety worth asserting against.
+  // Seed a request with a structurally invalid verdict so hydration
+  // fails; the ID pattern must match YamlRequestRepository's listAll
+  // filter (YYYY-MM-DD-NNN[N]), otherwise the file is filtered out
+  // before hydration even attempts it — a subtlety worth asserting
+  // against. (Previously this probe used an unknown lense, but lense
+  // hydration is now permissive — see Lense.ts parseLense's `strict`
+  // parameter and Review.create's `strictLense` flag. Verdict stays
+  // strict on read, so it's the right probe for "genuinely
+  // malformed" vs. "lense removed from config since write.")
   const { root, cleanup } = bootstrap();
   try {
     mkdirSync(join(root, 'requests', 'completed'), { recursive: true });
@@ -203,8 +208,8 @@ test('gate boot: content_root_health surfaces malformed records with a fix hint'
         'reviews:',
         '  - by: alice',
         '    at: 2099-04-17T10:00:01.000Z',
-        '    lense: not_a_real_lense',
-        '    verdict: ok',
+        '    lense: devil',
+        '    verdict: not_a_real_verdict',
         '    comment: test',
         '',
       ].join('\n'),

@@ -17,13 +17,26 @@ export type Lense = string;
  *
  * The error message below surfaces this extension path so first-time
  * users don't have to discover it from source.
+ *
+ * `strict` (default true) controls what happens when `value` is
+ * not in `allowed`. Strict throws; non-strict returns the raw
+ * string as-is. Non-strict exists so that hydration of historical
+ * records can preserve lense values that were valid at write time
+ * but have since been removed from the config (lense-deprecation
+ * gap surfaced in alexandria/issues/i-2026-04-19-0005). Write
+ * paths should stay strict; read paths may be permissive because
+ * the value was already validated when it was first committed.
  */
 export function parseLense(
   value: string,
   allowed: readonly string[] = DEFAULT_LENSES,
+  strict: boolean = true,
 ): Lense {
   const effectiveAllowed = allowed.length > 0 ? allowed : DEFAULT_LENSES;
   if (effectiveAllowed.includes(value)) {
+    return value;
+  }
+  if (!strict) {
     return value;
   }
   throw new DomainError(

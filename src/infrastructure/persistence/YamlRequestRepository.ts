@@ -268,6 +268,12 @@ function hydrate(
           lense: String(ro['lense']),
           verdict: String(ro['verdict']),
           comment: String(ro['comment'] ?? ''),
+          // Hydration is permissive on lense: a value that was
+          // valid at write time stays loadable even if the lense
+          // has since been removed from the config. The write
+          // path remains strict via Review.create's default. See
+          // alexandria/issues/i-2026-04-19-0005.
+          strictLense: false,
         };
         if (typeof ro['at'] === 'string') rc.at = ro['at'] as string;
         if (typeof ro['invoked_by'] === 'string')

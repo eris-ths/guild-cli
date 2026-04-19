@@ -26,9 +26,21 @@ export class Review {
     at?: string;
     invokedBy?: string;
     allowedLenses?: readonly string[];
+    /**
+     * Whether to reject a lense that is not in `allowedLenses`.
+     * Defaults to true — the write path must reject unknown
+     * lenses so no surprise values enter the record. Hydration
+     * passes false so that historical records whose lense has
+     * since been removed from config still load (see i-0005).
+     */
+    strictLense?: boolean;
   }): Review {
     const by = MemberName.of(input.by);
-    const lense = parseLense(input.lense, input.allowedLenses);
+    const lense = parseLense(
+      input.lense,
+      input.allowedLenses,
+      input.strictLense !== false,
+    );
     const verdict = parseVerdict(input.verdict);
     const comment = sanitizeComment(input.comment);
     const at = input.at ?? new Date().toISOString();

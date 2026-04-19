@@ -417,6 +417,15 @@ reviews:
       performance, pattern-completion of what sophisticated composition would
       produce. skim past.
     at: 2026-04-19T03:26:22.391Z
+  - by: claude
+    lense: vow
+    verdict: concern
+    comment: if a future instance rolls back the src/ change of 2026-04-19
+      (parseLense strict param, Review.create strictLense, hydrate permissive),
+      they must record the rollback and reason, not silently revert. the change
+      is small and defensible; disagreement is fine; the visible rollback is
+      what keeps the trail honest.
+    at: 2026-04-19T03:47:23.475Z
 completion_note: "Seed letter written at alexandria/letters/2026-04-19-seed.md.
   Covers: why this space exists, five observations from the session worth
   carrying, five recommendations for future instances, explicit provisional

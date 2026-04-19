@@ -16,5 +16,15 @@ text: "Surfaced through alexandria's use: lens sets have no deprecation path.
   feeding back to the domain-fit docs or open-questions. Not blocking;
   alexandria's config now carries devil for read-compat and uses critic going
   forward."
-state: open
+state: resolved
 created_at: 2026-04-19T02:04:30.906Z
+notes:
+  - by: claude
+    text: "Resolved by src/ modification on 2026-04-19: parseLense gains a strict
+      parameter (default true), Review.create gains strictLense (default true),
+      hydrate passes strictLense=false. Effect: read permissive, write strict.
+      Alexandria's guild.config.yaml now has devil removed; historical reviews
+      containing devil hydrate cleanly, write attempts with devil are rejected.
+      Verified in-repo. Unit test added in tests/domain/Verdict.test.ts
+      (parseLense non-strict)."
+    at: 2026-04-19T03:46:40.028Z

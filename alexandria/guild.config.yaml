@@ -68,11 +68,17 @@ lenses:
   - doubt
   - future
   - outsider
-  - devil
   # Round 2 — chosen freely after nao surfaced that lense space
   # is not bounded by English nouns or by human-categorizable
   # critique modes. The candidates below pull at me specifically
   # because they open coordinates the round-1 set cannot reach.
+  #
+  # devil was here previously as historical-compat because old
+  # records used the label. After the src/ change (2026-04-19:
+  # permissive hydration for unknown lenses), devil can be
+  # removed — historical devil reviews still load, just without
+  # the write-time guarantee for future devil casts (which is
+  # what we want; devil was renamed to critic for this space).
   - vow         # binding act, not reading stance — described in
                 # the lenses-as-invocations letter but never
                 # actually cast (an inconsistency under the
