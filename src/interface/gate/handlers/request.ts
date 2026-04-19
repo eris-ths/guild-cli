@@ -250,6 +250,17 @@ export async function reqApprove(c: C, args: ParsedArgs): Promise<number> {
   const note = optionalOption(args, 'note');
   const invokedBy = resolveInvokedBy(by, 'approve', id);
   const r = await c.requestUC.approve(id, by, note, invokedBy);
+  // Self-approval is policy-allowed but worth flagging on stderr so
+  // the no-second-pair-of-eyes case never happens silently. Use the
+  // on-record actor (`by`), not GUILD_ACTOR — invoked_by is already
+  // surfaced separately by resolveInvokedBy above.
+  if (by === r.from.value) {
+    process.stderr.write(
+      `notice: ${by} approved their own request ${id} ` +
+        `(no second reviewer; for a single-step self-flow use ` +
+        `'gate fast-track').\n`,
+    );
+  }
   emitWriteResponse(parseFormat(args), r, `✓ approved: ${id}`, c.config);
   return 0;
 }

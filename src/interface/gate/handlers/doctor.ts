@@ -1,5 +1,5 @@
 import { ParsedArgs, optionalOption } from '../../shared/parseArgs.js';
-import { C } from './internal.js';
+import { C, warnIfMisconfiguredCwd } from './internal.js';
 import {
   DiagnosticReport,
   DiagnosticAreaSummary,
@@ -24,6 +24,16 @@ export async function doctorCmd(c: C, args: ParsedArgs): Promise<number> {
   const format = optionalOption(args, 'format') ?? 'text';
   const summaryOnly =
     args.options['summary'] === true || args.positional[0] === 'summary';
+
+  // "0 of everything" + no config = the user is in the wrong cwd, not
+  // running an unusually thorough fresh-start audit. Same gate as
+  // `gate boot`'s misconfigured_cwd hint, surfaced via stderr so the
+  // `--format json | gate repair` pipeline still parses cleanly.
+  const totals =
+    report.summary.members.total +
+    report.summary.requests.total +
+    report.summary.issues.total;
+  warnIfMisconfiguredCwd(c, totals === 0);
 
   if (format === 'json') {
     process.stdout.write(JSON.stringify(report.toJSON(), null, 2) + '\n');
