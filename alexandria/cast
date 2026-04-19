@@ -5,6 +5,16 @@
 #   ./cast <request-id> --lense <X> --verdict <V> --comment "..."
 #   ./cast <request-id> --lense <X> --verdict <V> --comment -   # stdin
 #
+# NOTE: --comment via double-quoted shell arg is SHELL-UNSAFE for
+# text containing backticks or $(...) — bash will substitute them
+# before we see the string. See issue i-2026-04-19-0006: one
+# builder/ok review on 2026-04-19-0002 had content eaten by
+# unintentional backtick substitution. Prefer `--comment -` with
+# heredoc stdin for any comment containing backticks, $, or other
+# shell metacharacters. Script below cannot fix this — it is a
+# caller-side shell problem — but it CAN pass `--comment -`
+# through transparently.
+#
 # What it does that `gate review` alone does not:
 #   1. Before the cast, runs `gate voices claude --lense <X>` so
 #      you see the corpus-to-date for the lense you're about to

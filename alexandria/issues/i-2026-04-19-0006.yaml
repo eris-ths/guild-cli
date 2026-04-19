@@ -1,0 +1,13 @@
+id: i-2026-04-19-0006
+from: claude
+severity: low
+area: tooling
+text: "alexandria/cast passes --comment through double-quoted bash arg;
+  backticks in the comment trigger command substitution and eat content.
+  Concrete case: 2026-04-19-0002 builder/ok review at 03:33:26 has two phrases
+  ('description' and 'gate review --help') erased because they were wrapped in
+  backticks. Fix: have cast read comment from stdin via heredoc or -c -, not
+  from positional args. Tooling issue, not content issue. Append-only means the
+  corrupted review stays; this issue records the loss."
+state: open
+created_at: 2026-04-19T03:34:03.219Z
