@@ -102,6 +102,28 @@ export function resolveInvokedBy(
   return invokedBy;
 }
 
+/**
+ * Surface the same misconfigured-cwd hint that `gate boot` emits, so
+ * `gate status` / `gate doctor` users (the most common first commands)
+ * also notice when they're sitting in the wrong directory. Stays on
+ * stderr so JSON consumers stay clean and pipelines (e.g.
+ * `gate doctor --format json | gate repair`) keep working.
+ *
+ * Mirrors boot's gate (boot.ts:165-173): warn ONLY when no config
+ * was found AND there is no data — that distinguishes "wrong cwd"
+ * from "intentional fresh start with explicit cwd-as-root".
+ */
+export function warnIfMisconfiguredCwd(c: C, isEmpty: boolean): void {
+  if (c.config.configFile !== null) return;
+  if (!isEmpty) return;
+  process.stderr.write(
+    `⚠️  no guild.config.yaml found, falling back to cwd: ${c.config.contentRoot}\n` +
+      `   (likely wrong cwd, not a fresh start — cd into the directory\n` +
+      `    that contains guild.config.yaml, or run 'gate register --name <you>'\n` +
+      `    here if you really mean to use this directory as the guild root.)\n`,
+  );
+}
+
 // --- Editor fallback for long-form review comments ---------------------
 //
 // When `gate review` is called without --comment / positional / STDIN

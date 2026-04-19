@@ -273,6 +273,11 @@ test('gate issues add --text <value-starting-with--> surfaces the POSIX escape h
 
 // ── positional `-` as stdin sentinel (symmetry with --comment -/--text -) ──
 
+// IDs carry today's UTC date from gate's clock, so the prefix is
+// derived at run time rather than baked in (the old `2026-04-18`
+// literals only matched on the day the test was authored).
+const _today = () => new Date().toISOString().slice(0, 10);
+
 test('gate review <id> ... - reads stdin (positional sentinel)', () => {
   const { root, cleanup } = bootstrap();
   try {
@@ -282,11 +287,12 @@ test('gate review <id> ... - reads stdin (positional sentinel)', () => {
       ['request', '--from', 'eris', '--action', 'x', '--reason', 'r'],
       { env: { GUILD_ACTOR: 'eris' } },
     );
+    const reqId = `${_today()}-0001`;
     const { status } = runGate(
       root,
       [
         'review',
-        '2026-04-18-0001',
+        reqId,
         '--by',
         'claude',
         '--lense',
@@ -299,7 +305,7 @@ test('gate review <id> ... - reads stdin (positional sentinel)', () => {
     );
     assert.equal(status, 0);
     // Assert via gate show that the comment landed (not literal "-").
-    const { stdout } = runGate(root, ['show', '2026-04-18-0001', '--format', 'text']);
+    const { stdout } = runGate(root, ['show', reqId, '--format', 'text']);
     assert.match(stdout, /stdin review body/);
     assert.equal(/\[devil\/ok\] by claude.*\n\s+-\n/.test(stdout), false);
   } finally {
@@ -316,9 +322,10 @@ test('gate issues note <id> ... - reads stdin (positional sentinel)', () => {
        '--text', 'seed'],
       { env: { GUILD_ACTOR: 'eris' } },
     );
+    const issueId = `i-${_today()}-0001`;
     const { status } = runGate(
       root,
-      ['issues', 'note', 'i-2026-04-18-0001', '--by', 'eris', '-'],
+      ['issues', 'note', issueId, '--by', 'eris', '-'],
       { input: 'stdin note body\n', env: { GUILD_ACTOR: 'eris' } },
     );
     assert.equal(status, 0);

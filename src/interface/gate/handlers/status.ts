@@ -1,6 +1,6 @@
 import { ParsedArgs, optionalOption } from '../../shared/parseArgs.js';
 import { Request } from '../../../domain/request/Request.js';
-import { C } from './internal.js';
+import { C, warnIfMisconfiguredCwd } from './internal.js';
 
 /**
  * gate status [--for <name>] [--format json|text]
@@ -162,6 +162,11 @@ export async function statusCmd(c: C, args: ParsedArgs): Promise<number> {
       // inbox may not exist for this actor — non-fatal
     }
   }
+
+  // Surface misconfigured-cwd before the (likely all-zero) payload
+  // so the user sees the cause before the symptom. Same condition as
+  // `gate boot`: no config + no data = probably wrong cwd.
+  warnIfMisconfiguredCwd(c, all.length === 0 && summary.open_issues === 0);
 
   if (format === 'json') {
     process.stdout.write(JSON.stringify(summary, null, 2) + '\n');

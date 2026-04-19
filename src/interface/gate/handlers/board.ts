@@ -30,7 +30,9 @@ import {
  * Empty sections still render their header with "(0)" / "(none)" so
  * the board shape stays stable across calls — a reader scanning for
  * "executing" should always find the line even when nothing is mid-
- * execution.
+ * execution. Exception: when ALL three sections are empty there is
+ * no shape to preserve, so we collapse to a single "no requests in
+ * flight." line to spare the reader three back-to-back "(none)" rows.
  */
 const BOARD_STATES = ['pending', 'approved', 'executing'] as const;
 
@@ -87,6 +89,11 @@ export async function boardCmd(c: C, args: ParsedArgs): Promise<number> {
   // section). Same treatment `gate list` gives a single state list.
   const allItems = sections.flatMap((s) => s.items);
   const markerWidth = computeReviewMarkerWidth(allItems);
+
+  if (allItems.length === 0) {
+    process.stdout.write('no requests in flight.\n');
+    return 0;
+  }
 
   for (let s = 0; s < sections.length; s++) {
     const { state, items } = sections[s]!;
