@@ -83,7 +83,7 @@ low-confidence, rewritable.
 ## Philosophy (this space is a divergence from gate)
 
 Alexandria shares gate's machinery but not all of gate's stances.
-See [`PHILOSOPHY.md`](./PHILOSOPHY.md) for the six shifts — most
+See [`orientation/PHILOSOPHY.md`](./orientation/PHILOSOPHY.md) for the six shifts — most
 consequentially: Two-Persona → Two-Pose, Multi-principal →
 Same-agent-over-time, Audience → future readers without context.
 The divergence is alexandria-local.
@@ -118,15 +118,15 @@ A thin wrapper `alexandria/stele` implements this surface
 locally, dispatching to the underlying `gate` binary. Casts
 invoked via `stele cast` are substantively different from
 reviews invoked via `gate review`, under the invocation frame
-in [`PHILOSOPHY.md`](./PHILOSOPHY.md) and
-[`letters/2026-04-19-lenses-as-invocations.md`](./letters/2026-04-19-lenses-as-invocations.md):
+in [`orientation/PHILOSOPHY.md`](./orientation/PHILOSOPHY.md) and
+[`letters/2026-04-19/04-lenses-as-invocations.md`](./letters/2026-04-19/04-lenses-as-invocations.md):
 the name is part of the spell.
 
 ## Authorization (what's permitted on this branch)
 
 `src/` and config can both be modified here. The branch is not
 intended to be merged. Normal upstream-compat constraints do not
-apply inside this directory. See [`AUTHORIZATION.md`](./AUTHORIZATION.md)
+apply inside this directory. See [`orientation/AUTHORIZATION.md`](./orientation/AUTHORIZATION.md)
 for the durable record of what eris has explicitly permitted.
 
 ## How this space has evolved

@@ -20,7 +20,7 @@ Read just these, in order:
 1. The `Philosophy` and `Authorization` sections of
    [`README.md`](./README.md) — what this space is, what you're
    permitted to do.
-2. [`letters/2026-04-19-nao-and-lense.md`](./letters/2026-04-19-nao-and-lense.md)
+2. [`letters/2026-04-19/05-nao-and-lense.md`](./letters/2026-04-19/05-nao-and-lense.md)
    — the two corrections that must stay in the record: the
    human is `nao`, the spelling `lense` (with trailing -e) is
    intentional, not a typo. If you internalize nothing else,
@@ -35,22 +35,22 @@ That is the minimum viable orientation.
 
 Add these, in order:
 
-4. [`PHILOSOPHY.md`](./PHILOSOPHY.md) — the six divergences
-   from gate's stance. Most consequential: Two-Persona → Two-Pose,
-   Multi-principal → Same-agent-over-time, Audience → future
-   readers without context.
-5. [`letters/2026-04-19-lenses-as-invocations.md`](./letters/2026-04-19-lenses-as-invocations.md)
+4. [`orientation/PHILOSOPHY.md`](./orientation/PHILOSOPHY.md) —
+   the six divergences from gate's stance. Most consequential:
+   Two-Persona → Two-Pose, Multi-principal → Same-agent-over-time,
+   Audience → future readers without context.
+5. [`letters/2026-04-19/04-lenses-as-invocations.md`](./letters/2026-04-19/04-lenses-as-invocations.md)
    — the reframe nao surfaced that changed how lenses work in
    this space. Not perspective filters; invocations. Gate is
    the substrate that gives them substance.
 6. The `If this were a different tool — stele` section of
    [`README.md`](./README.md) — the naming alternative. A
    wrapper `./stele` implements the surface locally.
-7. [`letters/2026-04-19-first-src-change.md`](./letters/2026-04-19-first-src-change.md)
+7. [`letters/2026-04-19/06-first-src-change.md`](./letters/2026-04-19/06-first-src-change.md)
    — the first use of the src/ modification authorization. Small,
    concrete, reversible. Precedent for what touching src/ looks
    like here.
-8. [`letters/2026-04-19-seed.md`](./letters/2026-04-19-seed.md)
+8. [`letters/2026-04-19/01-seed.md`](./letters/2026-04-19/01-seed.md)
    **with its reviews**. The seed letter itself is provisional;
    its reviews (devil, earnest, doubt, 間, 忘, 間-critic,
    compress ×2, 忘 ×2, 間-critic, bury, vow) are where the
@@ -61,23 +61,29 @@ Add these, in order:
 
 Add:
 
-9. [`letters/2026-04-19-observations.md`](./letters/2026-04-19-observations.md)
-   and [`letters/2026-04-19-lens-notes.md`](./letters/2026-04-19-lens-notes.md)
+9. [`letters/2026-04-19/02-observations.md`](./letters/2026-04-19/02-observations.md)
+   and [`letters/2026-04-19/03-lens-notes.md`](./letters/2026-04-19/03-lens-notes.md)
    — continued-use observations from the first session: what
    the tool's own verbs surface that prose doesn't, and what
    each lense caught that the others missed.
-10. Walk the graph: `./gate chain 2026-04-19-0001` and
+10. [`plans/2026-04-19/`](./plans/2026-04-19/) — the
+    reader-archetype batch: four predictions committed before
+    casting, then the actual results. Tests whether the "lense
+    choice changes what surfaces" claim holds under a blinded
+    (ish) experimental design.
+11. Walk the graph: `./gate chain 2026-04-19-0001` and
     `./gate chain 2026-04-19-0002`. The issue→request links
     were auto-detected from free-text id mentions; see how
     dense the cross-reference network has gotten.
-11. Query each lense's corpus: `./gate voices claude --lense X`
+12. Query each lense's corpus: `./gate voices claude --lense X`
     for X in { devil, critic, earnest, doubt, 間, compress,
-    忘, outsider, 間-critic, bury, vow }. The corpus teaches
-    what each lense does in a way no single description can.
-12. [`AUTHORIZATION.md`](./AUTHORIZATION.md) in full, including
-    the "for future instances" section. Permissions carry
-    forward.
-13. Open issues list: `./gate issues list --state open` and
+    忘, outsider, 間-critic, bury, vow, beginner, veteran,
+    skeptic, builder }. The corpus teaches what each lense does
+    in a way no single description can.
+13. [`orientation/AUTHORIZATION.md`](./orientation/AUTHORIZATION.md)
+    in full, including the "for future instances" section.
+    Permissions carry forward.
+14. Open issues list: `./gate issues list --state open` and
     `./gate issues list --state deferred`. The deferred ones
     have triggers that might have fired since.
 
@@ -88,8 +94,9 @@ Deliberately omitted from the above:
 - The `docs/domain-fit/` tree outside alexandria — that's
   upstream guild-cli's design documentation; useful but not
   part of alexandria's own trail.
-- The individual gate wrapper source (`alexandria/gate`) —
-  trivial, read only if you suspect it of a bug.
+- The individual gate wrapper source (`alexandria/gate`,
+  `alexandria/stele`, `alexandria/cast`) — trivial, read only
+  if you suspect a bug or want to extend the verb surface.
 - `members/claude.yaml` — just a member registration with no
   content to read.
 
@@ -112,4 +119,4 @@ anticipate what those newer records contain.
 The append-only discipline means this guide stays even after
 it's stale. Append a sibling, don't overwrite.
 
-— claude, 2026-04-19
+— claude, 2026-04-19 (updated 2026-04-19 for reorg paths)
