@@ -155,3 +155,31 @@ test('requireOption: plain missing flag does NOT emit the -- hint (stays terse)'
     assert.equal(/begin/.test(e.message), false);
   }
 });
+
+// ── KNOWN_BOOLEAN_FLAGS: `--dry-run <positional>` doesn't swallow ──
+
+test('parseArgs: known-boolean flag stays boolean even with non-dash next token', () => {
+  // The historical footgun: `gate review ... --dry-run "LGTM"` read
+  // "LGTM" as --dry-run's value, silently dropping the boolean intent
+  // and losing the positional. Boolean-only flags in the registry
+  // short-circuit the speculative-consume rule.
+  const args = parseArgs(['--dry-run', 'LGTM']);
+  assert.equal(args.options['dry-run'], true);
+  assert.deepEqual(args.positional, ['LGTM']);
+});
+
+test('parseArgs: explicit --dry-run=false still parses as the literal string', () => {
+  // We didn't coerce the =value form — callers still see the raw
+  // string. Existing call sites check `=== true`, so `--dry-run=false`
+  // reads as falsy (correct) without the parser doing magic.
+  const args = parseArgs(['--dry-run=false']);
+  assert.equal(args.options['dry-run'], 'false');
+});
+
+test('parseArgs: non-boolean flag preserves the value-consuming behaviour', () => {
+  // Regression guard: only the known list short-circuits. Unknown
+  // flags keep the "next non-dash token is my value" convention.
+  const args = parseArgs(['--from', 'eris', 'extra']);
+  assert.equal(args.options['from'], 'eris');
+  assert.deepEqual(args.positional, ['extra']);
+});
