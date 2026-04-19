@@ -15,6 +15,7 @@ import {
   reqFastTrack,
 } from './handlers/request.js';
 import { reqReview } from './handlers/review.js';
+import { reqThank } from './handlers/thank.js';
 import {
   reqVoices,
   reqTail,
@@ -36,6 +37,7 @@ import {
 } from './handlers/messages.js';
 import { statusCmd } from './handlers/status.js';
 import { suggestCmd } from './handlers/suggest.js';
+import { transcriptCmd } from './handlers/transcript.js';
 
 // Re-export for test backward-compat (tests/interface/reviewMarkers.test.ts).
 // formatReviewMarkers and computeReviewMarkerWidth live in handlers/request.ts
@@ -89,9 +91,14 @@ Requests:
                    [--comment <s> | --comment - | <comment>] [--dry-run]
                        --dry-run on any write verb above emits a
                        preview JSON envelope (dry_run/verb/would_
-                       transition/preview) without persisting. Use
-                       --dry-run=true if followed by a non-dash
-                       positional (see "Values beginning with '--'").
+                       transition/preview) without persisting.
+  gate thank <to> --for <id> [--by <m>] [--reason <s> | --reason -]
+                  [--dry-run]
+                       Record cross-actor appreciation against a
+                       specific request. Sibling of 'review' — no
+                       verdict, no state change, no calibration
+                       impact. Reviews track judgement; thanks
+                       track gratitude.
   gate fast-track --from <m> --action <a> --reason <r>
                   [--executor <m>] [--auto-review <m>] [--note <s>]
                   [--with <n1>[,<n2>...]]
@@ -172,6 +179,13 @@ Status:
                        thing?" without the full orientation payload.
                        Priority ladder is shared with boot, so the
                        two never disagree.
+  gate transcript <id> [--format text|json]
+                       Narrative prose render of one request's arc,
+                       composed from status_log + reviews. Sibling
+                       of 'gate show' (structured) and 'gate voices'
+                       (per-actor). JSON mode carries both the
+                       narrative and a summary (actors/verdicts/
+                       duration_ms) for programmatic consumers.
   gate resume [--format json|text]
                        Reconstruct what the actor was doing when the
                        last session ended. Returns last utterance,
@@ -196,9 +210,9 @@ Meta:
 const KNOWN_COMMANDS = [
   'request', 'pending', 'board', 'list', 'show', 'voices', 'tail',
   'whoami', 'register', 'chain', 'approve', 'deny', 'execute',
-  'complete', 'fail', 'review', 'fast-track', 'issues', 'message',
+  'complete', 'fail', 'review', 'thank', 'fast-track', 'issues', 'message',
   'broadcast', 'inbox', 'doctor', 'repair', 'status', 'boot',
-  'suggest', 'resume', 'schema',
+  'suggest', 'transcript', 'resume', 'schema',
 ] as const;
 
 function levenshtein(a: string, b: string): number {
@@ -302,6 +316,8 @@ export async function main(argv: readonly string[]): Promise<number> {
         return await reqFail(c, args);
       case 'review':
         return await reqReview(c, args);
+      case 'thank':
+        return await reqThank(c, args);
       case 'fast-track':
         return await reqFastTrack(c, args);
       case 'issues':
@@ -322,6 +338,8 @@ export async function main(argv: readonly string[]): Promise<number> {
         return await bootCmd(c, args);
       case 'suggest':
         return await suggestCmd(c, args);
+      case 'transcript':
+        return await transcriptCmd(c, args);
       case 'resume':
         return await resumeCmd(c, args);
       case 'schema':

@@ -5,11 +5,13 @@ import {
   parseRequestState,
 } from './RequestState.js';
 import { Review } from './Review.js';
+import { Thank } from './Thank.js';
 import { MemberName } from '../member/MemberName.js';
 import { DomainError } from '../shared/DomainError.js';
 
 const MAX_TEXT = 4096;
 const MAX_REVIEWS = 50;
+const MAX_THANKS = 50;
 const MAX_STATUS_LOG = 100;
 
 export interface StatusLogEntry {
@@ -61,6 +63,13 @@ export interface RequestProps {
   state: RequestState;
   createdAt: string;
   reviews: Review[];
+  /**
+   * Optional — records written before the thank primitive existed
+   * don't carry this field, and the repo hydrates them as undefined
+   * rather than breaking. The constructor normalises to [] so the
+   * internal invariant is still "always an array".
+   */
+  thanks?: Thank[];
   statusLog: StatusLogEntry[];
 }
 
@@ -76,7 +85,13 @@ export class Request {
   private constructor(
     private props: RequestProps,
     private readonly _loadedVersion: number,
-  ) {}
+  ) {
+    // Normalise optional `thanks` so every downstream reader sees
+    // an array. Old records hydrated with the field absent pick up
+    // an empty list here; `addThank` and the `thanks` getter both
+    // assume the array exists.
+    if (this.props.thanks === undefined) this.props.thanks = [];
+  }
 
   static create(input: {
     id: RequestId;
@@ -124,6 +139,7 @@ export class Request {
       state: 'pending',
       createdAt,
       reviews: [],
+      thanks: [],
       statusLog: [initialEntry],
     };
     if (input.executor !== undefined) {
@@ -250,6 +266,25 @@ export class Request {
     this.props.reviews.push(review);
   }
 
+  /**
+   * Append a thank to the request. Parallels addReview but for the
+   * gratitude primitive — no verdict, no state change, doesn't feed
+   * calibration. Cap mirrors reviews (50) so a degenerate caller
+   * can't fill disk; in practice this should be generous enough.
+   */
+  addThank(thank: Thank): void {
+    const list = this.props.thanks ?? [];
+    if (list.length >= MAX_THANKS) {
+      throw new DomainError(`Too many thanks (max ${MAX_THANKS})`, 'thanks');
+    }
+    list.push(thank);
+    this.props.thanks = list;
+  }
+
+  get thanks(): readonly Thank[] {
+    return this.props.thanks ?? [];
+  }
+
   private transition(
     to: RequestState,
     by: MemberName,
@@ -292,6 +327,14 @@ export class Request {
       status_log: this.props.statusLog.map((e) => statusLogEntryToJSON(e)),
       reviews: this.props.reviews.map((r) => r.toJSON()),
     };
+    // Thanks surface only when present — zero thanks is the common
+    // case and an empty array would clutter every show payload.
+    // Forward-compatible: consumers reading old records (pre-thanks)
+    // see no `thanks` key at all, which is correct.
+    const thanks = this.props.thanks ?? [];
+    if (thanks.length > 0) {
+      out['thanks'] = thanks.map((t) => t.toJSON());
+    }
     if (this.props.executor) out['executor'] = this.props.executor.value;
     if (this.props.autoReview)
       out['auto_review'] = this.props.autoReview.value;

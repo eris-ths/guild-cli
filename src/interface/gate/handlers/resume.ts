@@ -386,6 +386,17 @@ function composeRestorationProseEn(ctx: {
         `Your last voice (utterance, ${age}) was a review on req=${lastUtterance.requestId} — [${lastUtterance.lense}/${lastUtterance.verdict}]${proxyHint}:`,
       );
       lines.push(`  "${truncate(lastUtterance.comment, 240)}"`);
+    } else if (lastUtterance.kind === 'thank') {
+      const proxyHint = lastUtterance.invokedBy
+        ? ` (invoked by ${lastUtterance.invokedBy})`
+        : '';
+      lines.push(
+        `Your last voice (utterance, ${age}) was a thank → ${lastUtterance.to} on req=${lastUtterance.requestId}${proxyHint}:`,
+      );
+      lines.push(`  re: ${truncate(lastUtterance.action, 120)}`);
+      if (lastUtterance.reason !== undefined) {
+        lines.push(`  "${truncate(lastUtterance.reason, 200)}"`);
+      }
     } else {
       const withHint =
         lastUtterance.with && lastUtterance.with.length > 0
@@ -517,6 +528,17 @@ function composeRestorationProseJa(ctx: {
         `直近の発話 (utterance, ${age}): req=${lastUtterance.requestId} へのレビュー — [${lastUtterance.lense}/${lastUtterance.verdict}]${proxyHint}:`,
       );
       lines.push(`  「${truncate(lastUtterance.comment, 240)}」`);
+    } else if (lastUtterance.kind === 'thank') {
+      const proxyHint = lastUtterance.invokedBy
+        ? `（${lastUtterance.invokedBy} が代行）`
+        : '';
+      lines.push(
+        `直近の発話 (utterance, ${age}): req=${lastUtterance.requestId} への感謝 → ${lastUtterance.to}${proxyHint}:`,
+      );
+      lines.push(`  re: ${truncate(lastUtterance.action, 120)}`);
+      if (lastUtterance.reason !== undefined) {
+        lines.push(`  「${truncate(lastUtterance.reason, 200)}」`);
+      }
     } else {
       const withHint =
         lastUtterance.with && lastUtterance.with.length > 0

@@ -65,6 +65,7 @@ test('gate boot: JSON top-level keys are stable', () => {
         'status',
         'suggested_next',
         'tail',
+        'verbs_available_now',
         'your_recent',
       ],
       'boot payload top-level keys changed — agents depend on this contract',

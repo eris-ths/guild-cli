@@ -60,12 +60,18 @@ export async function suggestCmd(c: C, args: ParsedArgs): Promise<number> {
     if (suggestion === null) {
       process.stdout.write('(nothing urgent)\n');
     } else {
-      // Compact text form: one line for verb + args, one for reason.
+      // Compact text form: one line for verb + args, one for reason,
+      // one trailing advisory footer. The footer goes to stderr so
+      // stdout stays clean for `$(gate suggest ...)` shell composition
+      // but a human scanning the terminal still sees it next to the
+      // output. Keeps the reminder that suggested_next is a heuristic
+      // at the point where the user reads the suggestion.
       const argsStr = Object.entries(suggestion.args)
         .map(([k, v]) => `${k}=${v}`)
         .join(' ');
       process.stdout.write(`→ ${suggestion.verb} ${argsStr}\n`);
       process.stdout.write(`  ${suggestion.reason}\n`);
+      process.stderr.write('# advisory — override freely\n');
     }
   }
   return 0;

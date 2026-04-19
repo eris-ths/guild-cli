@@ -337,6 +337,629 @@ test('suggest --format text: compact two-line form for humans', () => {
   }
 });
 
+// ── boot.verbs_available_now: state-aware verb discovery ────────
+
+test('boot.verbs_available_now: actionable lists all valid transitions', () => {
+  // bob has executing-by-me (0001) AND unreviewed-mine (0002). suggested_next
+  // picks ONE; actionable lists ALL siblings so a branching agent sees
+  // the other options.
+  const { root, cleanup } = bootstrap();
+  try {
+    runGate(
+      root,
+      ['request', '--from', 'alice', '--action', 't1', '--reason', 'r', '--executor', 'bob'],
+      { GUILD_ACTOR: 'alice' },
+    );
+    runGate(root, ['approve', rid(1), '--by', 'alice']);
+    runGate(root, ['execute', rid(1), '--by', 'bob']);
+    runGate(
+      root,
+      ['fast-track', '--from', 'alice', '--action', 't2', '--reason', 'r', '--auto-review', 'bob'],
+      { GUILD_ACTOR: 'alice' },
+    );
+    const { stdout } = runGate(root, ['boot'], { GUILD_ACTOR: 'bob' });
+    const p = JSON.parse(stdout);
+    const verbs = p.verbs_available_now.actionable.map(
+      (a: { verb: string }) => a.verb,
+    );
+    assert.ok(verbs.includes('complete'), 'complete missing');
+    assert.ok(verbs.includes('fail'), 'fail missing');
+    assert.ok(verbs.includes('review'), 'review missing');
+    // suggested_next is ONE of the actionable entries.
+    assert.ok(
+      verbs.includes(p.suggested_next.verb),
+      'suggested_next must be in actionable list',
+    );
+  } finally {
+    cleanup();
+  }
+});
+
+test('boot.verbs_available_now: always_readable present for anonymous caller', () => {
+  // Initial-agent discovery: without identity, actionable is empty
+  // (can't transition anything), but always_readable still names
+  // the read surface so newcomers see the map.
+  const { root, cleanup } = bootstrap();
+  try {
+    const { stdout } = runGate(root, ['boot']);
+    const p = JSON.parse(stdout);
+    assert.equal(p.verbs_available_now.actionable.length, 0);
+    assert.ok(p.verbs_available_now.always_readable.length >= 10);
+    assert.ok(p.verbs_available_now.always_readable.includes('suggest'));
+    assert.ok(p.verbs_available_now.always_readable.includes('schema'));
+  } finally {
+    cleanup();
+  }
+});
+
+test('boot.verbs_available_now: actionable entries carry id + reason', () => {
+  // The reason converts "approve exists" into "approve is valid on
+  // this id because …" — teaching not just catalog.
+  const { root, cleanup } = bootstrap();
+  try {
+    runGate(
+      root,
+      ['request', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executor', 'bob'],
+      { GUILD_ACTOR: 'alice' },
+    );
+    const { stdout } = runGate(root, ['boot'], { GUILD_ACTOR: 'bob' });
+    const p = JSON.parse(stdout);
+    const approve = p.verbs_available_now.actionable.find(
+      (a: { verb: string }) => a.verb === 'approve',
+    );
+    assert.ok(approve, 'approve should be actionable');
+    assert.equal(approve.id, rid(1));
+    assert.match(approve.reason, /pending/);
+    assert.match(approve.reason, /executor/);
+  } finally {
+    cleanup();
+  }
+});
+
+// ── voice calibration: Two-Persona Devil gets a memory ──────────
+
+test('voices --with-calibration: aligns verdicts against terminal outcomes', () => {
+  // Carol files sharp concerns on things that later fail — her
+  // devil-lens calibration should read as "trusted". Bob rubber-
+  // stamps ok on things that fail — "learning".
+  const { root, cleanup } = bootstrap();
+  try {
+    // Register carol (only alice + bob exist in the bootstrap).
+    const r = runGate(root, ['register', '--name', 'carol']);
+    assert.equal(r.status, 0);
+
+    // 7 lifecycles: 4 failed + 3 completed. Bob always ok, carol
+    // rejects failures and oks completions.
+    const outcomes: Array<['completed' | 'failed', number]> = [
+      ['completed', 1], ['failed', 2], ['failed', 3], ['completed', 4],
+      ['failed', 5], ['failed', 6], ['completed', 7],
+    ];
+    for (const [state, n] of outcomes) {
+      const id = rid(n);
+      runGate(
+        root,
+        ['request', '--from', 'alice', '--action', `t${n}`, '--reason', 'r', '--executor', 'alice'],
+        { GUILD_ACTOR: 'alice' },
+      );
+      runGate(root, ['approve', id, '--by', 'alice']);
+      runGate(root, ['execute', id, '--by', 'alice']);
+      if (state === 'completed') {
+        runGate(root, ['complete', id, '--by', 'alice']);
+      } else {
+        runGate(root, ['fail', id, '--by', 'alice', '--reason', 'nope']);
+      }
+      runGate(root, [
+        'review', id, '--by', 'bob', '--lense', 'devil', '--verdict', 'ok', '--comment', 'b',
+      ]);
+      const carolV = state === 'completed' ? 'ok' : 'reject';
+      runGate(root, [
+        'review', id, '--by', 'carol', '--lense', 'devil', '--verdict', carolV, '--comment', 'c',
+      ]);
+    }
+
+    const { stdout: carolJson } = runGate(
+      root,
+      ['voices', 'carol', '--format', 'json', '--with-calibration'],
+      { GUILD_ACTOR: 'alice' },
+    );
+    const carol = JSON.parse(carolJson).calibration;
+    assert.equal(carol.by_lens.devil.status, 'trusted');
+    assert.equal(carol.by_lens.devil.aligned, 7);
+    assert.equal(carol.by_lens.devil.missed, 0);
+
+    const { stdout: bobJson } = runGate(
+      root,
+      ['voices', 'bob', '--format', 'json', '--with-calibration'],
+      { GUILD_ACTOR: 'alice' },
+    );
+    const bob = JSON.parse(bobJson).calibration;
+    assert.equal(bob.by_lens.devil.status, 'learning');
+    assert.equal(bob.by_lens.devil.aligned, 3);
+    assert.equal(bob.by_lens.devil.missed, 4);
+  } finally {
+    cleanup();
+  }
+});
+
+test('voices: self-view hides calibration (no self-optimisation)', () => {
+  // Voter shouldn't see their own score — the calibration only lands
+  // when viewing OTHER voices. Keeps the signal honest (if you can't
+  // see it, you can't game it).
+  const { root, cleanup } = bootstrap();
+  try {
+    // Seed one review so there's data to hide.
+    runGate(
+      root,
+      ['fast-track', '--from', 'alice', '--action', 'x', '--reason', 'r'],
+      { GUILD_ACTOR: 'alice' },
+    );
+    runGate(root, [
+      'review', rid(1), '--by', 'bob', '--lense', 'devil', '--verdict', 'ok', '--comment', 'b',
+    ]);
+
+    // bob views himself: calibration block NOT rendered in text.
+    const selfText = runGate(root, ['voices', 'bob', '--format', 'text'], { GUILD_ACTOR: 'bob' });
+    assert.equal(/calibration/.test(selfText.stdout), false);
+
+    // alice views bob: calibration block IS present (or at least the
+    // footer header renders, even if sample count is low).
+    const viewText = runGate(root, ['voices', 'bob', '--format', 'text'], { GUILD_ACTOR: 'alice' });
+    assert.match(viewText.stdout, /calibration/);
+
+    // JSON path: self-view returns null calibration under the flag.
+    const selfJson = runGate(
+      root,
+      ['voices', 'bob', '--format', 'json', '--with-calibration'],
+      { GUILD_ACTOR: 'bob' },
+    );
+    const payload = JSON.parse(selfJson.stdout);
+    assert.equal(payload.calibration, null);
+  } finally {
+    cleanup();
+  }
+});
+
+test('voices: default JSON shape unchanged (backward compat)', () => {
+  // `--with-calibration` is opt-in; without it, the JSON remains an
+  // array of utterances so existing consumers don't break.
+  const { root, cleanup } = bootstrap();
+  try {
+    runGate(
+      root,
+      ['fast-track', '--from', 'alice', '--action', 'x', '--reason', 'r'],
+      { GUILD_ACTOR: 'alice' },
+    );
+    const { stdout } = runGate(root, ['voices', 'alice', '--format', 'json']);
+    const payload = JSON.parse(stdout);
+    assert.ok(Array.isArray(payload), 'default JSON should still be an array');
+  } finally {
+    cleanup();
+  }
+});
+
+test('voices calibration: samples < 5 reads as "uncalibrated"', () => {
+  // Noise floor: a handful of verdicts isn't signal. Show the count
+  // so a reader sees where we are on the ramp, but don't claim a
+  // status from incomplete data.
+  const { root, cleanup } = bootstrap();
+  try {
+    for (let n = 1; n <= 3; n++) {
+      runGate(
+        root,
+        ['fast-track', '--from', 'alice', '--action', `t${n}`, '--reason', 'r'],
+        { GUILD_ACTOR: 'alice' },
+      );
+      runGate(root, [
+        'review', rid(n), '--by', 'bob', '--lense', 'devil', '--verdict', 'ok', '--comment', 'b',
+      ]);
+    }
+    const { stdout } = runGate(
+      root,
+      ['voices', 'bob', '--format', 'json', '--with-calibration'],
+      { GUILD_ACTOR: 'alice' },
+    );
+    const calib = JSON.parse(stdout).calibration;
+    assert.equal(calib.by_lens.devil.status, 'uncalibrated');
+    assert.equal(calib.by_lens.devil.sample_count, 3);
+    assert.equal(calib.by_lens.devil.alignment, null);
+  } finally {
+    cleanup();
+  }
+});
+
+// ── gate thank: cross-actor appreciation primitive ──────────────
+
+test('thank: records appreciation with by/to/reason on the request', () => {
+  const { root, cleanup } = bootstrap();
+  try {
+    runGate(
+      root,
+      ['fast-track', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executor', 'bob'],
+      { GUILD_ACTOR: 'alice' },
+    );
+    const { status } = runGate(
+      root,
+      ['thank', 'bob', '--for', rid(1), '--reason', 'nice work'],
+      { GUILD_ACTOR: 'alice' },
+    );
+    assert.equal(status, 0);
+    const { stdout } = runGate(root, ['show', rid(1), '--fields', 'thanks']);
+    const payload = JSON.parse(stdout);
+    assert.equal(payload.thanks.length, 1);
+    assert.equal(payload.thanks[0].by, 'alice');
+    assert.equal(payload.thanks[0].to, 'bob');
+    assert.equal(payload.thanks[0].reason, 'nice work');
+    assert.equal(typeof payload.thanks[0].at, 'string');
+  } finally {
+    cleanup();
+  }
+});
+
+test('thank: does NOT affect state or reviews (orthogonal record)', () => {
+  // Critical invariant: thanks is NOT a state transition and does
+  // NOT feed calibration. Keep these concerns orthogonal.
+  const { root, cleanup } = bootstrap();
+  try {
+    runGate(
+      root,
+      ['fast-track', '--from', 'alice', '--action', 'x', '--reason', 'r'],
+      { GUILD_ACTOR: 'alice' },
+    );
+    runGate(root, ['thank', 'alice', '--for', rid(1), '--reason', 'ty'], {
+      GUILD_ACTOR: 'alice',
+    });
+    const { stdout } = runGate(root, ['show', rid(1)]);
+    const p = JSON.parse(stdout);
+    assert.equal(p.state, 'completed');
+    assert.equal(p.reviews.length, 0);
+    assert.equal(p.thanks.length, 1);
+  } finally {
+    cleanup();
+  }
+});
+
+test('thank: reason is optional', () => {
+  // Most of the time the fact of the thank is the signal; a reason
+  // is a grace note. The schema doesn't require it.
+  const { root, cleanup } = bootstrap();
+  try {
+    runGate(
+      root,
+      ['fast-track', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executor', 'bob'],
+      { GUILD_ACTOR: 'alice' },
+    );
+    const { status } = runGate(root, ['thank', 'bob', '--for', rid(1)], {
+      GUILD_ACTOR: 'alice',
+    });
+    assert.equal(status, 0);
+    const { stdout } = runGate(root, ['show', rid(1), '--fields', 'thanks']);
+    const thanks = JSON.parse(stdout).thanks;
+    assert.equal(thanks[0].reason, undefined);
+  } finally {
+    cleanup();
+  }
+});
+
+test('thank: self-thank emits stderr notice but succeeds', () => {
+  const { root, cleanup } = bootstrap();
+  try {
+    runGate(
+      root,
+      ['fast-track', '--from', 'alice', '--action', 'x', '--reason', 'r'],
+      { GUILD_ACTOR: 'alice' },
+    );
+    const { status, stderr } = runGate(
+      root,
+      ['thank', 'alice', '--for', rid(1), '--reason', 'past me'],
+      { GUILD_ACTOR: 'alice' },
+    );
+    assert.equal(status, 0);
+    assert.match(stderr, /self-thank/);
+  } finally {
+    cleanup();
+  }
+});
+
+test('thank: unknown --to actor fails with a validation error', () => {
+  const { root, cleanup } = bootstrap();
+  try {
+    runGate(
+      root,
+      ['fast-track', '--from', 'alice', '--action', 'x', '--reason', 'r'],
+      { GUILD_ACTOR: 'alice' },
+    );
+    const { status, stderr } = runGate(
+      root,
+      ['thank', 'ghost', '--for', rid(1)],
+      { GUILD_ACTOR: 'alice' },
+    );
+    assert.equal(status, 1);
+    assert.match(stderr, /ghost/);
+  } finally {
+    cleanup();
+  }
+});
+
+test('thank --dry-run: preview without persist', () => {
+  const { root, cleanup } = bootstrap();
+  try {
+    runGate(
+      root,
+      ['fast-track', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executor', 'bob'],
+      { GUILD_ACTOR: 'alice' },
+    );
+    const { stdout, status } = runGate(
+      root,
+      ['thank', 'bob', '--for', rid(1), '--reason', 'preview', '--dry-run'],
+      { GUILD_ACTOR: 'alice' },
+    );
+    assert.equal(status, 0);
+    const p = JSON.parse(stdout);
+    assert.equal(p.dry_run, true);
+    assert.equal(p.verb, 'thank');
+    assert.equal(p.preview.thanks.length, 1);
+    // Real record has no thanks yet.
+    const after = JSON.parse(
+      runGate(root, ['show', rid(1)]).stdout,
+    );
+    assert.ok(after.thanks === undefined || after.thanks.length === 0);
+  } finally {
+    cleanup();
+  }
+});
+
+// ── suggested_next advisory semantics ───────────────────────────
+
+test('suggest --format text: advisory footer goes to stderr, stdout stays composable', () => {
+  // Humans scanning the terminal see the reminder that suggested_next
+  // is a heuristic. But `$(gate suggest --format text)` captures
+  // stdout, which must stay clean for shell composition.
+  const { root, cleanup } = bootstrap();
+  try {
+    runGate(
+      root,
+      ['request', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executor', 'bob'],
+      { GUILD_ACTOR: 'alice' },
+    );
+    const { stdout, stderr } = runGate(
+      root,
+      ['suggest', '--format', 'text'],
+      { GUILD_ACTOR: 'bob' },
+    );
+    assert.match(stderr, /advisory/);
+    assert.equal(/advisory/.test(stdout), false);
+    // Stdout still carries the actionable two-line output.
+    assert.match(stdout, /→ approve/);
+  } finally {
+    cleanup();
+  }
+});
+
+test('schema: suggested_next descriptions name the "advisory, not directive" semantic', () => {
+  // This is the durable surface — tool layers reading the schema
+  // get the semantic without parsing the runtime output. Easier to
+  // wire correctly once than to discover through experimentation.
+  const { root, cleanup } = bootstrap();
+  try {
+    const bootSchema = JSON.parse(
+      runGate(root, ['schema', '--verb', 'boot', '--format', 'json']).stdout,
+    );
+    const bootSN =
+      bootSchema.verbs[0].output.properties.suggested_next.description;
+    assert.ok(typeof bootSN === 'string');
+    assert.match(bootSN, /[Aa]dvisory/);
+    assert.match(bootSN, /not a directive|NOT a directive/);
+
+    const suggestSchema = JSON.parse(
+      runGate(root, ['schema', '--verb', 'suggest', '--format', 'json']).stdout,
+    );
+    const suggestSN =
+      suggestSchema.verbs[0].output.properties.suggested_next.description;
+    assert.ok(typeof suggestSN === 'string');
+    assert.match(suggestSN, /[Aa]dvisory/);
+    assert.match(suggestSN, /override/);
+  } finally {
+    cleanup();
+  }
+});
+
+// ── thank integration: utterance stream & transcript fold-in ────
+
+test('thank: appears in gate tail as a directional utterance', () => {
+  // tail is the unified cross-actor stream. Thanks share the stream
+  // with authored/review utterances so a reader scanning activity
+  // sees the appreciation alongside the decisions.
+  const { root, cleanup } = bootstrap();
+  try {
+    runGate(
+      root,
+      ['fast-track', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executor', 'bob'],
+      { GUILD_ACTOR: 'alice' },
+    );
+    runGate(root, ['thank', 'bob', '--for', rid(1), '--reason', 'nice'], {
+      GUILD_ACTOR: 'alice',
+    });
+    const { stdout } = runGate(root, ['tail']);
+    assert.match(stdout, /thank alice → bob/);
+    assert.match(stdout, /re: x/);
+  } finally {
+    cleanup();
+  }
+});
+
+test('voices <name>: surfaces thanks in BOTH directions (given and received)', () => {
+  // Reviews are one-sided (only `by` speaks). Thanks involve two
+  // actors; voices matches either side so a voice's full
+  // appreciation footprint — given AND received — is visible when
+  // looking at them.
+  const { root, cleanup } = bootstrap();
+  try {
+    runGate(
+      root,
+      ['fast-track', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executor', 'bob'],
+      { GUILD_ACTOR: 'alice' },
+    );
+    // alice thanks bob (bob receives)
+    runGate(root, ['thank', 'bob', '--for', rid(1), '--reason', 'a-to-b'], {
+      GUILD_ACTOR: 'alice',
+    });
+    // bob thanks alice (bob gives)
+    runGate(root, ['thank', 'alice', '--for', rid(1), '--reason', 'b-to-a'], {
+      GUILD_ACTOR: 'bob',
+    });
+    const { stdout } = runGate(root, ['voices', 'bob', '--format', 'text']);
+    // Both directions land in bob's stream.
+    assert.match(stdout, /thank alice → bob/);
+    assert.match(stdout, /thank bob → alice/);
+    assert.match(stdout, /a-to-b/);
+    assert.match(stdout, /b-to-a/);
+  } finally {
+    cleanup();
+  }
+});
+
+test('voices: lens/verdict filters DO NOT surface thanks (reviews only)', () => {
+  // thanks have no lens and no verdict. A lens-scoped query is
+  // asking for reviews through that lens; including thanks would
+  // be a category error.
+  const { root, cleanup } = bootstrap();
+  try {
+    runGate(
+      root,
+      ['fast-track', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executor', 'bob'],
+      { GUILD_ACTOR: 'alice' },
+    );
+    runGate(root, ['thank', 'bob', '--for', rid(1), '--reason', 'nice'], {
+      GUILD_ACTOR: 'alice',
+    });
+    const { stdout } = runGate(
+      root,
+      ['voices', 'alice', '--format', 'text', '--lense', 'devil'],
+    );
+    assert.equal(/thank/.test(stdout), false);
+    assert.match(stdout, /no utterances|reviews/);
+  } finally {
+    cleanup();
+  }
+});
+
+test('transcript: thanks appear as their own prose paragraph + in summary', () => {
+  const { root, cleanup } = bootstrap();
+  try {
+    runGate(
+      root,
+      ['fast-track', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executor', 'bob'],
+      { GUILD_ACTOR: 'alice' },
+    );
+    runGate(root, ['thank', 'bob', '--for', rid(1), '--reason', 'elegant'], {
+      GUILD_ACTOR: 'alice',
+    });
+    const { stdout } = runGate(root, ['transcript', rid(1)]);
+    assert.match(stdout, /Alice thanked bob/);
+    assert.match(stdout, /elegant/);
+
+    const jsonOut = runGate(root, ['transcript', rid(1), '--format', 'json']);
+    const p = JSON.parse(jsonOut.stdout);
+    assert.equal(p.summary.thank_count, 1);
+  } finally {
+    cleanup();
+  }
+});
+
+// ── gate transcript: narrative arc of one request ───────────────
+
+test('transcript: narrative prose names filer, action, executor, reviews', () => {
+  const { root, cleanup } = bootstrap();
+  try {
+    runGate(
+      root,
+      [
+        'request', '--from', 'alice',
+        '--action', 'refactor parser',
+        '--reason', 'cut p99 latency',
+        '--executor', 'bob',
+        '--auto-review', 'alice',
+      ],
+      { GUILD_ACTOR: 'alice' },
+    );
+    runGate(root, ['approve', rid(1), '--by', 'alice']);
+    runGate(root, ['execute', rid(1), '--by', 'bob']);
+    runGate(root, ['complete', rid(1), '--by', 'bob', '--note', 'landed in abc123']);
+    runGate(
+      root,
+      ['review', rid(1), '--by', 'alice', '--lense', 'devil', '--verdict', 'ok', '--comment', 'LGTM'],
+    );
+    const { stdout } = runGate(root, ['transcript', rid(1)]);
+    assert.match(stdout, /Alice filed/);
+    assert.match(stdout, /refactor parser/);
+    assert.match(stdout, /bob as executor/);
+    assert.match(stdout, /Bob moved it to completed/);
+    assert.match(stdout, /devil lens/);
+    assert.match(stdout, /verdict of ok/);
+    assert.match(stdout, /LGTM/);
+    assert.match(stdout, /Final state: completed/);
+  } finally {
+    cleanup();
+  }
+});
+
+test('transcript --format json: summary carries structured fields', () => {
+  const { root, cleanup } = bootstrap();
+  try {
+    runGate(
+      root,
+      ['request', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executor', 'bob'],
+      { GUILD_ACTOR: 'alice' },
+    );
+    runGate(root, ['approve', rid(1), '--by', 'alice']);
+    runGate(root, ['execute', rid(1), '--by', 'bob']);
+    runGate(root, ['complete', rid(1), '--by', 'bob']);
+    const { stdout } = runGate(root, ['transcript', rid(1), '--format', 'json']);
+    const p = JSON.parse(stdout);
+    assert.equal(p.id, rid(1));
+    assert.ok(typeof p.arc === 'string');
+    assert.ok(p.arc.length > 50);
+    assert.equal(p.summary.actor_count, 2);
+    assert.deepEqual(p.summary.actors.sort(), ['alice', 'bob']);
+    assert.equal(p.summary.final_state, 'completed');
+    assert.equal(typeof p.summary.duration_ms, 'number');
+  } finally {
+    cleanup();
+  }
+});
+
+test('transcript: self-loop arc surfaces as "carried out by X alone"', () => {
+  // The textual echo of the self-loop-check plugin: one sentence in
+  // the summary names the mono-actor pattern per-request.
+  const { root, cleanup } = bootstrap();
+  try {
+    runGate(
+      root,
+      ['fast-track', '--from', 'alice', '--action', 'x', '--reason', 'r'],
+      { GUILD_ACTOR: 'alice' },
+    );
+    const { stdout } = runGate(root, ['transcript', rid(1)]);
+    assert.match(stdout, /carried out by alice alone/);
+  } finally {
+    cleanup();
+  }
+});
+
+test('transcript: pending auto-review is named explicitly', () => {
+  const { root, cleanup } = bootstrap();
+  try {
+    runGate(
+      root,
+      ['fast-track', '--from', 'alice', '--action', 'x', '--reason', 'r', '--auto-review', 'bob'],
+      { GUILD_ACTOR: 'alice' },
+    );
+    const { stdout } = runGate(root, ['transcript', rid(1)]);
+    assert.match(stdout, /Auto-review is pending: bob/);
+  } finally {
+    cleanup();
+  }
+});
+
 // ── gate show --plain: shell-friendly single-field output ────────
 
 test('show --plain --fields <key>: emits raw value, no JSON quoting', () => {

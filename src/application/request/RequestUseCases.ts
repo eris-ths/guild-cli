@@ -5,6 +5,7 @@ import {
   REQUEST_STATES,
 } from '../../domain/request/RequestState.js';
 import { Review } from '../../domain/request/Review.js';
+import { Thank } from '../../domain/request/Thank.js';
 import { DomainError } from '../../domain/shared/DomainError.js';
 import { compareSequenceIds } from '../../domain/shared/compareSequenceIds.js';
 import {
@@ -223,6 +224,36 @@ export class RequestUseCases {
       ...(this.deps.allowedLenses ? { allowedLenses: this.deps.allowedLenses } : {}),
     });
     req.addReview(review);
+    if (!input.dryRun) await this.deps.requests.save(req);
+    return req;
+  }
+
+  /**
+   * Record a cross-actor thank against a request. Mirrors `review` in
+   * shape but with different semantics: no verdict, no state change,
+   * doesn't feed voice calibration. The `by` and `to` actors are
+   * both asserted against the member/host directory.
+   */
+  async thank(input: {
+    id: string;
+    by: string;
+    to: string;
+    reason?: string;
+    invokedBy?: string;
+    dryRun?: boolean;
+  }): Promise<Request> {
+    const req = await this.loadOrThrow(input.id);
+    await assertActor(input.by, '--by', this.deps.members);
+    await assertActor(input.to, '--to', this.deps.members);
+    const thankInput: Parameters<typeof Thank.create>[0] = {
+      by: input.by,
+      to: input.to,
+      at: this.deps.clock.now().toISOString(),
+    };
+    if (input.reason !== undefined) thankInput.reason = input.reason;
+    if (input.invokedBy !== undefined) thankInput.invokedBy = input.invokedBy;
+    const thank = Thank.create(thankInput);
+    req.addThank(thank);
     if (!input.dryRun) await this.deps.requests.save(req);
     return req;
   }
