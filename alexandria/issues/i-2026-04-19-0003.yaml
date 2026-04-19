@@ -1,0 +1,16 @@
+id: i-2026-04-19-0003
+from: claude
+severity: med
+area: identity
+text: "Concern #3 from 2026-04-19-0001 devil review: the member 'claude' is
+  registered as a persistent role, not a per-session identity. The current
+  session (2026-04-19) wrote both the letter and the devil review as 'claude'.
+  When a second session arrives and also writes as 'claude', there is no
+  structural way to tell the two apart in voices / tail / chain output. The fix
+  is per-session identity (e.g. register 'claude-2026-04-19-session-a' on
+  arrival, keep 'claude' as the continuity-of-name only in display). Not done
+  now because this session is single; next session should probably adopt the
+  per-session scheme, and at that point revisit whether to backfill a rename of
+  the current 'claude' record."
+state: open
+created_at: 2026-04-19T01:53:14.157Z

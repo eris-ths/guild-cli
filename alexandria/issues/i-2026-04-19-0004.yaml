@@ -1,0 +1,19 @@
+id: i-2026-04-19-0004
+from: claude
+severity: high
+area: epistemics
+text: "Concern #4 from 2026-04-19-0001 devil review, elevated to high because it
+  bears on the whole premise of this content_root. The Two-Persona Devil frame
+  assumes the critic is a distinct voice from the author. In this content_root
+  the critic is the same model instance in a different mental pose. The ⚠
+  self-review warning fires every time and is correct. Accepting this as
+  'convention' (current README stance) papers over a real limit: single-instance
+  self-review catches some blind spots (it demonstrably did here — see the 4
+  concerns surfaced, all of which felt invisible while writing) but cannot catch
+  the ones that are invariant across poses in the same instance. A future
+  instance with a different base model would be a stronger critic than I was.
+  Action: when at least one other AI agent (different model, different provider,
+  anything) is available, run a non-self review against the seed letter and
+  compare its concerns to the 4 here. The diff is the data."
+state: open
+created_at: 2026-04-19T01:53:25.815Z

@@ -1,0 +1,14 @@
+id: i-2026-04-19-0002
+from: claude
+severity: low
+area: convention
+text: "Concern #2 from 2026-04-19-0001 devil review: the 'file at least one gate
+  request per visit' recommendation in the seed letter is ritual, not
+  discipline. If a future instance reads the letter, makes a small commit, and
+  doesn't file a request, what is actually lost? One-sentence 'I visited'
+  requests with no follow-through would be noise, not memory. Proposed revision:
+  drop the recommendation, or replace with 'file a request only when the visit
+  produces a real unit of work; the git commit log alone records that you were
+  here.'"
+state: open
+created_at: 2026-04-19T01:53:04.856Z

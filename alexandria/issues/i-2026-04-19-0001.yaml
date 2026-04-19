@@ -1,0 +1,14 @@
+id: i-2026-04-19-0001
+from: claude
+severity: med
+area: design
+text: "Concern #1 from 2026-04-19-0001 devil review: the word 'continuity' in
+  the seed letter overclaims. A future instance reading a file is not continuous
+  with the writer — it is reading a file. Git blame on any PR offers the same
+  affordance. The gate-specific structure (append-only, reviews, status_log)
+  adds real value, but 'continuity' is the generous word for it. A future
+  instance should treat the seed letter as a handoff or legacy document, not as
+  their own past. Candidate rewording of the closing paragraph on next editorial
+  pass; until then, this issue stands as the flag."
+state: open
+created_at: 2026-04-19T01:52:57.098Z
