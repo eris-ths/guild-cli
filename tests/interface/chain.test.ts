@@ -231,29 +231,36 @@ function _runGate(cwd: string, args: string[]): { stdout: string; status: number
   return { stdout: r.stdout, status: r.status ?? -1 };
 }
 
+// IDs are allocated from today's UTC date by gate itself, so the tests
+// derive their prefix at run time rather than baking in the authoring
+// day's date (which made these tests pass only on 2026-04-18).
+const _today = () => new Date().toISOString().slice(0, 10);
+const _id = (n: number) => `${_today()}-${String(n).padStart(4, '0')}`;
+
 test('chain: bidirectional text-mention renders once with ↔ marker, not twice', () => {
   const { root, cleanup } = _bootstrap();
   try {
+    const r1 = _id(1);
+    const r2 = _id(2);
     // r1 and r2 mention each other in their text.
     _runGate(root, ['request', '--from', 'mia', '--action', 'v1', '--reason', 'r']);
-    _runGate(root, ['deny', '2026-04-18-0001', '--by', 'mia',
-      '--reason', 'refiled as 2026-04-18-0002']);
+    _runGate(root, ['deny', r1, '--by', 'mia',
+      '--reason', `refiled as ${r2}`]);
     _runGate(root, ['request', '--from', 'mia', '--action',
-      'v2 from 2026-04-18-0001', '--reason', 'response to critique']);
-    const { stdout } = _runGate(root, ['chain', '2026-04-18-0002']);
+      `v2 from ${r1}`, '--reason', 'response to critique']);
+    const { stdout } = _runGate(root, ['chain', r2]);
     // Count only tree-entry lines (those starting with tree glyphs);
     // the root header ALSO mentions v1 in its action text (because
-    // v2's action was "v2 from 2026-04-18-0001"), and that's not a
-    // dedup concern.
+    // v2's action was "v2 from <r1>"), and that's not a dedup concern.
     const entryLines = stdout
       .split('\n')
-      .filter((l) => /^[│├└ ]/.test(l) && /2026-04-18-0001/.test(l));
+      .filter((l) => /^[│├└ ]/.test(l) && l.includes(r1));
     assert.equal(
       entryLines.length,
       1,
       `expected 1 tree entry for v1, got ${entryLines.length}:\n${stdout}`,
     );
-    assert.match(entryLines[0]!, /↔ 2026-04-18-0001/);
+    assert.match(entryLines[0]!, new RegExp(`↔ ${r1}`));
     // "referenced by requests" section should NOT appear (dedupped
     // into the forward section).
     assert.equal(/referenced by requests/.test(stdout), false);
@@ -265,16 +272,18 @@ test('chain: bidirectional text-mention renders once with ↔ marker, not twice'
 test('chain: one-way reference shows no ↔ marker', () => {
   const { root, cleanup } = _bootstrap();
   try {
+    const r1 = _id(1);
+    const r2 = _id(2);
     _runGate(root, ['request', '--from', 'mia', '--action', 'target', '--reason', 'r']);
     // Only r2 mentions r1 (not vice versa).
     _runGate(root, ['request', '--from', 'mia', '--action',
-      'refers to 2026-04-18-0001', '--reason', 'one-way']);
-    const { stdout: forwardOut } = _runGate(root, ['chain', '2026-04-18-0002']);
+      `refers to ${r1}`, '--reason', 'one-way']);
+    const { stdout: forwardOut } = _runGate(root, ['chain', r2]);
     // r2's chain: r1 is referenced (not bidirectional).
     assert.match(forwardOut, /referenced requests/);
     assert.equal(/↔/.test(forwardOut), false);
 
-    const { stdout: inboundOut } = _runGate(root, ['chain', '2026-04-18-0001']);
+    const { stdout: inboundOut } = _runGate(root, ['chain', r1]);
     // r1's chain: r2 mentions it (inbound, not bidirectional).
     assert.match(inboundOut, /referenced by requests/);
     assert.equal(/↔/.test(inboundOut), false);

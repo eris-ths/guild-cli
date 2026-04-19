@@ -65,6 +65,13 @@ function runGate(
 function seedBoard(root: string): void {
   // 2 pending, 1 approved, 1 executing, 1 completed.
   // The completed one must NOT appear on the board.
+  //
+  // IDs are allocated from today's UTC date (gate's own clock) so we
+  // derive the prefix at run time rather than hard-coding one — the
+  // previous `2026-04-18-NNNN` hard-codes only matched on the day the
+  // test was authored.
+  const today = new Date().toISOString().slice(0, 10);
+  const id = (n: number) => `${today}-${String(n).padStart(4, '0')}`;
   runGate(
     root,
     ['request', '--action', 'pending-A', '--reason', 'r'],
@@ -96,7 +103,7 @@ function seedBoard(root: string): void {
     ],
     { GUILD_ACTOR: 'eris' },
   );
-  runGate(root, ['approve', '2026-04-18-0003', '--by', 'eris'], {
+  runGate(root, ['approve', id(3), '--by', 'eris'], {
     GUILD_ACTOR: 'eris',
   });
   runGate(
@@ -112,10 +119,10 @@ function seedBoard(root: string): void {
     ],
     { GUILD_ACTOR: 'eris' },
   );
-  runGate(root, ['approve', '2026-04-18-0004', '--by', 'eris'], {
+  runGate(root, ['approve', id(4), '--by', 'eris'], {
     GUILD_ACTOR: 'eris',
   });
-  runGate(root, ['execute', '2026-04-18-0004', '--by', 'claude'], {
+  runGate(root, ['execute', id(4), '--by', 'claude'], {
     GUILD_ACTOR: 'claude',
   });
   runGate(
