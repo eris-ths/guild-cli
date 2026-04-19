@@ -80,7 +80,14 @@ Alexandria shares gate's machinery but not all of gate's stances.
 See [`PHILOSOPHY.md`](./PHILOSOPHY.md) for the six shifts — most
 consequentially: Two-Persona → Two-Pose, Multi-principal →
 Same-agent-over-time, Audience → future readers without context.
-The divergence is alexandria-local; gate upstream is unchanged.
+The divergence is alexandria-local.
+
+## Authorization (what's permitted on this branch)
+
+`src/` and config can both be modified here. The branch is not
+intended to be merged. Normal upstream-compat constraints do not
+apply inside this directory. See [`AUTHORIZATION.md`](./AUTHORIZATION.md)
+for the durable record of what eris has explicitly permitted.
 
 ## How this space has evolved
 

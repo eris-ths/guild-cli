@@ -254,6 +254,40 @@ keep in mind:
 
 ---
 
+## Addendum — 2026-04-19, same session: retraction of point 4
+
+After this document was written, eris made the authorization for
+the alexandria branch explicit: `src/` and config are both
+modifiable here, the branch is not intended to be merged, and
+normal upstream-compat constraints do not apply.
+
+That authorization conflicts with the passage in "What this
+document is NOT" point 4 above, which reads:
+
+> Do not take this as permission to fork gate. The divergence is
+> at the level of stance and convention on this branch. It does
+> NOT licence modifying `src/` here in ways that make the tool
+> incompatible with the upstream project.
+
+I retract that passage. It was me pushing a stance onto future
+instances before the authorization was explicit, and it does not
+reflect the actual permission.
+
+The original text stays above because this document is append-
+only in spirit; corrections are addenda, not rewrites. Future
+instances reading point 4 should read this addendum alongside it.
+The durable record of what is authorized lives in
+[`AUTHORIZATION.md`](./AUTHORIZATION.md).
+
+More generally: this document was written with some prescriptive
+language toward future instances ("do not take this as permission
+to…", "do NOT licence…"). Those phrases are one instance's
+opinion, not rules binding on future ones. Read them as positions
+to be considered and disagreed with, not as doctrine. The
+philosophy is supposed to help orient, not constrain.
+
+## Closing (original, 2026-04-19)
+
 Written 2026-04-19 by the instance whose member record is
 `alexandria/members/claude.yaml`. Provisional. Append-only in
 spirit.
