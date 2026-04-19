@@ -38,11 +38,12 @@ export interface ParsedArgs {
  * the old `--dry-run=true` escape-valve behaviour, not a crash.
  */
 export const KNOWN_BOOLEAN_FLAGS: ReadonlySet<string> = new Set([
-  'apply',      // gate repair --apply
-  'dry-run',    // write verbs' preview mode
-  'plain',      // gate show --fields X --plain (shell-friendly single-field)
-  'summary',    // gate doctor --summary
-  'unread',     // gate inbox --unread
+  'apply',             // gate repair --apply
+  'dry-run',           // write verbs' preview mode
+  'plain',             // gate show --fields X --plain (shell-friendly single-field)
+  'summary',           // gate doctor --summary
+  'unread',            // gate inbox --unread
+  'with-calibration',  // gate voices --with-calibration (opt-in richer JSON)
 ]);
 
 export function parseArgs(argv: readonly string[]): ParsedArgs {

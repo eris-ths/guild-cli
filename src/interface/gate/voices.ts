@@ -3,6 +3,11 @@
  * entry point so the gather/filter/sort logic is unit-testable without
  * a live filesystem.
  *
+ * Also home to `computeVoiceCalibration` (see bottom of file), which
+ * derives a per-(actor, lens) calibration score from historical
+ * review verdicts vs terminal-state outcomes. Exported from here so
+ * the CLI handler and the schema can reuse the same definition.
+ *
  * An "utterance" is anything a named actor put on the record:
  *   - `authored`: a request they filed (action + reason + the
  *     appropriate closure note — completion_note / deny_reason /
@@ -37,12 +42,14 @@ export type RequestJSON = {
   readonly from: string;
   readonly action: string;
   readonly reason: string;
+  readonly state?: string;
   readonly created_at: string;
   readonly completion_note?: string;
   readonly deny_reason?: string;
   readonly failure_reason?: string;
   readonly with?: ReadonlyArray<string>;
   readonly reviews?: ReadonlyArray<ReviewJSON>;
+  readonly thanks?: ReadonlyArray<ThankJSON>;
   readonly status_log?: ReadonlyArray<StatusLogEntryJSON>;
   // Tool-generated structured link to the source issue when this
   // request came from `gate issues promote`. Used by chain as a
@@ -60,6 +67,19 @@ export type ReviewJSON = {
   // in snake_case; voices surfaces it so a reviewer who ghost-wrote
   // through an AI agent is visible in tail / whoami / voices instead
   // of only in `gate show <id>`.
+  readonly invoked_by?: string;
+};
+
+/**
+ * Structural projection of Thank's toJSON() — just what voices reads.
+ * Optional on RequestJSON because records written before the thank
+ * verb existed simply lack the field.
+ */
+export type ThankJSON = {
+  readonly by: string;
+  readonly to: string;
+  readonly at: string;
+  readonly reason?: string;
   readonly invoked_by?: string;
 };
 
@@ -107,7 +127,31 @@ export type ReviewUtterance = {
   readonly comment: string;
 };
 
-export type Utterance = AuthoredUtterance | ReviewUtterance;
+/**
+ * A `thank` utterance — someone thanking another actor for their
+ * work on a specific request. Sibling of ReviewUtterance; simpler
+ * (no lens, no verdict, no required comment) because the record
+ * semantics are different. Reviews express judgement; thanks
+ * express gratitude.
+ *
+ * Both `by` and `to` flow through so tail / voices readers see the
+ * directional relationship without fetching the raw request.
+ */
+export type ThankUtterance = {
+  readonly kind: 'thank';
+  readonly at: string;
+  readonly requestId: string;
+  readonly by: string;
+  readonly to: string;
+  readonly invokedBy?: string;
+  // Action of the containing request for context, same rationale as
+  // ReviewUtterance.action.
+  readonly action: string;
+  // Optional prose; thanks without a reason are legitimate.
+  readonly reason?: string;
+};
+
+export type Utterance = AuthoredUtterance | ReviewUtterance | ThankUtterance;
 
 export interface VoicesFilter {
   // When omitted, match every actor. Used by `gate tail` to stream
@@ -204,6 +248,37 @@ export function collectUtterances(
         (reviewUtterance as { invokedBy?: string }).invokedBy = rv.invoked_by;
       }
       out.push(reviewUtterance);
+    }
+    // Thank utterances: emitted for both the `by` actor (who gave)
+    // and the `to` actor (who received) — either name-filter match
+    // surfaces the record. Reviews are one-sided (only `by` speaks),
+    // so this is the one place the filter diverges. Lens/verdict
+    // filters short-circuit the thanks loop entirely — thanks have
+    // no lens/verdict, so a lens-scoped query should not carry them.
+    const filteringReviewsOnly =
+      filter.lense !== undefined || filter.verdict !== undefined;
+    if (!filteringReviewsOnly) {
+      const thanks = r.thanks ?? [];
+      for (const th of thanks) {
+        const byMatches = needle === undefined || th.by.toLowerCase() === needle;
+        const toMatches = needle === undefined || th.to.toLowerCase() === needle;
+        if (!byMatches && !toMatches) continue;
+        const thankUtterance: ThankUtterance = {
+          kind: 'thank',
+          at: th.at,
+          requestId: r.id,
+          action: r.action,
+          by: th.by,
+          to: th.to,
+        };
+        if (th.reason !== undefined) {
+          (thankUtterance as { reason?: string }).reason = th.reason;
+        }
+        if (th.invoked_by !== undefined) {
+          (thankUtterance as { invokedBy?: string }).invokedBy = th.invoked_by;
+        }
+        out.push(thankUtterance);
+      }
     }
   }
 
@@ -310,7 +385,7 @@ export function renderUtterance(
     if (u.completionNote) pushMultilineField(lines, '  note:   ', u.completionNote);
     if (u.denyReason) pushMultilineField(lines, '  denied: ', u.denyReason);
     if (u.failureReason) pushMultilineField(lines, '  failed: ', u.failureReason);
-  } else {
+  } else if (u.kind === 'review') {
     // Always expose `invoked_by` when present, even when includeActor
     // is false (voices groups by actor, so the `by` is redundant —
     // but the proxy-invoker isn't). Keeps the stream honest about
@@ -324,6 +399,151 @@ export function renderUtterance(
     for (const line of u.comment.split('\n')) {
       lines.push(`  ${line}`);
     }
+  } else {
+    // u.kind === 'thank'. `by` thanked `to` on this request. Always
+    // render as full "by → to" direction regardless of `includeActor`:
+    // unlike reviews (where `by` is the only relevant actor), thanks
+    // have a giver AND a receiver, and both are load-bearing. Hiding
+    // `by` when voices groups by one of them would leave the reader
+    // asking "thanked by whom?" on every line.
+    const proxy = u.invokedBy ? ` [invoked_by=${u.invokedBy}]` : '';
+    lines.push(
+      `[${u.at}] req=${u.requestId} thank ${u.by} → ${u.to}${proxy}`,
+    );
+    lines.push(`  re: ${u.action}`);
+    if (u.reason !== undefined) {
+      for (const line of u.reason.split('\n')) {
+        lines.push(`  ${line}`);
+      }
+    }
   }
   return lines.join('\n');
+}
+
+// ── Voice calibration ─────────────────────────────────────────────
+//
+// A per-(actor, lens) score derived from historical review verdicts
+// vs terminal-state outcomes. Exists to let the Two-Persona Devil
+// Review frame *learn* — today every cross-actor critique weighs the
+// same, and over time the system has no memory of which voices
+// called it right.
+//
+// The mechanism is deliberately quiet:
+//   - Scores are visible on `gate voices <OTHER>` but hidden on
+//     `gate voices $GUILD_ACTOR` (so voters don't self-optimise).
+//   - No leaderboard, no aggregate ranking — each voice stands
+//     alone.
+//   - Small samples render as "uncalibrated" to avoid mistaking
+//     noise for signal.
+//   - Reasons are named in plain prose, not numeric badges.
+//
+// Alignment rules (v1; may refine once we have real signal):
+//   verdict=ok       + state=completed → aligned (you said fine, it was)
+//   verdict=ok       + state=failed    → missed   (you said fine, it wasn't)
+//   verdict=concern  + state=failed    → aligned (you flagged it, it broke)
+//   verdict=concern  + state=completed → soft    (issues may have been
+//                                                 absorbed; neither a
+//                                                 win nor a miss)
+//   verdict=reject   + state=failed    → aligned (you said no, it broke)
+//   verdict=reject   + state=completed → overruled (you said no, it
+//                                                   shipped anyway;
+//                                                   ambiguous signal —
+//                                                   could be wrong call,
+//                                                   could be reviewed
+//                                                   risk that held)
+//
+// Denied requests don't contribute (they never executed; no outcome
+// to compare against). `concern + completed` is counted as soft —
+// neither a hit nor a miss — because the outcome is consistent with
+// both "the concern was noted and addressed" and "the concern was
+// overblown". Counting it either way would bias the score.
+
+export interface CalibrationPerLens {
+  /** Samples that contributed (aligned + missed; soft/overruled excluded). */
+  readonly sample_count: number;
+  /** Verdicts that matched outcome (aligned). */
+  readonly aligned: number;
+  /** Verdicts that missed (ok on a failed, or reject on a completed — see above). */
+  readonly missed: number;
+  /** Numeric 0..1 score, aligned / sample_count. Null when uncalibrated. */
+  readonly alignment: number | null;
+  /** Categorical signal for prose use. "uncalibrated" when samples < threshold. */
+  readonly status: 'uncalibrated' | 'learning' | 'trusted';
+  /** One-line prose for human/agent consumers. */
+  readonly prose: string;
+}
+
+export interface VoiceCalibration {
+  readonly actor: string;
+  /** Per-lens calibration, keyed by lens name (e.g. "devil", "layer"). */
+  readonly by_lens: Record<string, CalibrationPerLens>;
+}
+
+const CALIBRATION_MIN_SAMPLES = 5;
+const CALIBRATION_TRUSTED_THRESHOLD = 0.7;
+
+export function computeVoiceCalibration(
+  all: ReadonlyArray<RequestJSON>,
+  actor: string,
+): VoiceCalibration {
+  const actorLower = actor.toLowerCase();
+  const byLens: Record<string, { aligned: number; missed: number }> = {};
+
+  for (const r of all) {
+    const state = r.state;
+    // Only terminal non-denied outcomes yield signal. `denied`
+    // requests never ran, so there's nothing to calibrate against.
+    if (state !== 'completed' && state !== 'failed') continue;
+    const reviews = r.reviews ?? [];
+    for (const rv of reviews) {
+      if (rv.by !== actorLower) continue;
+      const lens = rv.lense;
+      if (!byLens[lens]) byLens[lens] = { aligned: 0, missed: 0 };
+      const bucket = byLens[lens]!;
+      const v = rv.verdict;
+      if (v === 'ok') {
+        if (state === 'completed') bucket.aligned += 1;
+        else bucket.missed += 1;
+      } else if (v === 'reject') {
+        if (state === 'failed') bucket.aligned += 1;
+        else bucket.missed += 1;
+      }
+      // verdict === 'concern' intentionally excluded — see header.
+    }
+  }
+
+  const out: Record<string, CalibrationPerLens> = {};
+  for (const [lens, counts] of Object.entries(byLens)) {
+    const samples = counts.aligned + counts.missed;
+    if (samples < CALIBRATION_MIN_SAMPLES) {
+      out[lens] = {
+        sample_count: samples,
+        aligned: counts.aligned,
+        missed: counts.missed,
+        alignment: null,
+        status: 'uncalibrated',
+        prose:
+          `${lens} lens: ${samples} sample${samples === 1 ? '' : 's'} so far — not yet calibrated ` +
+          `(need ${CALIBRATION_MIN_SAMPLES - samples} more with a terminal outcome).`,
+      };
+      continue;
+    }
+    const alignment = counts.aligned / samples;
+    const status: CalibrationPerLens['status'] =
+      alignment >= CALIBRATION_TRUSTED_THRESHOLD ? 'trusted' : 'learning';
+    const proseFragment =
+      status === 'trusted'
+        ? `trusted — ${counts.aligned} of ${samples} verdicts aligned with outcomes`
+        : `still learning — ${counts.aligned} of ${samples} verdicts aligned`;
+    out[lens] = {
+      sample_count: samples,
+      aligned: counts.aligned,
+      missed: counts.missed,
+      alignment,
+      status,
+      prose: `${lens} lens: ${proseFragment}.`,
+    };
+  }
+
+  return { actor: actorLower, by_lens: out };
 }

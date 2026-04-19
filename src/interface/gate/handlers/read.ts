@@ -9,8 +9,10 @@ import { compareSequenceIds } from '../../../domain/shared/compareSequenceIds.js
 import {
   collectUtterances,
   renderUtterance,
+  computeVoiceCalibration,
   RequestJSON,
   VoicesFilter,
+  VoiceCalibration,
 } from '../voices.js';
 import {
   extractReferences,
@@ -65,8 +67,36 @@ export async function reqVoices(c: C, args: ParsedArgs): Promise<number> {
   }
   const utterances = collectUtterances(allJson, filter);
 
+  // Voice calibration: per-(actor, lens) score derived from historical
+  // verdicts vs outcomes. Hidden when viewing your own voice (the
+  // voter shouldn't game their own score); shown otherwise. See the
+  // `computeVoiceCalibration` header in voices.ts for semantics.
+  const envActor = process.env['GUILD_ACTOR'];
+  const isSelfView =
+    envActor !== undefined &&
+    envActor.length > 0 &&
+    envActor.toLowerCase() === name.toLowerCase();
+  const calibration: VoiceCalibration | null = isSelfView
+    ? null
+    : computeVoiceCalibration(allJson, name);
+  const withCalibration = args.options['with-calibration'] === true;
+
   if (format === 'json') {
-    process.stdout.write(JSON.stringify(utterances, null, 2) + '\n');
+    // Shape contract: default stays the utterances array so existing
+    // consumers don't break. `--with-calibration` opts into an object
+    // shape that carries both. The flag is registered in
+    // KNOWN_BOOLEAN_FLAGS so its presence doesn't swallow positionals.
+    if (withCalibration) {
+      process.stdout.write(
+        JSON.stringify(
+          { utterances, calibration: calibration },
+          null,
+          2,
+        ) + '\n',
+      );
+    } else {
+      process.stdout.write(JSON.stringify(utterances, null, 2) + '\n');
+    }
     return 0;
   }
 
@@ -90,6 +120,20 @@ export async function reqVoices(c: C, args: ParsedArgs): Promise<number> {
   );
   for (const u of utterances) {
     process.stdout.write(renderUtterance(u, false) + '\n\n');
+  }
+  // Calibration footer: one line per lens with recorded activity.
+  // Placed after the utterances so a reader who scanned the prose
+  // sees the summary below without it fighting for attention. Self-
+  // view skips this entirely (see isSelfView above).
+  if (calibration !== null) {
+    const lensEntries = Object.entries(calibration.by_lens);
+    if (lensEntries.length > 0) {
+      process.stdout.write('── calibration ──\n');
+      for (const [, c] of lensEntries) {
+        process.stdout.write(`  ${c.prose}\n`);
+      }
+      process.stdout.write('\n');
+    }
   }
   return 0;
 }
