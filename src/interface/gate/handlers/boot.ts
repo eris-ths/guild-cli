@@ -88,6 +88,34 @@ interface BootPayload {
     };
   };
   /**
+   * Discoverability hint: what verbs are applicable right now?
+   *
+   * `actionable` names the state-transition verbs whose preconditions
+   * are met for the caller's current queues. Each entry carries the
+   * target id + a human-readable reason so a first-time agent can see
+   * not just "approve exists" but "approve is valid on 2026-04-19-0001
+   * because you're its executor and it's pending". `suggested_next`
+   * picks ONE of these to lead with; `actionable` names the rest so
+   * an agent that wants to branch can see the siblings.
+   *
+   * `always_readable` is the flat catalog of side-effect-free verbs
+   * an identified (or even anonymous) actor can always call — the
+   * "map of the readable world" for initial exploration.
+   *
+   * The two lists never overlap: write verbs belong to `actionable`
+   * (when they're valid) or are absent; read verbs belong to
+   * `always_readable`. Keeping them separate makes it obvious which
+   * calls change state and which don't.
+   */
+  verbs_available_now: {
+    actionable: Array<{
+      verb: string;
+      id: string;
+      reason: string;
+    }>;
+    always_readable: readonly string[];
+  };
+  /**
    * First-step prescription for the caller. Populated when boot can
    * infer an obvious "do this next" — typically pre-onboarding (no
    * GUILD_ACTOR, or GUILD_ACTOR set to an unregistered name) where
@@ -223,6 +251,7 @@ export async function bootCmd(c: C, args: ParsedArgs): Promise<number> {
     members,
     allRequests,
   );
+  const verbsAvailableNow = deriveVerbsAvailableNow(actor, role, allRequests);
 
   const payload: BootPayload = {
     actor,
@@ -239,6 +268,7 @@ export async function bootCmd(c: C, args: ParsedArgs): Promise<number> {
       content_root_health: contentRootHealth,
     },
     suggested_next: suggestedNext,
+    verbs_available_now: verbsAvailableNow,
   };
 
   if (format === 'json') {
@@ -380,6 +410,95 @@ export function deriveBootSuggestedNext(
   }
 
   return null;
+}
+
+const ALWAYS_READABLE_VERBS: readonly string[] = [
+  'boot', 'suggest', 'status', 'show', 'board', 'list', 'pending',
+  'tail', 'voices', 'chain', 'whoami', 'schema', 'doctor', 'resume',
+];
+
+/**
+ * Enumerate the state-transition verbs whose preconditions are met
+ * right now, with the target id + reason for each. `suggested_next`
+ * picks ONE of these; this list names the siblings so an agent can
+ * branch (e.g. "I see approve and deny are both valid — deny this,
+ * the reason doesn't hold up").
+ *
+ * Kept deliberately narrow: only the gated transitions. Free verbs
+ * (request, fast-track, message, broadcast) are always valid for a
+ * registered member and listed via the identity-scoped catalog, not
+ * here — repeating them per-request would bloat the payload.
+ */
+function deriveVerbsAvailableNow(
+  actor: string | null,
+  role: BootPayload['role'],
+  allRequests: ReadonlyArray<Request>,
+): BootPayload['verbs_available_now'] {
+  const actionable: BootPayload['verbs_available_now']['actionable'] = [];
+  if (actor === null || role === 'unknown') {
+    return { actionable, always_readable: ALWAYS_READABLE_VERBS };
+  }
+  const actorLower = actor.toLowerCase();
+
+  // Executing-by-me → complete/fail are both valid.
+  for (const r of allRequests) {
+    if (r.state !== 'executing') continue;
+    if (r.executor?.value !== actorLower && r.from.value !== actorLower) continue;
+    actionable.push({
+      verb: 'complete',
+      id: r.id.value,
+      reason: `${r.id.value} is executing (you're ${r.executor?.value === actorLower ? 'the executor' : 'the author'})`,
+    });
+    actionable.push({
+      verb: 'fail',
+      id: r.id.value,
+      reason: `${r.id.value} is executing; use fail if it can't land`,
+    });
+  }
+
+  // Approved-for-me → execute is valid.
+  for (const r of allRequests) {
+    if (r.state !== 'approved') continue;
+    if (r.executor?.value !== actorLower) continue;
+    actionable.push({
+      verb: 'execute',
+      id: r.id.value,
+      reason: `${r.id.value} is approved and names you as executor`,
+    });
+  }
+
+  // Pending-as-executor → approve/deny are both valid for any actor
+  // who isn't the author (author approving their own is the self-
+  // approval case — still policy-allowed, just louder).
+  for (const r of allRequests) {
+    if (r.state !== 'pending') continue;
+    if (r.executor?.value !== actorLower) continue;
+    if (r.from.value === actorLower) continue;
+    actionable.push({
+      verb: 'approve',
+      id: r.id.value,
+      reason: `${r.id.value} is pending and names you as executor (authored by ${r.from.value})`,
+    });
+    actionable.push({
+      verb: 'deny',
+      id: r.id.value,
+      reason: `${r.id.value} is pending; deny with --reason if it shouldn't proceed`,
+    });
+  }
+
+  // Unreviewed-mine → review is valid.
+  for (const r of allRequests) {
+    if (r.state !== 'completed') continue;
+    if (r.autoReview?.value !== actorLower) continue;
+    if (r.reviews.length > 0) continue;
+    actionable.push({
+      verb: 'review',
+      id: r.id.value,
+      reason: `${r.id.value} completed with auto-review assigned to you`,
+    });
+  }
+
+  return { actionable, always_readable: ALWAYS_READABLE_VERBS };
 }
 
 function renderBootText(p: BootPayload): string {

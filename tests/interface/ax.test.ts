@@ -337,6 +337,85 @@ test('suggest --format text: compact two-line form for humans', () => {
   }
 });
 
+// ── boot.verbs_available_now: state-aware verb discovery ────────
+
+test('boot.verbs_available_now: actionable lists all valid transitions', () => {
+  // bob has executing-by-me (0001) AND unreviewed-mine (0002). suggested_next
+  // picks ONE; actionable lists ALL siblings so a branching agent sees
+  // the other options.
+  const { root, cleanup } = bootstrap();
+  try {
+    runGate(
+      root,
+      ['request', '--from', 'alice', '--action', 't1', '--reason', 'r', '--executor', 'bob'],
+      { GUILD_ACTOR: 'alice' },
+    );
+    runGate(root, ['approve', rid(1), '--by', 'alice']);
+    runGate(root, ['execute', rid(1), '--by', 'bob']);
+    runGate(
+      root,
+      ['fast-track', '--from', 'alice', '--action', 't2', '--reason', 'r', '--auto-review', 'bob'],
+      { GUILD_ACTOR: 'alice' },
+    );
+    const { stdout } = runGate(root, ['boot'], { GUILD_ACTOR: 'bob' });
+    const p = JSON.parse(stdout);
+    const verbs = p.verbs_available_now.actionable.map(
+      (a: { verb: string }) => a.verb,
+    );
+    assert.ok(verbs.includes('complete'), 'complete missing');
+    assert.ok(verbs.includes('fail'), 'fail missing');
+    assert.ok(verbs.includes('review'), 'review missing');
+    // suggested_next is ONE of the actionable entries.
+    assert.ok(
+      verbs.includes(p.suggested_next.verb),
+      'suggested_next must be in actionable list',
+    );
+  } finally {
+    cleanup();
+  }
+});
+
+test('boot.verbs_available_now: always_readable present for anonymous caller', () => {
+  // Initial-agent discovery: without identity, actionable is empty
+  // (can't transition anything), but always_readable still names
+  // the read surface so newcomers see the map.
+  const { root, cleanup } = bootstrap();
+  try {
+    const { stdout } = runGate(root, ['boot']);
+    const p = JSON.parse(stdout);
+    assert.equal(p.verbs_available_now.actionable.length, 0);
+    assert.ok(p.verbs_available_now.always_readable.length >= 10);
+    assert.ok(p.verbs_available_now.always_readable.includes('suggest'));
+    assert.ok(p.verbs_available_now.always_readable.includes('schema'));
+  } finally {
+    cleanup();
+  }
+});
+
+test('boot.verbs_available_now: actionable entries carry id + reason', () => {
+  // The reason converts "approve exists" into "approve is valid on
+  // this id because …" — teaching not just catalog.
+  const { root, cleanup } = bootstrap();
+  try {
+    runGate(
+      root,
+      ['request', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executor', 'bob'],
+      { GUILD_ACTOR: 'alice' },
+    );
+    const { stdout } = runGate(root, ['boot'], { GUILD_ACTOR: 'bob' });
+    const p = JSON.parse(stdout);
+    const approve = p.verbs_available_now.actionable.find(
+      (a: { verb: string }) => a.verb === 'approve',
+    );
+    assert.ok(approve, 'approve should be actionable');
+    assert.equal(approve.id, rid(1));
+    assert.match(approve.reason, /pending/);
+    assert.match(approve.reason, /executor/);
+  } finally {
+    cleanup();
+  }
+});
+
 // ── gate show --plain: shell-friendly single-field output ────────
 
 test('show --plain --fields <key>: emits raw value, no JSON quoting', () => {
