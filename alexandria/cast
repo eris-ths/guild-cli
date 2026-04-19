@@ -2,20 +2,33 @@
 # alexandria/cast — corpus-aware wrapper for `gate review`.
 #
 # Usage:
-#   ./cast <request-id> --lense <X> --verdict <V> --comment "..."
-#   ./cast <request-id> --lense <X> --verdict <V> --comment -   # stdin
+#   ./cast <id> --lense <X> --verdict <V> --comment "simple text"
+#   ./cast <id> --lense <X> --verdict <V> --comment - <<'EOF'
+#   multi-line comment via heredoc
+#   EOF
+#   ./cast <id> --lense <X> --verdict <V> -F path/to/comment.txt
 #
-# NOTE: --comment via double-quoted shell arg is SHELL-UNSAFE for
-# text containing backticks or $(...) — bash will substitute them
-# before we see the string. See issue i-2026-04-19-0006: one
-# builder/ok review on 2026-04-19-0002 had content eaten by
-# unintentional backtick substitution. Prefer `--comment -` with
-# heredoc stdin for any comment containing backticks, $, or other
-# shell metacharacters. Script below cannot fix this — it is a
-# caller-side shell problem — but it CAN pass `--comment -`
-# through transparently.
+# SHELL SAFETY (i-2026-04-19-0006):
+# --comment "..." as a positional shell arg is UNSAFE for content
+# containing backticks (`), dollar signs ($), or other shell
+# metacharacters — bash performs command/variable substitution
+# BEFORE cast sees the string. A review casting "`gate review
+# --help`" will have the backticked phrase replaced with the
+# output of running `gate review --help`, or if the tokens aren't
+# executable, stripped entirely.
 #
-# What it does that `gate review` alone does not:
+# Concrete incident: 2026-04-19-0002 builder/ok review at
+# 03:33:26 had two phrases ('description' and 'gate review
+# --help') eaten because they were wrapped in backticks at the
+# call site. Append-only means the corrupted record stays.
+#
+# Fix (this revision): added -F / --from-file <path>. When set,
+# cast cat's the file to gate's stdin and passes --comment -.
+# This is the recommended path for any comment containing shell
+# metacharacters. The --comment "..." path stays for short plain
+# text where safety is obvious.
+#
+# What cast does that `gate review` alone does not:
 #   1. Before the cast, runs `gate voices claude --lense <X>` so
 #      you see the corpus-to-date for the lense you're about to
 #      add to. You are casting INTO a context, not in isolation.
@@ -33,21 +46,52 @@ set -eu
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 GATE="$SCRIPT_DIR/gate"
 
+usage() {
+  cat <<EOF >&2
+usage:
+  cast <id> --lense <X> --verdict <V> --comment "plain text"
+  cast <id> --lense <X> --verdict <V> --comment - <<'EOF'
+  ...heredoc content...
+  EOF
+  cast <id> --lense <X> --verdict <V> -F path/to/comment.txt
+
+See the header of this script for the shell-safety note on why
+-F / heredoc are preferred for any comment with backticks, \$,
+or other shell metacharacters.
+EOF
+}
+
 if [ $# -lt 1 ]; then
-  echo "usage: cast <request-id> --lense <X> --verdict <V> --comment <...>" >&2
+  usage
   exit 2
 fi
+
+case "$1" in
+  -h|--help|help)
+    usage
+    exit 0
+    ;;
+esac
 
 REQ_ID="$1"
 shift
 
 LENSE=""
+COMMENT_FILE=""
 ARGS=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --lense|--lens)
       LENSE="$2"
       ARGS+=("$1" "$2")
+      shift 2
+      ;;
+    -F|--from-file)
+      if [ $# -lt 2 ]; then
+        echo "cast: $1 requires a path argument" >&2
+        exit 2
+      fi
+      COMMENT_FILE="$2"
       shift 2
       ;;
     *)
@@ -62,12 +106,36 @@ if [ -z "$LENSE" ]; then
   exit 2
 fi
 
+if [ -n "$COMMENT_FILE" ]; then
+  if [ ! -r "$COMMENT_FILE" ]; then
+    echo "cast: cannot read comment file: $COMMENT_FILE" >&2
+    exit 2
+  fi
+  # Append --comment - so gate reads content from stdin. If the
+  # caller also passed an explicit --comment, theirs will appear
+  # first in ARGS and win; we warn about that case.
+  for a in "${ARGS[@]}"; do
+    if [ "$a" = "--comment" ]; then
+      echo "cast: warning: both -F and --comment present; --comment takes precedence" >&2
+      COMMENT_FILE=""
+      break
+    fi
+  done
+  if [ -n "$COMMENT_FILE" ]; then
+    ARGS+=("--comment" "-")
+  fi
+fi
+
 echo "─── corpus before cast: voices claude --lense $LENSE ───"
 "$GATE" voices claude --lense "$LENSE" --format text 2>&1 | head -40 || true
 echo
 
 echo "─── casting ───"
-"$GATE" review "$REQ_ID" --by claude --lense "$LENSE" "${ARGS[@]}"
+if [ -n "$COMMENT_FILE" ]; then
+  "$GATE" review "$REQ_ID" --by claude --lense "$LENSE" "${ARGS[@]}" < "$COMMENT_FILE"
+else
+  "$GATE" review "$REQ_ID" --by claude --lense "$LENSE" "${ARGS[@]}"
+fi
 echo
 
 echo "─── corpus after cast (diff implicit) ───"

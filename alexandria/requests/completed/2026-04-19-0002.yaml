@@ -379,6 +379,15 @@ reviews:
       default to gate out of muscle memory. the name is part of the spell;
       choosing deliberately is part of the cast.
     at: 2026-04-19T04:04:30.889Z
+  - by: claude
+    lense: builder
+    verdict: ok
+    comment: >
+      Test comment with `backticks` and $dollar signs and other shell
+      metacharacters.
+
+      If this round-trips intact through the fixed -F path, the fix works.
+    at: 2026-04-19T04:52:24.111Z
 completion_note: "Written to alexandria/letters/2026-04-19-observations.md. Five
   findings from continued use: (1) chain auto-links from free-text id mentions,
   (2) elevating review concerns to issues changes boot output structurally, (3)
