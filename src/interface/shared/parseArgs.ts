@@ -40,6 +40,7 @@ export interface ParsedArgs {
 export const KNOWN_BOOLEAN_FLAGS: ReadonlySet<string> = new Set([
   'apply',      // gate repair --apply
   'dry-run',    // write verbs' preview mode
+  'plain',      // gate show --fields X --plain (shell-friendly single-field)
   'summary',    // gate doctor --summary
   'unread',     // gate inbox --unread
 ]);

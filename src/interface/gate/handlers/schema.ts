@@ -121,6 +121,29 @@ const VERBS: readonly VerbSchema[] = [
     output: { type: 'object' },
   },
   {
+    name: 'suggest',
+    category: 'read',
+    summary:
+      'tight-loop sibling of boot: returns ONLY the suggested_next triple (verb/args/reason) or null, with no orientation payload',
+    input: {
+      type: 'object',
+      properties: { format: formatField },
+    },
+    output: {
+      type: 'object',
+      properties: {
+        suggested_next: {
+          type: 'object',
+          properties: {
+            verb: str,
+            args: { type: 'object' },
+            reason: str,
+          },
+        },
+      },
+    },
+  },
+  {
     name: 'resume',
     category: 'read',
     summary:

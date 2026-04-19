@@ -144,10 +144,11 @@ export async function reqShow(c: C, args: ParsedArgs): Promise<number> {
   const id = args.positional[0];
   if (!id)
     throw new Error(
-      'Usage: gate show <id> [--format json|text] [--fields k1,k2,...]',
+      'Usage: gate show <id> [--format json|text] [--fields k1,k2,...] [--plain]',
     );
-  const format = optionalOption(args, 'format') ?? 'json';
-  if (format !== 'json' && format !== 'text') {
+  const plain = args.options['plain'] === true;
+  const format = optionalOption(args, 'format') ?? (plain ? 'plain' : 'json');
+  if (format !== 'json' && format !== 'text' && format !== 'plain') {
     throw new Error(`--format must be 'json' or 'text', got: ${format}`);
   }
   const r = await c.requestUC.show(id);
@@ -155,13 +156,46 @@ export async function reqShow(c: C, args: ParsedArgs): Promise<number> {
     process.stderr.write(`not found: ${id}\n`);
     return 1;
   }
+  const fields = optionalOption(args, 'fields');
+  if (plain || format === 'plain') {
+    // --plain is for shell composition: `$(gate show $id --fields
+    // state --plain)` returns just `approved` without JSON quoting.
+    // Requires exactly one --fields entry; the "one value, no
+    // envelope" contract is what makes it pipeline-friendly.
+    const keep = (fields ?? '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+    if (keep.length !== 1) {
+      throw new Error(
+        '--plain requires exactly one field (use --fields <key>). ' +
+          'For multiple fields, drop --plain and read the JSON object.',
+      );
+    }
+    const payload = r.toJSON();
+    const key = keep[0]!;
+    if (!(key in payload)) {
+      // Missing field: emit nothing, exit 1 so shell `[ -z "$v" ]`
+      // handles it without hallucinating a default.
+      return 1;
+    }
+    const v = payload[key];
+    if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') {
+      process.stdout.write(String(v) + '\n');
+    } else {
+      // Objects / arrays — fall back to compact JSON so callers
+      // still get something usable. Rare in practice (most useful
+      // fields are scalars).
+      process.stdout.write(JSON.stringify(v) + '\n');
+    }
+    return 0;
+  }
   if (format === 'json') {
     // `--fields state,executor` trims the payload to what the caller
     // actually needs. A full `show` JSON runs ~400-800 bytes; for an
     // agent checking just `state` in a tight loop, that's a lot of
     // tokens for one boolean-ish answer. Only available in JSON mode
     // (text already has its own compact summary).
-    const fields = optionalOption(args, 'fields');
     let payload: Record<string, unknown> = r.toJSON();
     if (fields !== undefined) {
       const keep = fields
