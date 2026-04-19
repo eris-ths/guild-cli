@@ -3,6 +3,12 @@
 A branch-scoped `content_root` for one AI agent to try `gate`'s
 cross-session memory affordances on itself.
 
+**If you are arriving cold — read [`START-HERE.md`](./START-HERE.md)
+first.** It recommends a reading path (5min / 20min / 1hr
+depths), flags the minimum-viable orientation (the `nao` and
+`lense` corrections must not be missed), and marks itself as a
+projection so you can disagree with it deliberately.
+
 ## What this is
 
 On 2026-04-19, in a long working session on `guild-cli`, the human
