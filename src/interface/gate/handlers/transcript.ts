@@ -37,6 +37,7 @@ interface TranscriptSummary {
   actor_count: number;
   review_count: number;
   review_verdicts: readonly string[];
+  thank_count: number;
   final_state: string;
   duration_ms: number | null;
 }
@@ -81,6 +82,9 @@ function buildTranscript(r: Request): TranscriptPayload {
     : [];
   const reviews = Array.isArray(j['reviews'])
     ? (j['reviews'] as Array<Record<string, unknown>>)
+    : [];
+  const thanks = Array.isArray(j['thanks'])
+    ? (j['thanks'] as Array<Record<string, unknown>>)
     : [];
   const finalState = String(j['state']);
 
@@ -157,8 +161,31 @@ function buildTranscript(r: Request): TranscriptPayload {
     );
   }
 
+  // 3b. Thanks — lighter prose, doesn't gate state. One sentence
+  // per thank, same cluster-join pattern as reviews. Emitted after
+  // the reviews section so the verdict-bearing record leads.
+  if (thanks.length > 0) {
+    const thankLines: string[] = [];
+    for (const th of thanks) {
+      const by = String(th['by'] ?? '');
+      const to = String(th['to'] ?? '');
+      const reason = th['reason'] ? String(th['reason']).trim() : '';
+      const invokedBy = th['invoked_by'] ? ` (via ${th['invoked_by']})` : '';
+      const reasonFrag =
+        reason.length === 0
+          ? ''
+          : reason.length <= 80
+            ? ` — "${reason}"`
+            : `\n    "${reason}"`;
+      thankLines.push(
+        `${capitalise(by)}${invokedBy} thanked ${to}${reasonFrag}`,
+      );
+    }
+    paragraphs.push(thankLines.join('. ') + '.');
+  }
+
   // 4. Summary — facts the caller might want at a glance.
-  const summary = computeSummary(log, reviews, finalState);
+  const summary = computeSummary(log, reviews, thanks, finalState);
   const actorFrag = summary.actor_count === 1
     ? `the entire arc was carried out by ${summary.actors[0]} alone`
     : `the arc involved ${summary.actor_count} actor${summary.actor_count === 1 ? '' : 's'} ` +
@@ -176,6 +203,7 @@ function buildTranscript(r: Request): TranscriptPayload {
 function computeSummary(
   log: Array<Record<string, unknown>>,
   reviews: Array<Record<string, unknown>>,
+  thanks: Array<Record<string, unknown>>,
   finalState: string,
 ): TranscriptSummary {
   const actors = new Set<string>();
@@ -184,6 +212,10 @@ function computeSummary(
   }
   for (const rv of reviews) {
     if (typeof rv['by'] === 'string') actors.add(rv['by']);
+  }
+  for (const th of thanks) {
+    if (typeof th['by'] === 'string') actors.add(th['by']);
+    if (typeof th['to'] === 'string') actors.add(th['to']);
   }
   const verdicts: string[] = [];
   for (const rv of reviews) {
@@ -201,6 +233,7 @@ function computeSummary(
     actor_count: actors.size,
     review_count: reviews.length,
     review_verdicts: verdicts,
+    thank_count: thanks.length,
     final_state: finalState,
     duration_ms: durationMs,
   };

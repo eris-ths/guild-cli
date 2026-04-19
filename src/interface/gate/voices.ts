@@ -49,6 +49,7 @@ export type RequestJSON = {
   readonly failure_reason?: string;
   readonly with?: ReadonlyArray<string>;
   readonly reviews?: ReadonlyArray<ReviewJSON>;
+  readonly thanks?: ReadonlyArray<ThankJSON>;
   readonly status_log?: ReadonlyArray<StatusLogEntryJSON>;
   // Tool-generated structured link to the source issue when this
   // request came from `gate issues promote`. Used by chain as a
@@ -66,6 +67,19 @@ export type ReviewJSON = {
   // in snake_case; voices surfaces it so a reviewer who ghost-wrote
   // through an AI agent is visible in tail / whoami / voices instead
   // of only in `gate show <id>`.
+  readonly invoked_by?: string;
+};
+
+/**
+ * Structural projection of Thank's toJSON() — just what voices reads.
+ * Optional on RequestJSON because records written before the thank
+ * verb existed simply lack the field.
+ */
+export type ThankJSON = {
+  readonly by: string;
+  readonly to: string;
+  readonly at: string;
+  readonly reason?: string;
   readonly invoked_by?: string;
 };
 
@@ -113,7 +127,31 @@ export type ReviewUtterance = {
   readonly comment: string;
 };
 
-export type Utterance = AuthoredUtterance | ReviewUtterance;
+/**
+ * A `thank` utterance — someone thanking another actor for their
+ * work on a specific request. Sibling of ReviewUtterance; simpler
+ * (no lens, no verdict, no required comment) because the record
+ * semantics are different. Reviews express judgement; thanks
+ * express gratitude.
+ *
+ * Both `by` and `to` flow through so tail / voices readers see the
+ * directional relationship without fetching the raw request.
+ */
+export type ThankUtterance = {
+  readonly kind: 'thank';
+  readonly at: string;
+  readonly requestId: string;
+  readonly by: string;
+  readonly to: string;
+  readonly invokedBy?: string;
+  // Action of the containing request for context, same rationale as
+  // ReviewUtterance.action.
+  readonly action: string;
+  // Optional prose; thanks without a reason are legitimate.
+  readonly reason?: string;
+};
+
+export type Utterance = AuthoredUtterance | ReviewUtterance | ThankUtterance;
 
 export interface VoicesFilter {
   // When omitted, match every actor. Used by `gate tail` to stream
@@ -210,6 +248,37 @@ export function collectUtterances(
         (reviewUtterance as { invokedBy?: string }).invokedBy = rv.invoked_by;
       }
       out.push(reviewUtterance);
+    }
+    // Thank utterances: emitted for both the `by` actor (who gave)
+    // and the `to` actor (who received) — either name-filter match
+    // surfaces the record. Reviews are one-sided (only `by` speaks),
+    // so this is the one place the filter diverges. Lens/verdict
+    // filters short-circuit the thanks loop entirely — thanks have
+    // no lens/verdict, so a lens-scoped query should not carry them.
+    const filteringReviewsOnly =
+      filter.lense !== undefined || filter.verdict !== undefined;
+    if (!filteringReviewsOnly) {
+      const thanks = r.thanks ?? [];
+      for (const th of thanks) {
+        const byMatches = needle === undefined || th.by.toLowerCase() === needle;
+        const toMatches = needle === undefined || th.to.toLowerCase() === needle;
+        if (!byMatches && !toMatches) continue;
+        const thankUtterance: ThankUtterance = {
+          kind: 'thank',
+          at: th.at,
+          requestId: r.id,
+          action: r.action,
+          by: th.by,
+          to: th.to,
+        };
+        if (th.reason !== undefined) {
+          (thankUtterance as { reason?: string }).reason = th.reason;
+        }
+        if (th.invoked_by !== undefined) {
+          (thankUtterance as { invokedBy?: string }).invokedBy = th.invoked_by;
+        }
+        out.push(thankUtterance);
+      }
     }
   }
 
@@ -316,7 +385,7 @@ export function renderUtterance(
     if (u.completionNote) pushMultilineField(lines, '  note:   ', u.completionNote);
     if (u.denyReason) pushMultilineField(lines, '  denied: ', u.denyReason);
     if (u.failureReason) pushMultilineField(lines, '  failed: ', u.failureReason);
-  } else {
+  } else if (u.kind === 'review') {
     // Always expose `invoked_by` when present, even when includeActor
     // is false (voices groups by actor, so the `by` is redundant —
     // but the proxy-invoker isn't). Keeps the stream honest about
@@ -329,6 +398,23 @@ export function renderUtterance(
     lines.push(`  re: ${u.action}`);
     for (const line of u.comment.split('\n')) {
       lines.push(`  ${line}`);
+    }
+  } else {
+    // u.kind === 'thank'. `by` thanked `to` on this request. Always
+    // render as full "by → to" direction regardless of `includeActor`:
+    // unlike reviews (where `by` is the only relevant actor), thanks
+    // have a giver AND a receiver, and both are load-bearing. Hiding
+    // `by` when voices groups by one of them would leave the reader
+    // asking "thanked by whom?" on every line.
+    const proxy = u.invokedBy ? ` [invoked_by=${u.invokedBy}]` : '';
+    lines.push(
+      `[${u.at}] req=${u.requestId} thank ${u.by} → ${u.to}${proxy}`,
+    );
+    lines.push(`  re: ${u.action}`);
+    if (u.reason !== undefined) {
+      for (const line of u.reason.split('\n')) {
+        lines.push(`  ${line}`);
+      }
     }
   }
   return lines.join('\n');

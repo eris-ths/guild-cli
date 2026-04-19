@@ -708,6 +708,109 @@ test('thank --dry-run: preview without persist', () => {
   }
 });
 
+// ── thank integration: utterance stream & transcript fold-in ────
+
+test('thank: appears in gate tail as a directional utterance', () => {
+  // tail is the unified cross-actor stream. Thanks share the stream
+  // with authored/review utterances so a reader scanning activity
+  // sees the appreciation alongside the decisions.
+  const { root, cleanup } = bootstrap();
+  try {
+    runGate(
+      root,
+      ['fast-track', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executor', 'bob'],
+      { GUILD_ACTOR: 'alice' },
+    );
+    runGate(root, ['thank', 'bob', '--for', rid(1), '--reason', 'nice'], {
+      GUILD_ACTOR: 'alice',
+    });
+    const { stdout } = runGate(root, ['tail']);
+    assert.match(stdout, /thank alice → bob/);
+    assert.match(stdout, /re: x/);
+  } finally {
+    cleanup();
+  }
+});
+
+test('voices <name>: surfaces thanks in BOTH directions (given and received)', () => {
+  // Reviews are one-sided (only `by` speaks). Thanks involve two
+  // actors; voices matches either side so a voice's full
+  // appreciation footprint — given AND received — is visible when
+  // looking at them.
+  const { root, cleanup } = bootstrap();
+  try {
+    runGate(
+      root,
+      ['fast-track', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executor', 'bob'],
+      { GUILD_ACTOR: 'alice' },
+    );
+    // alice thanks bob (bob receives)
+    runGate(root, ['thank', 'bob', '--for', rid(1), '--reason', 'a-to-b'], {
+      GUILD_ACTOR: 'alice',
+    });
+    // bob thanks alice (bob gives)
+    runGate(root, ['thank', 'alice', '--for', rid(1), '--reason', 'b-to-a'], {
+      GUILD_ACTOR: 'bob',
+    });
+    const { stdout } = runGate(root, ['voices', 'bob', '--format', 'text']);
+    // Both directions land in bob's stream.
+    assert.match(stdout, /thank alice → bob/);
+    assert.match(stdout, /thank bob → alice/);
+    assert.match(stdout, /a-to-b/);
+    assert.match(stdout, /b-to-a/);
+  } finally {
+    cleanup();
+  }
+});
+
+test('voices: lens/verdict filters DO NOT surface thanks (reviews only)', () => {
+  // thanks have no lens and no verdict. A lens-scoped query is
+  // asking for reviews through that lens; including thanks would
+  // be a category error.
+  const { root, cleanup } = bootstrap();
+  try {
+    runGate(
+      root,
+      ['fast-track', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executor', 'bob'],
+      { GUILD_ACTOR: 'alice' },
+    );
+    runGate(root, ['thank', 'bob', '--for', rid(1), '--reason', 'nice'], {
+      GUILD_ACTOR: 'alice',
+    });
+    const { stdout } = runGate(
+      root,
+      ['voices', 'alice', '--format', 'text', '--lense', 'devil'],
+    );
+    assert.equal(/thank/.test(stdout), false);
+    assert.match(stdout, /no utterances|reviews/);
+  } finally {
+    cleanup();
+  }
+});
+
+test('transcript: thanks appear as their own prose paragraph + in summary', () => {
+  const { root, cleanup } = bootstrap();
+  try {
+    runGate(
+      root,
+      ['fast-track', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executor', 'bob'],
+      { GUILD_ACTOR: 'alice' },
+    );
+    runGate(root, ['thank', 'bob', '--for', rid(1), '--reason', 'elegant'], {
+      GUILD_ACTOR: 'alice',
+    });
+    const { stdout } = runGate(root, ['transcript', rid(1)]);
+    assert.match(stdout, /Alice thanked bob/);
+    assert.match(stdout, /elegant/);
+
+    const jsonOut = runGate(root, ['transcript', rid(1), '--format', 'json']);
+    const p = JSON.parse(jsonOut.stdout);
+    assert.equal(p.summary.thank_count, 1);
+  } finally {
+    cleanup();
+  }
+});
+
 // ── gate transcript: narrative arc of one request ───────────────
 
 test('transcript: narrative prose names filer, action, executor, reviews', () => {

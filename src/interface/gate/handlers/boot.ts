@@ -560,6 +560,8 @@ function renderBootText(p: BootPayload): string {
     for (const u of p.tail.slice(0, 5)) {
       if (u.kind === 'review') {
         lines.push(`  ${u.at}  req=${u.requestId}  [${u.lense}/${u.verdict}] by ${u.by}`);
+      } else if (u.kind === 'thank') {
+        lines.push(`  ${u.at}  req=${u.requestId}  thank ${u.by} → ${u.to}`);
       } else {
         lines.push(`  ${u.at}  req=${u.requestId}  authored by ${u.from}`);
       }
