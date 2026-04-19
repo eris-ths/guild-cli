@@ -11,6 +11,8 @@ import {
   deriveInvokedBy,
   emitInvokedByNotice,
   resolveInvokedBy,
+  isDryRun,
+  emitDryRunPreview,
 } from './internal.js';
 import { emitWriteResponse, parseFormat } from './writeFormat.js';
 
@@ -140,7 +142,10 @@ function describeFilters(filters: Record<string, string | undefined>): string {
 
 export async function reqShow(c: C, args: ParsedArgs): Promise<number> {
   const id = args.positional[0];
-  if (!id) throw new Error('Usage: gate show <id> [--format json|text]');
+  if (!id)
+    throw new Error(
+      'Usage: gate show <id> [--format json|text] [--fields k1,k2,...]',
+    );
   const format = optionalOption(args, 'format') ?? 'json';
   if (format !== 'json' && format !== 'text') {
     throw new Error(`--format must be 'json' or 'text', got: ${format}`);
@@ -151,7 +156,25 @@ export async function reqShow(c: C, args: ParsedArgs): Promise<number> {
     return 1;
   }
   if (format === 'json') {
-    process.stdout.write(JSON.stringify(r.toJSON(), null, 2) + '\n');
+    // `--fields state,executor` trims the payload to what the caller
+    // actually needs. A full `show` JSON runs ~400-800 bytes; for an
+    // agent checking just `state` in a tight loop, that's a lot of
+    // tokens for one boolean-ish answer. Only available in JSON mode
+    // (text already has its own compact summary).
+    const fields = optionalOption(args, 'fields');
+    let payload: Record<string, unknown> = r.toJSON();
+    if (fields !== undefined) {
+      const keep = fields
+        .split(',')
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
+      const picked: Record<string, unknown> = {};
+      for (const k of keep) {
+        if (k in payload) picked[k] = payload[k];
+      }
+      payload = picked;
+    }
+    process.stdout.write(JSON.stringify(payload, null, 2) + '\n');
   } else {
     process.stdout.write(formatRequestText(r) + '\n');
   }
@@ -245,10 +268,18 @@ function formatRequestText(r: Request): string {
 
 export async function reqApprove(c: C, args: ParsedArgs): Promise<number> {
   const id = args.positional[0];
-  if (!id) throw new Error('Usage: gate approve <id> --by <m>');
+  if (!id) throw new Error('Usage: gate approve <id> --by <m> [--dry-run]');
   const by = requireOption(args, 'by', '--by required', 'GUILD_ACTOR');
   const note = optionalOption(args, 'note');
   const invokedBy = resolveInvokedBy(by, 'approve', id);
+  if (isDryRun(args)) {
+    const prior = await c.requestUC.show(id);
+    if (!prior) throw new Error(`Request not found: ${id}`);
+    const fromState = prior.state;
+    const r = await c.requestUC.approve(id, by, note, invokedBy, { dryRun: true });
+    emitDryRunPreview({ verb: 'approve', id, by, fromState, toState: r.state, after: r });
+    return 0;
+  }
   const r = await c.requestUC.approve(id, by, note, invokedBy);
   // Self-approval is policy-allowed but worth flagging on stderr so
   // the no-second-pair-of-eyes case never happens silently. Use the
@@ -270,12 +301,20 @@ export async function reqDeny(c: C, args: ParsedArgs): Promise<number> {
   const reason = await resolveReason(args, 'deny');
   if (!id || !reason) {
     throw new Error(
-      'Usage: gate deny <id> --by <m> [--note <s> | --reason <s> | <reason>]' +
+      'Usage: gate deny <id> --by <m> [--note <s> | --reason <s> | <reason>] [--dry-run]' +
         dashedValueHint(args, ['reason', 'note']),
     );
   }
   const by = requireOption(args, 'by', '--by required', 'GUILD_ACTOR');
   const invokedBy = resolveInvokedBy(by, 'deny', id);
+  if (isDryRun(args)) {
+    const prior = await c.requestUC.show(id);
+    if (!prior) throw new Error(`Request not found: ${id}`);
+    const fromState = prior.state;
+    const r = await c.requestUC.deny(id, by, reason, invokedBy, { dryRun: true });
+    emitDryRunPreview({ verb: 'deny', id, by, fromState, toState: r.state, after: r });
+    return 0;
+  }
   const r = await c.requestUC.deny(id, by, reason, invokedBy);
   emitWriteResponse(parseFormat(args), r, `✓ denied: ${id}`, c.config);
   return 0;
@@ -283,10 +322,18 @@ export async function reqDeny(c: C, args: ParsedArgs): Promise<number> {
 
 export async function reqExecute(c: C, args: ParsedArgs): Promise<number> {
   const id = args.positional[0];
-  if (!id) throw new Error('Usage: gate execute <id> --by <m>');
+  if (!id) throw new Error('Usage: gate execute <id> --by <m> [--dry-run]');
   const by = requireOption(args, 'by', '--by required', 'GUILD_ACTOR');
   const note = optionalOption(args, 'note');
   const invokedBy = resolveInvokedBy(by, 'execute', id);
+  if (isDryRun(args)) {
+    const prior = await c.requestUC.show(id);
+    if (!prior) throw new Error(`Request not found: ${id}`);
+    const fromState = prior.state;
+    const r = await c.requestUC.execute(id, by, note, invokedBy, { dryRun: true });
+    emitDryRunPreview({ verb: 'execute', id, by, fromState, toState: r.state, after: r });
+    return 0;
+  }
   const r = await c.requestUC.execute(id, by, note, invokedBy);
   emitWriteResponse(parseFormat(args), r, `✓ executing: ${id}`, c.config);
   return 0;
@@ -294,10 +341,18 @@ export async function reqExecute(c: C, args: ParsedArgs): Promise<number> {
 
 export async function reqComplete(c: C, args: ParsedArgs): Promise<number> {
   const id = args.positional[0];
-  if (!id) throw new Error('Usage: gate complete <id> --by <m>');
+  if (!id) throw new Error('Usage: gate complete <id> --by <m> [--dry-run]');
   const by = requireOption(args, 'by', '--by required', 'GUILD_ACTOR');
   const note = optionalOption(args, 'note');
   const invokedBy = resolveInvokedBy(by, 'complete', id);
+  if (isDryRun(args)) {
+    const prior = await c.requestUC.show(id);
+    if (!prior) throw new Error(`Request not found: ${id}`);
+    const fromState = prior.state;
+    const r = await c.requestUC.complete(id, by, note, invokedBy, { dryRun: true });
+    emitDryRunPreview({ verb: 'complete', id, by, fromState, toState: r.state, after: r });
+    return 0;
+  }
   const r = await c.requestUC.complete(id, by, note, invokedBy);
   const extraLines: string[] = [];
   if (r.autoReview) {
@@ -317,12 +372,20 @@ export async function reqFail(c: C, args: ParsedArgs): Promise<number> {
   const reason = await resolveReason(args, 'fail');
   if (!id || !reason) {
     throw new Error(
-      'Usage: gate fail <id> --by <m> [--note <s> | --reason <s> | <reason>]' +
+      'Usage: gate fail <id> --by <m> [--note <s> | --reason <s> | <reason>] [--dry-run]' +
         dashedValueHint(args, ['reason', 'note']),
     );
   }
   const by = requireOption(args, 'by', '--by required', 'GUILD_ACTOR');
   const invokedBy = resolveInvokedBy(by, 'fail', id);
+  if (isDryRun(args)) {
+    const prior = await c.requestUC.show(id);
+    if (!prior) throw new Error(`Request not found: ${id}`);
+    const fromState = prior.state;
+    const r = await c.requestUC.fail(id, by, reason, invokedBy, { dryRun: true });
+    emitDryRunPreview({ verb: 'fail', id, by, fromState, toState: r.state, after: r });
+    return 0;
+  }
   const r = await c.requestUC.fail(id, by, reason, invokedBy);
   emitWriteResponse(parseFormat(args), r, `✓ failed: ${id}`, c.config);
   return 0;
