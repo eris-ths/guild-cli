@@ -98,6 +98,18 @@ lenses:
                 # has teeth as corpus — `voices --lense bury`
                 # = "here's where the writer asks you to
                 # skim past"
+  # Round 3 — reader-archetype set, cast as a batch on one
+  # record to test the corpus-orchestration hypothesis (four
+  # lenses together teach what individuals do not). See
+  # alexandria/plans/2026-04-19-reader-archetype-batch.md.
+  - beginner    # someone new to gate encountering a record
+                # with no prior context on verbs or conventions
+  - veteran     # someone who has used gate for months and
+                # internalized its idioms
+  - skeptic     # someone who thinks gate is overstated;
+                # evaluates on value-per-overhead grounds
+  - builder     # someone who might extend gate; reads
+                # records as feature proposals / design specs
 
 paths:
   members:  members

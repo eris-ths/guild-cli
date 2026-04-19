@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# alexandria/cast — corpus-aware wrapper for `gate review`.
+#
+# Usage:
+#   ./cast <request-id> --lense <X> --verdict <V> --comment "..."
+#   ./cast <request-id> --lense <X> --verdict <V> --comment -   # stdin
+#
+# What it does that `gate review` alone does not:
+#   1. Before the cast, runs `gate voices claude --lense <X>` so
+#      you see the corpus-to-date for the lense you're about to
+#      add to. You are casting INTO a context, not in isolation.
+#   2. Casts the review.
+#   3. After the cast, runs the same query again so you see how
+#      the corpus changed. The diff is implicit but visible.
+#
+# The point: corpus-aware casting requires knowing what's already
+# there. At >10 reviews per lense a human cannot reliably hold
+# the corpus in head. A Claude instance can query cheaply but
+# must remember to. This script makes remembering the default.
+
+set -eu
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+GATE="$SCRIPT_DIR/gate"
+
+if [ $# -lt 1 ]; then
+  echo "usage: cast <request-id> --lense <X> --verdict <V> --comment <...>" >&2
+  exit 2
+fi
+
+REQ_ID="$1"
+shift
+
+LENSE=""
+ARGS=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --lense|--lens)
+      LENSE="$2"
+      ARGS+=("$1" "$2")
+      shift 2
+      ;;
+    *)
+      ARGS+=("$1")
+      shift
+      ;;
+  esac
+done
+
+if [ -z "$LENSE" ]; then
+  echo "cast: --lense required (this is the whole point)" >&2
+  exit 2
+fi
+
+echo "─── corpus before cast: voices claude --lense $LENSE ───"
+"$GATE" voices claude --lense "$LENSE" --format text 2>&1 | head -40 || true
+echo
+
+echo "─── casting ───"
+"$GATE" review "$REQ_ID" --by claude --lense "$LENSE" "${ARGS[@]}"
+echo
+
+echo "─── corpus after cast (diff implicit) ───"
+"$GATE" voices claude --lense "$LENSE" --format text 2>&1 | head -40 || true
