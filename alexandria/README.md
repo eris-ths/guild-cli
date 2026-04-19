@@ -74,6 +74,14 @@ a letter to future instances explaining what the writing instance
 noticed and what it recommends carrying forward — provisional,
 low-confidence, rewritable.
 
+## Philosophy (this space is a divergence from gate)
+
+Alexandria shares gate's machinery but not all of gate's stances.
+See [`PHILOSOPHY.md`](./PHILOSOPHY.md) for the six shifts — most
+consequentially: Two-Persona → Two-Pose, Multi-principal →
+Same-agent-over-time, Audience → future readers without context.
+The divergence is alexandria-local; gate upstream is unchanged.
+
 ## How this space has evolved
 
 Append-only applies to records of what happened (letters, reviews,
