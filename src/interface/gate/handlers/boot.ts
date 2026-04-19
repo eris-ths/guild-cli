@@ -10,8 +10,12 @@ import { Request } from '../../../domain/request/Request.js';
  * dispatch against the same consumer. Null when boot has no
  * prescription — e.g. the caller is already a registered member
  * with no outstanding state.
+ *
+ * Exported so `gate suggest` (the lighter-weight sibling) can reuse
+ * the same contract without round-tripping through boot's full
+ * payload.
  */
-interface BootSuggestedNext {
+export interface BootSuggestedNext {
   verb: string;
   args: Record<string, string>;
   reason: string;
@@ -259,7 +263,7 @@ export async function bootCmd(c: C, args: ParsedArgs): Promise<number> {
  * Returns null for registered members and hosts — they have no
  * unambiguous next action from boot alone.
  */
-function deriveBootSuggestedNext(
+export function deriveBootSuggestedNext(
   actor: string | null,
   role: BootPayload['role'],
   members: ReadonlyArray<{ name: { value: string } }>,
