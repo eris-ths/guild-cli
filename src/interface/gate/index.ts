@@ -35,6 +35,7 @@ import {
   msgInbox,
 } from './handlers/messages.js';
 import { statusCmd } from './handlers/status.js';
+import { suggestCmd } from './handlers/suggest.js';
 
 // Re-export for test backward-compat (tests/interface/reviewMarkers.test.ts).
 // formatReviewMarkers and computeReviewMarkerWidth live in handlers/request.ts
@@ -66,9 +67,13 @@ Requests:
                        executing, grouped by state.
   gate list --state <state> [--for <m>] [--from <m>]
                             [--executor <m>] [--auto-review <m>]
-  gate show <id> [--format json|text] [--fields k1,k2,...]
+  gate show <id> [--format json|text] [--fields k1,k2,...] [--plain]
                        --fields trims the JSON payload to just the
                        requested keys (agent-facing; JSON only).
+                       --plain + --fields <single-key> emits just
+                       the value (no JSON quotes) for shell combos:
+                         state=$(gate show $id --fields state --plain)
+                         [ "$state" = "pending" ] && gate approve $id
   gate voices <name> [--lense <l>] [--verdict <v>] [--limit <N>]
                      [--format json|text]          (default: json)
   gate tail [N]                                   (default 20)
@@ -160,6 +165,13 @@ Status:
                        Returns identity + status + tail + your recent
                        utterances + inbox unread as one JSON payload.
                        GUILD_ACTOR optional (global view if unset).
+  gate suggest [--format json|text]
+                       Tight-loop sibling of boot: returns ONLY the
+                       suggested_next triple (verb/args/reason) or
+                       null. Use when you want "what's the one next
+                       thing?" without the full orientation payload.
+                       Priority ladder is shared with boot, so the
+                       two never disagree.
   gate resume [--format json|text]
                        Reconstruct what the actor was doing when the
                        last session ended. Returns last utterance,
@@ -186,7 +198,7 @@ const KNOWN_COMMANDS = [
   'whoami', 'register', 'chain', 'approve', 'deny', 'execute',
   'complete', 'fail', 'review', 'fast-track', 'issues', 'message',
   'broadcast', 'inbox', 'doctor', 'repair', 'status', 'boot',
-  'resume', 'schema',
+  'suggest', 'resume', 'schema',
 ] as const;
 
 function levenshtein(a: string, b: string): number {
@@ -308,6 +320,8 @@ export async function main(argv: readonly string[]): Promise<number> {
         return await statusCmd(c, args);
       case 'boot':
         return await bootCmd(c, args);
+      case 'suggest':
+        return await suggestCmd(c, args);
       case 'resume':
         return await resumeCmd(c, args);
       case 'schema':

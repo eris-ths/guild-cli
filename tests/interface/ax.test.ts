@@ -269,6 +269,131 @@ test('show --fields: unknown keys silently dropped (not errored)', () => {
   }
 });
 
+// ── gate suggest: tight-loop sibling of boot ─────────────────────
+
+test('suggest --format json: returns the same triple as boot, no orientation payload', () => {
+  const { root, cleanup } = bootstrap();
+  try {
+    runGate(
+      root,
+      ['request', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executor', 'bob'],
+      { GUILD_ACTOR: 'alice' },
+    );
+    const bootOut = JSON.parse(runGate(root, ['boot'], { GUILD_ACTOR: 'bob' }).stdout);
+    const suggestOut = JSON.parse(runGate(root, ['suggest'], { GUILD_ACTOR: 'bob' }).stdout);
+    // Same suggestion.
+    assert.deepEqual(bootOut.suggested_next, suggestOut.suggested_next);
+    // Orientation keys present in boot, absent in suggest.
+    assert.ok('status' in bootOut);
+    assert.ok('tail' in bootOut);
+    assert.equal('status' in suggestOut, false);
+    assert.equal('tail' in suggestOut, false);
+    // Payload shrinks dramatically — suggest is the hot-loop form.
+    const bootStr = JSON.stringify(bootOut);
+    const suggestStr = JSON.stringify(suggestOut);
+    assert.ok(
+      suggestStr.length < bootStr.length / 3,
+      `expected suggest to be <1/3 of boot, got ${suggestStr.length} vs ${bootStr.length}`,
+    );
+  } finally {
+    cleanup();
+  }
+});
+
+test('suggest: null when registered actor has nothing to do', () => {
+  const { root, cleanup } = bootstrap();
+  try {
+    const { stdout } = runGate(root, ['suggest'], { GUILD_ACTOR: 'alice' });
+    const payload = JSON.parse(stdout);
+    assert.equal(payload.suggested_next, null);
+  } finally {
+    cleanup();
+  }
+});
+
+test('suggest --format text: compact two-line form for humans', () => {
+  const { root, cleanup } = bootstrap();
+  try {
+    runGate(
+      root,
+      ['request', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executor', 'bob'],
+      { GUILD_ACTOR: 'alice' },
+    );
+    const { stdout } = runGate(
+      root,
+      ['suggest', '--format', 'text'],
+      { GUILD_ACTOR: 'bob' },
+    );
+    // Line 1: → verb arg=val arg=val
+    // Line 2: the reason, indented
+    const lines = stdout.trim().split('\n');
+    assert.equal(lines.length, 2);
+    assert.match(lines[0]!, /^→ approve/);
+    assert.match(lines[0]!, /id=/);
+    assert.match(lines[0]!, /by=bob/);
+    assert.match(lines[1]!, /^  /);
+  } finally {
+    cleanup();
+  }
+});
+
+// ── gate show --plain: shell-friendly single-field output ────────
+
+test('show --plain --fields <key>: emits raw value, no JSON quoting', () => {
+  const { root, cleanup } = bootstrap();
+  try {
+    runGate(
+      root,
+      ['request', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executor', 'bob'],
+      { GUILD_ACTOR: 'alice' },
+    );
+    const { stdout } = runGate(root, ['show', rid(1), '--fields', 'state', '--plain']);
+    assert.equal(stdout, 'pending\n');
+  } finally {
+    cleanup();
+  }
+});
+
+test('show --plain: requires exactly one field', () => {
+  const { root, cleanup } = bootstrap();
+  try {
+    runGate(
+      root,
+      ['request', '--from', 'alice', '--action', 'x', '--reason', 'r'],
+      { GUILD_ACTOR: 'alice' },
+    );
+    const noFields = runGate(root, ['show', rid(1), '--plain']);
+    assert.equal(noFields.status, 1);
+    assert.match(noFields.stderr, /requires exactly one field/);
+    const multi = runGate(root, ['show', rid(1), '--fields', 'state,from', '--plain']);
+    assert.equal(multi.status, 1);
+    assert.match(multi.stderr, /requires exactly one field/);
+  } finally {
+    cleanup();
+  }
+});
+
+test('show --plain: missing field = empty stdout + exit 1 (shell-friendly)', () => {
+  // `[ -z "$v" ]` should be a usable check for "field not present"
+  // without the caller having to parse or differentiate error modes.
+  const { root, cleanup } = bootstrap();
+  try {
+    runGate(
+      root,
+      ['request', '--from', 'alice', '--action', 'x', '--reason', 'r'],
+      { GUILD_ACTOR: 'alice' },
+    );
+    const { stdout, status } = runGate(
+      root,
+      ['show', rid(1), '--fields', 'not_a_field', '--plain'],
+    );
+    assert.equal(stdout, '');
+    assert.equal(status, 1);
+  } finally {
+    cleanup();
+  }
+});
+
 // ── --dry-run on state-transition verbs ──────────────────────────
 
 test('approve --dry-run: emits preview envelope, does NOT persist', () => {
