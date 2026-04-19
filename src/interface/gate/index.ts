@@ -36,6 +36,7 @@ import {
 } from './handlers/messages.js';
 import { statusCmd } from './handlers/status.js';
 import { suggestCmd } from './handlers/suggest.js';
+import { transcriptCmd } from './handlers/transcript.js';
 
 // Re-export for test backward-compat (tests/interface/reviewMarkers.test.ts).
 // formatReviewMarkers and computeReviewMarkerWidth live in handlers/request.ts
@@ -172,6 +173,13 @@ Status:
                        thing?" without the full orientation payload.
                        Priority ladder is shared with boot, so the
                        two never disagree.
+  gate transcript <id> [--format text|json]
+                       Narrative prose render of one request's arc,
+                       composed from status_log + reviews. Sibling
+                       of `gate show` (structured) and `gate voices`
+                       (per-actor). JSON mode carries both the
+                       narrative and a summary (actors/verdicts/
+                       duration_ms) for programmatic consumers.
   gate resume [--format json|text]
                        Reconstruct what the actor was doing when the
                        last session ended. Returns last utterance,
@@ -198,7 +206,7 @@ const KNOWN_COMMANDS = [
   'whoami', 'register', 'chain', 'approve', 'deny', 'execute',
   'complete', 'fail', 'review', 'fast-track', 'issues', 'message',
   'broadcast', 'inbox', 'doctor', 'repair', 'status', 'boot',
-  'suggest', 'resume', 'schema',
+  'suggest', 'transcript', 'resume', 'schema',
 ] as const;
 
 function levenshtein(a: string, b: string): number {
@@ -322,6 +330,8 @@ export async function main(argv: readonly string[]): Promise<number> {
         return await bootCmd(c, args);
       case 'suggest':
         return await suggestCmd(c, args);
+      case 'transcript':
+        return await transcriptCmd(c, args);
       case 'resume':
         return await resumeCmd(c, args);
       case 'schema':

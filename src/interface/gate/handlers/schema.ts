@@ -144,6 +144,42 @@ const VERBS: readonly VerbSchema[] = [
     },
   },
   {
+    name: 'transcript',
+    category: 'read',
+    summary:
+      "narrative render of one request's full arc — the prose-first sibling of `gate show`. Text output reads as paragraphs; JSON output carries both the narrative and a structured summary (actors, review_verdicts, duration_ms).",
+    input: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'request id (YYYY-MM-DD-NNNN)' },
+        format: {
+          type: 'string',
+          enum: ['text', 'json'],
+          description: "output format (default: text — the narrative is what's useful here)",
+        },
+      },
+      required: ['id'],
+    },
+    output: {
+      type: 'object',
+      properties: {
+        id: str,
+        arc: str,
+        summary: {
+          type: 'object',
+          properties: {
+            actors: { type: 'array' },
+            actor_count: { type: 'integer' },
+            review_count: { type: 'integer' },
+            review_verdicts: { type: 'array' },
+            final_state: str,
+            duration_ms: { type: 'integer' },
+          },
+        },
+      },
+    },
+  },
+  {
     name: 'resume',
     category: 'read',
     summary:

@@ -416,6 +416,100 @@ test('boot.verbs_available_now: actionable entries carry id + reason', () => {
   }
 });
 
+// ── gate transcript: narrative arc of one request ───────────────
+
+test('transcript: narrative prose names filer, action, executor, reviews', () => {
+  const { root, cleanup } = bootstrap();
+  try {
+    runGate(
+      root,
+      [
+        'request', '--from', 'alice',
+        '--action', 'refactor parser',
+        '--reason', 'cut p99 latency',
+        '--executor', 'bob',
+        '--auto-review', 'alice',
+      ],
+      { GUILD_ACTOR: 'alice' },
+    );
+    runGate(root, ['approve', rid(1), '--by', 'alice']);
+    runGate(root, ['execute', rid(1), '--by', 'bob']);
+    runGate(root, ['complete', rid(1), '--by', 'bob', '--note', 'landed in abc123']);
+    runGate(
+      root,
+      ['review', rid(1), '--by', 'alice', '--lense', 'devil', '--verdict', 'ok', '--comment', 'LGTM'],
+    );
+    const { stdout } = runGate(root, ['transcript', rid(1)]);
+    assert.match(stdout, /Alice filed/);
+    assert.match(stdout, /refactor parser/);
+    assert.match(stdout, /bob as executor/);
+    assert.match(stdout, /Bob moved it to completed/);
+    assert.match(stdout, /devil lens/);
+    assert.match(stdout, /verdict of ok/);
+    assert.match(stdout, /LGTM/);
+    assert.match(stdout, /Final state: completed/);
+  } finally {
+    cleanup();
+  }
+});
+
+test('transcript --format json: summary carries structured fields', () => {
+  const { root, cleanup } = bootstrap();
+  try {
+    runGate(
+      root,
+      ['request', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executor', 'bob'],
+      { GUILD_ACTOR: 'alice' },
+    );
+    runGate(root, ['approve', rid(1), '--by', 'alice']);
+    runGate(root, ['execute', rid(1), '--by', 'bob']);
+    runGate(root, ['complete', rid(1), '--by', 'bob']);
+    const { stdout } = runGate(root, ['transcript', rid(1), '--format', 'json']);
+    const p = JSON.parse(stdout);
+    assert.equal(p.id, rid(1));
+    assert.ok(typeof p.arc === 'string');
+    assert.ok(p.arc.length > 50);
+    assert.equal(p.summary.actor_count, 2);
+    assert.deepEqual(p.summary.actors.sort(), ['alice', 'bob']);
+    assert.equal(p.summary.final_state, 'completed');
+    assert.equal(typeof p.summary.duration_ms, 'number');
+  } finally {
+    cleanup();
+  }
+});
+
+test('transcript: self-loop arc surfaces as "carried out by X alone"', () => {
+  // The textual echo of the self-loop-check plugin: one sentence in
+  // the summary names the mono-actor pattern per-request.
+  const { root, cleanup } = bootstrap();
+  try {
+    runGate(
+      root,
+      ['fast-track', '--from', 'alice', '--action', 'x', '--reason', 'r'],
+      { GUILD_ACTOR: 'alice' },
+    );
+    const { stdout } = runGate(root, ['transcript', rid(1)]);
+    assert.match(stdout, /carried out by alice alone/);
+  } finally {
+    cleanup();
+  }
+});
+
+test('transcript: pending auto-review is named explicitly', () => {
+  const { root, cleanup } = bootstrap();
+  try {
+    runGate(
+      root,
+      ['fast-track', '--from', 'alice', '--action', 'x', '--reason', 'r', '--auto-review', 'bob'],
+      { GUILD_ACTOR: 'alice' },
+    );
+    const { stdout } = runGate(root, ['transcript', rid(1)]);
+    assert.match(stdout, /Auto-review is pending: bob/);
+  } finally {
+    cleanup();
+  }
+});
+
 // ── gate show --plain: shell-friendly single-field output ────────
 
 test('show --plain --fields <key>: emits raw value, no JSON quoting', () => {
