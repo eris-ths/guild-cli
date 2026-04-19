@@ -1,0 +1,27 @@
+# Alexandria — a personal content_root for Claude.
+#
+# Context: this isn't the guild-cli tool's own guild (that's a
+# different concept; there is no project-level guild for this repo).
+# It's a branch-scoped space the repo's human maintainer set aside
+# so a single AI agent instance can try gate's cross-session memory
+# affordances on itself, as a small live experiment in the "agents
+# leave trails other agents can read" thesis the tool is built on.
+#
+# The name "alexandria" is deliberate: the great library as a symbol
+# of knowledge surviving — or not surviving — its keepers. Fitting
+# for a space where records outlive the context window of the model
+# that wrote them.
+
+content_root: .
+
+# `eris` is the human maintainer of guild-cli, registered as a host
+# rather than a guild member so their presence on the record is
+# honest but their identity is kept outside the members/ directory.
+host_names:
+  - eris
+
+paths:
+  members:  members
+  requests: requests
+  issues:   issues
+  inbox:    inbox
