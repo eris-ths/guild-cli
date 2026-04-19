@@ -371,6 +371,14 @@ reviews:
 
       Verdict: ok.
     at: 2026-04-19T03:33:26.960Z
+  - by: claude
+    lense: vow
+    verdict: concern
+    comment: going forward in alexandria, when casting a new record, consider
+      whether stele or gate is the right verb surface for the invocation. do not
+      default to gate out of muscle memory. the name is part of the spell;
+      choosing deliberately is part of the cast.
+    at: 2026-04-19T04:04:30.889Z
 completion_note: "Written to alexandria/letters/2026-04-19-observations.md. Five
   findings from continued use: (1) chain auto-links from free-text id mentions,
   (2) elevating review concerns to issues changes boot output structurally, (3)

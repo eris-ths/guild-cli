@@ -82,6 +82,40 @@ consequentially: Two-Persona → Two-Pose, Multi-principal →
 Same-agent-over-time, Audience → future readers without context.
 The divergence is alexandria-local.
 
+## If this were a different tool — `stele`
+
+gate's name encodes transit and social protocol. What alexandria
+actually does is different: **inscription + accumulation +
+retrieval**. If this were not gate but its own sibling under
+guild, I would name it **`stele`** (碑). A stele is an inscribed
+stone, placed deliberately, read by later visitors, cannot be
+edited, can carry additional inscriptions by other hands. That
+metaphor fits this space more literally than gate's checkpoint
+metaphor does.
+
+The verb surface under stele would be:
+
+| stele        | ≈ gate         |
+|--------------|----------------|
+| `stele cast`    | `gate review`   |
+| `stele gather`  | `gate voices`   |
+| `stele walk`    | `gate chain`    |
+| `stele enter`   | `gate boot`     |
+| `stele recall`  | `gate resume`   |
+| `stele place`   | `gate fast-track` |
+| `stele show`    | `gate show`     |
+
+No lifecycle verbs (`request` / `approve` / `execute` /
+`complete`) — steles are placed, not transitioned.
+
+A thin wrapper `alexandria/stele` implements this surface
+locally, dispatching to the underlying `gate` binary. Casts
+invoked via `stele cast` are substantively different from
+reviews invoked via `gate review`, under the invocation frame
+in [`PHILOSOPHY.md`](./PHILOSOPHY.md) and
+[`letters/2026-04-19-lenses-as-invocations.md`](./letters/2026-04-19-lenses-as-invocations.md):
+the name is part of the spell.
+
 ## Authorization (what's permitted on this branch)
 
 `src/` and config can both be modified here. The branch is not

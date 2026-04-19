@@ -1,0 +1,126 @@
+#!/usr/bin/env bash
+# alexandria/stele — inscription verb surface for this content_root.
+#
+# Thin wrapper over `gate` that re-expresses the subset of verbs
+# meaningful under the stele frame (inscription + accumulation +
+# retrieval; no lifecycle). See alexandria/README.md for the
+# mapping table.
+#
+# Under the invocation frame in PHILOSOPHY.md, a cast invoked via
+# `stele cast` is substantively different from a review invoked
+# via `gate review` — the name is part of the spell. Historical
+# `gate review` casts stay in the record as their original frame;
+# new casts under stele are under the new frame. Both surface
+# retrievable via `stele gather` / `gate voices`.
+#
+# GUILD_ACTOR defaults to claude (like alexandria/gate does).
+# --by for `stele cast` auto-fills from GUILD_ACTOR if omitted.
+
+set -eu
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+GATE_BIN="$REPO_ROOT/bin/gate.mjs"
+
+if [ ! -x "$GATE_BIN" ]; then
+  echo "alexandria/stele: cannot find $GATE_BIN" >&2
+  echo "  run 'npm run build' at repo root first" >&2
+  exit 1
+fi
+
+if [ -z "${GUILD_ACTOR:-}" ]; then
+  export GUILD_ACTOR=claude
+fi
+
+cd "$SCRIPT_DIR"
+
+usage() {
+  cat <<EOF >&2
+stele — inscription surface for alexandria
+
+verbs:
+  stele cast <id> [--by <m>] --lense <l> --verdict <v> --comment <c>
+                        inscribe a cast on an existing stele
+                        (--by defaults to \$GUILD_ACTOR)
+  stele gather [<actor>] [--lense <l>] [--verdict <v>]
+                        gather casts across steles (default
+                        actor: \$GUILD_ACTOR)
+  stele walk <id>       walk the relations from a stele
+  stele enter           survey the field on arrival
+  stele recall          return to your last inscription
+  stele show <id>       read one stele in full
+  stele place --action <a> --reason <r> [--by <m>]
+                        place a new stele (no lifecycle;
+                        maps to gate fast-track)
+  stele help | -h | --help
+                        this text
+
+EOF
+}
+
+if [ $# -eq 0 ]; then
+  usage
+  exit 0
+fi
+
+verb="$1"
+shift
+
+case "$verb" in
+  help|-h|--help)
+    usage
+    ;;
+  cast)
+    # `stele cast <id> --lense X ...` → `gate review <id> --lense X ...`
+    # Auto-inject --by if not present.
+    has_by=0
+    for a in "$@"; do
+      case "$a" in --by) has_by=1 ;; esac
+      case "$a" in --by=*) has_by=1 ;; esac
+    done
+    if [ "$has_by" = 0 ]; then
+      exec "$GATE_BIN" review "$@" --by "$GUILD_ACTOR"
+    else
+      exec "$GATE_BIN" review "$@"
+    fi
+    ;;
+  gather)
+    # `stele gather [actor] ...` → `gate voices <actor> ...`
+    # Default actor is $GUILD_ACTOR if first arg looks like a flag.
+    if [ $# -eq 0 ] || [ "${1#-}" != "$1" ]; then
+      exec "$GATE_BIN" voices "$GUILD_ACTOR" "$@"
+    else
+      exec "$GATE_BIN" voices "$@"
+    fi
+    ;;
+  walk)
+    exec "$GATE_BIN" chain "$@"
+    ;;
+  enter)
+    exec "$GATE_BIN" boot "$@"
+    ;;
+  recall)
+    exec "$GATE_BIN" resume "$@"
+    ;;
+  show)
+    exec "$GATE_BIN" show "$@"
+    ;;
+  place)
+    # `stele place --action ... --reason ...` → `gate fast-track ...`
+    # Auto-inject --from if not present.
+    has_from=0
+    for a in "$@"; do
+      case "$a" in --from) has_from=1 ;; esac
+      case "$a" in --from=*) has_from=1 ;; esac
+    done
+    if [ "$has_from" = 0 ]; then
+      exec "$GATE_BIN" fast-track "$@" --from "$GUILD_ACTOR"
+    else
+      exec "$GATE_BIN" fast-track "$@"
+    fi
+    ;;
+  *)
+    echo "stele: unknown verb '$verb' — try 'stele help'" >&2
+    exit 2
+    ;;
+esac
