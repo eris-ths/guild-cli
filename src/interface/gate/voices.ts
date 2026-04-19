@@ -3,6 +3,11 @@
  * entry point so the gather/filter/sort logic is unit-testable without
  * a live filesystem.
  *
+ * Also home to `computeVoiceCalibration` (see bottom of file), which
+ * derives a per-(actor, lens) calibration score from historical
+ * review verdicts vs terminal-state outcomes. Exported from here so
+ * the CLI handler and the schema can reuse the same definition.
+ *
  * An "utterance" is anything a named actor put on the record:
  *   - `authored`: a request they filed (action + reason + the
  *     appropriate closure note — completion_note / deny_reason /
@@ -37,6 +42,7 @@ export type RequestJSON = {
   readonly from: string;
   readonly action: string;
   readonly reason: string;
+  readonly state?: string;
   readonly created_at: string;
   readonly completion_note?: string;
   readonly deny_reason?: string;
@@ -326,4 +332,132 @@ export function renderUtterance(
     }
   }
   return lines.join('\n');
+}
+
+// ── Voice calibration ─────────────────────────────────────────────
+//
+// A per-(actor, lens) score derived from historical review verdicts
+// vs terminal-state outcomes. Exists to let the Two-Persona Devil
+// Review frame *learn* — today every cross-actor critique weighs the
+// same, and over time the system has no memory of which voices
+// called it right.
+//
+// The mechanism is deliberately quiet:
+//   - Scores are visible on `gate voices <OTHER>` but hidden on
+//     `gate voices $GUILD_ACTOR` (so voters don't self-optimise).
+//   - No leaderboard, no aggregate ranking — each voice stands
+//     alone.
+//   - Small samples render as "uncalibrated" to avoid mistaking
+//     noise for signal.
+//   - Reasons are named in plain prose, not numeric badges.
+//
+// Alignment rules (v1; may refine once we have real signal):
+//   verdict=ok       + state=completed → aligned (you said fine, it was)
+//   verdict=ok       + state=failed    → missed   (you said fine, it wasn't)
+//   verdict=concern  + state=failed    → aligned (you flagged it, it broke)
+//   verdict=concern  + state=completed → soft    (issues may have been
+//                                                 absorbed; neither a
+//                                                 win nor a miss)
+//   verdict=reject   + state=failed    → aligned (you said no, it broke)
+//   verdict=reject   + state=completed → overruled (you said no, it
+//                                                   shipped anyway;
+//                                                   ambiguous signal —
+//                                                   could be wrong call,
+//                                                   could be reviewed
+//                                                   risk that held)
+//
+// Denied requests don't contribute (they never executed; no outcome
+// to compare against). `concern + completed` is counted as soft —
+// neither a hit nor a miss — because the outcome is consistent with
+// both "the concern was noted and addressed" and "the concern was
+// overblown". Counting it either way would bias the score.
+
+export interface CalibrationPerLens {
+  /** Samples that contributed (aligned + missed; soft/overruled excluded). */
+  readonly sample_count: number;
+  /** Verdicts that matched outcome (aligned). */
+  readonly aligned: number;
+  /** Verdicts that missed (ok on a failed, or reject on a completed — see above). */
+  readonly missed: number;
+  /** Numeric 0..1 score, aligned / sample_count. Null when uncalibrated. */
+  readonly alignment: number | null;
+  /** Categorical signal for prose use. "uncalibrated" when samples < threshold. */
+  readonly status: 'uncalibrated' | 'learning' | 'trusted';
+  /** One-line prose for human/agent consumers. */
+  readonly prose: string;
+}
+
+export interface VoiceCalibration {
+  readonly actor: string;
+  /** Per-lens calibration, keyed by lens name (e.g. "devil", "layer"). */
+  readonly by_lens: Record<string, CalibrationPerLens>;
+}
+
+const CALIBRATION_MIN_SAMPLES = 5;
+const CALIBRATION_TRUSTED_THRESHOLD = 0.7;
+
+export function computeVoiceCalibration(
+  all: ReadonlyArray<RequestJSON>,
+  actor: string,
+): VoiceCalibration {
+  const actorLower = actor.toLowerCase();
+  const byLens: Record<string, { aligned: number; missed: number }> = {};
+
+  for (const r of all) {
+    const state = r.state;
+    // Only terminal non-denied outcomes yield signal. `denied`
+    // requests never ran, so there's nothing to calibrate against.
+    if (state !== 'completed' && state !== 'failed') continue;
+    const reviews = r.reviews ?? [];
+    for (const rv of reviews) {
+      if (rv.by !== actorLower) continue;
+      const lens = rv.lense;
+      if (!byLens[lens]) byLens[lens] = { aligned: 0, missed: 0 };
+      const bucket = byLens[lens]!;
+      const v = rv.verdict;
+      if (v === 'ok') {
+        if (state === 'completed') bucket.aligned += 1;
+        else bucket.missed += 1;
+      } else if (v === 'reject') {
+        if (state === 'failed') bucket.aligned += 1;
+        else bucket.missed += 1;
+      }
+      // verdict === 'concern' intentionally excluded — see header.
+    }
+  }
+
+  const out: Record<string, CalibrationPerLens> = {};
+  for (const [lens, counts] of Object.entries(byLens)) {
+    const samples = counts.aligned + counts.missed;
+    if (samples < CALIBRATION_MIN_SAMPLES) {
+      out[lens] = {
+        sample_count: samples,
+        aligned: counts.aligned,
+        missed: counts.missed,
+        alignment: null,
+        status: 'uncalibrated',
+        prose:
+          `${lens} lens: ${samples} sample${samples === 1 ? '' : 's'} so far — not yet calibrated ` +
+          `(need ${CALIBRATION_MIN_SAMPLES - samples} more with a terminal outcome).`,
+      };
+      continue;
+    }
+    const alignment = counts.aligned / samples;
+    const status: CalibrationPerLens['status'] =
+      alignment >= CALIBRATION_TRUSTED_THRESHOLD ? 'trusted' : 'learning';
+    const proseFragment =
+      status === 'trusted'
+        ? `trusted — ${counts.aligned} of ${samples} verdicts aligned with outcomes`
+        : `still learning — ${counts.aligned} of ${samples} verdicts aligned`;
+    out[lens] = {
+      sample_count: samples,
+      aligned: counts.aligned,
+      missed: counts.missed,
+      alignment,
+      status,
+      prose: `${lens} lens: ${proseFragment}.`,
+    };
+  }
+
+  return { actor: actorLower, by_lens: out };
 }

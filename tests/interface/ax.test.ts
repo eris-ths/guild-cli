@@ -416,6 +416,157 @@ test('boot.verbs_available_now: actionable entries carry id + reason', () => {
   }
 });
 
+// ── voice calibration: Two-Persona Devil gets a memory ──────────
+
+test('voices --with-calibration: aligns verdicts against terminal outcomes', () => {
+  // Carol files sharp concerns on things that later fail — her
+  // devil-lens calibration should read as "trusted". Bob rubber-
+  // stamps ok on things that fail — "learning".
+  const { root, cleanup } = bootstrap();
+  try {
+    // Register carol (only alice + bob exist in the bootstrap).
+    const r = runGate(root, ['register', '--name', 'carol']);
+    assert.equal(r.status, 0);
+
+    // 7 lifecycles: 4 failed + 3 completed. Bob always ok, carol
+    // rejects failures and oks completions.
+    const outcomes: Array<['completed' | 'failed', number]> = [
+      ['completed', 1], ['failed', 2], ['failed', 3], ['completed', 4],
+      ['failed', 5], ['failed', 6], ['completed', 7],
+    ];
+    for (const [state, n] of outcomes) {
+      const id = rid(n);
+      runGate(
+        root,
+        ['request', '--from', 'alice', '--action', `t${n}`, '--reason', 'r', '--executor', 'alice'],
+        { GUILD_ACTOR: 'alice' },
+      );
+      runGate(root, ['approve', id, '--by', 'alice']);
+      runGate(root, ['execute', id, '--by', 'alice']);
+      if (state === 'completed') {
+        runGate(root, ['complete', id, '--by', 'alice']);
+      } else {
+        runGate(root, ['fail', id, '--by', 'alice', '--reason', 'nope']);
+      }
+      runGate(root, [
+        'review', id, '--by', 'bob', '--lense', 'devil', '--verdict', 'ok', '--comment', 'b',
+      ]);
+      const carolV = state === 'completed' ? 'ok' : 'reject';
+      runGate(root, [
+        'review', id, '--by', 'carol', '--lense', 'devil', '--verdict', carolV, '--comment', 'c',
+      ]);
+    }
+
+    const { stdout: carolJson } = runGate(
+      root,
+      ['voices', 'carol', '--format', 'json', '--with-calibration'],
+      { GUILD_ACTOR: 'alice' },
+    );
+    const carol = JSON.parse(carolJson).calibration;
+    assert.equal(carol.by_lens.devil.status, 'trusted');
+    assert.equal(carol.by_lens.devil.aligned, 7);
+    assert.equal(carol.by_lens.devil.missed, 0);
+
+    const { stdout: bobJson } = runGate(
+      root,
+      ['voices', 'bob', '--format', 'json', '--with-calibration'],
+      { GUILD_ACTOR: 'alice' },
+    );
+    const bob = JSON.parse(bobJson).calibration;
+    assert.equal(bob.by_lens.devil.status, 'learning');
+    assert.equal(bob.by_lens.devil.aligned, 3);
+    assert.equal(bob.by_lens.devil.missed, 4);
+  } finally {
+    cleanup();
+  }
+});
+
+test('voices: self-view hides calibration (no self-optimisation)', () => {
+  // Voter shouldn't see their own score — the calibration only lands
+  // when viewing OTHER voices. Keeps the signal honest (if you can't
+  // see it, you can't game it).
+  const { root, cleanup } = bootstrap();
+  try {
+    // Seed one review so there's data to hide.
+    runGate(
+      root,
+      ['fast-track', '--from', 'alice', '--action', 'x', '--reason', 'r'],
+      { GUILD_ACTOR: 'alice' },
+    );
+    runGate(root, [
+      'review', rid(1), '--by', 'bob', '--lense', 'devil', '--verdict', 'ok', '--comment', 'b',
+    ]);
+
+    // bob views himself: calibration block NOT rendered in text.
+    const selfText = runGate(root, ['voices', 'bob', '--format', 'text'], { GUILD_ACTOR: 'bob' });
+    assert.equal(/calibration/.test(selfText.stdout), false);
+
+    // alice views bob: calibration block IS present (or at least the
+    // footer header renders, even if sample count is low).
+    const viewText = runGate(root, ['voices', 'bob', '--format', 'text'], { GUILD_ACTOR: 'alice' });
+    assert.match(viewText.stdout, /calibration/);
+
+    // JSON path: self-view returns null calibration under the flag.
+    const selfJson = runGate(
+      root,
+      ['voices', 'bob', '--format', 'json', '--with-calibration'],
+      { GUILD_ACTOR: 'bob' },
+    );
+    const payload = JSON.parse(selfJson.stdout);
+    assert.equal(payload.calibration, null);
+  } finally {
+    cleanup();
+  }
+});
+
+test('voices: default JSON shape unchanged (backward compat)', () => {
+  // `--with-calibration` is opt-in; without it, the JSON remains an
+  // array of utterances so existing consumers don't break.
+  const { root, cleanup } = bootstrap();
+  try {
+    runGate(
+      root,
+      ['fast-track', '--from', 'alice', '--action', 'x', '--reason', 'r'],
+      { GUILD_ACTOR: 'alice' },
+    );
+    const { stdout } = runGate(root, ['voices', 'alice', '--format', 'json']);
+    const payload = JSON.parse(stdout);
+    assert.ok(Array.isArray(payload), 'default JSON should still be an array');
+  } finally {
+    cleanup();
+  }
+});
+
+test('voices calibration: samples < 5 reads as "uncalibrated"', () => {
+  // Noise floor: a handful of verdicts isn't signal. Show the count
+  // so a reader sees where we are on the ramp, but don't claim a
+  // status from incomplete data.
+  const { root, cleanup } = bootstrap();
+  try {
+    for (let n = 1; n <= 3; n++) {
+      runGate(
+        root,
+        ['fast-track', '--from', 'alice', '--action', `t${n}`, '--reason', 'r'],
+        { GUILD_ACTOR: 'alice' },
+      );
+      runGate(root, [
+        'review', rid(n), '--by', 'bob', '--lense', 'devil', '--verdict', 'ok', '--comment', 'b',
+      ]);
+    }
+    const { stdout } = runGate(
+      root,
+      ['voices', 'bob', '--format', 'json', '--with-calibration'],
+      { GUILD_ACTOR: 'alice' },
+    );
+    const calib = JSON.parse(stdout).calibration;
+    assert.equal(calib.by_lens.devil.status, 'uncalibrated');
+    assert.equal(calib.by_lens.devil.sample_count, 3);
+    assert.equal(calib.by_lens.devil.alignment, null);
+  } finally {
+    cleanup();
+  }
+});
+
 // ── gate transcript: narrative arc of one request ───────────────
 
 test('transcript: narrative prose names filer, action, executor, reviews', () => {

@@ -176,7 +176,7 @@ Status:
   gate transcript <id> [--format text|json]
                        Narrative prose render of one request's arc,
                        composed from status_log + reviews. Sibling
-                       of `gate show` (structured) and `gate voices`
+                       of 'gate show' (structured) and 'gate voices'
                        (per-actor). JSON mode carries both the
                        narrative and a summary (actors/verdicts/
                        duration_ms) for programmatic consumers.
