@@ -107,6 +107,14 @@ const VERBS: readonly VerbSchema[] = [
         your_recent: { type: 'array' },
         inbox_unread: { type: 'array' },
         last_activity: str,
+        suggested_next: {
+          type: 'object',
+          description:
+            'Advisory — NOT a directive. Orientation-time guidance ' +
+            'about what to do next, derived from queues + open loops. ' +
+            "Read `reason` and override when your judgement differs. " +
+            'Priority is shared with `gate suggest`; both are hints.',
+        },
       },
     },
   },
@@ -134,6 +142,13 @@ const VERBS: readonly VerbSchema[] = [
       properties: {
         suggested_next: {
           type: 'object',
+          description:
+            'Advisory — NOT a directive. Derived deterministically from the ' +
+            "caller's current queues using the same priority ladder as boot. " +
+            "Agents should read `reason` and override when their own " +
+            'judgement differs; a `suggest` loop that dispatches the verb ' +
+            'without reading the reason is treating a heuristic as a ' +
+            'command, which is the shape this field is trying to avoid.',
           properties: {
             verb: str,
             args: { type: 'object' },

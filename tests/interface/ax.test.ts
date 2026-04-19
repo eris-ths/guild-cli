@@ -708,6 +708,61 @@ test('thank --dry-run: preview without persist', () => {
   }
 });
 
+// ── suggested_next advisory semantics ───────────────────────────
+
+test('suggest --format text: advisory footer goes to stderr, stdout stays composable', () => {
+  // Humans scanning the terminal see the reminder that suggested_next
+  // is a heuristic. But `$(gate suggest --format text)` captures
+  // stdout, which must stay clean for shell composition.
+  const { root, cleanup } = bootstrap();
+  try {
+    runGate(
+      root,
+      ['request', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executor', 'bob'],
+      { GUILD_ACTOR: 'alice' },
+    );
+    const { stdout, stderr } = runGate(
+      root,
+      ['suggest', '--format', 'text'],
+      { GUILD_ACTOR: 'bob' },
+    );
+    assert.match(stderr, /advisory/);
+    assert.equal(/advisory/.test(stdout), false);
+    // Stdout still carries the actionable two-line output.
+    assert.match(stdout, /→ approve/);
+  } finally {
+    cleanup();
+  }
+});
+
+test('schema: suggested_next descriptions name the "advisory, not directive" semantic', () => {
+  // This is the durable surface — tool layers reading the schema
+  // get the semantic without parsing the runtime output. Easier to
+  // wire correctly once than to discover through experimentation.
+  const { root, cleanup } = bootstrap();
+  try {
+    const bootSchema = JSON.parse(
+      runGate(root, ['schema', '--verb', 'boot', '--format', 'json']).stdout,
+    );
+    const bootSN =
+      bootSchema.verbs[0].output.properties.suggested_next.description;
+    assert.ok(typeof bootSN === 'string');
+    assert.match(bootSN, /[Aa]dvisory/);
+    assert.match(bootSN, /not a directive|NOT a directive/);
+
+    const suggestSchema = JSON.parse(
+      runGate(root, ['schema', '--verb', 'suggest', '--format', 'json']).stdout,
+    );
+    const suggestSN =
+      suggestSchema.verbs[0].output.properties.suggested_next.description;
+    assert.ok(typeof suggestSN === 'string');
+    assert.match(suggestSN, /[Aa]dvisory/);
+    assert.match(suggestSN, /override/);
+  } finally {
+    cleanup();
+  }
+});
+
 // ── thank integration: utterance stream & transcript fold-in ────
 
 test('thank: appears in gate tail as a directional utterance', () => {
