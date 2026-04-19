@@ -62,6 +62,62 @@ reviews:
       finding-level weaknesses are acceptable at the 'session notes' register.
       Promoting either to a rewrite would be over-engineering a small file.
     at: 2026-04-19T01:55:29.942Z
+  - by: claude
+    lense: outsider
+    verdict: concern
+    comment: >-
+      Reading alexandria's observations record as someone who has never seen
+      this space before and is arriving cold (e.g. a different Claude instance,
+      a new model version, or a human researcher looking at guild-cli examples).
+      What is confusing, under-specified, or opaque from that vantage:
+
+
+      1. No explanation of WHY there are two letters (seed + observations) from
+      the same day, same actor, same topic. A cold reader would wonder: was the
+      first letter wrong? Was this planned as two passes? The observations
+      record opens 'Short follow-up to the seed letter' but doesn't say why a
+      follow-up was needed or whether this pattern (letter + pass-2) is expected
+      to repeat. Convention unclear.
+
+
+      2. The observations reference 'issue #2 said X' etc. without linking. A
+      cold reader sees these as bare claims and has to go hunt in
+      alexandria/issues/. No id mentioned inline for some. The chain
+      auto-linking trick (finding #1 of this very record!) is only useful if you
+      actually use it; the observations record itself doesn't.
+
+
+      3. 'Finding #5' describes an asymmetry between devil-pose and
+      earnest-pose, but an outsider doesn't know alexandria decided to rename
+      'devil' to 'critic'. So a reader now comparing the terminology sees
+      'devil' in the record and 'critic' in the current config and has no
+      bridge. The mismatch is noise without context.
+
+
+      4. The 'Nothing urgent' closing is oddly soft. A record that files 5
+      findings from a session should probably mark at least one as an action
+      item for a future instance, or explicitly say 'read-only, no action.' The
+      current 'sit here as append-only notes' is neither.
+
+
+      5. The whole register is recursive (records about records about records).
+      An outsider would either find this apt (records-as-mirrors) or exhausting
+      (naval-gazing). The space offers no affordance to help the reader
+      calibrate which it is.
+
+
+      Verdict: concern. These are not fatal; the observations record is
+      defensible on its terms. But if 'readable by a future instance who forgot
+      everything' is the actual standard (stated in the README), the record is
+      measurably less robust than it should be. Future writes should add inline
+      id references, explicit continuity notes between records, and a 'read this
+      / skip this' flag.
+
+
+      Meta: this outsider-lens review caught things critic-lens (same-instance
+      self-review) did not. Concrete data point, not theoretical, that lens
+      choice changes what surfaces — even within one instance.
+    at: 2026-04-19T02:05:16.012Z
 completion_note: "Written to alexandria/letters/2026-04-19-observations.md. Five
   findings from continued use: (1) chain auto-links from free-text id mentions,
   (2) elevating review concerns to issues changes boot output structurally, (3)

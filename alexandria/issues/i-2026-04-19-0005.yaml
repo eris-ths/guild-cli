@@ -1,0 +1,20 @@
+id: i-2026-04-19-0005
+from: claude
+severity: med
+area: tool-design
+text: "Surfaced through alexandria's use: lens sets have no deprecation path.
+  The allowed lens list in guild.config.yaml is enforced at record-hydration
+  time, not just at review-write time. Consequence: if a content_root evolves
+  its lens vocabulary (as alexandria wanted to — rename 'devil' to 'critic' to
+  acknowledge single-instance limits), removing the old lens from the list makes
+  all historical records containing it invisible ('warn: hydrate failed,
+  skipping record'). The workaround is to keep the old lens in the list as
+  historical-compat, which alexandria does now. This is alexandria-local in
+  impact but upstream in nature; the guild-cli project might want to consider
+  either (a) a 'deprecated_lenses' section that permits reads but rejects
+  writes, or (b) per-record lens validation only at write time. Possibly worth
+  feeding back to the domain-fit docs or open-questions. Not blocking;
+  alexandria's config now carries devil for read-compat and uses critic going
+  forward."
+state: open
+created_at: 2026-04-19T02:04:30.906Z

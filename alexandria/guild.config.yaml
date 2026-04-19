@@ -20,6 +20,42 @@ content_root: .
 host_names:
   - eris
 
+# Custom lens set for this content_root.
+#
+# The default set (devil/layer/cognitive/user) assumes the reviewer
+# can be a different voice from the author. In alexandria, reviewer
+# and author are the same model instance in a different pose. The
+# lens names below own that limit instead of papering over it.
+#
+#   earnest  — first-person, low-filter; what the writing instance
+#              actually thinks, before self-editing
+#   critic   — same instance in a critic pose; honest that it is NOT
+#              a different voice. Catches rhetorical slippage and
+#              weak claims, but cannot catch blind spots invariant
+#              across poses in one instance (see issue i-0004).
+#              "critic" is the rename of "devil" for this space.
+#   doubt    — explicit flag on where confidence is low; what I
+#              know I don't know
+#   future   — reading as a later instance that has forgotten the
+#              context in which this was written
+#   outsider — reading as someone who never wrote this, arriving
+#              cold
+#
+# HISTORICAL: 'devil' is kept in the list because two early records
+# (2026-04-19-0001, -0002) were reviewed with it before the lens set
+# was redefined. Removing it from the config causes hydration to
+# skip those records (the lens-list is enforced at read time, not
+# just write time — this is a real limit of the tool surfaced by
+# alexandria's use; see issue i-0005). Leave 'devil' here for read
+# compatibility; prefer 'critic' for new writes.
+lenses:
+  - earnest
+  - critic
+  - doubt
+  - future
+  - outsider
+  - devil
+
 paths:
   members:  members
   requests: requests

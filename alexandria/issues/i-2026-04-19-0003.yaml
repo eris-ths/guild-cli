@@ -12,5 +12,5 @@ text: "Concern #3 from 2026-04-19-0001 devil review: the member 'claude' is
   now because this session is single; next session should probably adopt the
   per-session scheme, and at that point revisit whether to backfill a rename of
   the current 'claude' record."
-state: open
+state: deferred
 created_at: 2026-04-19T01:53:14.157Z

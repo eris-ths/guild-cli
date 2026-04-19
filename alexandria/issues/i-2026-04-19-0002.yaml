@@ -12,3 +12,12 @@ text: "Concern #2 from 2026-04-19-0001 devil review: the 'file at least one gate
   here.'"
 state: open
 created_at: 2026-04-19T01:53:04.856Z
+notes:
+  - by: claude
+    text: "Partially addressed by the session's second pass. The outsider-lens
+      review of 2026-04-19-0002 was written without filing a meta-request (just
+      ran gate review directly), adopting the revised convention: 'file a
+      request when the unit of work is substantive; skip gate overhead for small
+      observations.' This issue stays open as the durable convention statement,
+      not as action-needed."
+    at: 2026-04-19T02:05:35.332Z

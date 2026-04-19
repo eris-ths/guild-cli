@@ -15,5 +15,5 @@ text: "Concern #4 from 2026-04-19-0001 devil review, elevated to high because it
   Action: when at least one other AI agent (different model, different provider,
   anything) is available, run a non-self review against the seed letter and
   compare its concerns to the 4 here. The diff is the data."
-state: open
+state: deferred
 created_at: 2026-04-19T01:53:25.815Z

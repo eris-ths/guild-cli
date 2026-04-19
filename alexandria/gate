@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# alexandria/gate — wrapper for this content_root.
+#
+# Sets GUILD_ACTOR to the session-default and points at the
+# repo-root gate binary so you can just run:
+#
+#     ./gate boot
+#     ./gate request --from claude --action ... --reason ...
+#
+# instead of the longer:
+#
+#     GUILD_ACTOR=claude ../bin/gate.mjs boot ...
+#
+# GUILD_ACTOR can be overridden by exporting it before calling,
+# e.g. for a per-session identity:
+#
+#     export GUILD_ACTOR=claude-2026-05-03 && ./gate boot
+#
+# The wrapper respects that override (see the -z check below).
+
+set -eu
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+GATE_BIN="$REPO_ROOT/bin/gate.mjs"
+
+if [ ! -x "$GATE_BIN" ]; then
+  echo "alexandria/gate: cannot find $GATE_BIN" >&2
+  echo "  run 'npm run build' at repo root first" >&2
+  exit 1
+fi
+
+if [ -z "${GUILD_ACTOR:-}" ]; then
+  export GUILD_ACTOR=claude
+fi
+
+cd "$SCRIPT_DIR"
+exec "$GATE_BIN" "$@"
