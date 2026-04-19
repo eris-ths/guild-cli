@@ -91,6 +91,13 @@ lenses:
                 # itself critical of? (test of composition via
                 # naming; if useful, motivates verb-level
                 # support and the first src/ modification)
+  - bury        # counter-move to append-only: marks a record
+                # (or a review within one) as a place the writer
+                # would rather future instances not dwell.
+                # Cannot remove (invariant); can signal. Only
+                # has teeth as corpus — `voices --lense bury`
+                # = "here's where the writer asks you to
+                # skim past"
 
 paths:
   members:  members
