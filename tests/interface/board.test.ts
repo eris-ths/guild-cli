@@ -158,18 +158,41 @@ test('gate board: completed/failed/denied requests do NOT appear on the board', 
   }
 });
 
-test('gate board: empty sections still render their header (board shape is stable)', () => {
+test('gate board: with at least one row in flight, empty sibling sections still render their header', () => {
+  // Shape stability matters when there IS a board to scan; the empty
+  // sibling state still gets a "(none)" so the reader doesn't think
+  // rendering broke. The all-empty case is handled separately below.
   const { root, cleanup } = bootstrap();
   try {
-    // Nothing on the board at all.
+    runGate(
+      root,
+      ['request', '--action', 'lone-pending', '--reason', 'r'],
+      { GUILD_ACTOR: 'eris' },
+    );
     const { stdout } = runGate(root, ['board']);
-    assert.match(stdout, /pending \(0\):/);
+    assert.match(stdout, /pending \(1\):/);
     assert.match(stdout, /approved \(0\):/);
     assert.match(stdout, /executing \(0\):/);
-    // Each empty section shows "(none)" so the reader knows there
-    // are no rows (not that rendering is broken).
+    // The two empty siblings each show "(none)".
     const noneCount = (stdout.match(/\(none\)/g) ?? []).length;
-    assert.equal(noneCount, 3);
+    assert.equal(noneCount, 2);
+  } finally {
+    cleanup();
+  }
+});
+
+test('gate board: all-empty case collapses to a single "no requests in flight." line', () => {
+  // Three back-to-back "(none)" sections were noisy when nothing was
+  // happening (and there is no shape to preserve when everything is
+  // empty). The single collapsed line replaces them; section headers
+  // come back the moment any state has work.
+  const { root, cleanup } = bootstrap();
+  try {
+    const { stdout, status } = runGate(root, ['board']);
+    assert.equal(status, 0);
+    assert.match(stdout, /^no requests in flight\.\s*$/m);
+    assert.equal(/\(none\)/.test(stdout), false);
+    assert.equal(/pending \(/.test(stdout), false);
   } finally {
     cleanup();
   }

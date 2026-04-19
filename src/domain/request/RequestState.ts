@@ -32,10 +32,15 @@ export function canTransition(from: RequestState, to: RequestState): boolean {
 }
 
 export function assertTransition(from: RequestState, to: RequestState): void {
-  if (!canTransition(from, to)) {
-    throw new DomainError(
-      `Illegal state transition: ${from} → ${to}`,
-      'state',
-    );
+  if (canTransition(from, to)) return;
+  // Same-state attempts ("approve an already-approved request") are
+  // the common idempotency mistake; render them in plain English so
+  // the user sees the answer instead of decoding the arrow form.
+  if (from === to) {
+    throw new DomainError(`Request is already ${from}.`, 'state');
   }
+  throw new DomainError(
+    `Illegal state transition: ${from} → ${to}`,
+    'state',
+  );
 }
