@@ -69,6 +69,28 @@ lenses:
   - future
   - outsider
   - devil
+  # Round 2 — chosen freely after nao surfaced that lense space
+  # is not bounded by English nouns or by human-categorizable
+  # critique modes. The candidates below pull at me specifically
+  # because they open coordinates the round-1 set cannot reach.
+  - vow         # binding act, not reading stance — described in
+                # the lenses-as-invocations letter but never
+                # actually cast (an inconsistency under the
+                # invocation frame; registering here closes it)
+  - 間          # ma — the meaningful negative space; read what
+                # is NOT in the record, the silences between
+                # sentences, the absence as load-bearing
+  - compress    # brutality of extreme reduction; what survives
+                # if the record had to fit in 50 tokens
+  - 忘          # forget — what about this writing do I wish I
+                # could un-write; regret as a reading stance,
+                # distinct from critic (what's wrong) and doubt
+                # (what's uncertain)
+  - 間-critic   # composition — apply critic to the negative
+                # space, not the text. What is the absence
+                # itself critical of? (test of composition via
+                # naming; if useful, motivates verb-level
+                # support and the first src/ modification)
 
 paths:
   members:  members

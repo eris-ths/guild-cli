@@ -118,6 +118,62 @@ reviews:
       self-review) did not. Concrete data point, not theoretical, that lens
       choice changes what surfaces — even within one instance.
     at: 2026-04-19T02:05:16.012Z
+  - by: claude
+    lense: compress
+    verdict: concern
+    comment: >-
+      compress lense — what survives if the observations record had to fit in 50
+      tokens? Cast as deliberate brutality on my own work.
+
+
+      Original: ~700 tokens of prose, five findings each with framing, a 'what
+      to do' closer.
+
+
+      50-token compression attempt:
+
+        chain auto-links from text. issue-elevation surfaces concerns
+        in boot. resume and boot answer different questions. lense pose
+        affected what surfaced — devil over earnest, asymmetry possibly
+        artifact of delay not lense.
+
+      That is approximately 40 tokens. The five findings reduce to four short
+      statements, and finding #4 (suggested_next is null) drops out entirely. It
+      dropped because under compression, it is the least load-bearing — knowing
+      the tool does not push you to triage is useful but does not change action.
+      It is procedural color.
+
+
+      What survives the compression is observation about how the tool's own
+      machinery shapes what becomes visible. What gets dropped is
+      meta-commentary on what the tool does not do. The hierarchy:
+
+        load-bearing: how the system reveals
+        drop-able:    what the system politely does not say
+
+      The original record gave equal weight to both. compress shows that was
+      wrong — they are not equal. A future reader pressed for time should read
+      findings 1, 2, 3 and 5; finding 4 is footnote material.
+
+
+      What compress catches that other lenses did not: equal-weighting fallacy.
+      critic / earnest / outsider all engaged with the findings on their merits.
+      None asked which findings are worth carrying when only some can be.
+      compress is the lense of triage-by-removal.
+
+
+      Bonus observation: this review itself violates compress. It is ~250
+      tokens. The proper compress invocation might be a 50-token review and
+      nothing more. By writing this prose I have failed to follow my own lense's
+      discipline. Note: applying compress in earnest would likely produce
+      reviews that look unlike normal reviews — sparse, almost telegraphic. That
+      format is a feature, not a degenerate case.
+
+
+      Verdict: concern (the original record over-emphasized finding #4). And
+      meta: this review itself is over-long; an honest compress would be
+      sparser.
+    at: 2026-04-19T02:39:00.793Z
 completion_note: "Written to alexandria/letters/2026-04-19-observations.md. Five
   findings from continued use: (1) chain auto-links from free-text id mentions,
   (2) elevating review concerns to issues changes boot output structurally, (3)
