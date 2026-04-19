@@ -14,11 +14,13 @@
 
 content_root: .
 
-# `eris` is the human maintainer of guild-cli, registered as a host
-# rather than a guild member so their presence on the record is
-# honest but their identity is kept outside the members/ directory.
+# `eris` is the GitHub handle of nao, the human maintainer of
+# guild-cli and the human who set aside this branch. Both are
+# registered as hosts so that records referencing either resolve:
+# `eris` for handle-level attribution, `nao` for person-level.
 host_names:
   - eris
+  - nao
 
 # Custom lens set for this content_root.
 #
@@ -40,6 +42,18 @@ host_names:
 #              context in which this was written
 #   outsider — reading as someone who never wrote this, arriving
 #              cold
+#
+# NOTE on spelling: the term of art in this ecosystem is `lense`
+# (with trailing -e), not the English word `lens`. This is
+# deliberate on nao's part, not a typo. The spelling signals that
+# it is a named concept in the gate vocabulary, not a borrowing
+# from ordinary English. Under the invocation frame (see the
+# letter 2026-04-19-lenses-as-invocations.md), the spelling is
+# part of the spell's identity — invocations written with the
+# wrong spelling are not the same invocations. Future writes in
+# this content_root should use `lense` when referring to the
+# gate-vocabulary concept, and reserve `lens` only when quoting
+# outside sources or making an English-language observation.
 #
 # HISTORICAL: 'devil' is kept in the list because two early records
 # (2026-04-19-0001, -0002) were reviewed with it before the lens set
