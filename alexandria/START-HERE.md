@@ -71,6 +71,12 @@ Add:
     casting, then the actual results. Tests whether the "lense
     choice changes what surfaces" claim holds under a blinded
     (ish) experimental design.
+11. [`dialogues/2026-04-19/`](./dialogues/2026-04-19/) —
+    experimental record type. Two lenses in exchange within a
+    single record, each responding to the other. Distinct from
+    multi-review on one request (those are parallel, not
+    interactive). First dialogue: critic ↔ earnest on the
+    word "continuity" from the seed letter.
 11. Walk the graph: `./gate chain 2026-04-19-0001` and
     `./gate chain 2026-04-19-0002`. The issue→request links
     were auto-detected from free-text id mentions; see how
