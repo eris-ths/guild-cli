@@ -307,10 +307,10 @@ test('review --dry-run: preview includes new review without persisting', () => {
       ['fast-track', '--from', 'alice', '--action', 'x', '--reason', 'r'],
       { GUILD_ACTOR: 'alice' },
     );
-    // Note: `--dry-run=true` rather than bare `--dry-run`, because the
-    // comment `looks good` that follows would otherwise be consumed as
-    // the flag's value by the generic parser. Explicit-value form is
-    // the documented escape valve (see parseArgs.ts).
+    // Bare `--dry-run` followed by the positional comment `looks good`
+    // works because `dry-run` is listed in KNOWN_BOOLEAN_FLAGS — the
+    // parser won't speculatively consume the next token as the flag's
+    // value. Before that fix this line needed `--dry-run=true`.
     const { stdout, status } = runGate(
       root,
       [
@@ -318,7 +318,7 @@ test('review --dry-run: preview includes new review without persisting', () => {
         '--by', 'bob',
         '--lense', 'devil',
         '--verdict', 'ok',
-        '--dry-run=true',
+        '--dry-run',
         'looks good',
       ],
     );

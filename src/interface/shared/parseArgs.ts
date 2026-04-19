@@ -14,11 +14,35 @@
  * stays boolean-true because the parser can't tell a value-that-
  * happens-to-start-with-dashes apart from a genuine next flag. This
  * is the standard POSIX resolution to that ambiguity.
+ *
+ * Known-boolean flags (KNOWN_BOOLEAN_FLAGS) are NEVER consumed-with-
+ * value: they land as `true` even when followed by a non-dash token.
+ * This closes the footgun where `gate review <id> --dry-run "LGTM"`
+ * quietly read "LGTM" as the dry-run value and silently skipped the
+ * intended boolean. Callers of these flags use `=== true` on the
+ * value anyway, so the old misbehaviour was latent: true intent
+ * dropped on the floor, positional swallowed.
  */
 export interface ParsedArgs {
   readonly options: Readonly<Record<string, string | boolean>>;
   readonly positional: readonly string[];
 }
+
+/**
+ * Flags that are definitionally boolean — they never take a value.
+ * Listed here so the parser doesn't speculatively consume the next
+ * token as their "value" (see docblock above).
+ *
+ * Adding to this list is the right move when a new `--flag` is
+ * documented as boolean-only; forgetting to add it just preserves
+ * the old `--dry-run=true` escape-valve behaviour, not a crash.
+ */
+export const KNOWN_BOOLEAN_FLAGS: ReadonlySet<string> = new Set([
+  'apply',      // gate repair --apply
+  'dry-run',    // write verbs' preview mode
+  'summary',    // gate doctor --summary
+  'unread',     // gate inbox --unread
+]);
 
 export function parseArgs(argv: readonly string[]): ParsedArgs {
   const options: Record<string, string | boolean> = {};
@@ -44,7 +68,11 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       } else {
         const key = token.slice(2);
         const next = argv[i + 1];
-        if (next !== undefined && !next.startsWith('--')) {
+        if (
+          !KNOWN_BOOLEAN_FLAGS.has(key) &&
+          next !== undefined &&
+          !next.startsWith('--')
+        ) {
           options[key] = next;
           i++;
         } else {

@@ -349,9 +349,35 @@ export async function main(argv: readonly string[]): Promise<number> {
       };
       const errObj = payload['error'] as Record<string, unknown>;
       if (e instanceof DomainError && e.field) errObj['field'] = e.field;
+      const code = deriveErrorCode(e);
+      if (code) errObj['code'] = code;
       process.stderr.write(JSON.stringify(payload) + '\n');
     }
     process.stderr.write(`error: ${msg}\n`);
     return 1;
   }
+}
+
+/**
+ * Macro-level error classification for the JSON envelope. Patterns
+ * match the current set of `DomainError` messages so a tool layer
+ * can branch on `code` instead of regex-matching the prose.
+ *
+ * The codes are intentionally coarse (a 4-way fork covers most retry
+ * / escalate decisions): fine-grained differentiation stays in the
+ * `message` + `field` pair.
+ *
+ * Message-pattern derivation rather than a per-throw `code` argument
+ * keeps the change surgical — adding a code later at the throw site
+ * remains compatible; a call that doesn't yet name one still produces
+ * the right classification here.
+ */
+function deriveErrorCode(e: unknown): string | null {
+  if (!(e instanceof Error)) return null;
+  const m = e.message;
+  if (/\bnot found\b/i.test(m)) return 'not_found';
+  if (/\bis already \w+\.?/i.test(m)) return 'already_in_state';
+  if (/illegal state transition/i.test(m)) return 'illegal_transition';
+  if (e instanceof DomainError) return 'validation_error';
+  return null;
 }
