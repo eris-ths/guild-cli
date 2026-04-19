@@ -2,6 +2,7 @@ import { ParsedArgs, optionalOption } from '../../shared/parseArgs.js';
 import { C, loadAllRequestsAsJson, parseOptionalIntOption } from './internal.js';
 import { collectStatus, StatusSummary } from './status.js';
 import { collectUtterances } from '../voices.js';
+import { Request } from '../../../domain/request/Request.js';
 
 /**
  * Next-step hint embedded in boot. Mirrors the SuggestedNext shape
@@ -212,7 +213,12 @@ export async function bootCmd(c: C, args: ParsedArgs): Promise<number> {
     // Diagnostic errored — skip health, keep boot usable.
   }
 
-  const suggestedNext = deriveBootSuggestedNext(actor, role, members);
+  const suggestedNext = deriveBootSuggestedNext(
+    actor,
+    role,
+    members,
+    allRequests,
+  );
 
   const payload: BootPayload = {
     actor,
@@ -257,6 +263,7 @@ function deriveBootSuggestedNext(
   actor: string | null,
   role: BootPayload['role'],
   members: ReadonlyArray<{ name: { value: string } }>,
+  allRequests: ReadonlyArray<Request>,
 ): BootSuggestedNext | null {
   if (actor === null) {
     if (members.length === 0) {
@@ -289,6 +296,85 @@ function deriveBootSuggestedNext(
         `Run gate register --name ${actor} to create the member file.`,
     };
   }
+  // Known actor: pick the most actionable open loop. Priority reflects
+  // "which one would surprise the agent most if missed":
+  //   1. Executing-by-me  → mid-flight work; resume/close it first
+  //   2. Unreviewed mine  → others are blocked on our verdict
+  //   3. Approved for me  → warm queue, ready to start
+  // Stops at the first match so the agent gets ONE verb to call next.
+  // The other loops remain visible via status counts.
+  const actorLower = actor.toLowerCase();
+
+  const executingMine = allRequests.find(
+    (r) =>
+      r.state === 'executing' &&
+      (r.executor?.value === actorLower || r.from.value === actorLower),
+  );
+  if (executingMine) {
+    return {
+      verb: 'complete',
+      args: { id: executingMine.id.value, by: actor },
+      reason:
+        `you are executing ${executingMine.id.value} — ` +
+        `complete it (or 'gate fail <id> --reason <s>' if it can't land).`,
+    };
+  }
+
+  const unreviewedMine = allRequests.find(
+    (r) =>
+      r.state === 'completed' &&
+      r.autoReview?.value === actorLower &&
+      r.reviews.length === 0,
+  );
+  if (unreviewedMine) {
+    return {
+      verb: 'review',
+      args: {
+        id: unreviewedMine.id.value,
+        by: actor,
+        lense: 'devil',
+      },
+      reason:
+        `${unreviewedMine.id.value} completed with auto-review assigned to ` +
+        `you; pick --verdict <ok|concern|reject> and --comment after reading ` +
+        `the work.`,
+    };
+  }
+
+  const approvedForMe = allRequests.find(
+    (r) => r.state === 'approved' && r.executor?.value === actorLower,
+  );
+  if (approvedForMe) {
+    return {
+      verb: 'execute',
+      args: { id: approvedForMe.id.value, by: actor },
+      reason:
+        `${approvedForMe.id.value} is approved and names you as executor — ` +
+        `start the work (gate execute), then complete/fail when done.`,
+    };
+  }
+
+  // Pending-as-executor: someone queued work for me but it still needs
+  // approval. Any registered actor can approve (author-approval gets
+  // the self-approval notice; third-party approval is the clean case).
+  // Suggest it so the agent sees the bottleneck instead of sitting.
+  const pendingAsExecutor = allRequests.find(
+    (r) =>
+      r.state === 'pending' &&
+      r.executor?.value === actorLower &&
+      r.from.value !== actorLower,
+  );
+  if (pendingAsExecutor) {
+    return {
+      verb: 'approve',
+      args: { id: pendingAsExecutor.id.value, by: actor },
+      reason:
+        `${pendingAsExecutor.id.value} is pending and names you as executor ` +
+        `(authored by ${pendingAsExecutor.from.value}); approve it to unblock, ` +
+        `or deny with --reason if it shouldn't proceed.`,
+    };
+  }
+
   return null;
 }
 

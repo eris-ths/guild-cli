@@ -3,7 +3,14 @@ import {
   requireOption,
   optionalOption,
 } from '../../shared/parseArgs.js';
-import { C, readStdin, readCommentViaEditor, resolveInvokedBy } from './internal.js';
+import {
+  C,
+  readStdin,
+  readCommentViaEditor,
+  resolveInvokedBy,
+  isDryRun,
+  emitDryRunPreview,
+} from './internal.js';
 import { emitWriteResponse, parseFormat } from './writeFormat.js';
 
 export async function reqReview(c: C, args: ParsedArgs): Promise<number> {
@@ -60,6 +67,21 @@ export async function reqReview(c: C, args: ParsedArgs): Promise<number> {
   }
 
   const invokedBy = resolveInvokedBy(by, 'review', id);
+  if (isDryRun(args)) {
+    const updated = await c.requestUC.review({
+      id,
+      by,
+      lense,
+      verdict,
+      comment,
+      ...(invokedBy !== undefined ? { invokedBy } : {}),
+      dryRun: true,
+    });
+    // Review doesn't transition state — omit would_transition, let
+    // the preview payload carry the new review entry in `reviews`.
+    emitDryRunPreview({ verb: 'review', id, by, after: updated });
+    return 0;
+  }
   const updated = await c.requestUC.review({
     id,
     by,

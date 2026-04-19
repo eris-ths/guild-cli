@@ -137,11 +137,12 @@ export class RequestUseCases {
     by: string,
     note?: string,
     invokedBy?: string,
+    opts?: { dryRun?: boolean },
   ): Promise<Request> {
     const req = await this.loadOrThrow(id);
     const actor = await assertActor(by, '--by', this.deps.members);
     req.approve(actor, note, invokedBy);
-    await this.deps.requests.save(req);
+    if (!opts?.dryRun) await this.deps.requests.save(req);
     return req;
   }
 
@@ -150,11 +151,12 @@ export class RequestUseCases {
     by: string,
     reason: string,
     invokedBy?: string,
+    opts?: { dryRun?: boolean },
   ): Promise<Request> {
     const req = await this.loadOrThrow(id);
     const actor = await assertActor(by, '--by', this.deps.members);
     req.deny(actor, reason, invokedBy);
-    await this.deps.requests.save(req);
+    if (!opts?.dryRun) await this.deps.requests.save(req);
     return req;
   }
 
@@ -163,11 +165,12 @@ export class RequestUseCases {
     by: string,
     note?: string,
     invokedBy?: string,
+    opts?: { dryRun?: boolean },
   ): Promise<Request> {
     const req = await this.loadOrThrow(id);
     const actor = await assertActor(by, '--by', this.deps.members);
     req.execute(actor, note, invokedBy);
-    await this.deps.requests.save(req);
+    if (!opts?.dryRun) await this.deps.requests.save(req);
     return req;
   }
 
@@ -176,11 +179,12 @@ export class RequestUseCases {
     by: string,
     note?: string,
     invokedBy?: string,
+    opts?: { dryRun?: boolean },
   ): Promise<Request> {
     const req = await this.loadOrThrow(id);
     const actor = await assertActor(by, '--by', this.deps.members);
     req.complete(actor, note, invokedBy);
-    await this.deps.requests.save(req);
+    if (!opts?.dryRun) await this.deps.requests.save(req);
     return req;
   }
 
@@ -189,11 +193,12 @@ export class RequestUseCases {
     by: string,
     reason: string,
     invokedBy?: string,
+    opts?: { dryRun?: boolean },
   ): Promise<Request> {
     const req = await this.loadOrThrow(id);
     const actor = await assertActor(by, '--by', this.deps.members);
     req.fail(actor, reason, invokedBy);
-    await this.deps.requests.save(req);
+    if (!opts?.dryRun) await this.deps.requests.save(req);
     return req;
   }
 
@@ -204,6 +209,7 @@ export class RequestUseCases {
     verdict: string;
     comment: string;
     invokedBy?: string;
+    dryRun?: boolean;
   }): Promise<Request> {
     const req = await this.loadOrThrow(input.id);
     await assertActor(input.by, '--by', this.deps.members);
@@ -217,7 +223,7 @@ export class RequestUseCases {
       ...(this.deps.allowedLenses ? { allowedLenses: this.deps.allowedLenses } : {}),
     });
     req.addReview(review);
-    await this.deps.requests.save(req);
+    if (!input.dryRun) await this.deps.requests.save(req);
     return req;
   }
 

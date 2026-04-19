@@ -103,6 +103,64 @@ export function resolveInvokedBy(
 }
 
 /**
+ * Shared --dry-run detector for write verbs. Accepted as `--dry-run`
+ * or `--dry-run=true`. Anything else (missing, or explicit `=false`)
+ * returns false.
+ *
+ * The agent use case: "what would this command do?" before committing.
+ * Humans can try-undo; agents lack that affordance and benefit from a
+ * safe preview. Repair already has --apply vs --dry-run; this extends
+ * the same contract to the state-transition verbs.
+ */
+export function isDryRun(args: ParsedArgs): boolean {
+  const v = args.options['dry-run'];
+  if (v === true) return true;
+  if (typeof v === 'string' && v.toLowerCase() === 'true') return true;
+  return false;
+}
+
+/**
+ * Emit a dry-run preview envelope on stdout (JSON only — text callers
+ * already have `gate show` for inspection, and the preview is mostly
+ * an agent-facing affordance).
+ *
+ * Shape:
+ *   {
+ *     "dry_run": true,
+ *     "verb": "approve",
+ *     "id": "...",
+ *     "by": "...",
+ *     "would_transition": {"from": "pending", "to": "approved"},
+ *     "preview": { full request JSON post-mutation, NOT persisted }
+ *   }
+ *
+ * `would_transition` is omitted when the verb doesn't cross states
+ * (review). `preview` always reflects the unsaved in-memory object
+ * so the caller sees exactly what would land if they dropped
+ * `--dry-run`.
+ */
+export function emitDryRunPreview(p: {
+  verb: string;
+  id: string;
+  by: string;
+  fromState?: string;
+  toState?: string;
+  after: { toJSON(): Record<string, unknown> };
+}): void {
+  const envelope: Record<string, unknown> = {
+    dry_run: true,
+    verb: p.verb,
+    id: p.id,
+    by: p.by,
+  };
+  if (p.fromState !== undefined && p.toState !== undefined) {
+    envelope['would_transition'] = { from: p.fromState, to: p.toState };
+  }
+  envelope['preview'] = p.after.toJSON();
+  process.stdout.write(JSON.stringify(envelope, null, 2) + '\n');
+}
+
+/**
  * Surface the same misconfigured-cwd hint that `gate boot` emits, so
  * `gate status` / `gate doctor` users (the most common first commands)
  * also notice when they're sitting in the wrong directory. Stays on

@@ -76,9 +76,22 @@ export async function boardCmd(c: C, args: ParsedArgs): Promise<number> {
     // Plain object keyed by state name in lifecycle order. Stable
     // key set (pending/approved/executing) across calls; consumers
     // can rely on all three being present even when empty.
+    //
+    // `_meta.filter` echoes any scoping that was applied so a JSON
+    // consumer sees what the stderr notice shows to humans. Without
+    // it, an agent piping stdout has no way to tell "empty because
+    // filtered" from "empty because nothing in flight".
     const payload: Record<string, unknown> = {};
     for (const { state, items } of sections) {
       payload[state] = items.map((r) => r.toJSON());
+    }
+    if (forFilter !== undefined) {
+      payload['_meta'] = {
+        filter: {
+          actor: forFilter,
+          source: explicitFor !== undefined ? '--for' : 'GUILD_ACTOR',
+        },
+      };
     }
     process.stdout.write(JSON.stringify(payload, null, 2) + '\n');
     return 0;

@@ -66,20 +66,27 @@ Requests:
                        executing, grouped by state.
   gate list --state <state> [--for <m>] [--from <m>]
                             [--executor <m>] [--auto-review <m>]
-  gate show <id> [--format json|text]          (default: json)
+  gate show <id> [--format json|text] [--fields k1,k2,...]
+                       --fields trims the JSON payload to just the
+                       requested keys (agent-facing; JSON only).
   gate voices <name> [--lense <l>] [--verdict <v>] [--limit <N>]
                      [--format json|text]          (default: json)
   gate tail [N]                                   (default 20)
   gate whoami                                     (needs GUILD_ACTOR)
   gate chain <id>                                 (request or issue;
                                                    forward refs + inbound)
-  gate approve <id> --by <m> [--note <s>]
-  gate deny <id> --by <m> [--note <s> | --reason <s> | <reason>]
-  gate execute <id> --by <m> [--note <s>]
-  gate complete <id> --by <m> [--note <s>]
-  gate fail <id> --by <m> [--note <s> | --reason <s> | <reason>]
+  gate approve <id> --by <m> [--note <s>] [--dry-run]
+  gate deny <id> --by <m> [--note <s> | --reason <s> | <reason>] [--dry-run]
+  gate execute <id> --by <m> [--note <s>] [--dry-run]
+  gate complete <id> --by <m> [--note <s>] [--dry-run]
+  gate fail <id> --by <m> [--note <s> | --reason <s> | <reason>] [--dry-run]
   gate review <id> --by <m> --lense <l> --verdict <v>
-                   [--comment <s> | --comment - | <comment>]
+                   [--comment <s> | --comment - | <comment>] [--dry-run]
+                       --dry-run on any write verb above emits a
+                       preview JSON envelope (dry_run/verb/would_
+                       transition/preview) without persisting. Use
+                       --dry-run=true if followed by a non-dash
+                       positional (see "Values beginning with '--'").
   gate fast-track --from <m> --action <a> --reason <r>
                   [--executor <m>] [--auto-review <m>] [--note <s>]
                   [--with <n1>[,<n2>...]]
@@ -326,6 +333,24 @@ export async function main(argv: readonly string[]): Promise<number> {
       : e instanceof Error
         ? e.message
         : String(e);
+    // When the caller asked for JSON output, mirror the error on
+    // stderr as a JSON envelope so a tool layer doesn't have to run
+    // two parsers (one on stdout JSON, one on stderr text). The
+    // human-readable `error: …` line still goes out too — pipelines
+    // that ignore stderr keep working, and humans reading the
+    // terminal still get a scannable message at the top.
+    if (args.options['format'] === 'json') {
+      const payload: Record<string, unknown> = {
+        ok: false,
+        error: {
+          message:
+            e instanceof DomainError ? e.message : msg,
+        },
+      };
+      const errObj = payload['error'] as Record<string, unknown>;
+      if (e instanceof DomainError && e.field) errObj['field'] = e.field;
+      process.stderr.write(JSON.stringify(payload) + '\n');
+    }
     process.stderr.write(`error: ${msg}\n`);
     return 1;
   }
