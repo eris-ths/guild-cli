@@ -17,7 +17,7 @@ members):
 
 ```bash
 mkdir -p /tmp/gate-sandbox && cd /tmp/gate-sandbox
-cp /path/to/guild-cli/guild.config.yaml.example guild.config.yaml
+cp /path/to/guild-cli/examples/quick-start/guild.config.yaml guild.config.yaml
 mkdir members requests issues inbox
 export GATE=/path/to/guild-cli/bin/gate.mjs
 ```

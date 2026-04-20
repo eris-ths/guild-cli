@@ -9,7 +9,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "test": "tsc && node scripts/run-tests.mjs",
+    "test": "tsc && node tests/run.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
