@@ -8,6 +8,22 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 ## [Unreleased]
 
 ### Fixed
+- **`save()` no longer throws spurious `RequestVersionConflict` on
+  records carrying legacy stateless `status_log` entries.** `hydrate`
+  skips status_log rows whose `state` field is missing (an older
+  format wrote review notes that way), but `readVersion` was counting
+  those rows from the raw YAML — so `loadedVersion` (from the hydrated
+  aggregate) lagged `maxOnDisk` (from the raw count) by exactly the
+  number of skipped entries. Every save() on such a record then threw
+  `RequestVersionConflict` even when no concurrent writer existed.
+  Surfaced by `gate thank` against any reviews ≥ 1 request whose
+  status_log carried a legacy review-note row — the verb only touches
+  `thanks[]`, so the version drift wasn't masked by a real
+  status_log/reviews delta. Same shape as the earlier
+  "`Custom lenses no longer break listAll-backed read verbs`" fix
+  (read-path skip rule out of sync with raw count). One-line behavior
+  fix; regression test injects the legacy shape and runs `addThank` →
+  `save()` round-trip.
 - **`unresponded_concerns` no longer counts pre-dating mentions as
   follow-ups.** `UnrespondedConcernsQuery.hasFollowUp` was checking
   "does any authored record mention this id?" without a temporal
