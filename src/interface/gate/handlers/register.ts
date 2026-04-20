@@ -9,8 +9,8 @@ import { parseMemberCategory } from '../../../domain/member/MemberCategory.js';
  * Register a new member in the content_root. One-shot onboarding:
  * before this verb existed, an agent encountering gate for the
  * first time had to hand-author YAML under `members/<name>.yaml`,
- * figure out the schema from `members.example/`, and then still
- * risk a typo. Now: one command.
+ * figure out the schema from `examples/quick-start/members/`, and
+ * then still risk a typo. Now: one command.
  *
  * Design intent — "initial registration must be frictionless":
  *   - `--category` defaults to `professional` (the right bucket
