@@ -378,3 +378,65 @@ test('save() does not throw spurious VersionConflict on records with legacy stat
     cleanup();
   }
 });
+
+test('save() does not throw spurious VersionConflict when reviews carries non-object entries', async () => {
+  // Class-closure regression guard for the same shape as the
+  // legacy-stateless-status_log case above. hydrate() drops review
+  // entries that are not objects (loose-shape YAML, legacy import,
+  // hand-edited file), but readVersion() used to count the raw
+  // length. This created an identical loadedVersion vs maxOnDisk
+  // drift on a different field. Surfaced by a noir-lens devil
+  // review on the status_log fix that asked whether "any hydrate
+  // skip rule ↔ counter mismatch" was closed as a class, not just
+  // the one instance.
+  const { root, cfg, repo, cleanup } = makeRoot();
+  try {
+    const req = await createSaved(repo, 1);
+    const path = join(
+      root,
+      'requests',
+      'pending',
+      `${req.id.value}.yaml`,
+    );
+    const doc = YAML.parse(readFileSync(path, 'utf8')) as Record<
+      string,
+      unknown
+    >;
+    // Inject a non-object review entry alongside a real one. hydrate
+    // skips the string; raw count would include it.
+    doc['reviews'] = [
+      'malformed-non-object-entry',
+      {
+        by: 'human',
+        lense: 'devil',
+        verdict: 'concern',
+        comment: 'real review next to a malformed sibling',
+        at: '2026-04-16T00:00:01Z',
+      },
+    ];
+    writeFileSync(path, YAML.stringify(doc));
+
+    const reloaded = await repo.findById(RequestId.of(req.id.value));
+    assert.ok(reloaded);
+    // hydrate drops the string, keeps the object → reviews.length=1.
+    assert.equal(reloaded!.reviews.length, 1);
+    // statusLog=1 (created entry), reviews=1, version=2.
+    assert.equal(reloaded!.loadedVersion, 2);
+
+    // Pre-fix, addThank+save would raise VersionConflict (expected 2,
+    // found 3) because raw count saw the malformed string.
+    const thank = (await import(
+      '../../src/domain/request/Thank.js'
+    )).Thank.create({
+      by: 'alice',
+      to: 'human',
+      at: '2026-04-16T00:00:02Z',
+      reason: 'reviews-non-object class-closure regression',
+    });
+    reloaded!.addThank(thank);
+    await repo.save(reloaded!); // must not throw
+    cfg;
+  } finally {
+    cleanup();
+  }
+});

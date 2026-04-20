@@ -24,6 +24,20 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
   code, not buried under `docs/`. Doc / code refs follow the moves.
 
 ### Fixed
+- **`save()` no longer throws spurious `RequestVersionConflict` when
+  `reviews` carries non-object entries.** Class-closure follow-up to
+  the prior `status_log` fix below. `hydrate()` silently drops review
+  entries that aren't objects (a loose-shape input rare in normal
+  write paths but possible from hand-edited or imported YAML); the
+  earlier `readVersion()` patch only filtered `status_log`, leaving
+  the same drift on `reviews`. Both arrays now share one
+  `isObjectEntry` guard so the structural symmetry is visible at the
+  call site, and adding a future skip rule on either side forces the
+  corresponding filter here. Surfaced by a noir-lens devil review on
+  the prior fix that asked whether "any hydrate skip rule ↔ counter
+  mismatch" was closed as a class, not just at one site. Regression
+  test injects a non-object review entry alongside a real one and
+  verifies `addThank` + `save()` no longer raise `VersionConflict`.
 - **`save()` no longer throws spurious `RequestVersionConflict` on
   records carrying legacy stateless `status_log` entries.** `hydrate`
   skips status_log rows whose `state` field is missing (an older
