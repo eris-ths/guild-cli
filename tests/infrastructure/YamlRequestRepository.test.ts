@@ -310,3 +310,71 @@ test('listByState passes config.lenses to hydrate (custom lens YAML round-trips)
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('save() does not throw spurious VersionConflict on records with legacy stateless status_log entries', async () => {
+  // Regression guard: hydrate() skips status_log entries whose
+  // `state` field is missing (e.g., a review-note row written by an
+  // older format). readVersion() used to count those entries from
+  // the raw YAML, so loadedVersion (from the hydrated aggregate)
+  // and maxOnDisk (from raw count) drifted by exactly the number
+  // of skipped entries — every save() on such a record then threw
+  // RequestVersionConflict even though no concurrent writer existed.
+  // Surfaced by `gate thank` against any reviews>=1 request whose
+  // status_log carried a legacy review-note entry.
+  const { root, cfg, repo, cleanup } = makeRoot();
+  try {
+    const req = await createSaved(repo, 1);
+    const path = join(
+      root,
+      'requests',
+      'pending',
+      `${req.id.value}.yaml`,
+    );
+    const doc = YAML.parse(readFileSync(path, 'utf8')) as Record<
+      string,
+      unknown
+    >;
+    // Inject the legacy shape: a review row in status_log without
+    // a `state` field (review-note flavor).
+    (doc['status_log'] as unknown[]).push({
+      by: 'human',
+      at: '2026-04-16T00:00:01Z',
+      note: 'review (concern, lense: devil): legacy review-note row',
+    });
+    // Plus a real review entry so reviews.length=1.
+    doc['reviews'] = [
+      {
+        by: 'human',
+        lense: 'devil',
+        verdict: 'concern',
+        comment: 'legacy companion review',
+        at: '2026-04-16T00:00:01Z',
+      },
+    ];
+    writeFileSync(path, YAML.stringify(doc));
+
+    const reloaded = await repo.findById(RequestId.of(req.id.value));
+    assert.ok(reloaded);
+    // Hydrated aggregate drops the stateless row → statusLog.length=1,
+    // reviews.length=1, loadedVersion=2.
+    assert.equal(reloaded!.statusLog.length, 1);
+    assert.equal(reloaded!.reviews.length, 1);
+    assert.equal(reloaded!.loadedVersion, 2);
+
+    // Touch a non-status_log/reviews field path: addThank.
+    // Pre-fix, this threw RequestVersionConflict (expected 2, found 3).
+    const thank = (await import(
+      '../../src/domain/request/Thank.js'
+    )).Thank.create({
+      by: 'alice',
+      to: 'human',
+      at: '2026-04-16T00:00:02Z',
+      reason: 'legacy-version regression',
+    });
+    reloaded!.addThank(thank);
+    await repo.save(reloaded!); // must not throw
+    cfg; // keep makeRoot's cfg referenced
+  } finally {
+    cleanup();
+  }
+});
