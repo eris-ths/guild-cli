@@ -11,8 +11,9 @@
 > when a specific verb starts behaving in a way that surprises you —
 > this cookbook is organized around those surprises.
 >
-> If a verb is missing here, see [`README.md` § Two CLIs](../README.md#two-clis)
-> for the full signature list.
+> If a verb is missing here, see [`AGENT.md`](../AGENT.md) for the
+> full signature list (the agent quick reference carries every verb,
+> state machine, and config field).
 
 ---
 
