@@ -190,23 +190,26 @@ export class YamlRequestRepository implements RequestRepository {
 function readVersion(parsed: unknown): number {
   if (!parsed || typeof parsed !== 'object') return 0;
   const obj = parsed as Record<string, unknown>;
-  // Match hydrate()'s skip rule: legacy status_log entries that
-  // omit `state` (e.g., review notes from older formats) are dropped
-  // during hydration. If we count them here, loadedVersion (from the
-  // hydrated aggregate) lags maxOnDisk (from raw YAML) by exactly
-  // the number of such entries — making every save() throw
-  // RequestVersionConflict on a record that nobody else is touching.
-  // Surfaced when adding `gate thank` to a request whose status_log
-  // carries a legacy review-note entry.
+  // Class invariant: every partial-skip rule in hydrate() must have
+  // a matching filter here, or loadedVersion (from the hydrated
+  // aggregate) drifts from maxOnDisk (from raw YAML) by exactly the
+  // skipped count, throwing RequestVersionConflict on records nobody
+  // else is touching. The status_log case was surfaced by `gate thank`
+  // against a record carrying a legacy stateless row; the reviews
+  // case is structurally identical (hydrate skips non-object review
+  // entries silently) even though the loose-shape input is rare in
+  // normal write paths. Both filtered for class closure rather than
+  // single-instance fix.
+  const isObjectEntry = (e: unknown): e is Record<string, unknown> =>
+    e !== null && typeof e === 'object';
   const log = Array.isArray(obj['status_log'])
     ? (obj['status_log'] as unknown[]).filter(
-        (e) =>
-          e !== null &&
-          typeof e === 'object' &&
-          typeof (e as Record<string, unknown>)['state'] === 'string',
+        (e) => isObjectEntry(e) && typeof e['state'] === 'string',
       ).length
     : 0;
-  const reviews = Array.isArray(obj['reviews']) ? obj['reviews'].length : 0;
+  const reviews = Array.isArray(obj['reviews'])
+    ? (obj['reviews'] as unknown[]).filter(isObjectEntry).length
+    : 0;
   return computeVersion(log, reviews);
 }
 
