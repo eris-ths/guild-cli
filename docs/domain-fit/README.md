@@ -56,7 +56,7 @@ pronouncement.
 - [`docs/verbs.md`](../verbs.md) — the per-verb reference.
   `domain-fit/conventions` shows the verbs in action across
   domains; it's the "how to compose them" side of the same story.
-- [`POLICY.md`](../../POLICY.md) — versioning + invariants.
+- [`POLICY.md`](../POLICY.md) — versioning + invariants.
   Anything in `domain-fit/` that graduates into a hard design
   decision should move into `POLICY.md` or a real design doc.
 

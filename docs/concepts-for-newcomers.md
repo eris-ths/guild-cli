@@ -87,7 +87,7 @@ The documentation is layered. **Stop at whichever layer is enough for what you'r
 | You want design rationale + first-time setup | [README.md](../README.md) | 30 min |
 | You want to see a real multi-actor session | [examples/dogfood-session/](../examples/dogfood-session/) | 15 min |
 | You want deeper per-verb notes and surprises | [docs/verbs.md](./verbs.md) | 1 hour |
-| You're embedding guild-cli as a library | [POLICY.md](../POLICY.md) (stable surface) | when needed |
+| You're embedding guild-cli as a library | [POLICY.md](./POLICY.md) (stable surface) | when needed |
 | You're operating it in a sensitive context | [SECURITY.md](../SECURITY.md) (threat model) | when needed |
 
 A 30-second pitch plus one `gate boot` is often enough to start being productive. The rest is available when the moment calls for it.

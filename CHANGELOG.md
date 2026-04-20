@@ -7,6 +7,22 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 
 ## [Unreleased]
 
+### Changed
+- **README minimized; the repo's top-level surface is the entrance,
+  and the entrance should be small.** README dropped from 478 to ~96
+  lines: the depth ladder + a one-line link to `lore/` are the load-
+  bearing parts. The verb cookbook, configuration block, file-layout
+  diagram, state-machine diagrams, "what this tool does NOT do" list,
+  and tests-detail block were redundant against `AGENT.md` /
+  `docs/verbs.md` and now defer to those files. Top-level git tree
+  shrank from 22 to 18 entries: `POLICY.md` → `docs/POLICY.md`,
+  `guild.config.yaml.example` + `members.example/` →
+  `examples/quick-start/`, `scripts/run-tests.mjs` → `tests/run.mjs`.
+  GitHub-conventional files (`README.md`, `LICENSE`, `SECURITY.md`,
+  `CHANGELOG.md`, `.github/`) untouched. `lore/` stays at top so
+  ls-ing the repo surfaces the load-bearing thinking next to the
+  code, not buried under `docs/`. Doc / code refs follow the moves.
+
 ### Fixed
 - **`save()` no longer throws spurious `RequestVersionConflict` when
   `reviews` carries non-object entries.** Class-closure follow-up to
