@@ -190,7 +190,22 @@ export class YamlRequestRepository implements RequestRepository {
 function readVersion(parsed: unknown): number {
   if (!parsed || typeof parsed !== 'object') return 0;
   const obj = parsed as Record<string, unknown>;
-  const log = Array.isArray(obj['status_log']) ? obj['status_log'].length : 0;
+  // Match hydrate()'s skip rule: legacy status_log entries that
+  // omit `state` (e.g., review notes from older formats) are dropped
+  // during hydration. If we count them here, loadedVersion (from the
+  // hydrated aggregate) lags maxOnDisk (from raw YAML) by exactly
+  // the number of such entries — making every save() throw
+  // RequestVersionConflict on a record that nobody else is touching.
+  // Surfaced when adding `gate thank` to a request whose status_log
+  // carries a legacy review-note entry.
+  const log = Array.isArray(obj['status_log'])
+    ? (obj['status_log'] as unknown[]).filter(
+        (e) =>
+          e !== null &&
+          typeof e === 'object' &&
+          typeof (e as Record<string, unknown>)['state'] === 'string',
+      ).length
+    : 0;
   const reviews = Array.isArray(obj['reviews']) ? obj['reviews'].length : 0;
   return computeVersion(log, reviews);
 }
