@@ -84,7 +84,8 @@ The documentation is layered. **Stop at whichever layer is enough for what you'r
 | Next step | File | Time |
 |-----------|------|------|
 | You're an AI agent about to run `gate` | [AGENT.md](../AGENT.md) | 10 min |
-| You want design rationale + first-time setup | [README.md](../README.md) | 30 min |
+| You want the design's load-bearing ideas, named | [lore/principles/](../lore/principles/) | 5–10 min |
+| You want the entrance + how-to-install | [README.md](../README.md) | 5 min |
 | You want to see a real multi-actor session | [examples/dogfood-session/](../examples/dogfood-session/) | 15 min |
 | You want deeper per-verb notes and surprises | [docs/verbs.md](./verbs.md) | 1 hour |
 | You're embedding guild-cli as a library | [POLICY.md](./POLICY.md) (stable surface) | when needed |
