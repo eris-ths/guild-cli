@@ -1,6 +1,7 @@
 import {
   ParsedArgs,
   optionalOption,
+  rejectUnknownFlags,
 } from '../../shared/parseArgs.js';
 import { parseLense } from '../../../domain/shared/Lense.js';
 import { parseVerdict } from '../../../domain/shared/Verdict.js';
@@ -138,7 +139,16 @@ export async function reqVoices(c: C, args: ParsedArgs): Promise<number> {
   return 0;
 }
 
+const TAIL_KNOWN_FLAGS: ReadonlySet<string> = new Set(['limit']);
+
 export async function reqTail(c: C, args: ParsedArgs): Promise<number> {
+  // Strict-reject unknown flags. `gate tail` has a small surface
+  // (positional N + --limit); typos like `--from noir` would otherwise
+  // be silently ignored and the caller would read "unfiltered" as
+  // "filtered" — exactly the fail-open pattern we want surfaced.
+  // Pilot opt-in: other verbs migrate individually in follow-up PRs.
+  rejectUnknownFlags(args, TAIL_KNOWN_FLAGS, 'tail');
+
   let n: number | undefined;
   const positional = args.positional[0];
   if (positional !== undefined) {
