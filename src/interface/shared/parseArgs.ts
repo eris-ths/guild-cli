@@ -127,3 +127,36 @@ export function optionalOption(
   }
   return undefined;
 }
+
+/**
+ * Reject any --flag not in the verb's known set.
+ *
+ * The parser itself is intentionally permissive (a user may alias in
+ * future flags without the parser crashing). Permissiveness at the
+ * parser layer is appropriate; silently ignoring an unknown flag at
+ * the *verb* layer is not — the caller typed `--from noir` expecting
+ * it to do something, and got a result that looked like success.
+ *
+ * Callers pass their full known set (string flags + boolean flags +
+ * flags that `requireOption`/`optionalOption` will read). Unknown
+ * flags throw a usage error naming what was used and what is valid.
+ * This is the strict variant each verb opts into — opting-in is how
+ * existing verbs migrate without risk.
+ */
+export function rejectUnknownFlags(
+  args: ParsedArgs,
+  known: ReadonlySet<string>,
+  verb: string,
+): void {
+  const unknown: string[] = [];
+  for (const key of Object.keys(args.options)) {
+    if (!known.has(key)) unknown.push(key);
+  }
+  if (unknown.length === 0) return;
+  const knownList = [...known].sort().map((k) => `--${k}`).join(', ');
+  const badList = unknown.sort().map((k) => `--${k}`).join(', ');
+  throw new Error(
+    `gate ${verb}: unknown flag${unknown.length === 1 ? '' : 's'}: ${badList}\n` +
+      `  valid flags for '${verb}': ${knownList}`,
+  );
+}
