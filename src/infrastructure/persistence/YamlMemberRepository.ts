@@ -3,7 +3,6 @@ import { Member } from '../../domain/member/Member.js';
 import { MemberName } from '../../domain/member/MemberName.js';
 import { MemberRepository } from '../../application/ports/MemberRepository.js';
 import {
-  assertUnder,
   existsSafe,
   listDirSafe,
   readTextSafe,
@@ -106,6 +105,3 @@ function hydrate(
     return null;
   }
 }
-
-// Silence unused import warning
-void assertUnder;

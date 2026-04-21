@@ -737,6 +737,134 @@ vs intervention. You can always run `gate doctor` without fear of
 side effects. This mirrors the `silent_fail_taxonomy` principle:
 separate the "what's wrong" from the "what to do about it."
 
+### Board: what's in flight
+
+`gate board` shows the non-terminal subset of the request corpus
+in a single view — pending, approved, and executing, stacked in
+lifecycle order:
+
+```
+$ gate board
+── pending (2) ──────────────────────────
+  2026-04-19-0003  [alice] implement caching layer
+  2026-04-19-0004  [bob]   update API docs
+
+── approved (1) ─────────────────────────
+  2026-04-19-0002  [alice] refactor auth module   executor=bob
+
+── executing (1) ────────────────────────
+  2026-04-19-0001  [bob]   add rate limiting      executor=bob ✓devil
+```
+
+`--for <m>` scopes to the actor's requests. When `GUILD_ACTOR`
+is set, filtering is implicit (with a stderr notice). JSON
+output via `--format json`.
+
+**Design note.** Board excludes terminal states and issues.
+"In flight" means "someone could still act on this." Closed
+records belong to `tail` / `voices` / `show`.
+
+### Register: onboarding in one command
+
+Before `register`, a first-time agent had to hand-author YAML.
+Now:
+
+```
+$ gate register --name claude --category professional
+✓ registered: claude (professional)
+```
+
+- `--category` defaults to `professional` (aliases: `pro`, `prof`,
+  `member`).
+- Re-registering the same name is a no-op error, not a silent
+  overwrite.
+- `--dry-run` previews the YAML without writing.
+- `--category host` is rejected — hosts go in `guild.config.yaml`.
+
+**Design note.** Registration must be frictionless so an agent's
+first interaction with a content_root doesn't stall on schema
+discovery. The verb exists because the alternative ("figure out
+the member YAML format from examples") is the wrong first
+impression for agent-first tooling.
+
+### Suggest: the hot-loop sibling of boot
+
+`gate suggest` returns the ONE next thing, right now, using the
+same priority ladder as `boot.suggested_next`:
+
+```
+$ gate suggest --format text
+→ complete id=2026-04-19-0001 by=bob
+  you are executing 2026-04-19-0001 — complete it
+# advisory — override freely
+```
+
+The `# advisory` footer goes to stderr (principle 02). JSON
+output returns `{ suggested_next: { verb, args, reason } | null }`.
+
+**Design note.** `boot` is the orientation call (comprehensive
+snapshot, once per session). `suggest` is the hot-loop call
+(minimal payload, repeated). They share `deriveBootSuggestedNext`
+so the two can never diverge. An agent that dispatches
+`suggest.verb` without reading `suggest.reason` is treating a
+heuristic as a command — the anti-pattern principle 02 names.
+
+### Thank: the gratitude primitive
+
+```
+$ gate thank noir --for 2026-04-19-0001 --by eris
+✓ thanked: noir on 2026-04-19-0001
+```
+
+Thanks are orthogonal to reviews (principle 06, Two memories):
+
+- **Reviews** record judgement → feed voice calibration.
+- **Thanks** record gratitude → feed nothing quantitative.
+
+`--reason` is optional. Most of the time the fact of the thank
+is the signal. Self-thank is allowed but flagged on stderr.
+`--reason -` reads stdin (symmetric with `review --comment -`).
+
+**Design note.** If thanks fed calibration, gratitude would
+become strategic. If reviews captured gratitude, judgement would
+become polite. Keeping them orthogonal lets each be honest.
+See `lore/principles/06-two-memories.md`.
+
+### Transcript: the narrative arc of a request
+
+```
+$ gate transcript 2026-04-19-0001
+# 2026-04-19-0001 — add rate limiting
+
+Filed by bob on 2026-04-19T10:00:00Z.
+  action: add rate limiting to the API gateway
+  reason: protect upstream services from burst traffic
+
+Approved by eris (+3m). Execution started by bob (+5m).
+Completed by bob (+2h15m): "implemented with token bucket; ...".
+
+Reviewed by noir [devil/ok] (+4h):
+  "clean implementation, considered failure modes."
+
+noir thanked bob.
+
+── summary ──
+actors: bob, eris, noir (3)
+reviews: 1 (devil/ok)
+thanks: 1
+duration: 4h
+```
+
+JSON output (`--format json`) returns `{ id, arc, summary }`
+where `arc` is the prose and `summary` carries structured data
+(actors, review_verdicts, duration_ms).
+
+**Design note.** `show` gives structured access. `voices` gives
+per-actor history. `transcript` gives per-request prose — the
+narrative a cold reader needs to understand what happened without
+parsing YAML. If agents render this better themselves, the verb
+can be dropped — the data path isn't disturbed (read-only).
+
 **Plugins.** `gate doctor` supports plugins via `guild.config.yaml`:
 
 ```yaml

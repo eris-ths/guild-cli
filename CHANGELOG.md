@@ -722,6 +722,57 @@ team coordination.
 - No state-transition lock; `saveNew` is race-safe (O_EXCL) but `save` has last-writer-wins semantics.
 - Sequence ceiling 999 per UTC day (ID format `YYYY-MM-DD-NNN`).
 
+## [0.2.0] — 2026-04-15
+
+Stabilization pass: diagnostic/repair verbs, cross-platform fixes, and
+the infrastructure to make 0.3.0's agent-first features possible.
+
+### Added
+- **`gate doctor` verb** — read-only diagnostic scan of the content_root.
+  Reports malformed YAML (parse failures, hydration errors, top-level
+  non-mapping), duplicate ids, and per-area totals. Text and JSON output
+  formats. Closes `i-2026-04-14-0015`. (#14)
+- **`gate repair` verb** — intervention layer paired with `gate doctor`.
+  Consumes `gate doctor --format json` output and quarantines malformed
+  records to `<content_root>/quarantine/<ISO-timestamp>/<area>/`. `--dry-run`
+  (default) previews the plan; `--apply` executes. Idempotent — already-moved
+  sources are skipped. Path safety via `realpathSync` canonicalization.
+  Closes `i-2026-04-15-0025`, `i-2026-04-15-0026`. (#15)
+- **`guild --version` / `gate --version`** (alias `-v`) — print
+  `guild-cli <version>` and exit 0. (#9)
+- `CHANGELOG.md` and `POLICY.md` — versioning promise and change history. (#8)
+- `.github/workflows/ci.yml` — typecheck + test on Node 20 / 22. (#7)
+
+### Changed
+- **Sequence ceiling**: Request and Issue ids now use 4-digit sequences
+  (`YYYY-MM-DD-NNNN` / `i-YYYY-MM-DD-NNNN`), raising the per-UTC-day
+  ceiling from 999 to 9999. Loader accepts both 3- and 4-digit forms;
+  generation always produces 4 digits. (#12)
+- **`OnMalformed` callback**: `GuildConfig` now carries
+  `onMalformed: (msg: string) => void`, defaulting to stderr. Every
+  hydrate path routes skipped records through it. (#11)
+
+### Changed (internal)
+- **Refactor**: `src/interface/gate/index.ts` split into
+  `handlers/{request,review,read,issues,messages}.ts` plus
+  `handlers/internal.ts`. `index.ts` is now 158 lines (was 1206).
+  Behavior unchanged. (#10)
+
+### Fixed
+- **Cross-platform**: Windows path separators, `EDITOR` fallback to
+  `notepad` on win32, richer error messages with hints. (#21)
+- **Diagnostic**: YAML parse errors now surface via `onMalformed`
+  instead of silently skipping. (#17)
+- **Sort**: Numeric-aware id ordering for mixed 3/4-digit sequences. (#13)
+
+### Documentation
+- README extracted verb deep-dives to `docs/verbs.md` (803→458 lines). (#16)
+- README reflects 0.2.0 status and test surface. (#19)
+- POLICY.md: MemberName ASCII-only rationale + diagnostic/repair
+  partial stability. (#20)
+- README: tighten redundancy, clarify scope and requirements. (#22)
+- CI lockfile sync, version drift guard. (#23)
+
 [Unreleased]: https://github.com/eris-ths/guild-cli/compare/v0.3.0...HEAD
 [0.3.0]: https://github.com/eris-ths/guild-cli/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eris-ths/guild-cli/compare/v0.1.0...v0.2.0
