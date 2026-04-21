@@ -297,6 +297,47 @@ function formatRequestText(r: Request): string {
       prevAt = at;
     }
   }
+
+  // Chain hint: detect full-id references (YYYY-MM-DD-NNN...) in free
+  // text fields so the reader can notice whether `gate chain <id>` will
+  // surface anything. Pure read-time signal; the write path is
+  // untouched, preserving "write forgivingness" (free-form text) while
+  // surfacing structural awareness at read time. Short-form references
+  // like "(0004)" are intentionally not detected — the full ID format
+  // is what `chain` walks, and hinting otherwise would mislead.
+  const REF_PATTERN = /\b\d{4}-\d{2}-\d{2}-\d+\b/g;
+  const selfId = String(j['id'] ?? '');
+  const refs = new Set<string>();
+  const scanText = (value: unknown): void => {
+    if (typeof value !== 'string') return;
+    const matches = value.match(REF_PATTERN);
+    if (matches) for (const m of matches) refs.add(m);
+  };
+  scanText(j['action']);
+  scanText(j['reason']);
+  scanText(j['completion_note']);
+  scanText(j['deny_reason']);
+  scanText(j['failure_reason']);
+  for (const entry of log as Array<Record<string, unknown>>) {
+    scanText(entry['note']);
+  }
+  for (const rv of reviews as Array<Record<string, unknown>>) {
+    scanText(rv['comment']);
+  }
+  refs.delete(selfId);
+  const refList = [...refs].sort();
+  lines.push('');
+  if (refList.length === 0) {
+    lines.push(
+      `  chain hint: no outbound id references detected (gate chain ${selfId} will return nothing)`,
+    );
+  } else {
+    const noun = refList.length === 1 ? 'reference' : 'references';
+    lines.push(
+      `  chain hint: ${refList.length} outbound ${noun} detected — ${refList.join(', ')}`,
+    );
+  }
+
   return lines.join('\n');
 }
 
