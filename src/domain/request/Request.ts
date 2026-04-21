@@ -183,7 +183,7 @@ export class Request {
     // silently lose one review on last-writer-wins. See
     // `computeVersion` below for the single place that defines the
     // invariant.
-    return new Request({ ...props }, computeVersion(props.statusLog.length, props.reviews.length));
+    return new Request({ ...props }, computeVersion(props.statusLog.length, props.reviews.length, (props.thanks ?? []).length));
   }
 
   get id(): RequestId {
@@ -222,10 +222,11 @@ export class Request {
   /**
    * Total mutation count observed when this aggregate was loaded from
    * disk (0 for freshly-created instances). Defined as
-   * `status_log.length + reviews.length` — both arrays are append-only,
-   * so their combined length is a monotonic version. The repository
-   * uses it as an optimistic-lock token: if the on-disk total has
-   * grown since, another writer won the race and our save is rejected.
+   * `status_log.length + reviews.length + thanks.length` — all three
+   * arrays are append-only, so their combined length is a monotonic
+   * version. The repository uses it as an optimistic-lock token: if
+   * the on-disk total has grown since, another writer won the race
+   * and our save is rejected.
    */
   get loadedVersion(): number {
     return this._loadedVersion;
@@ -236,7 +237,7 @@ export class Request {
    * repository will write with, so `loadedVersion` + delta = `currentVersion`.
    */
   get currentVersion(): number {
-    return computeVersion(this.props.statusLog.length, this.props.reviews.length);
+    return computeVersion(this.props.statusLog.length, this.props.reviews.length, (this.props.thanks ?? []).length);
   }
 
   approve(by: MemberName, note?: string, invokedBy?: string): void {
@@ -372,13 +373,17 @@ function statusLogEntryToJSON(e: StatusLogEntry): Record<string, unknown> {
 }
 
 /**
- * Total mutation count: status_log entries + reviews. Both arrays are
- * append-only so the sum is monotonic across any legal transition.
+ * Total mutation count: status_log entries + reviews + thanks. All
+ * three arrays are append-only so the sum is monotonic across any
+ * legal mutation. Thanks are included despite being orthogonal to the
+ * analytical memory (principle 06): they are still records that
+ * outlive writers (principle 04), and a concurrent addThank that
+ * silently loses to last-writer-wins would violate append-only.
  * Kept as a module-private helper so the invariant is defined in one
  * place and the repository can reuse it when reading raw YAML.
  */
-export function computeVersion(statusLogLen: number, reviewsLen: number): number {
-  return statusLogLen + reviewsLen;
+export function computeVersion(statusLogLen: number, reviewsLen: number, thanksLen: number = 0): number {
+  return statusLogLen + reviewsLen + thanksLen;
 }
 
 function sanitizeText(raw: unknown, field: string): string {

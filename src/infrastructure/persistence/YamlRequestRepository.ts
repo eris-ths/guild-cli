@@ -210,7 +210,10 @@ function readVersion(parsed: unknown): number {
   const reviews = Array.isArray(obj['reviews'])
     ? (obj['reviews'] as unknown[]).filter(isObjectEntry).length
     : 0;
-  return computeVersion(log, reviews);
+  const thanks = Array.isArray(obj['thanks'])
+    ? (obj['thanks'] as unknown[]).filter(isObjectEntry).length
+    : 0;
+  return computeVersion(log, reviews, thanks);
 }
 
 /**

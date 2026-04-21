@@ -12,7 +12,9 @@ import {
   readTextSafe,
   writeTextSafe,
 } from './safeFs.js';
+import { join } from 'node:path';
 import { GuildConfig } from '../config/GuildConfig.js';
+import { parseYamlSafe } from './parseYamlSafe.js';
 
 const MAX_INBOX_SIZE = 500;
 
@@ -29,11 +31,15 @@ export class FsInboxNotification implements NotificationPort {
 
   async post(n: Notification): Promise<void> {
     const rel = `${n.to.value}.yaml`;
-    const file: InboxFile = existsSafe(this.config.paths.inbox, rel)
-      ? (YAML.parse(readTextSafe(this.config.paths.inbox, rel)) ?? {
-          messages: [],
-        })
-      : { messages: [] };
+    let file: InboxFile;
+    if (existsSafe(this.config.paths.inbox, rel)) {
+      const raw = readTextSafe(this.config.paths.inbox, rel);
+      const absSource = join(this.config.paths.inbox, rel);
+      const data = parseYamlSafe(raw, absSource, this.config.onMalformed);
+      file = (data as InboxFile | undefined) ?? { messages: [] };
+    } else {
+      file = { messages: [] };
+    }
     if (!Array.isArray(file.messages)) file.messages = [];
     const entry: Record<string, unknown> = {
       from: n.from,
@@ -55,9 +61,10 @@ export class FsInboxNotification implements NotificationPort {
   async listFor(member: MemberName): Promise<InboxMessage[]> {
     const rel = `${member.value}.yaml`;
     if (!existsSafe(this.config.paths.inbox, rel)) return [];
-    const parsed = YAML.parse(readTextSafe(this.config.paths.inbox, rel)) as
-      | InboxFile
-      | null;
+    const raw = readTextSafe(this.config.paths.inbox, rel);
+    const absSource = join(this.config.paths.inbox, rel);
+    const data = parseYamlSafe(raw, absSource, this.config.onMalformed);
+    const parsed = data as InboxFile | undefined;
     if (!parsed || !Array.isArray(parsed.messages)) return [];
     return parsed.messages.map((m) => normalizeMessage(m));
   }
@@ -72,9 +79,10 @@ export class FsInboxNotification implements NotificationPort {
     if (!existsSafe(this.config.paths.inbox, rel)) {
       return { marked: 0, alreadyRead: 0, total: 0 };
     }
-    const parsed = YAML.parse(readTextSafe(this.config.paths.inbox, rel)) as
-      | InboxFile
-      | null;
+    const rawText = readTextSafe(this.config.paths.inbox, rel);
+    const absSource = join(this.config.paths.inbox, rel);
+    const data = parseYamlSafe(rawText, absSource, this.config.onMalformed);
+    const parsed = data as InboxFile | undefined;
     const raw =
       parsed && Array.isArray(parsed.messages) ? parsed.messages : [];
     const total = raw.length;
