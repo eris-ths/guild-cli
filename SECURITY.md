@@ -31,6 +31,21 @@ write access to `content_root`".
 - **YAML safety** — parsing goes through `yaml` lib's default schema
   which refuses custom tags.
 
+## Trust assumptions (v0.3.0)
+
+- **Editor invocation.** `gate review` spawns the user's editor via
+  `$GIT_EDITOR` / `$VISUAL` / `$EDITOR` environment variables. The
+  editor command is **not validated** — the tool trusts the local
+  environment. In multi-user or container environments, restrict
+  environment variable mutation or avoid interactive review.
+- **Doctor plugins.** Plugins listed in `guild.config.yaml`
+  `doctor.plugins` are ES modules executed **in the main process**
+  with full Node.js capabilities. Only load plugins from trusted
+  sources. There is no sandboxing.
+- **MCP server (gate_mcp.py).** Spawns `gate` as a subprocess via
+  `asyncio.create_subprocess_exec` (array form, no shell expansion).
+  Project name validation blocks path traversal (`/`, `\`, `.`, `..`).
+
 ## Known hardening items (not yet addressed)
 
 - **Error messages may leak absolute paths.** Errors from `safeFs`
@@ -41,7 +56,9 @@ write access to `content_root`".
   does not independently guard against prototype keys.
 - **Concurrent writes.** There is no lock file. Two simultaneous
   `gate approve` calls on the same request have a last-writer-wins
-  race. Serialize at the caller.
+  race. Optimistic-lock detection (`RequestVersionConflict`) catches
+  most concurrent mutations, but is not a full serialization barrier.
+  Serialize at the caller for critical operations.
 
 ## Reporting
 

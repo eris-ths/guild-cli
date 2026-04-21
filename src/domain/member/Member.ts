@@ -22,7 +22,10 @@ export class Member {
   }): Member {
     const name = MemberName.of(input.name);
     const category = parseMemberCategory(input.category);
-    const displayName = input.displayName?.trim();
+    const rawDisplay = input.displayName?.trim();
+    const displayName = rawDisplay !== undefined && rawDisplay.length === 0
+      ? undefined
+      : rawDisplay;
     if (displayName !== undefined && displayName.length > MAX_DISPLAY_NAME_LEN) {
       throw new DomainError(
         `displayName too long (max ${MAX_DISPLAY_NAME_LEN})`,
