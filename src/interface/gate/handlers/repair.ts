@@ -11,8 +11,22 @@
 
 import { readFileSync } from 'node:fs';
 import { isAbsolute } from 'node:path';
-import { ParsedArgs, optionalOption } from '../../shared/parseArgs.js';
+import {
+  ParsedArgs,
+  optionalOption,
+  rejectUnknownFlags,
+} from '../../shared/parseArgs.js';
 import { C, readStdin } from './internal.js';
+
+// `gate repair` is a write verb (`--apply` can move files into
+// quarantine). Strict-reject typos to prevent silent fall-through
+// to dry-run when the caller intended to apply — `--aply` without
+// rejection would look successful but do nothing.
+const REPAIR_KNOWN_FLAGS: ReadonlySet<string> = new Set([
+  'apply',
+  'format',
+  'from-doctor',
+]);
 import {
   DiagnosticFinding,
   DiagnosticArea,
@@ -38,6 +52,7 @@ const VALID_KINDS: ReadonlySet<DiagnosticKind> = new Set([
 ]);
 
 export async function repairCmd(c: C, args: ParsedArgs): Promise<number> {
+  rejectUnknownFlags(args, REPAIR_KNOWN_FLAGS, 'repair');
   const apply = args.options['apply'] === true;
   const format = optionalOption(args, 'format') ?? 'text';
   const fromPath = optionalOption(args, 'from-doctor');

@@ -1,10 +1,23 @@
-import { ParsedArgs, optionalOption } from '../../shared/parseArgs.js';
+import {
+  ParsedArgs,
+  optionalOption,
+  rejectUnknownFlags,
+} from '../../shared/parseArgs.js';
 import { C, warnIfMisconfiguredCwd } from './internal.js';
 import {
   DiagnosticReport,
   DiagnosticAreaSummary,
   DiagnosticFinding,
 } from '../../../domain/diagnostic/DiagnosticReport.js';
+
+// `gate doctor` is read-only but still benefits from strict-reject:
+// `--summry` or `--formt json` typos would silently fall through to
+// defaults, giving the caller an unfiltered report when they asked
+// for the summary view. Consistent with tail's rationale.
+const DOCTOR_KNOWN_FLAGS: ReadonlySet<string> = new Set([
+  'format',
+  'summary',
+]);
 
 // gate doctor — read-only diagnostic over the guild content root.
 //
@@ -20,6 +33,7 @@ import {
 // principle of separating observation from intervention.
 
 export async function doctorCmd(c: C, args: ParsedArgs): Promise<number> {
+  rejectUnknownFlags(args, DOCTOR_KNOWN_FLAGS, 'doctor');
   const report = await c.diagnosticUC.run();
   const format = optionalOption(args, 'format') ?? 'text';
   const summaryOnly =

@@ -7,6 +7,24 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 
 ## [Unreleased]
 
+### Added
+- **Issue repository now uses atomic write + optimistic-lock CAS.**
+  `YamlIssueRepository.save` writes via `writeTextSafeAtomic` and
+  rejects concurrent mutations with a new `IssueVersionConflict`
+  (parallel to `RequestVersionConflict` and `InboxVersionConflict`).
+  Closes the asymmetry where Request and Inbox were locked but Issue
+  was last-writer-wins — which had self-defeated the state_log
+  append-only invariant when two `gate issues resolve / note` calls
+  raced. Version counter = `state_log.length + notes.length`
+  (monotonic, append-only domain operations). Legacy issues still
+  hydrate cleanly; the first save after upgrade follows the new path.
+- **`gate repair` and `gate doctor` join the strict-flag rejection
+  set.** Typos like `gate repair --aply` (which used to silently
+  stay in dry-run) or `gate doctor --summry` (which used to show
+  the full report instead of the summary) now error with the valid
+  flag list. Brings these two verbs into parity with the write-verb
+  suite shipped earlier.
+
 ### BREAKING
 - **`gate issues resolve` / `defer` / `start` / `reopen` now require
   `--by <m>` (or `GUILD_ACTOR`).** Issue state transitions now append
