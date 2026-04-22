@@ -1,5 +1,6 @@
 import { MemberName } from '../member/MemberName.js';
 import { DomainError } from '../shared/DomainError.js';
+import { sanitizeText as sharedSanitizeText } from '../shared/sanitizeText.js';
 
 export const ISSUE_SEVERITIES = ['low', 'med', 'high', 'critical'] as const;
 export type IssueSeverity = (typeof ISSUE_SEVERITIES)[number];
@@ -145,17 +146,7 @@ function parseArea(value: string): string {
 }
 
 function sanitizeText(raw: unknown, field: string): string {
-  if (typeof raw !== 'string') {
-    throw new DomainError(`${field} must be a string`, field);
-  }
-  const cleaned = raw.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '').trim();
-  if (!cleaned) {
-    throw new DomainError(`${field} required`, field);
-  }
-  if (cleaned.length > MAX_TEXT) {
-    throw new DomainError(`${field} too long (max ${MAX_TEXT})`, field);
-  }
-  return cleaned;
+  return sharedSanitizeText(raw, field, { maxLen: MAX_TEXT });
 }
 
 /**
