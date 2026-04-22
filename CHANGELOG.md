@@ -8,6 +8,17 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 ## [Unreleased]
 
 ### Added
+- **`FsInboxNotification.post` / `markRead` retry once on
+  `InboxVersionConflict`.** When a concurrent writer advances the
+  on-disk version between our read and the CAS check, the first
+  attempt throws; the retry re-reads the now-advanced file and
+  commits on top. Safe because post is append-only (order may
+  shift but side-effects don't duplicate) and markRead is
+  idempotent (already-read entries stay read). Two consecutive
+  conflicts still bubble up so a three-or-more simultaneous-writer
+  scenario surfaces to the caller instead of looping forever.
+  Closes devil's C4 on hiroba `2026-04-22-0002`. (PR #84)
+
 - **Issue repository now uses atomic write + optimistic-lock CAS.**
   `YamlIssueRepository.save` writes via `writeTextSafeAtomic` and
   rejects concurrent mutations with a new `IssueVersionConflict`

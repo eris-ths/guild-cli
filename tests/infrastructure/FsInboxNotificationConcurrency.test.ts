@@ -187,6 +187,138 @@ test('writeWithCas: detects when file was deleted between load and save', async 
   }
 });
 
+test('post() retries once on InboxVersionConflict and succeeds', async () => {
+  // post() catches InboxVersionConflict and re-reads + re-writes.
+  // This suite exercises the retry by forcing the first-attempt
+  // write to conflict (via a stale snapshot committed manually),
+  // then calling the public post() — which internally retries
+  // against the post-stale disk and succeeds.
+  //
+  // Why this is safe: post is append-only. A retry re-reads the
+  // now-advanced file, appends on top, writes. No duplicate side
+  // effect — just a later `at` timestamp for the retried message.
+  const { port, root, cleanup } = bootstrap();
+  try {
+    // Seed at version=1.
+    await port.post({
+      from: 'alice',
+      to: MemberName.of('bob'),
+      type: 'message',
+      text: 'seed',
+    });
+
+    // Manually drive a stale write so the next public post() sees
+    // a conflict on its first attempt and must retry.
+    type Priv = {
+      readWithVersion(rel: string): {
+        file: { version?: number; messages: Array<Record<string, unknown>> };
+        version: number;
+      };
+    };
+    const priv = port as unknown as Priv;
+
+    // Concurrent writer bumps disk to version=2 behind the scenes.
+    await port.post({
+      from: 'eve',
+      to: MemberName.of('bob'),
+      type: 'message',
+      text: 'concurrent',
+    });
+
+    // Now a public post() starts: its first _postOnce captures
+    // version=2 from disk (on-disk = 2, loadedVersion = 2), which
+    // agrees with CAS and succeeds without retry. To actually
+    // trigger the retry path we need to inject a stale read. We
+    // do that by monkey-patching readWithVersion for exactly one
+    // call.
+    const origRead = priv.readWithVersion.bind(priv);
+    let callCount = 0;
+    priv.readWithVersion = (rel: string) => {
+      callCount++;
+      if (callCount === 1) {
+        // Return a stale snapshot (pretend we read at version=1
+        // even though disk is at version=2). The _postOnce that
+        // consumes this will prep a write with loadedVersion=1,
+        // CAS will detect disk=2, throw InboxVersionConflict.
+        return { file: { version: 1, messages: [] }, version: 1 };
+      }
+      return origRead(rel);
+    };
+
+    await port.post({
+      from: 'alice',
+      to: MemberName.of('bob'),
+      type: 'message',
+      text: 'should survive the retry',
+    });
+
+    // call 1: post's initial read (stale, injected)
+    // call 2: writeWithCas CAS check (real disk = v2 → conflict)
+    // call 3: retry's post initial read (origRead, real)
+    // call 4: retry's writeWithCas CAS check (real, matches → pass)
+    assert.equal(
+      callCount,
+      4,
+      'first attempt (read+CAS) + retry (read+CAS) = 4 reads',
+    );
+    const parsed = YAML.parse(
+      readFileSync(join(root, 'inbox', 'bob.yaml'), 'utf8'),
+    );
+    // Expect: seed (1) + concurrent (2) + retried write (3) = 3 messages
+    assert.equal(parsed.messages.length, 3);
+    assert.equal(parsed.version, 3);
+    assert.equal(parsed.messages[2].text, 'should survive the retry');
+  } finally {
+    cleanup();
+  }
+});
+
+test('post() surfaces the conflict after the retry also fails (2nd cascade)', async () => {
+  // Retry is once-only. Two consecutive conflicts (the retry itself
+  // collides with a third writer) must bubble up so the caller
+  // knows to back off rather than loop forever.
+  const { port, cleanup } = bootstrap();
+  try {
+    await port.post({
+      from: 'alice',
+      to: MemberName.of('bob'),
+      type: 'message',
+      text: 'seed',
+    });
+    type Priv = {
+      readWithVersion(rel: string): {
+        file: { version?: number; messages: Array<Record<string, unknown>> };
+        version: number;
+      };
+    };
+    const priv = port as unknown as Priv;
+    const origRead = priv.readWithVersion.bind(priv);
+    let callCount = 0;
+    // Stale on odd calls (post initial reads), real on even calls
+    // (writeWithCas CAS checks) — so both the first attempt and the
+    // retry see a CAS mismatch and throw.
+    priv.readWithVersion = (rel: string) => {
+      callCount++;
+      if (callCount % 2 === 1) {
+        return { file: { version: 0, messages: [] }, version: 0 };
+      }
+      return origRead(rel);
+    };
+    await assert.rejects(
+      () =>
+        port.post({
+          from: 'alice',
+          to: MemberName.of('bob'),
+          type: 'message',
+          text: 'never lands',
+        }),
+      (e: unknown) => e instanceof InboxVersionConflict,
+    );
+  } finally {
+    cleanup();
+  }
+});
+
 test('post() sequentially: happy-path CAS (no race, no conflict)', async () => {
   // Regression guard for the "no false conflict" case — sequential
   // posts from the same instance must keep succeeding forever, with

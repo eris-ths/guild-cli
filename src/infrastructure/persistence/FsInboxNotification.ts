@@ -43,6 +43,29 @@ export class FsInboxNotification implements NotificationPort {
   constructor(private readonly config: GuildConfig) {}
 
   async post(n: Notification): Promise<void> {
+    // post is append-only: each attempt reads the latest on-disk
+    // version, appends the new entry, and CAS-writes. If a concurrent
+    // writer advanced the file between our read and the CAS check,
+    // the first attempt throws InboxVersionConflict — retry once
+    // after re-reading. A second conflict means three+ simultaneous
+    // writers; bubble up to the caller with the actionable message.
+    //
+    // Retry is safe here specifically because post is commutative
+    // (appending a new message after another append produces the
+    // same union, just with a different timestamp order, which is
+    // how `at` timestamps already handle it).
+    try {
+      await this._postOnce(n);
+    } catch (e) {
+      if (e instanceof InboxVersionConflict) {
+        await this._postOnce(n);
+        return;
+      }
+      throw e;
+    }
+  }
+
+  private async _postOnce(n: Notification): Promise<void> {
     const rel = `${n.to.value}.yaml`;
     const { file, version: loadedVersion } = this.readWithVersion(rel);
     const entry: Record<string, unknown> = {
@@ -75,6 +98,27 @@ export class FsInboxNotification implements NotificationPort {
   }
 
   async markRead(
+    member: MemberName,
+    readAt: string,
+    readBy: string,
+    index?: number,
+  ): Promise<MarkReadResult> {
+    // Same retry rationale as post(): markRead is idempotent
+    // (already-read entries stay read), so a second attempt against
+    // a post-concurrent-write version is safe — entries the other
+    // writer added aren't flagged as read by us, the ones we already
+    // flagged stay flagged.
+    try {
+      return await this._markReadOnce(member, readAt, readBy, index);
+    } catch (e) {
+      if (e instanceof InboxVersionConflict) {
+        return await this._markReadOnce(member, readAt, readBy, index);
+      }
+      throw e;
+    }
+  }
+
+  private async _markReadOnce(
     member: MemberName,
     readAt: string,
     readBy: string,
