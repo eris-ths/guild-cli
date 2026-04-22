@@ -434,6 +434,13 @@ stays legible. Filters are intentionally omitted — tail is for
 "everything recent", and once you want to slice, switch to
 `gate voices` or `gate list`.
 
+**No-silent-ignore.** `gate tail` opts in to strict unknown-flag
+rejection: `gate tail --from noir` now errors (used to be silently
+dropped, because `--from` was never a tail flag). The error lists
+the valid flags for the verb so the fix is obvious. This is the
+pilot caller of `rejectUnknownFlags` in `parseArgs`; other verbs
+migrate one at a time so existing invocations don't break en masse.
+
 ### Whoami: session-start orientation
 
 `gate whoami` (requires `GUILD_ACTOR` in the environment) resolves
@@ -539,6 +546,15 @@ fully-spelled id; if you want all four chained, write them out in
 full in the note or review. This is a deliberate trade-off —
 range-parsing would grow the regex into something hard to audit
 for a tiny gain.
+
+**Preview without walking.** `gate show <id> --format text` ends
+with a **chain hint footer** that scans the same free-text fields
+and reports whether `gate chain <id>` will surface anything — either
+`"chain hint: no outbound id references detected"` or the list of
+referenced ids. The hint is read-time only; writers stay
+unconstrained. This is the nudge for writers who might otherwise
+discover the short-form gotcha (`(0004)` not counting as a
+reference) only when a reader can't follow the thread.
 
 ### Issue → Request promotion
 

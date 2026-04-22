@@ -7,6 +7,28 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 
 ## [Unreleased]
 
+### Added
+- **`gate show <id> --format text` now prints a chain-hint footer.**
+  The footer scans `action` / `reason` / `completion_note` /
+  `deny_reason` / `failure_reason` / `status_log[].note` /
+  `reviews[].comment` for full-id references (`YYYY-MM-DD-NNN...`)
+  and reports either `"chain hint: no outbound id references
+  detected"` or the list of referenced ids. Read-time surfacing only
+  — the write path is untouched, so writers stay free-form while
+  readers can see at a glance whether `gate chain <id>` will return
+  anything. Short-form `(0004)` is intentionally not detected
+  (that's the case the hint is warning about). Self-ids are
+  excluded. See also the expanded paragraph in
+  [`docs/verbs.md`](./docs/verbs.md#chain-cross-reference-walks). (PR #72)
+- **Strict unknown-flag rejection helper, with `gate tail` as the
+  pilot caller.** `rejectUnknownFlags(args, known, verb)` lives in
+  `src/interface/shared/parseArgs.ts`. Verbs opt in individually;
+  `gate tail` now errors with a clear message (and lists the valid
+  flags for the verb) instead of silently ignoring a typo like
+  `gate tail --from noir`. Other verbs migrate in follow-up PRs —
+  the opt-in model is deliberate so existing invocations don't break
+  en masse. (PR #73)
+
 ### Changed
 - **README minimized; the repo's top-level surface is the entrance,
   and the entrance should be small.** README dropped from 478 to ~96
