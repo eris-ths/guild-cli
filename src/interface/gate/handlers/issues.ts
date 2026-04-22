@@ -28,7 +28,10 @@ const ISSUES_PROMOTE_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'reason',
 ]);
 const ISSUES_NOTE_KNOWN_FLAGS: ReadonlySet<string> = new Set(['by', 'text']);
-const ISSUES_TRANSITION_KNOWN_FLAGS: ReadonlySet<string> = new Set([]);
+// `gate issues resolve/defer/start/reopen` take `--by <m>` (or fall
+// back to GUILD_ACTOR) so the state_log audit entry can record who
+// ran the transition. See Sec H3 (state_log per transition).
+const ISSUES_TRANSITION_KNOWN_FLAGS: ReadonlySet<string> = new Set(['by']);
 
 export async function issuesCmd(c: C, args: ParsedArgs): Promise<number> {
   const sub = args.positional[0];
