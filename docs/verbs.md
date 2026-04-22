@@ -437,9 +437,14 @@ stays legible. Filters are intentionally omitted — tail is for
 **No-silent-ignore.** `gate tail` opts in to strict unknown-flag
 rejection: `gate tail --from noir` now errors (used to be silently
 dropped, because `--from` was never a tail flag). The error lists
-the valid flags for the verb so the fix is obvious. This is the
-pilot caller of `rejectUnknownFlags` in `parseArgs`; other verbs
-migrate one at a time so existing invocations don't break en masse.
+the valid flags for the verb so the fix is obvious. As of the
+follow-up landing, **every write verb** (`register`, `request`,
+`approve`, `deny`, `execute`, `complete`, `fail`, `fast-track`,
+`review`, `thank`, `message`, `broadcast`, `inbox`,
+`inbox mark-read`, and all `issues` subcommands) enforces the
+same rule, so typos like `gate register --catgeory X` or
+`gate thank --reasn "..."` also error instead of silently filling
+in defaults.
 
 ### Whoami: session-start orientation
 
@@ -556,6 +561,30 @@ unconstrained. This is the nudge for writers who might otherwise
 discover the short-form gotcha (`(0004)` not counting as a
 reference) only when a reader can't follow the thread.
 
+### Issue state transitions and the state_log
+
+`gate issues resolve / defer / start / reopen <id>` move an issue
+through its state graph (open ↔ in_progress ↔ deferred → resolved,
+plus resolved → open via reopen). Each transition requires
+`--by <m>` (or `GUILD_ACTOR`) and appends one entry to the issue's
+`state_log: [{state, by, at, invoked_by?}]`:
+
+```
+$ gate issues resolve i-2026-04-22-0001 --by alice
+✓ issue i-2026-04-22-0001: → resolved by alice
+```
+
+The log is append-only, max 100 entries per issue. It's the
+companion to Request's `status_log` — same shape, same contract.
+Without it an `open → resolved → open → resolved` flap collapses
+to "just resolved" in YAML; the log preserves that history so
+forensics can see the flutter.
+
+Legacy issue YAML (pre-state_log) hydrates as `[]`; the first
+post-upgrade transition starts the log. `toJSON` omits the field
+when empty, so issues that haven't transitioned yet stay
+byte-identical to their pre-log form.
+
 ### Issue → Request promotion
 
 `gate issues promote` lifts an open issue into a new request and
@@ -570,7 +599,8 @@ $ gate issues promote i-2026-04-14-002 --from kiri --executor kiri --auto-review
 
 Promotion is non-atomic: if the state transition fails after the
 request is created, the operator is told both ids so the issue can
-be resolved manually.
+be resolved manually. The `resolved` transition stamps the
+state_log as `by: <from>` (the promoter).
 
 ### Messages and inbox
 

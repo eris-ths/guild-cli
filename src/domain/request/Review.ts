@@ -2,6 +2,7 @@ import { Lense, parseLense } from '../shared/Lense.js';
 import { Verdict, parseVerdict } from '../shared/Verdict.js';
 import { MemberName } from '../member/MemberName.js';
 import { DomainError } from '../shared/DomainError.js';
+import { sanitizeText as sharedSanitizeText } from '../shared/sanitizeText.js';
 
 const MAX_COMMENT_LEN = 4096;
 
@@ -74,17 +75,27 @@ export class Review {
   }
 }
 
+/**
+ * Review comments have two quirks vs other text fields:
+ *   - `trim: false` — inner/trailing whitespace preserved so code blocks
+ *     and indented bullets render correctly (the interface layer
+ *     already stripped leading/trailing before calling create)
+ *   - `requireNonEmpty: false` — empty-string comments are tolerated
+ *     here at the domain level. The interface layer (handlers/review.ts)
+ *     enforces "comment required" at its own boundary. This split keeps
+ *     the domain permissive for programmatic callers who may have a
+ *     legitimate empty-comment use (audit backfill, etc.) while still
+ *     giving the CLI a UX nudge.
+ *
+ * Note: the second quirk is a drift that pre-dates consolidation. If it
+ * turns out no caller relies on empty-comment passthrough, tighten to
+ * `requireNonEmpty: true` in a later patch — consistency beats a loose
+ * back-door every time.
+ */
 function sanitizeComment(raw: unknown): string {
-  if (typeof raw !== 'string') {
-    throw new DomainError('Review comment must be a string', 'comment');
-  }
-  // Strip control characters except newline/tab
-  const cleaned = raw.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
-  if (cleaned.length > MAX_COMMENT_LEN) {
-    throw new DomainError(
-      `Review comment too long (max ${MAX_COMMENT_LEN} chars)`,
-      'comment',
-    );
-  }
-  return cleaned;
+  return sharedSanitizeText(raw, 'comment', {
+    maxLen: MAX_COMMENT_LEN,
+    trim: false,
+    requireNonEmpty: false,
+  });
 }

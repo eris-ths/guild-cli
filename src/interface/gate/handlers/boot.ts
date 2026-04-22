@@ -335,81 +335,138 @@ export function deriveBootSuggestedNext(
   //   1. Executing-by-me  → mid-flight work; resume/close it first
   //   2. Unreviewed mine  → others are blocked on our verdict
   //   3. Approved for me  → warm queue, ready to start
+  //   4. Pending-as-exec  → bottleneck: approve or deny
   // Stops at the first match so the agent gets ONE verb to call next.
   // The other loops remain visible via status counts.
-  const actorLower = actor.toLowerCase();
+  //
+  // The predicate logic lives in `actionableTransitions` (single source
+  // of truth shared with `deriveVerbsAvailableNow`). This function picks
+  // the first (highest-priority) one and crafts the suggest-flavored
+  // reason for it.
+  const transitions = actionableTransitions(actor, allRequests);
+  const top = transitions[0];
+  if (!top) return null;
+  const id = top.request.id.value;
+  switch (top.kind) {
+    case 'executing-mine':
+      return {
+        verb: 'complete',
+        args: { id, by: actor },
+        reason:
+          `you are executing ${id} — ` +
+          `complete it (or 'gate fail <id> --reason <s>' if it can't land).`,
+      };
+    case 'unreviewed-mine':
+      return {
+        verb: 'review',
+        args: { id, by: actor, lense: 'devil' },
+        reason:
+          `${id} completed with auto-review assigned to you; ` +
+          `pick --verdict <ok|concern|reject> and --comment after reading the work.`,
+      };
+    case 'approved-for-me':
+      return {
+        verb: 'execute',
+        args: { id, by: actor },
+        reason:
+          `${id} is approved and names you as executor — ` +
+          `start the work (gate execute), then complete/fail when done.`,
+      };
+    case 'pending-as-executor':
+      return {
+        verb: 'approve',
+        args: { id, by: actor },
+        reason:
+          `${id} is pending and names you as executor ` +
+          `(authored by ${top.request.from.value}); approve it to unblock, ` +
+          `or deny with --reason if it shouldn't proceed.`,
+      };
+  }
+}
 
-  const executingMine = allRequests.find(
-    (r) =>
+type ActionableKind =
+  | 'executing-mine'
+  | 'unreviewed-mine'
+  | 'approved-for-me'
+  | 'pending-as-executor';
+
+interface ActionableTransition {
+  kind: ActionableKind;
+  request: Request;
+  /** For `executing-mine`, which role the actor plays. */
+  executorRole?: 'executor' | 'author';
+}
+
+// Priority order for suggested_next selection. Lower = picked first.
+// `verbs_available_now` uses the full list in this order, too.
+const ACTIONABLE_PRIORITY: Record<ActionableKind, number> = {
+  'executing-mine': 0,
+  'unreviewed-mine': 1,
+  'approved-for-me': 2,
+  'pending-as-executor': 3,
+};
+
+/**
+ * Single source of truth for "what verbs does the actor have open right
+ * now?". Both `deriveBootSuggestedNext` (picks top) and
+ * `deriveVerbsAvailableNow` (emits all) consume this.
+ *
+ * Before this was extracted, the four predicates below were each
+ * hand-written twice — once in each consumer. Adding a new RequestState
+ * (or tweaking an existing trigger condition, e.g. "executor OR author
+ * for executing-mine") required updating both copies and any drift
+ * would silently surface in one API but not the other. Keeping the
+ * logic here means a single edit propagates to both surfaces.
+ */
+function actionableTransitions(
+  actor: string,
+  allRequests: ReadonlyArray<Request>,
+): ActionableTransition[] {
+  const lower = actor.toLowerCase();
+  const out: ActionableTransition[] = [];
+  for (const r of allRequests) {
+    // Executing-mine: actor is either assigned executor or the author
+    // (which happens for requests filed-then-self-executed).
+    if (
       r.state === 'executing' &&
-      (r.executor?.value === actorLower || r.from.value === actorLower),
-  );
-  if (executingMine) {
-    return {
-      verb: 'complete',
-      args: { id: executingMine.id.value, by: actor },
-      reason:
-        `you are executing ${executingMine.id.value} — ` +
-        `complete it (or 'gate fail <id> --reason <s>' if it can't land).`,
-    };
-  }
-
-  const unreviewedMine = allRequests.find(
-    (r) =>
+      (r.executor?.value === lower || r.from.value === lower)
+    ) {
+      out.push({
+        kind: 'executing-mine',
+        request: r,
+        executorRole:
+          r.executor?.value === lower ? 'executor' : 'author',
+      });
+      continue;
+    }
+    // Unreviewed-mine: auto-review assigned to me but no review landed.
+    if (
       r.state === 'completed' &&
-      r.autoReview?.value === actorLower &&
-      r.reviews.length === 0,
-  );
-  if (unreviewedMine) {
-    return {
-      verb: 'review',
-      args: {
-        id: unreviewedMine.id.value,
-        by: actor,
-        lense: 'devil',
-      },
-      reason:
-        `${unreviewedMine.id.value} completed with auto-review assigned to ` +
-        `you; pick --verdict <ok|concern|reject> and --comment after reading ` +
-        `the work.`,
-    };
-  }
-
-  const approvedForMe = allRequests.find(
-    (r) => r.state === 'approved' && r.executor?.value === actorLower,
-  );
-  if (approvedForMe) {
-    return {
-      verb: 'execute',
-      args: { id: approvedForMe.id.value, by: actor },
-      reason:
-        `${approvedForMe.id.value} is approved and names you as executor — ` +
-        `start the work (gate execute), then complete/fail when done.`,
-    };
-  }
-
-  // Pending-as-executor: someone queued work for me but it still needs
-  // approval. Any registered actor can approve (author-approval gets
-  // the self-approval notice; third-party approval is the clean case).
-  // Suggest it so the agent sees the bottleneck instead of sitting.
-  const pendingAsExecutor = allRequests.find(
-    (r) =>
+      r.autoReview?.value === lower &&
+      r.reviews.length === 0
+    ) {
+      out.push({ kind: 'unreviewed-mine', request: r });
+      continue;
+    }
+    // Approved-for-me: ready to start executing.
+    if (r.state === 'approved' && r.executor?.value === lower) {
+      out.push({ kind: 'approved-for-me', request: r });
+      continue;
+    }
+    // Pending-as-executor: approval bottleneck (non-self; self-approve
+    // is still legal but fires the "self-approval" notice).
+    if (
       r.state === 'pending' &&
-      r.executor?.value === actorLower &&
-      r.from.value !== actorLower,
-  );
-  if (pendingAsExecutor) {
-    return {
-      verb: 'approve',
-      args: { id: pendingAsExecutor.id.value, by: actor },
-      reason:
-        `${pendingAsExecutor.id.value} is pending and names you as executor ` +
-        `(authored by ${pendingAsExecutor.from.value}); approve it to unblock, ` +
-        `or deny with --reason if it shouldn't proceed.`,
-    };
+      r.executor?.value === lower &&
+      r.from.value !== lower
+    ) {
+      out.push({ kind: 'pending-as-executor', request: r });
+    }
   }
-
-  return null;
+  out.sort(
+    (a, b) => ACTIONABLE_PRIORITY[a.kind] - ACTIONABLE_PRIORITY[b.kind],
+  );
+  return out;
 }
 
 const ALWAYS_READABLE_VERBS: readonly string[] = [
@@ -438,64 +495,56 @@ function deriveVerbsAvailableNow(
   if (actor === null || role === 'unknown') {
     return { actionable, always_readable: ALWAYS_READABLE_VERBS };
   }
-  const actorLower = actor.toLowerCase();
 
-  // Executing-by-me → complete/fail are both valid.
-  for (const r of allRequests) {
-    if (r.state !== 'executing') continue;
-    if (r.executor?.value !== actorLower && r.from.value !== actorLower) continue;
-    actionable.push({
-      verb: 'complete',
-      id: r.id.value,
-      reason: `${r.id.value} is executing (you're ${r.executor?.value === actorLower ? 'the executor' : 'the author'})`,
-    });
-    actionable.push({
-      verb: 'fail',
-      id: r.id.value,
-      reason: `${r.id.value} is executing; use fail if it can't land`,
-    });
-  }
-
-  // Approved-for-me → execute is valid.
-  for (const r of allRequests) {
-    if (r.state !== 'approved') continue;
-    if (r.executor?.value !== actorLower) continue;
-    actionable.push({
-      verb: 'execute',
-      id: r.id.value,
-      reason: `${r.id.value} is approved and names you as executor`,
-    });
-  }
-
-  // Pending-as-executor → approve/deny are both valid for any actor
-  // who isn't the author (author approving their own is the self-
-  // approval case — still policy-allowed, just louder).
-  for (const r of allRequests) {
-    if (r.state !== 'pending') continue;
-    if (r.executor?.value !== actorLower) continue;
-    if (r.from.value === actorLower) continue;
-    actionable.push({
-      verb: 'approve',
-      id: r.id.value,
-      reason: `${r.id.value} is pending and names you as executor (authored by ${r.from.value})`,
-    });
-    actionable.push({
-      verb: 'deny',
-      id: r.id.value,
-      reason: `${r.id.value} is pending; deny with --reason if it shouldn't proceed`,
-    });
-  }
-
-  // Unreviewed-mine → review is valid.
-  for (const r of allRequests) {
-    if (r.state !== 'completed') continue;
-    if (r.autoReview?.value !== actorLower) continue;
-    if (r.reviews.length > 0) continue;
-    actionable.push({
-      verb: 'review',
-      id: r.id.value,
-      reason: `${r.id.value} completed with auto-review assigned to you`,
-    });
+  // Single source of truth shared with `deriveBootSuggestedNext`.
+  // Previously the predicates below were hand-duplicated per kind in
+  // both functions; now each kind lives in `actionableTransitions` and
+  // we expand it into its valid verbs here.
+  const transitions = actionableTransitions(actor, allRequests);
+  for (const t of transitions) {
+    const id = t.request.id.value;
+    switch (t.kind) {
+      case 'executing-mine': {
+        const role = t.executorRole ?? 'executor';
+        actionable.push({
+          verb: 'complete',
+          id,
+          reason: `${id} is executing (you're the ${role})`,
+        });
+        actionable.push({
+          verb: 'fail',
+          id,
+          reason: `${id} is executing; use fail if it can't land`,
+        });
+        break;
+      }
+      case 'unreviewed-mine':
+        actionable.push({
+          verb: 'review',
+          id,
+          reason: `${id} completed with auto-review assigned to you`,
+        });
+        break;
+      case 'approved-for-me':
+        actionable.push({
+          verb: 'execute',
+          id,
+          reason: `${id} is approved and names you as executor`,
+        });
+        break;
+      case 'pending-as-executor':
+        actionable.push({
+          verb: 'approve',
+          id,
+          reason: `${id} is pending and names you as executor (authored by ${t.request.from.value})`,
+        });
+        actionable.push({
+          verb: 'deny',
+          id,
+          reason: `${id} is pending; deny with --reason if it shouldn't proceed`,
+        });
+        break;
+    }
   }
 
   return { actionable, always_readable: ALWAYS_READABLE_VERBS };

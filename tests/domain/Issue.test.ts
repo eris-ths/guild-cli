@@ -64,20 +64,37 @@ test('assertIssueTransition throws DomainError on invalid transition', () => {
 
 test('Issue.setState enforces transition rules', () => {
   const i = mkIssue();
-  i.setState('in_progress');
+  i.setState('in_progress', 'alice');
   assert.equal(i.state, 'in_progress');
-  i.setState('resolved');
+  i.setState('resolved', 'alice');
   assert.equal(i.state, 'resolved');
   // resolved → in_progress is illegal
-  assert.throws(() => i.setState('in_progress'), DomainError);
+  assert.throws(() => i.setState('in_progress', 'alice'), DomainError);
   // resolved → open is legal (reopen)
-  i.setState('open');
+  i.setState('open', 'alice');
   assert.equal(i.state, 'open');
 });
 
 test('Issue.setState rejects same-state double-call', () => {
   const i = mkIssue();
-  assert.throws(() => i.setState('open'), DomainError);
+  assert.throws(() => i.setState('open', 'alice'), DomainError);
+});
+
+test('Issue.setState records a state_log entry per transition', () => {
+  const i = mkIssue();
+  assert.equal(i.stateLog.length, 0);
+  i.setState('in_progress', 'alice');
+  assert.equal(i.stateLog.length, 1);
+  assert.equal(i.stateLog[0]!.state, 'in_progress');
+  assert.equal(i.stateLog[0]!.by, 'alice');
+  assert.ok(i.stateLog[0]!.at, 'at should be ISO timestamp');
+  // invokedBy defaults to undefined when by === invokedBy
+  assert.equal(i.stateLog[0]!.invokedBy, undefined);
+
+  i.setState('resolved', 'bob', 'alice'); // ghost transition: bob acting on alice's behalf
+  assert.equal(i.stateLog.length, 2);
+  assert.equal(i.stateLog[1]!.by, 'bob');
+  assert.equal(i.stateLog[1]!.invokedBy, 'alice');
 });
 
 test('Issue.restore bypasses transition validation (historical truth)', () => {
@@ -95,7 +112,7 @@ test('Issue.restore bypasses transition validation (historical truth)', () => {
   });
   assert.equal(i.state, 'resolved');
   // But *new* transitions from that state must still follow the rules.
-  assert.throws(() => i.setState('deferred'), DomainError);
+  assert.throws(() => i.setState('deferred', 'alice'), DomainError);
 });
 
 // ── parseIssueSeverity — canonical + aliases + rejects ──

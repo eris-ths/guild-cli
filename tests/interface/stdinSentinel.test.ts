@@ -245,6 +245,14 @@ test('gate issues add --text <value-starting-with--> surfaces the POSIX escape h
   // Same hint shape as `issues note` + `review`: when the user
   // passes a value that begins with "--", the parser refuses it and
   // the handler's fallback error points at the escape valves.
+  //
+  // The sentinel `--text` value here is `--severity` — another *known*
+  // flag, so strict unknown-flag rejection (see PR adding
+  // rejectUnknownFlags to all write verbs) does not short-circuit
+  // the handler before the escape-hint path runs. Using an unknown
+  // flag like `--reason` as the sentinel would fire the strict-reject
+  // guard first and never reach the hint; picking a known flag is
+  // deliberate so both guards stay testable independently.
   const { root, cleanup } = bootstrap();
   try {
     const { status, stderr } = runGate(
@@ -254,12 +262,11 @@ test('gate issues add --text <value-starting-with--> surfaces the POSIX escape h
         'add',
         '--from',
         'eris',
-        '--severity',
-        'low',
         '--area',
         'ux',
         '--text',
-        '--reason',
+        '--severity',
+        'low',
       ],
       { env: { GUILD_ACTOR: 'eris' } },
     );

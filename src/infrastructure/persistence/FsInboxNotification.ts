@@ -1,6 +1,7 @@
 import YAML from 'yaml';
 import {
   InboxMessage,
+  InboxVersionConflict,
   MarkReadResult,
   Notification,
   NotificationPort,
@@ -10,7 +11,7 @@ import { DomainError } from '../../domain/shared/DomainError.js';
 import {
   existsSafe,
   readTextSafe,
-  writeTextSafe,
+  writeTextSafeAtomic,
 } from './safeFs.js';
 import { join } from 'node:path';
 import { GuildConfig } from '../config/GuildConfig.js';
@@ -18,7 +19,19 @@ import { parseYamlSafe } from './parseYamlSafe.js';
 
 const MAX_INBOX_SIZE = 500;
 
+/**
+ * On-disk shape of an inbox file.
+ *
+ * `version` is an optimistic-lock counter: every successful write (post
+ * or markRead that actually changed something) increments it by 1.
+ * Concurrent writers detect each other by comparing the loaded version
+ * against what's on disk right before the atomic rename.
+ *
+ * Legacy files (pre-version field) hydrate as `version: 0` so the very
+ * first save-after-upgrade proceeds without a false conflict.
+ */
 interface InboxFile {
+  version?: number;
   messages: Array<Record<string, unknown>>;
 }
 
@@ -31,16 +44,7 @@ export class FsInboxNotification implements NotificationPort {
 
   async post(n: Notification): Promise<void> {
     const rel = `${n.to.value}.yaml`;
-    let file: InboxFile;
-    if (existsSafe(this.config.paths.inbox, rel)) {
-      const raw = readTextSafe(this.config.paths.inbox, rel);
-      const absSource = join(this.config.paths.inbox, rel);
-      const data = parseYamlSafe(raw, absSource, this.config.onMalformed);
-      file = (data as InboxFile | undefined) ?? { messages: [] };
-    } else {
-      file = { messages: [] };
-    }
-    if (!Array.isArray(file.messages)) file.messages = [];
+    const { file, version: loadedVersion } = this.readWithVersion(rel);
     const entry: Record<string, unknown> = {
       from: n.from,
       to: n.to.value,
@@ -55,7 +59,8 @@ export class FsInboxNotification implements NotificationPort {
     if (file.messages.length > MAX_INBOX_SIZE) {
       file.messages = file.messages.slice(-MAX_INBOX_SIZE);
     }
-    writeTextSafe(this.config.paths.inbox, rel, YAML.stringify(file));
+    file.version = loadedVersion + 1;
+    this.writeWithCas(n.to.value, rel, file, loadedVersion);
   }
 
   async listFor(member: MemberName): Promise<InboxMessage[]> {
@@ -79,12 +84,8 @@ export class FsInboxNotification implements NotificationPort {
     if (!existsSafe(this.config.paths.inbox, rel)) {
       return { marked: 0, alreadyRead: 0, total: 0 };
     }
-    const rawText = readTextSafe(this.config.paths.inbox, rel);
-    const absSource = join(this.config.paths.inbox, rel);
-    const data = parseYamlSafe(rawText, absSource, this.config.onMalformed);
-    const parsed = data as InboxFile | undefined;
-    const raw =
-      parsed && Array.isArray(parsed.messages) ? parsed.messages : [];
+    const { file, version: loadedVersion } = this.readWithVersion(rel);
+    const raw = file.messages;
     const total = raw.length;
 
     // Validate index bounds before mutating anything so callers see
@@ -122,10 +123,70 @@ export class FsInboxNotification implements NotificationPort {
     }
 
     if (marked > 0) {
-      const file: InboxFile = { messages: raw };
-      writeTextSafe(this.config.paths.inbox, rel, YAML.stringify(file));
+      file.version = loadedVersion + 1;
+      this.writeWithCas(member.value, rel, file, loadedVersion);
     }
     return { marked, alreadyRead, total };
+  }
+
+  /**
+   * Read an inbox file and its optimistic-lock version. A missing file
+   * is treated as `{ version: 0, messages: [] }` so the first post can
+   * proceed; a malformed YAML body is also coerced to that empty state
+   * via the shared onMalformed handler (same fallback policy as the
+   * request repository).
+   */
+  private readWithVersion(rel: string): {
+    file: InboxFile;
+    version: number;
+  } {
+    if (!existsSafe(this.config.paths.inbox, rel)) {
+      return { file: { messages: [], version: 0 }, version: 0 };
+    }
+    const raw = readTextSafe(this.config.paths.inbox, rel);
+    const absSource = join(this.config.paths.inbox, rel);
+    const data = parseYamlSafe(raw, absSource, this.config.onMalformed);
+    const parsed = (data as InboxFile | undefined) ?? {
+      messages: [],
+      version: 0,
+    };
+    if (!Array.isArray(parsed.messages)) parsed.messages = [];
+    const version =
+      typeof parsed.version === 'number' && parsed.version >= 0
+        ? parsed.version
+        : 0;
+    return { file: parsed, version };
+  }
+
+  /**
+   * Atomic write with compare-and-swap on the version counter. Right
+   * before the rename, re-read the on-disk version; if it's grown
+   * since the caller loaded, a concurrent writer beat us — throw so
+   * the caller can retry on fresh data.
+   *
+   * The CAS window (between re-read and rename) is small but non-zero.
+   * This matches the YamlRequestRepository pattern and is acceptable
+   * for single-host, single-user-at-a-time usage. For multi-process
+   * hardening, a lock file would close the window further; out of
+   * scope for this PR.
+   */
+  private writeWithCas(
+    member: string,
+    rel: string,
+    file: InboxFile,
+    loadedVersion: number,
+  ): void {
+    if (existsSafe(this.config.paths.inbox, rel)) {
+      const { version: currentVersion } = this.readWithVersion(rel);
+      if (currentVersion !== loadedVersion) {
+        throw new InboxVersionConflict(member, loadedVersion, currentVersion);
+      }
+    }
+    writeTextSafeAtomic(
+      this.config.paths.inbox,
+      rel,
+      YAML.stringify(file),
+    );
   }
 }
 

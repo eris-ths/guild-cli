@@ -2,7 +2,66 @@ import {
   ParsedArgs,
   requireOption,
   optionalOption,
+  rejectUnknownFlags,
 } from '../../shared/parseArgs.js';
+
+// Known flags per write-verb. Silent-ignore of unknown flags (e.g.
+// `--executr noir` instead of `--executor noir`) would let a typo
+// slip through as "no executor assigned" with no error — the exact
+// fail-open class that `tail` already opts into. See
+// i-2026-04-22-0001 (hiroba) / devil review 2026-04-22-0001.
+const REQUEST_CREATE_KNOWN_FLAGS: ReadonlySet<string> = new Set([
+  'from',
+  'action',
+  'reason',
+  'executor',
+  'target',
+  'auto-review',
+  'with',
+  'format',
+]);
+const APPROVE_KNOWN_FLAGS: ReadonlySet<string> = new Set([
+  'by',
+  'note',
+  'dry-run',
+  'format',
+]);
+const DENY_KNOWN_FLAGS: ReadonlySet<string> = new Set([
+  'by',
+  'reason',
+  'note',
+  'dry-run',
+  'format',
+]);
+const EXECUTE_KNOWN_FLAGS: ReadonlySet<string> = new Set([
+  'by',
+  'note',
+  'dry-run',
+  'format',
+]);
+const COMPLETE_KNOWN_FLAGS: ReadonlySet<string> = new Set([
+  'by',
+  'note',
+  'dry-run',
+  'format',
+]);
+const FAIL_KNOWN_FLAGS: ReadonlySet<string> = new Set([
+  'by',
+  'reason',
+  'note',
+  'dry-run',
+  'format',
+]);
+const FAST_TRACK_KNOWN_FLAGS: ReadonlySet<string> = new Set([
+  'from',
+  'action',
+  'reason',
+  'executor',
+  'auto-review',
+  'note',
+  'with',
+  'format',
+]);
 import { Request } from '../../../domain/request/Request.js';
 import { formatDelta, pushMultilineField } from '../voices.js';
 import {
@@ -17,6 +76,7 @@ import {
 import { emitWriteResponse, parseFormat } from './writeFormat.js';
 
 export async function reqCreate(c: C, args: ParsedArgs): Promise<number> {
+  rejectUnknownFlags(args, REQUEST_CREATE_KNOWN_FLAGS, 'request');
   const from = requireOption(
     args,
     'from',
@@ -342,6 +402,7 @@ function formatRequestText(r: Request): string {
 }
 
 export async function reqApprove(c: C, args: ParsedArgs): Promise<number> {
+  rejectUnknownFlags(args, APPROVE_KNOWN_FLAGS, 'approve');
   const id = args.positional[0];
   if (!id) throw new Error('Usage: gate approve <id> --by <m> [--dry-run]');
   const by = requireOption(args, 'by', '--by required', 'GUILD_ACTOR');
@@ -372,6 +433,7 @@ export async function reqApprove(c: C, args: ParsedArgs): Promise<number> {
 }
 
 export async function reqDeny(c: C, args: ParsedArgs): Promise<number> {
+  rejectUnknownFlags(args, DENY_KNOWN_FLAGS, 'deny');
   const id = args.positional[0];
   const reason = await resolveReason(args, 'deny');
   if (!id || !reason) {
@@ -396,6 +458,7 @@ export async function reqDeny(c: C, args: ParsedArgs): Promise<number> {
 }
 
 export async function reqExecute(c: C, args: ParsedArgs): Promise<number> {
+  rejectUnknownFlags(args, EXECUTE_KNOWN_FLAGS, 'execute');
   const id = args.positional[0];
   if (!id) throw new Error('Usage: gate execute <id> --by <m> [--dry-run]');
   const by = requireOption(args, 'by', '--by required', 'GUILD_ACTOR');
@@ -415,6 +478,7 @@ export async function reqExecute(c: C, args: ParsedArgs): Promise<number> {
 }
 
 export async function reqComplete(c: C, args: ParsedArgs): Promise<number> {
+  rejectUnknownFlags(args, COMPLETE_KNOWN_FLAGS, 'complete');
   const id = args.positional[0];
   if (!id) throw new Error('Usage: gate complete <id> --by <m> [--dry-run]');
   const by = requireOption(args, 'by', '--by required', 'GUILD_ACTOR');
@@ -443,6 +507,7 @@ export async function reqComplete(c: C, args: ParsedArgs): Promise<number> {
 }
 
 export async function reqFail(c: C, args: ParsedArgs): Promise<number> {
+  rejectUnknownFlags(args, FAIL_KNOWN_FLAGS, 'fail');
   const id = args.positional[0];
   const reason = await resolveReason(args, 'fail');
   if (!id || !reason) {
@@ -514,6 +579,7 @@ async function resolveReason(args: ParsedArgs, _verb: string): Promise<string> {
 }
 
 export async function reqFastTrack(c: C, args: ParsedArgs): Promise<number> {
+  rejectUnknownFlags(args, FAST_TRACK_KNOWN_FLAGS, 'fast-track');
   const from = requireOption(args, 'from', '--from required', 'GUILD_ACTOR');
   const action = requireOption(args, 'action', '--action required');
   let reason = requireOption(args, 'reason', '--reason required');

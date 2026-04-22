@@ -60,6 +60,33 @@ export interface MarkReadResult {
   total: number;
 }
 
+/**
+ * Thrown when a concurrent writer modified the inbox file between the
+ * moment we loaded it and the moment we tried to write it back. Pairs
+ * with `RequestVersionConflict` — the mechanism is the same:
+ * optimistic lock via a monotonic version counter stored in the file.
+ *
+ * The inbox is a read-modify-write surface (post appends, markRead
+ * mutates), and without this guard two concurrent writers would
+ * last-writer-wins, dropping the earlier message or read flag
+ * silently. Throwing forces the caller to retry on a fresh read.
+ */
+export class InboxVersionConflict extends Error {
+  readonly code = 'INBOX_VERSION_CONFLICT' as const;
+  constructor(
+    readonly member: string,
+    readonly expected: number,
+    readonly found: number,
+  ) {
+    super(
+      `inbox for ${member} was modified concurrently ` +
+        `(expected version ${expected}, found ${found}). ` +
+        `Re-run the command to retry.`,
+    );
+    this.name = 'InboxVersionConflict';
+  }
+}
+
 export interface NotificationPort {
   /** Append a notification to `to`'s inbox. */
   post(notification: Notification): Promise<void>;

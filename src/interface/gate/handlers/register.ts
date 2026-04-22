@@ -1,7 +1,20 @@
-import { ParsedArgs, optionalOption, requireOption } from '../../shared/parseArgs.js';
+import {
+  ParsedArgs,
+  optionalOption,
+  requireOption,
+  rejectUnknownFlags,
+} from '../../shared/parseArgs.js';
 import { C } from './internal.js';
 import { MemberName } from '../../../domain/member/MemberName.js';
 import { parseMemberCategory } from '../../../domain/member/MemberCategory.js';
+
+const REGISTER_KNOWN_FLAGS: ReadonlySet<string> = new Set([
+  'name',
+  'category',
+  'display-name',
+  'dry-run',
+  'format',
+]);
 
 /**
  * gate register --name <n> [--category <c>] [--display-name <s>] [--dry-run] [--format json|text]
@@ -34,6 +47,7 @@ import { parseMemberCategory } from '../../../domain/member/MemberCategory.js';
  * host assignment an intentional, human-edited decision.
  */
 export async function reqRegister(c: C, args: ParsedArgs): Promise<number> {
+  rejectUnknownFlags(args, REGISTER_KNOWN_FLAGS, 'register');
   const name = requireOption(args, 'name', '--name required');
   const category = optionalOption(args, 'category') ?? 'professional';
   const displayName = optionalOption(args, 'display-name');

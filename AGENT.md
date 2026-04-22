@@ -89,9 +89,13 @@ open ↔ in_progress ↔ deferred → resolved (reopen → open)
 ```bash
 gate issues add --from <m> --severity <low|med|high> --area <a> "text"
 gate issues list [--state <s>]
-gate issues resolve|defer|start|reopen <id>
+gate issues resolve|defer|start|reopen <id> --by <m>   # --by required; appends state_log
 gate issues promote <id> --from <m>     # lift issue → new request
 ```
+
+State transitions append to `state_log: [{state, by, at, invoked_by?}]`
+(max 100 per issue). `--by` is required so the audit entry records
+the actor; falls back to `GUILD_ACTOR` when unset.
 
 ## Messages
 

@@ -7,7 +7,64 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 
 ## [Unreleased]
 
+### BREAKING
+- **`gate issues resolve` / `defer` / `start` / `reopen` now require
+  `--by <m>` (or `GUILD_ACTOR`).** Issue state transitions now append
+  to a `state_log: [{state, by, at, invoked_by?}]` array (parallel to
+  Request's `status_log`), and the transition cannot be recorded
+  without knowing who performed it. Migration: add `--by <name>` to
+  any scripted issue state-transition invocation; `GUILD_ACTOR`
+  continues to work as fallback. `Issue.setState(next)` →
+  `Issue.setState(next, by, invokedBy?)` at the domain level;
+  `IssueUseCases.setState(id, state)` → `setState(id, state, by,
+  invokedBy?)`. Legacy issue YAML (no `state_log`) hydrates cleanly
+  as `[]` so existing records open fine — the audit trail starts
+  from the first post-upgrade transition. (PR #81)
+
 ### Added
+- **Issue state transitions now produce an append-only `state_log`.**
+  Every resolve / defer / start / reopen records one entry
+  `{state, by, at, invoked_by?}` (mirrors Request `status_log`), max
+  100 entries per issue. Forensics for flapping (`open → resolved →
+  open → resolved`) previously collapsed to only-the-final-state;
+  state_log preserves the transition history. Empty arrays are
+  omitted from `toJSON` so byte-identical YAML output survives
+  issues that haven't transitioned. (PR #81, Sec H3)
+- **Strict unknown-flag rejection extended to all write verbs.**
+  `rejectUnknownFlags` (previously opted-in by `gate tail` only)
+  now runs in every write verb: `register`, `request`, `approve`,
+  `deny`, `execute`, `complete`, `fail`, `fast-track`, `review`,
+  `thank`, `message`, `broadcast`, `inbox`, `inbox mark-read`, and
+  all `issues` subcommands. Typos like `gate register --catgeory X`,
+  `gate request --executr noir`, `gate thank --reasn "..."` now
+  error with a list of valid flags instead of silently doing the
+  wrong thing. (PR #81, Sec H1)
+- **Inbox writes are atomic with optimistic-lock (`InboxVersionConflict`).**
+  `FsInboxNotification.post` and `markRead` now use
+  `writeTextSafeAtomic` and maintain a monotonic `version: N`
+  counter for compare-and-swap. Concurrent writers that would
+  previously last-writer-wins (silently dropping a message or a
+  read flag) now surface an `InboxVersionConflict` the caller can
+  retry. Exported from `application/ports/NotificationPort.ts`
+  alongside the existing `RequestVersionConflict`. Legacy files
+  without `version` hydrate as 0 so first post-upgrade save
+  proceeds without a false conflict. (PR #81, Sec H2)
+- **Shared `sanitizeText` helper at `src/domain/shared/sanitizeText.ts`.**
+  Replaces four hand-written near-duplicates (Request, Issue,
+  Review, MessageUseCases). Options: `{maxLen, requireNonEmpty?,
+  trim?}`. Behavior is preserved per call site (Review keeps its
+  existing `trim: false` / `requireNonEmpty: false` drift
+  intentionally, flagged as a named follow-up). New policy changes
+  (e.g. emoji / BOM handling) can now land in one place instead
+  of four. (PR #81, Refactor H1)
+- **`actionableTransitions()` as single source of truth in boot.**
+  `deriveBootSuggestedNext` and `deriveVerbsAvailableNow` both
+  consume one predicate set (`executing-mine`, `unreviewed-mine`,
+  `approved-for-me`, `pending-as-executor`) with declared priority,
+  instead of hand-coding the same four predicates in each function.
+  Byte-identical output; future state additions are guided by
+  TypeScript's exhaustiveness check on `ActionableKind`. (PR #81,
+  Refactor H2)
 - **`gate show <id> --format text` now prints a chain-hint footer.**
   The footer scans `action` / `reason` / `completion_note` /
   `deny_reason` / `failure_reason` / `status_log[].note` /

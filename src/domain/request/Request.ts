@@ -8,6 +8,7 @@ import { Review } from './Review.js';
 import { Thank } from './Thank.js';
 import { MemberName } from '../member/MemberName.js';
 import { DomainError } from '../shared/DomainError.js';
+import { sanitizeText as sharedSanitizeText } from '../shared/sanitizeText.js';
 
 const MAX_TEXT = 4096;
 const MAX_REVIEWS = 50;
@@ -386,21 +387,12 @@ export function computeVersion(statusLogLen: number, reviewsLen: number, thanksL
   return statusLogLen + reviewsLen + thanksLen;
 }
 
+// Local wrapper over the shared sanitizer: every call in this file used
+// the request-scoped MAX_TEXT + requireNonEmpty invariants, so keeping
+// the local name lets the existing call sites stay byte-identical while
+// still consolidating the algorithm in one place.
 function sanitizeText(raw: unknown, field: string): string {
-  if (typeof raw !== 'string') {
-    throw new DomainError(`${field} must be a string`, field);
-  }
-  const cleaned = raw.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '').trim();
-  if (!cleaned) {
-    throw new DomainError(`${field} required`, field);
-  }
-  if (cleaned.length > MAX_TEXT) {
-    throw new DomainError(
-      `${field} too long (max ${MAX_TEXT} chars)`,
-      field,
-    );
-  }
-  return cleaned;
+  return sharedSanitizeText(raw, field, { maxLen: MAX_TEXT });
 }
 
 // Re-export for persistence layer

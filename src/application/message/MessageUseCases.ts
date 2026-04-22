@@ -1,5 +1,6 @@
 import { MemberName } from '../../domain/member/MemberName.js';
 import { DomainError } from '../../domain/shared/DomainError.js';
+import { sanitizeText as sharedSanitizeText } from '../../domain/shared/sanitizeText.js';
 import { MemberRepository } from '../ports/MemberRepository.js';
 import {
   InboxMessage,
@@ -204,16 +205,5 @@ export class MessageUseCases {
 }
 
 function sanitizeMessageText(raw: unknown): string {
-  if (typeof raw !== 'string') {
-    throw new DomainError('text must be a string', 'text');
-  }
-  const cleaned = raw.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '').trim();
-  if (!cleaned) throw new DomainError('text required', 'text');
-  if (cleaned.length > MAX_MESSAGE_TEXT) {
-    throw new DomainError(
-      `text too long (max ${MAX_MESSAGE_TEXT})`,
-      'text',
-    );
-  }
-  return cleaned;
+  return sharedSanitizeText(raw, 'text', { maxLen: MAX_MESSAGE_TEXT });
 }
