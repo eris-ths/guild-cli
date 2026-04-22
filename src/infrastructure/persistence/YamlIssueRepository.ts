@@ -5,6 +5,7 @@ import {
   IssueNote,
   IssueState,
   IssueStateLogEntry,
+  computeIssueVersion,
   parseIssueSeverity,
   parseIssueState,
 } from '../../domain/issue/Issue.js';
@@ -12,12 +13,14 @@ import { MemberName } from '../../domain/member/MemberName.js';
 import {
   IssueRepository,
   IssueIdCollision,
+  IssueVersionConflict,
 } from '../../application/ports/IssueRepository.js';
 import {
   existsSafe,
   listDirSafe,
   readTextSafe,
   writeTextSafe,
+  writeTextSafeAtomic,
 } from './safeFs.js';
 import { join } from 'node:path';
 import { GuildConfig } from '../config/GuildConfig.js';
@@ -62,8 +65,38 @@ export class YamlIssueRepository implements IssueRepository {
 
   async save(issue: Issue): Promise<void> {
     const rel = `${issue.id.value}.yaml`;
+    // Optimistic-lock CAS: right before the atomic write, re-read the
+    // on-disk state_log + notes lengths and compare against the value
+    // we loaded. Concurrent writers detect each other this way. The
+    // window between re-read and rename is small but non-zero — same
+    // trade-off as Request / Inbox repositories.
+    //
+    // Unlike YamlRequestRepository, there is no loadedVersion===0
+    // guard here: Request uses that sentinel for "fresh vs loaded"
+    // because its mutation count (status_log.length) starts at 1 on
+    // create. Issue's starts at 0 (empty state_log AND empty notes),
+    // so 0 is a legitimate load result for a just-saved issue that
+    // has never been mutated. saveNew's EEXIST check is the actual
+    // collision gate for the create path.
+    if (existsSafe(this.config.paths.issues, rel)) {
+      const rawCheck = readTextSafe(this.config.paths.issues, rel);
+      const absCheck = join(this.config.paths.issues, rel);
+      const parsedCheck = parseYamlSafe(
+        rawCheck,
+        absCheck,
+        this.config.onMalformed,
+      );
+      const onDiskVersion = readIssueVersion(parsedCheck);
+      if (onDiskVersion !== issue.loadedVersion) {
+        throw new IssueVersionConflict(
+          issue.id.value,
+          issue.loadedVersion,
+          onDiskVersion,
+        );
+      }
+    }
     const text = YAML.stringify(issue.toJSON());
-    writeTextSafe(this.config.paths.issues, rel, text);
+    writeTextSafeAtomic(this.config.paths.issues, rel, text);
   }
 
   async saveNew(issue: Issue): Promise<void> {
@@ -206,4 +239,23 @@ function hydrateStateLog(
     out.push(logEntry);
   }
   return out;
+}
+
+/**
+ * Read the total mutation count from raw parsed YAML using the same
+ * `computeIssueVersion` invariant the domain uses. Defined here (not
+ * just on Issue) so the repository can compare on-disk state without
+ * hydrating a full Issue — a malformed or torn file returns 0, forcing
+ * the caller to reload rather than proceed on incomplete data.
+ *
+ * Mirrors `readVersion` in YamlRequestRepository.ts.
+ */
+function readIssueVersion(parsed: unknown): number {
+  if (!parsed || typeof parsed !== 'object') return 0;
+  const obj = parsed as Record<string, unknown>;
+  const stateLogLen = Array.isArray(obj['state_log'])
+    ? obj['state_log'].length
+    : 0;
+  const notesLen = Array.isArray(obj['notes']) ? obj['notes'].length : 0;
+  return computeIssueVersion(stateLogLen, notesLen);
 }

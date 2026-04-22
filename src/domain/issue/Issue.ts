@@ -215,7 +215,21 @@ export interface IssueProps {
 }
 
 export class Issue {
-  private constructor(private props: IssueProps) {}
+  private constructor(
+    private props: IssueProps,
+    private readonly _loadedVersion: number,
+  ) {}
+
+  /**
+   * Optimistic-lock snapshot of total mutation count at load time.
+   * New issues are `0` (no on-disk predecessor). Restore computes it
+   * from the in-file state_log + notes lengths. The repository
+   * compares this against the value recomputed from disk right before
+   * save, mirroring the Request / Inbox CAS pattern.
+   */
+  get loadedVersion(): number {
+    return this._loadedVersion;
+  }
 
   static create(input: {
     id: IssueId;
@@ -244,7 +258,8 @@ export class Issue {
     ) {
       props.invokedBy = input.invokedBy;
     }
-    return new Issue(props);
+    // Fresh issue — no predecessor on disk. version 0 is "never seen".
+    return new Issue(props, 0);
   }
 
   /**
@@ -259,11 +274,13 @@ export class Issue {
     // Treat missing as empty so hydration of historical YAML keeps
     // working. The missing state_log on legacy issues means their
     // pre-upgrade transitions are lost — historical by design.
-    return new Issue({
-      ...props,
-      notes: props.notes ?? [],
-      stateLog: props.stateLog ?? [],
-    });
+    const notes = props.notes ?? [];
+    const stateLog = props.stateLog ?? [];
+    // loadedVersion = total mutation count at load time. Same
+    // motivation as Request.computeVersion: catching two concurrent
+    // mutations that both grow the issue from the same snapshot.
+    const loadedVersion = computeIssueVersion(stateLog.length, notes.length);
+    return new Issue({ ...props, notes, stateLog }, loadedVersion);
   }
 
   get id(): IssueId {
@@ -363,6 +380,24 @@ export class Issue {
     }
     return out;
   }
+}
+
+/**
+ * Total mutation count for the optimistic-lock version on Issue.
+ * state_log grows by one per transition; notes grow by one per
+ * `addNote`. Both are append-only in the domain, so their sum is a
+ * monotonic "how many times has this issue been touched after
+ * create" — exactly what the CAS needs to detect a concurrent
+ * mutation. Create is the implicit 0-th event (not in either array).
+ *
+ * Exported so the repository can recompute the same value without
+ * hydrating a full Issue object, keeping the CAS path cheap.
+ */
+export function computeIssueVersion(
+  stateLogLen: number,
+  notesLen: number,
+): number {
+  return stateLogLen + notesLen;
 }
 
 function stateLogEntryToJSON(e: IssueStateLogEntry): Record<string, unknown> {

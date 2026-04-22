@@ -44,7 +44,8 @@ write access to `content_root`".
   Applies to: `register`, `request`, `approve`, `deny`, `execute`,
   `complete`, `fail`, `fast-track`, `review`, `thank`, `message`,
   `broadcast`, `inbox`, `inbox mark-read`, `issues add|list|note|
-  promote|resolve|defer|start|reopen`, and `tail` (read verb, pilot).
+  promote|resolve|defer|start|reopen`, `repair`, and — among
+  read-only verbs — `tail` and `doctor`.
 - **Denial-of-service caps** — directory listings (1000), reviews (50
   per request), status log (100 per request), issue state log (100
   per issue), inbox messages (500 per member).
@@ -76,15 +77,13 @@ write access to `content_root`".
   does not independently guard against prototype keys.
 - **Concurrent writes.** There is no lock file. Two simultaneous
   writes on the same record have a last-writer-wins race unless
-  optimistic-lock detection (`RequestVersionConflict` or
-  `InboxVersionConflict`) catches the second write's stale read —
-  which covers **most** concurrent mutations but is not a full
-  serialization barrier. Request and Inbox are covered; **Issue**
-  `save()` is not yet covered and has an outstanding follow-up
-  (tracked as an issue in the consumer's content_root); until then,
-  an `open → resolved → open → resolved` race could collapse one
-  `state_log` entry. Serialize at the caller for critical operations
-  on any record.
+  optimistic-lock detection catches the second write's stale read —
+  `RequestVersionConflict`, `InboxVersionConflict`, and
+  `IssueVersionConflict` each cover their own record class. This
+  catches **most** concurrent mutations but is not a full
+  serialization barrier (the CAS window between re-read and
+  atomic-rename is non-zero). Serialize at the caller for critical
+  operations on any record.
 
 ## Reporting
 
