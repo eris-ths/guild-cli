@@ -26,3 +26,31 @@ export class IssueIdCollision extends Error {
     this.name = 'IssueIdCollision';
   }
 }
+
+/**
+ * Thrown when a concurrent writer advanced the on-disk version of
+ * an issue between the moment we loaded it and the moment we tried
+ * to save it back. Parallels `RequestVersionConflict` and
+ * `InboxVersionConflict` — same optimistic-lock pattern, one
+ * invariant per record class.
+ *
+ * Before this existed, two concurrent `gate issues resolve` /
+ * `gate issues note` calls could last-writer-wins, dropping the
+ * earlier state_log entry or note silently — which self-defeats
+ * the Issue audit trail invariant that state_log is append-only.
+ */
+export class IssueVersionConflict extends Error {
+  readonly code = 'ISSUE_VERSION_CONFLICT' as const;
+  constructor(
+    readonly id: string,
+    readonly expected: number,
+    readonly found: number,
+  ) {
+    super(
+      `issue ${id} was modified concurrently ` +
+        `(expected version ${expected}, found ${found}). ` +
+        `Re-run the command to retry.`,
+    );
+    this.name = 'IssueVersionConflict';
+  }
+}

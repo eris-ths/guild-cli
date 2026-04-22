@@ -265,6 +265,20 @@ const VERB_CASES: ReadonlyArray<VerbCase> = [
     ],
     bogus: '--bogus',
   },
+  {
+    // `gate repair --apply` moves files to quarantine; typos like
+    // `--aply` used to silently fall through to default dry-run.
+    name: 'repair',
+    args: ['repair', '--aply'],
+    bogus: '--aply',
+  },
+  {
+    // `gate doctor` is read-only but strict-rejects anyway so a
+    // `--summry` typo doesn't quietly show the full view.
+    name: 'doctor',
+    args: ['doctor', '--summry'],
+    bogus: '--summry',
+  },
 ];
 
 for (const vc of VERB_CASES) {
