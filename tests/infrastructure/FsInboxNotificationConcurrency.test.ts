@@ -9,7 +9,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import YAML from 'yaml';
@@ -64,10 +64,18 @@ test('post() bumps version and uses atomic write', async () => {
   }
 });
 
-test('post() throws InboxVersionConflict when on-disk grew since load', async () => {
+test('writeWithCas: detects concurrent writer that bumped disk version', async () => {
+  // Real CAS path verification (was previously contract-only). The
+  // trick: `post()` is fully sync end-to-end (readFileSync +
+  // writeFileSync), so two concurrent post() calls in the same
+  // process execute sequentially and never race. To exercise the
+  // CAS we capture a stale snapshot via the port's private
+  // readWithVersion, let another writer advance the file, then ask
+  // writeWithCas to re-check — same flow the runtime exercises,
+  // just with the race deterministically ordered.
   const { port, root, cleanup } = bootstrap();
   try {
-    // Seed with 1 message (version becomes 1).
+    // Seed at version=1.
     await port.post({
       from: 'alice',
       to: MemberName.of('bob'),
@@ -75,45 +83,130 @@ test('post() throws InboxVersionConflict when on-disk grew since load', async ()
       text: 'seed',
     });
 
-    // Simulate a concurrent writer by hand-editing the file to a higher
-    // version mid-flight: we kick off a post whose read captures
-    // version=1, then bump the on-disk version to 2 before the CAS.
-    // Easiest reproduction: monkey-patch the fs between the post's
-    // internal read and write. Here we take a simpler route — use two
-    // ports against the same dir, each with a stale in-memory load.
-    const config = GuildConfig.load(root);
-    const portA = new FsInboxNotification(config);
-    const portB = new FsInboxNotification(config);
+    // Capture a stale snapshot at version=1 using the private reader.
+    // The `as any` is a test-only seam — the production path keeps
+    // read + CAS inside post()/markRead().
+    type Priv = {
+      readWithVersion(rel: string): {
+        file: { version?: number; messages: Array<Record<string, unknown>> };
+        version: number;
+      };
+      writeWithCas(
+        member: string,
+        rel: string,
+        file: { version?: number; messages: Array<Record<string, unknown>> },
+        loadedVersion: number,
+      ): void;
+    };
+    const priv = port as unknown as Priv;
+    const snapshot = priv.readWithVersion('bob.yaml');
+    assert.equal(snapshot.version, 1);
 
-    // portA loads, portB loads — both see version=1.
-    // portA writes first (bumps to version=2 on disk).
-    await portA.post({
+    // A concurrent writer advances disk to version=2.
+    await port.post({
       from: 'alice',
       to: MemberName.of('bob'),
       type: 'message',
-      text: 'A wrote',
+      text: 'concurrent writer',
     });
 
-    // portB's next post should conflict, because internally portB re-reads
-    // and finds version=2 instead of the 1 it loaded. To force the
-    // mid-flight stale load we have to simulate: write an artifact
-    // matching the seed state, have portB.post go through.
-    // Simpler E2E: hand-write bob.yaml back to version=1 (pretend
-    // external process did) and call portB.post. The CAS in post will
-    // read the file at version=1, prep the new messages list, then
-    // before rename re-read and still see version=1 — no conflict.
-    // That's the *happy* path.
-    //
-    // The way a conflict shows up in practice is: two writers both
-    // did their read at version=N (same), then each prepared their
-    // write. Whichever renames second has its "prev version == N"
-    // check fail because the first rename bumped on-disk to N+1.
-    //
-    // We can synthesize this by hacking the file between the
-    // private readWithVersion call and the writeWithCas call. The
-    // clean way is to write a separate unit test on writeWithCas;
-    // the next test covers that.
-    assert.ok(portB); // keep lint happy; real conflict path is next test.
+    // Stale snapshot's CAS should now detect the drift and throw.
+    const staleFile = {
+      ...snapshot.file,
+      version: snapshot.version + 1,
+      messages: [
+        ...snapshot.file.messages,
+        { from: 'alice', to: 'bob', type: 'message', text: 'stale' },
+      ],
+    };
+    assert.throws(
+      () => priv.writeWithCas('bob', 'bob.yaml', staleFile, snapshot.version),
+      (e: unknown) =>
+        e instanceof InboxVersionConflict &&
+        e.expected === 1 &&
+        e.found === 2,
+    );
+
+    // The concurrent writer's version=2 content survives untouched.
+    const parsed = YAML.parse(
+      readFileSync(join(root, 'inbox', 'bob.yaml'), 'utf8'),
+    );
+    assert.equal(parsed.version, 2);
+    assert.equal(parsed.messages.length, 2);
+    assert.equal(
+      parsed.messages[1].text,
+      'concurrent writer',
+      "concurrent writer's content must not be clobbered by stale CAS attempt",
+    );
+  } finally {
+    cleanup();
+  }
+});
+
+test('writeWithCas: detects when file was deleted between load and save', async () => {
+  // Edge case: the existsSafe check inside writeWithCas means a
+  // file deleted between load and save skips the CAS and proceeds
+  // as if fresh. That's by design (see writeWithCas comment) — but
+  // pin it so the behavior change, if ever chosen, surfaces in CI.
+  const { port, root, cleanup } = bootstrap();
+  try {
+    await port.post({
+      from: 'alice',
+      to: MemberName.of('bob'),
+      type: 'message',
+      text: 'seed',
+    });
+    type Priv = {
+      readWithVersion(rel: string): {
+        file: { version?: number; messages: Array<Record<string, unknown>> };
+        version: number;
+      };
+      writeWithCas(
+        member: string,
+        rel: string,
+        file: { version?: number; messages: Array<Record<string, unknown>> },
+        loadedVersion: number,
+      ): void;
+    };
+    const priv = port as unknown as Priv;
+    const snapshot = priv.readWithVersion('bob.yaml');
+    // Delete the file (simulating an external cleanup).
+    unlinkSync(join(root, 'inbox', 'bob.yaml'));
+    // writeWithCas with loadedVersion=1 against a now-missing file
+    // falls through to atomic write (no CAS check possible).
+    const fresh = { version: 2, messages: snapshot.file.messages };
+    assert.doesNotThrow(() =>
+      priv.writeWithCas('bob', 'bob.yaml', fresh, snapshot.version),
+    );
+    const parsed = YAML.parse(
+      readFileSync(join(root, 'inbox', 'bob.yaml'), 'utf8'),
+    );
+    assert.equal(parsed.version, 2);
+  } finally {
+    cleanup();
+  }
+});
+
+test('post() sequentially: happy-path CAS (no race, no conflict)', async () => {
+  // Regression guard for the "no false conflict" case — sequential
+  // posts from the same instance must keep succeeding forever, with
+  // version climbing monotonically. A bug that incorrectly compared
+  // loadedVersion to post-write disk value would fail here.
+  const { port, root, cleanup } = bootstrap();
+  try {
+    for (let i = 0; i < 5; i++) {
+      await port.post({
+        from: 'alice',
+        to: MemberName.of('bob'),
+        type: 'message',
+        text: `msg ${i}`,
+      });
+    }
+    const parsed = YAML.parse(
+      readFileSync(join(root, 'inbox', 'bob.yaml'), 'utf8'),
+    );
+    assert.equal(parsed.version, 5);
+    assert.equal(parsed.messages.length, 5);
   } finally {
     cleanup();
   }
@@ -167,39 +260,14 @@ test('post() into a legacy (no-version) file starts counting from 0', async () =
   }
 });
 
-test('writeWithCas conflict: when file grows between load and save', async () => {
-  // Direct CAS verification. Hand-edit the on-disk version to simulate
-  // a concurrent writer beating us to the punch, then attempt post —
-  // the internal CAS re-read should fire before the rename and throw.
-  const { port, root, cleanup } = bootstrap();
-  try {
-    // Seed an inbox at version=1 manually.
-    writeFileSync(
-      join(root, 'inbox', 'bob.yaml'),
-      YAML.stringify({ version: 1, messages: [] }),
-    );
-    // Use a custom port subclass to inject a "concurrent write" right
-    // after readWithVersion but before writeWithCas. Easier: patch
-    // post to manually orchestrate it via raw file edits.
-    //
-    // Approach: We call post once successfully (version 1 → 2). Then
-    // we hand-edit the file to version=5 (simulating a race). Then
-    // call post again — internal loads version=5, prepares version=6,
-    // CAS re-reads and still sees 5 — no conflict (happy path).
-    //
-    // For a true conflict, we need the CAS re-read to see a DIFFERENT
-    // value than loadedVersion. We achieve this by injecting between
-    // load and CAS. The unit tests for this end-to-end path require
-    // mocking; we skip that here and pin the class-level contract
-    // with a construction test: an `InboxVersionConflict` thrown when
-    // the loaded version disagrees with disk.
-    const err = new InboxVersionConflict('bob', 1, 2);
-    assert.equal(err.code, 'INBOX_VERSION_CONFLICT');
-    assert.match(err.message, /expected version 1/);
-    assert.match(err.message, /found 2/);
-    assert.match(err.message, /Re-run/);
-    assert.ok(port, 'port constructed');
-  } finally {
-    cleanup();
-  }
+test('InboxVersionConflict: error shape', () => {
+  // Contract pin: the shape callers rely on (code / message /
+  // name). Paired with the writeWithCas path test above that covers
+  // the functional trigger, so this one stays a pure shape test.
+  const err = new InboxVersionConflict('bob', 1, 2);
+  assert.equal(err.code, 'INBOX_VERSION_CONFLICT');
+  assert.equal(err.name, 'InboxVersionConflict');
+  assert.match(err.message, /expected version 1/);
+  assert.match(err.message, /found 2/);
+  assert.match(err.message, /Re-run/);
 });
