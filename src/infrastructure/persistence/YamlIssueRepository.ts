@@ -4,6 +4,7 @@ import {
   IssueId,
   IssueNote,
   IssueState,
+  IssueStateLogEntry,
   parseIssueSeverity,
   parseIssueState,
 } from '../../domain/issue/Issue.js';
@@ -117,6 +118,7 @@ function hydrate(
       state: parseIssueState(String(obj['state'] ?? 'open')),
       createdAt: String(obj['created_at'] ?? new Date().toISOString()),
       notes: hydrateNotes(obj['notes'], source, onMalformed),
+      stateLog: hydrateStateLog(obj['state_log'], source, onMalformed),
     };
     if (typeof obj['invoked_by'] === 'string') {
       restoreInput.invokedBy = obj['invoked_by'];
@@ -161,6 +163,47 @@ function hydrateNotes(
     const note: IssueNote = { by, text, at };
     if (typeof r['invoked_by'] === 'string') note.invokedBy = r['invoked_by'];
     out.push(note);
+  }
+  return out;
+}
+
+function hydrateStateLog(
+  raw: unknown,
+  source: string,
+  onMalformed: OnMalformed,
+): IssueStateLogEntry[] {
+  if (!Array.isArray(raw)) return [];
+  const out: IssueStateLogEntry[] = [];
+  for (let i = 0; i < raw.length; i++) {
+    const entry = raw[i];
+    if (!entry || typeof entry !== 'object') {
+      onMalformed(source, `state_log[${i}] is not a mapping; skipping`);
+      continue;
+    }
+    const r = entry as Record<string, unknown>;
+    const stateRaw = typeof r['state'] === 'string' ? r['state'] : '';
+    const by = typeof r['by'] === 'string' ? r['by'] : '';
+    const at = typeof r['at'] === 'string' ? r['at'] : '';
+    if (!stateRaw || !by || !at) {
+      onMalformed(
+        source,
+        `state_log[${i}] missing required fields (state/by/at); skipping`,
+      );
+      continue;
+    }
+    let state: IssueState;
+    try {
+      state = parseIssueState(stateRaw);
+    } catch {
+      onMalformed(
+        source,
+        `state_log[${i}] has unknown state "${stateRaw}"; skipping`,
+      );
+      continue;
+    }
+    const logEntry: IssueStateLogEntry = { state, by, at };
+    if (typeof r['invoked_by'] === 'string') logEntry.invokedBy = r['invoked_by'];
+    out.push(logEntry);
   }
   return out;
 }
