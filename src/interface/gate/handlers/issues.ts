@@ -127,9 +127,11 @@ export async function issuesCmd(c: C, args: ParsedArgs): Promise<number> {
   if (nextState !== undefined) {
     rejectUnknownFlags(args, ISSUES_TRANSITION_KNOWN_FLAGS, `issues ${sub}`);
     const id = args.positional[1];
-    if (!id) throw new Error(`Usage: gate issues ${sub} <id>`);
-    const issue = await c.issueUC.setState(id, nextState);
-    process.stdout.write(`✓ issue ${issue.id.value}: → ${nextState}\n`);
+    if (!id) throw new Error(`Usage: gate issues ${sub} <id> --by <m>`);
+    const by = requireOption(args, 'by', '--by required', 'GUILD_ACTOR');
+    const invokedBy = resolveInvokedBy(by, `issues ${sub}`, id);
+    const issue = await c.issueUC.setState(id, nextState, by, invokedBy);
+    process.stdout.write(`✓ issue ${issue.id.value}: → ${nextState} by ${by}\n`);
     return 0;
   }
   throw new Error(`unknown issues sub: ${sub}`);
@@ -198,7 +200,7 @@ async function issuesPromote(c: C, args: ParsedArgs): Promise<number> {
     emitInvokedByNotice(from, invokedByPromote, 'issues promote', req.id.value);
   }
   try {
-    await c.issueUC.setState(id, 'resolved');
+    await c.issueUC.setState(id, 'resolved', from, invokedByPromote);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     process.stderr.write(

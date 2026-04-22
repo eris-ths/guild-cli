@@ -83,11 +83,17 @@ export class IssueUseCases {
     return sortIssues(await this.issues.listAll());
   }
 
-  async setState(id: string, state: string): Promise<Issue> {
+  async setState(
+    id: string,
+    state: string,
+    by: string,
+    invokedBy?: string,
+  ): Promise<Issue> {
+    await assertActor(by, '--by', this.members);
     const issueId = IssueId.of(id);
     const issue = await this.issues.findById(issueId);
     if (!issue) throw new DomainError(`Issue not found: ${id}`, 'id');
-    issue.setState(parseIssueState(state) as IssueState);
+    issue.setState(parseIssueState(state) as IssueState, by, invokedBy);
     await this.issues.save(issue);
     return issue;
   }
