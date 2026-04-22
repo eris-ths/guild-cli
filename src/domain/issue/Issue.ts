@@ -1,5 +1,6 @@
 import { MemberName } from '../member/MemberName.js';
 import { DomainError } from '../shared/DomainError.js';
+import { sanitizeText as sharedSanitizeText } from '../shared/sanitizeText.js';
 
 export const ISSUE_SEVERITIES = ['low', 'med', 'high', 'critical'] as const;
 export type IssueSeverity = (typeof ISSUE_SEVERITIES)[number];
@@ -145,17 +146,7 @@ function parseArea(value: string): string {
 }
 
 function sanitizeText(raw: unknown, field: string): string {
-  if (typeof raw !== 'string') {
-    throw new DomainError(`${field} must be a string`, field);
-  }
-  const cleaned = raw.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '').trim();
-  if (!cleaned) {
-    throw new DomainError(`${field} required`, field);
-  }
-  if (cleaned.length > MAX_TEXT) {
-    throw new DomainError(`${field} too long (max ${MAX_TEXT})`, field);
-  }
-  return cleaned;
+  return sharedSanitizeText(raw, field, { maxLen: MAX_TEXT });
 }
 
 /**
@@ -182,6 +173,25 @@ export interface IssueNote {
 }
 
 const MAX_NOTES = 50;
+const MAX_STATE_LOG = 100;
+
+/**
+ * One entry in an issue's state history. Each transition (open → resolved,
+ * resolved → open, etc.) appends one of these so the audit trail records
+ * both what changed and who changed it.
+ *
+ * Mirrors the `status_log` entry shape on Request (same fields: state,
+ * by, at, invoked_by) to keep the cross-entity mental model consistent.
+ * The difference is that Request's log covers create-through-terminal
+ * while Issue's covers only re-transitions after create (the create
+ * event itself is implicit in `createdAt` + `from`).
+ */
+export interface IssueStateLogEntry {
+  state: IssueState;
+  by: string;
+  at: string;
+  invokedBy?: string;
+}
 
 export interface IssueProps {
   id: IssueId;
@@ -193,6 +203,13 @@ export interface IssueProps {
   createdAt: string;
   /** Optional — historical YAML pre-dates notes; restore backfills []. */
   notes?: IssueNote[];
+  /**
+   * Optional — historical YAML pre-dates state_log; restore backfills
+   * []. Every `setState` call appends one entry, so the length of this
+   * array is the number of transitions the issue has taken since
+   * creation. The create event is implicit (not in the log).
+   */
+  stateLog?: IssueStateLogEntry[];
   /** See IssueNote.invokedBy — same invariant on the creation act. */
   invokedBy?: string;
 }
@@ -219,6 +236,7 @@ export class Issue {
       state: 'open',
       createdAt: input.createdAt ?? new Date().toISOString(),
       notes: [],
+      stateLog: [],
     };
     if (
       input.invokedBy !== undefined &&
@@ -237,9 +255,15 @@ export class Issue {
    * state, the operator must fix the YAML by hand.
    */
   static restore(props: IssueProps): Issue {
-    // Older on-disk issues have no `notes` array. Treat missing as
-    // empty so hydration of historical YAML keeps working.
-    return new Issue({ ...props, notes: props.notes ?? [] });
+    // Older on-disk issues have no `notes` or `state_log` arrays.
+    // Treat missing as empty so hydration of historical YAML keeps
+    // working. The missing state_log on legacy issues means their
+    // pre-upgrade transitions are lost — historical by design.
+    return new Issue({
+      ...props,
+      notes: props.notes ?? [],
+      stateLog: props.stateLog ?? [],
+    });
   }
 
   get id(): IssueId {
@@ -255,13 +279,34 @@ export class Issue {
     return this.props.text;
   }
 
-  setState(next: IssueState): void {
+  setState(next: IssueState, by: string, invokedBy?: string): void {
     assertIssueTransition(this.props.state, next);
+    const byName = MemberName.of(by).value;
     this.props.state = next;
+    if (!this.props.stateLog) this.props.stateLog = [];
+    if (this.props.stateLog.length >= MAX_STATE_LOG) {
+      throw new DomainError(
+        `Too many state transitions on ${this.props.id.value} (max ${MAX_STATE_LOG})`,
+        'state_log',
+      );
+    }
+    const entry: IssueStateLogEntry = {
+      state: next,
+      by: byName,
+      at: new Date().toISOString(),
+    };
+    if (invokedBy !== undefined && invokedBy !== byName) {
+      entry.invokedBy = invokedBy;
+    }
+    this.props.stateLog.push(entry);
   }
 
   get notes(): readonly IssueNote[] {
     return this.props.notes ?? [];
+  }
+
+  get stateLog(): readonly IssueStateLogEntry[] {
+    return this.props.stateLog ?? [];
   }
 
   addNote(
@@ -305,14 +350,29 @@ export class Issue {
     if (this.props.invokedBy !== undefined) {
       out['invoked_by'] = this.props.invokedBy;
     }
-    // Backward compat: omit the `notes` key when empty so pre-notes
-    // YAML stays byte-identical after a round-trip through restore/save.
+    // Backward compat: omit the `notes` / `state_log` keys when empty
+    // so pre-notes / pre-audit YAML stays byte-identical after a
+    // round-trip through restore/save.
     const notes = this.props.notes;
     if (notes && notes.length > 0) {
       out['notes'] = notes.map((n) => noteToJSON(n));
     }
+    const stateLog = this.props.stateLog;
+    if (stateLog && stateLog.length > 0) {
+      out['state_log'] = stateLog.map((e) => stateLogEntryToJSON(e));
+    }
     return out;
   }
+}
+
+function stateLogEntryToJSON(e: IssueStateLogEntry): Record<string, unknown> {
+  const out: Record<string, unknown> = {
+    state: e.state,
+    by: e.by,
+    at: e.at,
+  };
+  if (e.invokedBy !== undefined) out['invoked_by'] = e.invokedBy;
+  return out;
 }
 
 /**

@@ -2,6 +2,7 @@ import {
   ParsedArgs,
   requireOption,
   optionalOption,
+  rejectUnknownFlags,
 } from '../../shared/parseArgs.js';
 import {
   C,
@@ -10,7 +11,24 @@ import {
   readStdin,
 } from './internal.js';
 
+const MESSAGE_SEND_KNOWN_FLAGS: ReadonlySet<string> = new Set([
+  'from',
+  'to',
+  'text',
+  'type',
+]);
+const MESSAGE_BROADCAST_KNOWN_FLAGS: ReadonlySet<string> = new Set([
+  'from',
+  'text',
+  'type',
+]);
+const INBOX_KNOWN_FLAGS: ReadonlySet<string> = new Set([
+  'for',
+  'unread',
+]);
+
 export async function msgSend(c: C, args: ParsedArgs): Promise<number> {
+  rejectUnknownFlags(args, MESSAGE_SEND_KNOWN_FLAGS, 'message');
   const from = requireOption(args, 'from', '--from required', 'GUILD_ACTOR');
   const to = requireOption(args, 'to', '--to required');
   let text = requireOption(args, 'text', '--text required');
@@ -37,6 +55,7 @@ export async function msgSend(c: C, args: ParsedArgs): Promise<number> {
 }
 
 export async function msgBroadcast(c: C, args: ParsedArgs): Promise<number> {
+  rejectUnknownFlags(args, MESSAGE_BROADCAST_KNOWN_FLAGS, 'broadcast');
   const from = requireOption(args, 'from', '--from required', 'GUILD_ACTOR');
   let text = requireOption(args, 'text', '--text required');
   if (text === '-') text = (await readStdin()).trim();
@@ -74,11 +93,13 @@ export async function msgBroadcast(c: C, args: ParsedArgs): Promise<number> {
 export async function msgInbox(c: C, args: ParsedArgs): Promise<number> {
   // `gate inbox mark-read [N]` dispatches here too — the first
   // positional is treated as a subverb. This keeps the verb family
-  // under a single `inbox` namespace.
+  // under a single `inbox` namespace. mark-read has its own flag set
+  // (subset of INBOX_KNOWN_FLAGS), so the inner handler re-validates.
   if (args.positional[0] === 'mark-read') {
     return await msgInboxMarkRead(c, args);
   }
 
+  rejectUnknownFlags(args, INBOX_KNOWN_FLAGS, 'inbox');
   const forName = requireOption(args, 'for', '--for required', 'GUILD_ACTOR');
   const unreadOnly = args.options['unread'] === true;
   const messages = await c.messageUC.inbox(forName);
@@ -114,7 +135,10 @@ export async function msgInbox(c: C, args: ParsedArgs): Promise<number> {
   return 0;
 }
 
+const INBOX_MARK_READ_KNOWN_FLAGS: ReadonlySet<string> = new Set(['for']);
+
 async function msgInboxMarkRead(c: C, args: ParsedArgs): Promise<number> {
+  rejectUnknownFlags(args, INBOX_MARK_READ_KNOWN_FLAGS, 'inbox mark-read');
   const forName = requireOption(args, 'for', '--for required', 'GUILD_ACTOR');
   let index: number | undefined;
   const positional = args.positional[1]; // [0] is 'mark-read'

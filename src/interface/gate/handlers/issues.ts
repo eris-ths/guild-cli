@@ -2,6 +2,7 @@ import {
   ParsedArgs,
   requireOption,
   optionalOption,
+  rejectUnknownFlags,
 } from '../../shared/parseArgs.js';
 import {
   C,
@@ -12,6 +13,26 @@ import {
   resolveInvokedBy,
 } from './internal.js';
 
+const ISSUES_ADD_KNOWN_FLAGS: ReadonlySet<string> = new Set([
+  'from',
+  'severity',
+  'area',
+  'text',
+]);
+const ISSUES_LIST_KNOWN_FLAGS: ReadonlySet<string> = new Set(['state']);
+const ISSUES_PROMOTE_KNOWN_FLAGS: ReadonlySet<string> = new Set([
+  'from',
+  'executor',
+  'auto-review',
+  'action',
+  'reason',
+]);
+const ISSUES_NOTE_KNOWN_FLAGS: ReadonlySet<string> = new Set(['by', 'text']);
+// `gate issues resolve/defer/start/reopen` take `--by <m>` (or fall
+// back to GUILD_ACTOR) so the state_log audit entry can record who
+// ran the transition. See Sec H3 (state_log per transition).
+const ISSUES_TRANSITION_KNOWN_FLAGS: ReadonlySet<string> = new Set(['by']);
+
 export async function issuesCmd(c: C, args: ParsedArgs): Promise<number> {
   const sub = args.positional[0];
   if (sub === 'promote') {
@@ -21,6 +42,7 @@ export async function issuesCmd(c: C, args: ParsedArgs): Promise<number> {
     return await issuesNote(c, args);
   }
   if (sub === 'add') {
+    rejectUnknownFlags(args, ISSUES_ADD_KNOWN_FLAGS, 'issues add');
     const from = requireOption(args, 'from', '--from required', 'GUILD_ACTOR');
     const severity = requireOption(args, 'severity', '--severity required');
     const area = requireOption(args, 'area', '--area required');
@@ -80,6 +102,7 @@ export async function issuesCmd(c: C, args: ParsedArgs): Promise<number> {
     return 0;
   }
   if (sub === 'list' || sub === undefined) {
+    rejectUnknownFlags(args, ISSUES_LIST_KNOWN_FLAGS, 'issues list');
     const state = optionalOption(args, 'state');
     const items = await c.issueUC.list(state);
     for (const i of items) {
@@ -105,16 +128,20 @@ export async function issuesCmd(c: C, args: ParsedArgs): Promise<number> {
   // State transitions: resolve, defer, start, reopen.
   const nextState = resolveIssueVerb(sub);
   if (nextState !== undefined) {
+    rejectUnknownFlags(args, ISSUES_TRANSITION_KNOWN_FLAGS, `issues ${sub}`);
     const id = args.positional[1];
-    if (!id) throw new Error(`Usage: gate issues ${sub} <id>`);
-    const issue = await c.issueUC.setState(id, nextState);
-    process.stdout.write(`✓ issue ${issue.id.value}: → ${nextState}\n`);
+    if (!id) throw new Error(`Usage: gate issues ${sub} <id> --by <m>`);
+    const by = requireOption(args, 'by', '--by required', 'GUILD_ACTOR');
+    const invokedBy = resolveInvokedBy(by, `issues ${sub}`, id);
+    const issue = await c.issueUC.setState(id, nextState, by, invokedBy);
+    process.stdout.write(`✓ issue ${issue.id.value}: → ${nextState} by ${by}\n`);
     return 0;
   }
   throw new Error(`unknown issues sub: ${sub}`);
 }
 
 async function issuesPromote(c: C, args: ParsedArgs): Promise<number> {
+  rejectUnknownFlags(args, ISSUES_PROMOTE_KNOWN_FLAGS, 'issues promote');
   const id = args.positional[1];
   if (!id) {
     throw new Error(
@@ -176,7 +203,7 @@ async function issuesPromote(c: C, args: ParsedArgs): Promise<number> {
     emitInvokedByNotice(from, invokedByPromote, 'issues promote', req.id.value);
   }
   try {
-    await c.issueUC.setState(id, 'resolved');
+    await c.issueUC.setState(id, 'resolved', from, invokedByPromote);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     process.stderr.write(
@@ -195,6 +222,7 @@ async function issuesPromote(c: C, args: ParsedArgs): Promise<number> {
 }
 
 async function issuesNote(c: C, args: ParsedArgs): Promise<number> {
+  rejectUnknownFlags(args, ISSUES_NOTE_KNOWN_FLAGS, 'issues note');
   // Issues are otherwise immutable by design: the original severity /
   // area / text freeze the first-frame record. A `note` is the
   // escape hatch for revised understanding — "severity should be med

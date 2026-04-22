@@ -2,6 +2,7 @@ import {
   ParsedArgs,
   requireOption,
   optionalOption,
+  rejectUnknownFlags,
 } from '../../shared/parseArgs.js';
 import {
   C,
@@ -11,6 +12,14 @@ import {
   emitDryRunPreview,
 } from './internal.js';
 import { emitWriteResponse, parseFormat } from './writeFormat.js';
+
+const THANK_KNOWN_FLAGS: ReadonlySet<string> = new Set([
+  'for',
+  'by',
+  'reason',
+  'dry-run',
+  'format',
+]);
 
 /**
  * gate thank <to> --for <id> [--reason <s>] [--by <m>] [--dry-run]
@@ -29,6 +38,7 @@ import { emitWriteResponse, parseFormat } from './writeFormat.js';
  * stdin (symmetric with review --comment -).
  */
 export async function reqThank(c: C, args: ParsedArgs): Promise<number> {
+  rejectUnknownFlags(args, THANK_KNOWN_FLAGS, 'thank');
   const to = args.positional[0];
   if (!to) {
     throw new Error(

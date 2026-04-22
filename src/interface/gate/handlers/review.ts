@@ -2,6 +2,7 @@ import {
   ParsedArgs,
   requireOption,
   optionalOption,
+  rejectUnknownFlags,
 } from '../../shared/parseArgs.js';
 import {
   C,
@@ -13,7 +14,17 @@ import {
 } from './internal.js';
 import { emitWriteResponse, parseFormat } from './writeFormat.js';
 
+const REVIEW_KNOWN_FLAGS: ReadonlySet<string> = new Set([
+  'by',
+  'lense',
+  'verdict',
+  'comment',
+  'dry-run',
+  'format',
+]);
+
 export async function reqReview(c: C, args: ParsedArgs): Promise<number> {
+  rejectUnknownFlags(args, REVIEW_KNOWN_FLAGS, 'review');
   const id = args.positional[0];
   if (!id) {
     throw new Error(

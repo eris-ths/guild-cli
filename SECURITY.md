@@ -22,12 +22,32 @@ write access to `content_root`".
     enum parsing rejects unknowns
 - **Text sanitization** — free-text fields (`action`, `reason`, `note`,
   `comment`) are stripped of ASCII control characters (except `\n\t`)
-  and capped (4 KB for request fields, 2 KB for issue text).
+  and capped (4 KB for request fields, 2 KB for issue text). The
+  sanitization policy has a single source of truth at
+  `src/domain/shared/sanitizeText.ts`; every caller (Request, Issue,
+  Review, MessageUseCases) re-exports the same strip-and-cap
+  invariant rather than maintaining its own copy.
 - **State transitions** — `assertTransition` rejects illegal moves
   (e.g. `completed → approved`).
+- **Issue audit trail (state_log).** Every `Issue.setState` call
+  appends to `state_log: [{state, by, at, invoked_by?}]`
+  (append-only, max 100 per issue), parallel to Request's
+  `status_log`. An `open → resolved → open → resolved` flap stays
+  distinguishable from a single resolve. `gate issues resolve /
+  defer / start / reopen` require `--by <m>` (or `GUILD_ACTOR`) —
+  the transition cannot be recorded without an actor.
+- **Strict CLI flag validation.** Every write verb declares its known
+  flag set and rejects unknown flags via
+  `src/interface/shared/parseArgs.ts#rejectUnknownFlags`. Typos like
+  `--executr noir` or `--catgeory pro` error with a listing of
+  valid flags instead of silently falling through to defaults.
+  Applies to: `register`, `request`, `approve`, `deny`, `execute`,
+  `complete`, `fail`, `fast-track`, `review`, `thank`, `message`,
+  `broadcast`, `inbox`, `inbox mark-read`, `issues add|list|note|
+  promote|resolve|defer|start|reopen`, and `tail` (read verb, pilot).
 - **Denial-of-service caps** — directory listings (1000), reviews (50
-  per request), status log (100 per request), inbox messages (500 per
-  member).
+  per request), status log (100 per request), issue state log (100
+  per issue), inbox messages (500 per member).
 - **YAML safety** — parsing goes through `yaml` lib's default schema
   which refuses custom tags.
 
@@ -55,10 +75,16 @@ write access to `content_root`".
   plain objects and handles `__proto__` safely, but the hydration layer
   does not independently guard against prototype keys.
 - **Concurrent writes.** There is no lock file. Two simultaneous
-  `gate approve` calls on the same request have a last-writer-wins
-  race. Optimistic-lock detection (`RequestVersionConflict`) catches
-  most concurrent mutations, but is not a full serialization barrier.
-  Serialize at the caller for critical operations.
+  writes on the same record have a last-writer-wins race unless
+  optimistic-lock detection (`RequestVersionConflict` or
+  `InboxVersionConflict`) catches the second write's stale read —
+  which covers **most** concurrent mutations but is not a full
+  serialization barrier. Request and Inbox are covered; **Issue**
+  `save()` is not yet covered and has an outstanding follow-up
+  (tracked as an issue in the consumer's content_root); until then,
+  an `open → resolved → open → resolved` race could collapse one
+  `state_log` entry. Serialize at the caller for critical operations
+  on any record.
 
 ## Reporting
 
