@@ -16,6 +16,7 @@ import {
   RequestVersionConflict,
 } from '../../application/ports/RequestRepository.js';
 import {
+  MAX_DIR_ENTRIES,
   existsSafe,
   listDirSafe,
   readTextSafe,
@@ -58,7 +59,7 @@ export class YamlRequestRepository implements RequestRepository {
   async listByState(state: RequestState): Promise<Request[]> {
     const files = listDirSafe(this.config.paths.requests, state)
       .filter((f) => /^\d{4}-\d{2}-\d{2}-\d{3,4}\.yaml$/.test(f))
-      .slice(0, 1000);
+      .slice(0, MAX_DIR_ENTRIES);
     const out: Request[] = [];
     for (const f of files) {
       const rel = join(state, f);

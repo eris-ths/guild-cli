@@ -16,6 +16,7 @@ import {
   IssueVersionConflict,
 } from '../../application/ports/IssueRepository.js';
 import {
+  MAX_DIR_ENTRIES,
   existsSafe,
   listDirSafe,
   readTextSafe,
@@ -50,7 +51,7 @@ export class YamlIssueRepository implements IssueRepository {
   async listAll(): Promise<Issue[]> {
     const files = listDirSafe(this.config.paths.issues, '.')
       .filter((f) => FILE_PATTERN.test(f))
-      .slice(0, 1000);
+      .slice(0, MAX_DIR_ENTRIES);
     const out: Issue[] = [];
     for (const f of files) {
       const raw = readTextSafe(this.config.paths.issues, f);

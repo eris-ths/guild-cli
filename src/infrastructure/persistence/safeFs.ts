@@ -125,6 +125,13 @@ export function unlinkSafe(base: string, relOrAbs: string): void {
   if (existsSync(p)) unlinkSync(p);
 }
 
+/**
+ * Per-directory file cap applied by repository scans. Prevents memory
+ * exhaustion on oversized directories — a content_root should never
+ * reach this ceiling in normal use.
+ */
+export const MAX_DIR_ENTRIES = 1000;
+
 export function listDirSafe(base: string, relOrAbs: string): string[] {
   const p = assertUnder(base, relOrAbs);
   if (!existsSync(p)) return [];

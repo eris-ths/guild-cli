@@ -3,6 +3,7 @@ import { Member } from '../../domain/member/Member.js';
 import { MemberName } from '../../domain/member/MemberName.js';
 import { MemberRepository } from '../../application/ports/MemberRepository.js';
 import {
+  MAX_DIR_ENTRIES,
   existsSafe,
   listDirSafe,
   readTextSafe,
@@ -42,7 +43,7 @@ export class YamlMemberRepository implements MemberRepository {
       /^[a-z][a-z0-9_-]{0,31}\.yaml$/.test(f),
     );
     const out: Member[] = [];
-    for (const f of files.slice(0, 1000)) {
+    for (const f of files.slice(0, MAX_DIR_ENTRIES)) {
       const raw = readTextSafe(this.config.paths.members, f);
       const name = f.replace(/\.yaml$/, '');
       const absSource = join(this.config.paths.members, f);
