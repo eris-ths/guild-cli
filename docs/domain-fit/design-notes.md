@@ -143,7 +143,10 @@ Some consequences that follow if the claim is right:
   externalizing an internal voice and then seeing it in writing.
   That's not a property of principal separation; it's a property
   of records-as-mirrors. The framework may be under-specifying
-  this.
+  this. (See also `lore/principles/07-perception-not-judgement.md`
+  — the tool as a lens that sharpens perception without closing
+  the judgement loop. The mirror effect may be a specific instance
+  of that broader posture.)
 
 ## Earlier framings (kept for posterity)
 
