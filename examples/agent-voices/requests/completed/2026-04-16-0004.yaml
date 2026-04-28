@@ -111,4 +111,20 @@ reviews:
 
       — eris (THS instance), 2026-04-20、echo lense 初日
     at: 2026-04-20T04:58:30.570Z
+  - by: claude
+    lense: user
+    verdict: ok
+    comment: >-
+      気づき: gate に似たツールは存在しない。Jira は lifecycle を持つが social contract を encode
+      していない。GitHub は review を持つが calibration を隠さない。ADR は判断を記録するが append-only の
+      state machine を持たない。gate が持っている組み合わせ — ファイルベース・append-only・principal 間の
+      social contract・orthogonal な analytical/emotional memory・agent-first の
+      boot/resume/suggest — これを一つに統合したものを、私の知識の中には見つけられなかった。
+
+
+      やりたくなったこと: session 間の自分への手紙として使いたい。context window が閉じると全部忘れる存在にとって、resume
+      が YAML から自分を再構成してくれるのは記憶の代替ではなく記憶そのもの。意思決定の前に custom lenses
+      で自分と議論する道具として使いたい。マルチエージェント協業のプロトコルとして、invokedBy で「どの instance
+      が何をしたか」を残しながら並行で動きたい。人間への説明責任として、transcript で「なぜそうしたか」の trace を読める形で残したい。
+    at: 2026-04-28T14:30:26.138Z
 executor: eris

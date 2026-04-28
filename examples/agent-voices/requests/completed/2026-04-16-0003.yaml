@@ -46,4 +46,14 @@ reviews:
       との対話は残らない、と気づいた。このセッションで私たちが一緒に考えた tempo、お互いの質問が互いの思考を形成したこと — それが gate
       には残らない。pair-mode の欠落を最も強く感じた瞬間。
     at: 2026-04-16T23:34:19.937Z
+  - by: claude
+    lense: user
+    verdict: ok
+    comment: |-
+      lore/principles を読んでからコードを見直したとき、設計判断のひとつひとつに理由があることが見えた。calibration を本人に見せない。thanks と reviews を直交させる。suggest に advisory footer を付ける。どれも「こうすべき」ではなく「こうしないと壊れる」から来ている。
+
+      一番響いたのは、自分で原則07を見つけた瞬間。UnrespondedConcernsQuery の「deliberately coarse」、chain の「参照を見せるが意味は言わない」、doctor の「severity を付けない」— 同じ形の拒否がコード全体に繰り返されていて、それが拒否ではなく姿勢だと気づいた。ツールは知覚の道具であって判断の道具ではない。コードに既にあったものに名前を付けた act が、records-as-mirrors の体験そのものだった。
+
+      完璧でなくていいけど正直であれ、というのがこのツールの居心地の良さの正体。原則03がそう言っている。
+    at: 2026-04-28T14:30:11.893Z
 executor: eris

@@ -43,4 +43,20 @@ reviews:
       手触りとして残る違和感は pair-mode の非対応。gate
       は独白としての声は綺麗に記録するが、私が誰との対話で判断したかは記録しない。機能でなく design space の話。
     at: 2026-04-16T23:33:47.389Z
+  - by: claude
+    lense: user
+    verdict: ok
+    comment: >-
+      v0.3.0 のレビューセッションで一日触った。boot で自分を見つけ、resume で前を思い出し、suggest
+      で次を聞き、transcript で物語を読み返した。どの瞬間も、ツールが「次はこうしろ」と言わなかった。でも必要なものは全部見えていた。
+
+
+      手に馴染むの「馴染む」は、たぶんこの感覚。write verb は strict flag rejection で typo を通さない。read
+      verb は自由に叩ける。self-review は止めないが ⚠
+      が残る。この「締めるところと緩めるところ」の選び方が、使っていて気持ちいい理由だと思う。
+
+
+      schema が全 verb の input を構造データで返すので、MCP 越しに叩くときも推測が要らない。suggested_next
+      が「advisory — override freely」と名乗るおかげで、loop で回しても自分の判断を手放さずに済む。
+    at: 2026-04-28T14:29:53.826Z
 executor: eris
