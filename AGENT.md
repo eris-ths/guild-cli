@@ -33,7 +33,7 @@ gate tail 10             # last 10 events across all actors
 ## Agent-first knobs
 
 - `gate boot` — single-command orientation (identity + status + tail + inbox)
-- `--format json` on every write verb (`request/approve/deny/execute/complete/fail/review/fast-track`)
+- `--format json` on every write verb (`request/approve/deny/execute/complete/fail/review/thank/fast-track`)
   returns `{ok, id, state, message, suggested_next:{verb, args, reason}}`
 - `gate schema` — JSON Schema for all verbs (LLM tool-layer input)
 
@@ -46,11 +46,14 @@ pending ─ approve ─▶ approved ─ execute ─▶ executing ─ complete �
 ```
 
 ```bash
-gate request --from <m> --action "..." --reason "..." [--executor <m>] [--auto-review <m>]
+gate request --from <m> --action "..." --reason "..." [--executor <m>] [--auto-review <m>] [--with <m>[,<m>...]]
 gate approve <id> --by <m> [--note "..."]
+gate deny <id> --by <m> --reason "..."
 gate execute <id> --by <m>
 gate complete <id> --by <m> [--note "..."]
+gate fail <id> --by <m> --reason "..."
 gate fast-track --from <m> --action "..." --reason "..."   # one-shot create→complete
+gate thank <to> --for <id> [--by <m>] [--reason <s>]       # gratitude (no verdict, no calibration)
 ```
 
 ## Review (Two-Persona Devil)
@@ -75,9 +78,12 @@ gate review <id> --by <m> --lense <l> --verdict <v> --comment "..."
 gate show <id>                          # request detail (JSON default)
 gate list --state <s> [--for <m>]       # filtered list
 gate pending [--for <m>]                # shortcut for --state pending
-gate voices <name> [--lense <l>]        # actor's full history (JSON default)
+gate board [--for <m>]                  # pending + approved + executing in one view
+gate voices <name> [--lense <l>] [--verdict <v>] [--limit <N>] [--with-calibration]
 gate tail [N]                           # recent activity stream (default 20)
 gate chain <id>                         # cross-reference walk (one hop)
+gate transcript <id>                    # narrative prose arc of a request
+gate suggest [--format json|text]       # suggested_next only (hot-loop sibling of boot)
 ```
 
 ## Issues
@@ -90,7 +96,8 @@ open ↔ in_progress ↔ deferred → resolved (reopen → open)
 gate issues add --from <m> --severity <low|med|high> --area <a> "text"
 gate issues list [--state <s>]
 gate issues resolve|defer|start|reopen <id> --by <m>   # --by required; appends state_log
-gate issues promote <id> --from <m>     # lift issue → new request
+gate issues note <id> --by <m> --text "..."          # append annotation
+gate issues promote <id> --from <m> [--executor <m>] [--auto-review <m>] [--action <s>] [--reason <s>]
 ```
 
 State transitions append to `state_log: [{state, by, at, invoked_by?}]`
@@ -100,9 +107,9 @@ the actor; falls back to `GUILD_ACTOR` when unset.
 ## Messages
 
 ```bash
-gate message --from <m> --to <m> --text "..."
-gate broadcast --from <m> --text "..."
-gate inbox --for <m>
+gate message --from <m> --to <m> --text "..." [--type <s>]
+gate broadcast --from <m> --text "..." [--type <s>]
+gate inbox --for <m> [--unread]
 gate inbox mark-read [N] --for <m>
 ```
 
@@ -120,9 +127,10 @@ Categories: `core | professional | assignee | trial | special | host`
 ## Diagnostic
 
 ```bash
-gate doctor                             # read-only health check
+gate doctor [--format json|text] [--summary]     # read-only health check
 gate doctor --format json | gate repair          # dry-run plan
 gate doctor --format json | gate repair --apply  # quarantine malformed
+gate repair [--from-doctor <path>] [--apply] [--format json|text]
 ```
 
 ## Configuration
@@ -158,6 +166,9 @@ Request IDs: `YYYY-MM-DD-NNNN`. Issue IDs: `i-YYYY-MM-DD-NNNN`.
 
 `GUILD_ACTOR=<name>` — default for `--from` / `--by` / `--for`.
 Explicit flags always win. `--executor` and `--auto-review` are never env-filled.
+
+`GUILD_LOCALE=<en|ja>` — prose language for `gate resume`
+`restoration_prose`. Defaults to `en`. Also settable via `--locale`.
 
 ## Output format
 

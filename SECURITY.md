@@ -13,8 +13,11 @@ write access to `content_root`".
   `infrastructure/persistence/safeFs.ts`, which rejects any target that
   does not resolve under the configured base directory, and refuses to
   follow symbolic links anywhere on the path.
-- **No shell execution** — the package never calls `child_process`.
-  Verified by `grep -r 'child_process\|exec\b\|spawn\b' src/`.
+- **No shell execution for data processing.** The only
+  `child_process` usage is `spawnSync` in array form (no shell
+  expansion) for the interactive editor in `gate review` — see
+  Trust Assumptions below. All persistence, parsing, and state
+  mutation paths are in-process with no subprocess calls.
 - **Input validation at the boundary**:
   - `MemberName` — `^[a-z][a-z0-9_-]{0,31}$` + reserved-name blacklist
   - `RequestId` / `IssueId` — strict date-sequence regex
