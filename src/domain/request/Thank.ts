@@ -1,5 +1,5 @@
 import { MemberName } from '../member/MemberName.js';
-import { DomainError } from '../shared/DomainError.js';
+import { sanitizeText } from '../shared/sanitizeText.js';
 
 const MAX_REASON_LEN = 1024;
 
@@ -90,15 +90,9 @@ export class Thank {
 }
 
 function sanitizeReason(raw: unknown): string {
-  if (typeof raw !== 'string') {
-    throw new DomainError('Thank reason must be a string', 'reason');
-  }
-  const cleaned = raw.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
-  if (cleaned.length > MAX_REASON_LEN) {
-    throw new DomainError(
-      `Thank reason too long (max ${MAX_REASON_LEN} chars)`,
-      'reason',
-    );
-  }
-  return cleaned;
+  return sanitizeText(raw, 'reason', {
+    maxLen: MAX_REASON_LEN,
+    requireNonEmpty: false,
+    trim: false,
+  });
 }

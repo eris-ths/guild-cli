@@ -85,8 +85,8 @@ test('save() throws RequestVersionConflict when on-disk grew since load', async 
       () => repo.save(aCopy!),
       (e) =>
         e instanceof RequestVersionConflict &&
-        e.expectedVersion === 1 &&
-        e.actualVersion === 2,
+        e.expected === 1 &&
+        e.found === 2,
       'expected A.save() to surface a version conflict with concrete version numbers',
     );
   } finally {
@@ -138,8 +138,8 @@ test('save() optimistic lock covers review races (not only transitions)', async 
       () => repo.save(reviewerA!),
       (e) =>
         e instanceof RequestVersionConflict &&
-        e.expectedVersion === 4 &&
-        e.actualVersion === 5,
+        e.expected === 4 &&
+        e.found === 5,
       'review race must trigger version conflict (the status_log-only bug we fixed)',
     );
   } finally {
