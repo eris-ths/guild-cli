@@ -41,13 +41,14 @@ export class RequestIdCollision extends Error {
  * than blindly overwrite.
  */
 export class RequestVersionConflict extends Error {
+  readonly code = 'REQUEST_VERSION_CONFLICT' as const;
   constructor(
-    public readonly id: string,
-    public readonly expectedVersion: number,
-    public readonly actualVersion: number,
+    readonly id: string,
+    readonly expected: number,
+    readonly found: number,
   ) {
     super(
-      `Request ${id} changed on disk (expected version ${expectedVersion}, found ${actualVersion}); reload and retry`,
+      `Request ${id} changed on disk (expected version ${expected}, found ${found}); reload and retry`,
     );
     this.name = 'RequestVersionConflict';
   }
