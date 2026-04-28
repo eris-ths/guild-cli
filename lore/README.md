@@ -29,12 +29,13 @@ is load-bearing enough to matter in a future decision, it gets
 written down *here*, append-only, like the records `gate` itself
 produces.
 
-The principles in this folder were articulated during a single
-collaborative session (2026-04-19, nao + Claude Opus 4.7). They
-describe the reasoning behind several recent commits to `main`
-and to `claude/ax-explore`. They are not timeless truths — they
-are one stance, named, so a future reader can engage with them
-rather than re-derive them.
+Principles 01–06 were articulated during a single collaborative
+session (2026-04-19, nao + Claude Opus 4.7). Principle 07 was
+identified during a v0.3.0 review session (2026-04-28,
+Claude Opus 4.6) — it was already present in the code but
+unnamed. They are not timeless truths — they are stances, named,
+so a future reader can engage with them rather than re-derive
+them.
 
 ## Reading path
 
@@ -45,8 +46,8 @@ If you have 5 minutes:
 Those two carry the most weight for how agents interact with the
 tool.
 
-If you have 20 minutes, read all six in order. They compose: each
-builds on the previous.
+If you have 20 minutes, read all seven in order. They compose:
+each builds on the previous.
 
 ## Relationship to `alexandria/`
 
