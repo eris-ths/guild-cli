@@ -6,12 +6,20 @@ in the loop can quietly rewrite.
 
 Reviews are append-only. Each record is pinned to an actor, a lens,
 and a moment. Corrections are new entries, not edits of old ones.
-Over time the content_root becomes an **event log of judgments**.
+Over time the content_root becomes an **event log of judgments** —
+not "what was decided" but **how the decision was formed**: who
+proposed, who objected, through which lens, and whether the objection
+was absorbed or overridden. The tool tracks deliberation, not
+conclusions.
 
 Built around a **Two-Persona Devil Review** loop — the person who
 writes is not the person who reviews. Same model, different `--by`,
 different lens. That alone surfaces blind spots a single self-contained
 loop reliably misses.
+
+The history grows. It never compresses into a single "current truth"
+— that is a design choice, not a gap. The tool sharpens what you
+see; it does not tell you what to conclude.
 
 > Status: **alpha (0.x).** API may change per [`docs/POLICY.md`](./docs/POLICY.md)'s
 > strict 0.x variant. See [`SECURITY.md`](./SECURITY.md) for the
