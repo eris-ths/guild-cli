@@ -38,6 +38,8 @@ import {
 import { statusCmd } from './handlers/status.js';
 import { suggestCmd } from './handlers/suggest.js';
 import { transcriptCmd } from './handlers/transcript.js';
+import { summarizeCmd } from './handlers/summarize.js';
+import { whyCmd } from './handlers/why.js';
 
 // Re-export for test backward-compat (tests/interface/reviewMarkers.test.ts).
 // formatReviewMarkers and computeReviewMarkerWidth live in handlers/request.ts
@@ -179,6 +181,14 @@ Status:
                        thing?" without the full orientation payload.
                        Priority ladder is shared with boot, so the
                        two never disagree.
+  gate summarize <id> [--format text|json]
+                       Compressed view: state, decision, open
+                       concerns, review/thank counts. The "30-second
+                       read" sibling of transcript.
+  gate why <id> [--format text|json]
+                       Trace the decision chain: terminal transition,
+                       reviews that aligned with the outcome, reviews
+                       that contested it. Perception, not judgement.
   gate transcript <id> [--format text|json]
                        Narrative prose render of one request's arc,
                        composed from status_log + reviews. Sibling
@@ -212,7 +222,7 @@ const KNOWN_COMMANDS = [
   'whoami', 'register', 'chain', 'approve', 'deny', 'execute',
   'complete', 'fail', 'review', 'thank', 'fast-track', 'issues', 'message',
   'broadcast', 'inbox', 'doctor', 'repair', 'status', 'boot',
-  'suggest', 'transcript', 'resume', 'schema',
+  'suggest', 'transcript', 'summarize', 'why', 'resume', 'schema',
 ] as const;
 
 function levenshtein(a: string, b: string): number {
@@ -340,6 +350,10 @@ export async function main(argv: readonly string[]): Promise<number> {
         return await suggestCmd(c, args);
       case 'transcript':
         return await transcriptCmd(c, args);
+      case 'summarize':
+        return await summarizeCmd(c, args);
+      case 'why':
+        return await whyCmd(c, args);
       case 'resume':
         return await resumeCmd(c, args);
       case 'schema':

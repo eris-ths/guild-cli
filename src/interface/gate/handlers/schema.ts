@@ -195,6 +195,57 @@ const VERBS: readonly VerbSchema[] = [
     },
   },
   {
+    name: 'summarize',
+    category: 'read',
+    summary:
+      'compressed view of a request: current state, decision, open concerns, review/thank counts. The 30-second-read sibling of transcript.',
+    input: {
+      type: 'object',
+      properties: {
+        id: idStr,
+        format: formatField,
+      },
+      required: ['id'],
+    },
+    output: {
+      type: 'object',
+      properties: {
+        id: str,
+        state: str,
+        decision: str,
+        open_concerns: { type: 'array', items: { type: 'object' } },
+        review_count: { type: 'integer' },
+        thank_count: { type: 'integer' },
+        actors: { type: 'array', items: str },
+      },
+    },
+  },
+  {
+    name: 'why',
+    category: 'read',
+    summary:
+      'decision-chain trace: terminal transition, reviews aligned with outcome, reviews that contested it. Perception, not judgement — shows which voices were heard, not whether the decision was correct.',
+    input: {
+      type: 'object',
+      properties: {
+        id: idStr,
+        format: formatField,
+      },
+      required: ['id'],
+    },
+    output: {
+      type: 'object',
+      properties: {
+        id: str,
+        state: str,
+        terminal_transition: { type: 'object' },
+        aligned_reviews: { type: 'array', items: { type: 'object' } },
+        contested_reviews: { type: 'array', items: { type: 'object' } },
+        review_count: { type: 'integer' },
+      },
+    },
+  },
+  {
     name: 'resume',
     category: 'read',
     summary:

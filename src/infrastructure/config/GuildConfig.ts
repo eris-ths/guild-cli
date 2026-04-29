@@ -97,11 +97,19 @@ export class GuildConfig implements GuildConfigProps {
           .map((x: string) => x.toLowerCase())
       : [...DEFAULT_LENSES];
     const doctor = raw.doctor ?? {};
-    const doctorPlugins = Array.isArray(doctor.plugins)
+    const pluginsTrusted = doctor.trusted === true;
+    const doctorPlugins = Array.isArray(doctor.plugins) && pluginsTrusted
       ? doctor.plugins
           .filter((x: unknown): x is string => typeof x === 'string')
           .map((x: string) => resolveUnder(root, x))
       : [];
+    if (Array.isArray(doctor.plugins) && doctor.plugins.length > 0 && !pluginsTrusted) {
+      onMalformed(
+        configPath,
+        'doctor.plugins present but doctor.trusted is not true — plugins will NOT be loaded. ' +
+          'Add `trusted: true` under `doctor:` in guild.config.yaml to enable.',
+      );
+    }
     return new GuildConfig(root, contentRoot, paths, hostNames, lenses, doctorPlugins, onMalformed, configPath);
   }
 
