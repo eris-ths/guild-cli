@@ -8,6 +8,37 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 ## [Unreleased]
 
 ### Fixed
+- **`gate register` surfaces the absolute path it wrote, on both
+  stderr (humans) and JSON (orchestrators).** Closes the silent
+  parent-config-pickup gap a fresh-agent dogfood surfaced. Pre-
+  fix, running `gate register --name newcomer` from a subdir of
+  an active guild silently walked up the tree, found the parent's
+  `guild.config.yaml`, and wrote `<parent>/members/newcomer.yaml`
+  with no signal — the agent had no clue their YAML landed in
+  someone else's repo. Same gap hit no-config-found cases (cwd
+  used as the implicit content_root).
+
+  Post-fix, `gate register` emits one stderr notice on success:
+  ```
+  notice: wrote /abs/path/members/<name>.yaml (config: /abs/path/guild.config.yaml)
+  ```
+  When no config was discovered the second segment becomes
+  `config: none — cwd used as fallback root`, naming the implicit
+  default explicitly. The JSON success envelope gains
+  `where_written` (absolute path of the saved file) and
+  `config_file` (absolute path of `guild.config.yaml` in use, or
+  `null`) so MCP consumers parse structured fields rather than
+  scraping stderr.
+
+  Symmetric on `--dry-run`: the preview header now shows the
+  absolute path (was: relative `members/<name>.yaml`) and the
+  stderr notice fires with `would write` (not `wrote`) so the
+  preview is not less honest about location than the real write.
+  Notice does NOT fire on error paths (collision, host-name
+  reservation, validation) — pinned by test. Devil-reviewed
+  (`2026-05-01-0001`/`0002`); v2 absorbed the JSON-contract,
+  dry-run-symmetry, and error-boundary concerns.
+
 - **`gate doctor` surfaces unrecognized .yaml files and unexpected
   subdirectories under `requests/`.** Pre-fix, `listByState`'s regex
   filter (`^\d{4}-\d{2}-\d{2}-\d{3,4}\.yaml$`) silently dropped
