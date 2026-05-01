@@ -3,7 +3,11 @@ import {
   optionalOption,
   rejectUnknownFlags,
 } from '../../shared/parseArgs.js';
-import { C, warnIfMisconfiguredCwd } from './internal.js';
+import {
+  C,
+  formatContentRootDisclosure,
+  warnIfMisconfiguredCwd,
+} from './internal.js';
 import {
   DiagnosticReport,
   DiagnosticAreaSummary,
@@ -55,6 +59,13 @@ export async function doctorCmd(c: C, args: ParsedArgs): Promise<number> {
   }
 
   if (summaryOnly) {
+    const disclosure = formatContentRootDisclosure(
+      c.config,
+      process.cwd(),
+    );
+    if (disclosure !== null && totals > 0) {
+      process.stdout.write(`${disclosure}\n`);
+    }
     writeSummaryLine('members', report.summary.members);
     writeSummaryLine('requests', report.summary.requests);
     writeSummaryLine('issues', report.summary.issues);
@@ -64,6 +75,21 @@ export async function doctorCmd(c: C, args: ParsedArgs): Promise<number> {
 
   // text (default)
   process.stdout.write('gate doctor — content root health\n\n');
+  // Surface the resolved content_root + config when surprising —
+  // same trigger and phrasing as PR #110's boot-text disclosure
+  // and PR #108's register notice. The 99% normal run (cwd ===
+  // content_root, config present) stays quiet. Suppressed when
+  // totals === 0 because the bigger misconfigured-cwd warning
+  // (warnIfMisconfiguredCwd above) already discloses verbosely
+  // in that case — keeps disclosure to exactly one surface at a
+  // time. See lore/principles/09-orientation-disclosure.md.
+  const disclosure = formatContentRootDisclosure(
+    c.config,
+    process.cwd(),
+  );
+  if (disclosure !== null && totals > 0) {
+    process.stdout.write(`${disclosure}\n\n`);
+  }
   writeAreaSection('members', report.summary.members, report.findings);
   writeAreaSection('requests', report.summary.requests, report.findings);
   writeAreaSection('issues', report.summary.issues, report.findings);

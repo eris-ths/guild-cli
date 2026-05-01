@@ -8,6 +8,40 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 ## [Unreleased]
 
 ### Added
+- **`lore/principles/09-orientation-disclosure.md`.** Names the
+  rule three empirical PRs (#108 register stderr notice, #110
+  boot text disclosure, this PR's doctor disclosure) had been
+  re-deriving instance-by-instance: a verb whose output is a
+  count / finding / status *about* a content_root must let the
+  operator verify the content_root identity in surprising cases,
+  and stay quiet otherwise. The conditional emission is the
+  whole design — voice budget says we don't burn a line on the
+  99% case where cwd === content_root and config sits where
+  expected. Surfaced via the kiri-author / noir-devil / mira-mirror
+  review session in the dogfood sandbox; mira's mirror role
+  (paraphrase + meta-question) flagged that we'd been ad-hoc'ing
+  the same pattern across PRs without naming the rule. Pinning
+  it so the next opt-in (status? board?) doesn't re-litigate.
+
+- **`gate doctor` discloses the resolved content_root + config
+  when surprising.** Carries the principle 09 pattern to doctor.
+  Pre-fix, `gate doctor` reported "members 1 total, 0 malformed"
+  with no signal about WHICH content_root those numbers applied
+  to. An operator running doctor from a subdir of an active
+  guild had no clue the diagnostic walked up to a parent. Post-
+  fix, doctor emits the canonical line shape ONLY when
+  surprising:
+    - Subdir of an active guild → `content root: /abs (config: /abs/guild.config.yaml)`
+    - No-config fallback (cwd as implicit root, has data) →
+      `content root: /abs (config: none — cwd used as fallback root)`
+  Suppressed when `misconfigured_cwd` already fires (no-config +
+  no-data, the bigger warning owns disclosure) so the operator
+  sees exactly one disclosure surface at a time. `--summary`
+  mode also discloses; `--format json` is unaffected (text-only
+  per principle 09 boundary). New shared formatter
+  `formatContentRootDisclosure` in `internal.ts` so a third
+  caller doesn't copy-paste.
+
 - **`gate tail --format json`** closes the asymmetry that left
   `tail` as the lone read verb without JSON output. Sibling verbs
   (`voices`, `list`, `board`, `show`, `status`, `whoami`,

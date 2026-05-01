@@ -1,3 +1,4 @@
+import { resolve as resolvePath } from 'node:path';
 import { buildContainer } from '../../shared/container.js';
 import { optionalOption, ParsedArgs } from '../../shared/parseArgs.js';
 import { RequestJSON } from '../voices.js';
@@ -194,6 +195,43 @@ export function warnIfMisconfiguredCwd(c: C, isEmpty: boolean): void {
       `    that contains guild.config.yaml, or run 'gate register --name <you>'\n` +
       `    here if you really mean to use this directory as the guild root.)\n`,
   );
+}
+
+/**
+ * Formats one orientation line surfacing where the operator's
+ * verb just acted, when the situation is surprising — voice budget
+ * stays clean at the alignment case.
+ *
+ * Returns the line (no trailing newline) when ANY of:
+ *   - cwd is not the resolved content root (subdir of an active guild)
+ *   - no config file was found (cwd silently used as fallback root)
+ * Returns null otherwise.
+ *
+ * The shape:
+ *   `content root: <abs> (config: <abs>/guild.config.yaml)`
+ *   `content root: <abs> (config: none — cwd used as fallback root)`
+ *
+ * Phrasing matches `gate register`'s success notice (PR #108)
+ * `(config: ...)` segment so the operator recognises the
+ * orientation cue across verbs without re-reading.
+ *
+ * Pure formatter — caller decides where the line goes (stderr,
+ * stdout text body, etc.) and whether to additionally guard on
+ * misconfigured-cwd (the bigger warning takes precedence; see
+ * `warnIfMisconfiguredCwd` and lore/principles/09-orientation-
+ * disclosure.md for the rule).
+ */
+export function formatContentRootDisclosure(
+  config: { configFile: string | null; contentRoot: string },
+  cwd: string,
+): string | null {
+  const cwdOutside = resolvePath(cwd) !== resolvePath(config.contentRoot);
+  if (config.configFile !== null && !cwdOutside) return null;
+  const configSegment =
+    config.configFile === null
+      ? 'config: none — cwd used as fallback root'
+      : `config: ${config.configFile}`;
+  return `content root: ${config.contentRoot} (${configSegment})`;
 }
 
 // --- Editor fallback for long-form review comments ---------------------
