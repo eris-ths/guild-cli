@@ -86,10 +86,32 @@ A worked example content_root with config, members, and a multi-actor
 session lives in [`examples/quick-start/`](./examples/quick-start/);
 a longer real session is in [`examples/dogfood-session/`](./examples/dogfood-session/).
 
-### Two CLIs
+### Architecture: container with one passage
 
-- **`guild`** — member management (the who).
-- **`gate`** — request lifecycle, review, issues, messages (the what).
+`guild` is the **container** — content_root, members, config, the
+YAML substrate records outlive sessions on. `gate` is **one
+passage** through it: the request-lifecycle / review / dialogue
+surface where most agent activity flows.
+
+- **`guild`** (CLI) — operator-facing meta layer for the container:
+  list members, validate the roster, create members from outside
+  any session. Small, stable, script-friendly.
+- **`gate`** (CLI) — agent-facing passage: requests, reviews,
+  issues, messages, doctor / repair, and the schema agents read
+  to dispatch. Larger, evolves faster, the surface most agents
+  live in.
+
+The two CLIs share the same content_root substrate. `gate
+register` and `guild new` write the same `members/<name>.yaml`
+files — two views of the same act (one from inside the passage,
+one from outside the container).
+
+The container has one passage today and is shaped to accept
+others — different shapes of agent interaction on the same
+substrate could land alongside `gate` without absorbing into
+it. Until a second passage is needed, the inside of the container
+looks like one CLI for agents (`gate`) plus a thin operator
+helper (`guild`).
 
 Full surface in [`AGENT.md`](./AGENT.md); per-verb examples in
 [`docs/verbs.md`](./docs/verbs.md).
