@@ -19,7 +19,10 @@ const ISSUES_ADD_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'area',
   'text',
 ]);
-const ISSUES_LIST_KNOWN_FLAGS: ReadonlySet<string> = new Set(['state']);
+const ISSUES_LIST_KNOWN_FLAGS: ReadonlySet<string> = new Set([
+  'state',
+  'format',
+]);
 const ISSUES_PROMOTE_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'from',
   'executor',
@@ -35,6 +38,23 @@ const ISSUES_TRANSITION_KNOWN_FLAGS: ReadonlySet<string> = new Set(['by']);
 
 export async function issuesCmd(c: C, args: ParsedArgs): Promise<number> {
   const sub = args.positional[0];
+  if (sub === undefined) {
+    // Pre-this-fix, a bare `gate issues` silently fell through to
+    // `issues list` (open-only). The user typed `issues` not `list`,
+    // so the silent fall-through hid the verb's actual surface from
+    // first-time callers. Mirror what `gate list` does for missing
+    // --state: short hint at common entry points, gesture at the full
+    // catalog, exit 1 so a script chained on the call notices.
+    process.stderr.write(
+      'gate issues needs a subcommand. common ones:\n' +
+        '  gate issues list                  # what is open\n' +
+        '  gate issues add --from <m> --severity <s> --area <a> --text <s>\n' +
+        '  gate issues note <id> --by <m> --text <s>\n' +
+        '  full set: add|list|note|resolve|defer|start|reopen|promote ' +
+        '(gate --help)\n',
+    );
+    return 1;
+  }
   if (sub === 'promote') {
     return await issuesPromote(c, args);
   }
@@ -101,10 +121,59 @@ export async function issuesCmd(c: C, args: ParsedArgs): Promise<number> {
     process.stdout.write(`✓ issue: ${i.id.value}\n`);
     return 0;
   }
-  if (sub === 'list' || sub === undefined) {
+  if (sub === 'list') {
     rejectUnknownFlags(args, ISSUES_LIST_KNOWN_FLAGS, 'issues list');
-    const state = optionalOption(args, 'state');
-    const items = await c.issueUC.list(state);
+    const stateRaw = optionalOption(args, 'state');
+    const format = optionalOption(args, 'format') ?? 'text';
+    if (format !== 'text' && format !== 'json') {
+      throw new Error(`--format must be 'text' or 'json', got: ${format}`);
+    }
+
+    // `--state all` is sugar for "every state, no filter". Implemented
+    // here rather than in IssueUseCases because the use case is
+    // "list issues filtered by a *valid* state" and `all` is a CLI-
+    // level affordance, not a domain state. Distinguishing these
+    // keeps domain validation strict (parseIssueState rejects 'all').
+    let items: Awaited<ReturnType<typeof c.issueUC.list>>;
+    if (stateRaw === 'all') {
+      items = await c.issueUC.listAll();
+    } else {
+      items = await c.issueUC.list(stateRaw);
+    }
+
+    // Default-filter discoverability: when the caller passed nothing,
+    // the underlying list silently filters to state=open. Empty stdout
+    // gives no signal whether (a) zero issues, (b) filter excluded,
+    // or (c) error. Surface the filter on stderr — the same shape
+    // `gate list`/`gate pending` use to disclose implicit narrowing.
+    //
+    // The phrasing also closes the open-vs-active gap: status counts
+    // open+in_progress as "open_issues" (a triage glance), but list
+    // is a worklist (what's unclaimed). Naming the difference here
+    // means a reader who notices the count mismatch finds the answer
+    // at the surface that exposed it.
+    if (stateRaw === undefined && format === 'text') {
+      process.stderr.write(
+        '# filtered to state=open; status counts open+in_progress (active) ' +
+          '— --state to override (open|in_progress|deferred|resolved|all)\n',
+      );
+    }
+
+    if (format === 'json') {
+      // Shape pinned in 2026-05-01-0002 design review (devil C):
+      //   array of issue objects with notes nested. text format
+      //   flattens notes for human reading; json preserves structure
+      //   so programmatic consumers can walk them as a tree.
+      process.stdout.write(
+        JSON.stringify(
+          items.map((i) => i.toJSON()),
+          null,
+          2,
+        ) + '\n',
+      );
+      return 0;
+    }
+
     for (const i of items) {
       const j = i.toJSON();
       const proxyTag = j['invoked_by']

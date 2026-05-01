@@ -109,7 +109,12 @@ Requests:
 Issues:
   gate issues add --from <m> --severity <s> --area <a>
                   [--text <s> | --text - | <text>]
-  gate issues list [--state <s>]
+  gate issues list [--state <s>] [--format json|text]
+                       Default --state is open (worklist semantic).
+                       Use --state all to see every state, or pass a
+                       specific state. Note: status.open_issues
+                       counts open+in_progress (triage), so list and
+                       status report different scopes on purpose.
   gate issues resolve|defer|start|reopen <id>
   gate issues note <id> --by <m> [--text <s> | --text - | <text>]
   gate issues promote <id> --from <m> [--executor <m>] [--auto-review <m>]

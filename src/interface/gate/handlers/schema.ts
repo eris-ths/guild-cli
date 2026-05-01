@@ -608,6 +608,22 @@ const VERBS: readonly VerbSchema[] = [
           description:
             "`note` appends an annotation without mutating severity/area/text — the issue record is otherwise immutable.",
         },
+        state: {
+          type: 'string',
+          description:
+            "`list` filter. Default: open (worklist semantic). " +
+            'Special: `all` returns every state with no filter. ' +
+            'Note: status.open_issues counts open+in_progress (triage) — ' +
+            'list and status report different scopes by design.',
+          enum: ['open', 'in_progress', 'deferred', 'resolved', 'all'],
+        },
+        format: {
+          type: 'string',
+          enum: ['text', 'json'],
+          description:
+            "`list` only. text (default) flattens notes for human reading; " +
+            'json keeps notes nested per issue.',
+        },
       },
     },
     output: { type: 'object' },
