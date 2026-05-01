@@ -447,6 +447,100 @@ test('boot.verbs_available_now: host self-approval doesnt double-list as blocker
   }
 });
 
+test('boot.status.unresponded: counts unresponded concerns for the actor', () => {
+  // The orientation gap: an actor with concerns recorded against
+  // their completed work used to see status = all-zero, then
+  // separately have to remember to run `gate unresponded`. With
+  // the count surfaced in boot.status, a single boot call shows
+  // the concern queue exists. Same detector as `gate unresponded`,
+  // so the two surfaces never disagree.
+  const { root, cleanup } = bootstrap();
+  try {
+    // Register carol so she can review.
+    runGate(root, ['register', '--name', 'carol']);
+
+    // Lifecycle: alice files → human approves → bob executes → bob
+    // completes → carol records a devil/concern verdict.
+    runGate(
+      root,
+      ['request', '--from', 'alice', '--action', 'rushed', '--reason', 'r', '--executor', 'bob'],
+      { GUILD_ACTOR: 'alice' },
+    );
+    const id = rid(1);
+    runGate(root, ['approve', id, '--by', 'human']);
+    runGate(root, ['execute', id, '--by', 'bob']);
+    runGate(root, ['complete', id, '--by', 'bob']);
+    runGate(root, [
+      'review', id, '--by', 'carol', '--lense', 'devil',
+      '--verdict', 'concern', '--comment', 'rushed',
+    ]);
+
+    const { stdout: aliceBoot } = runGate(
+      root,
+      ['boot'],
+      { GUILD_ACTOR: 'alice' },
+    );
+    const alice = JSON.parse(aliceBoot);
+    assert.equal(
+      alice.status.unresponded,
+      1,
+      'alice (author) should see her unresponded concern in boot.status',
+    );
+
+    // Cross-check: gate status surfaces the same number.
+    const { stdout: aliceStatus } = runGate(
+      root,
+      ['status', '--format', 'json'],
+      { GUILD_ACTOR: 'alice' },
+    );
+    assert.equal(JSON.parse(aliceStatus).unresponded, 1);
+
+    // bob (executor, not in authorship set) has no unresponded.
+    const { stdout: bobBoot } = runGate(
+      root,
+      ['boot'],
+      { GUILD_ACTOR: 'bob' },
+    );
+    assert.equal(JSON.parse(bobBoot).status.unresponded, 0);
+  } finally {
+    cleanup();
+  }
+});
+
+test('boot.verbs_available_now: executor (≠author) doesnt double-list as blocker', () => {
+  // When the actor is a non-host executor named on a pending request
+  // they didn't author, the pending-as-executor predicate puts approve
+  // into actionable. Listing the same id+verb under requires_other_actor
+  // would contradict actionable for the same record — the gap a fresh
+  // agent reading boot would notice immediately.
+  const { root, cleanup } = bootstrap();
+  try {
+    runGate(
+      root,
+      ['request', '--from', 'alice', '--action', 'cross', '--reason', 'r', '--executor', 'bob'],
+      { GUILD_ACTOR: 'alice' },
+    );
+    const { stdout } = runGate(root, ['boot'], { GUILD_ACTOR: 'bob' });
+    const p = JSON.parse(stdout);
+    const actionable = p.verbs_available_now.actionable;
+    const blockers = p.verbs_available_now.requires_other_actor;
+    assert.ok(
+      actionable.some(
+        (a: { verb: string; id: string }) =>
+          a.verb === 'approve' && a.id.startsWith('20'),
+      ),
+      'executor should see approve as actionable',
+    );
+    assert.equal(
+      blockers.length,
+      0,
+      'executor (≠ author) should not see their own approve as a blocker',
+    );
+  } finally {
+    cleanup();
+  }
+});
+
 test('write response suggested_next carries actor_resolved', () => {
   // 2.E: the boolean lets an orchestrator branch without parsing
   // `args.by` against the env. True when args.by is absent or
