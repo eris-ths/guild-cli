@@ -738,6 +738,102 @@ test('voices calibration: samples < 5 reads as "uncalibrated"', () => {
   }
 });
 
+test('voices calibration: verdict=concern + state=failed counts as aligned', () => {
+  // Pre-fix this case was excluded entirely — the source-code
+  // header documented `concern + failed → aligned` but the
+  // implementation had `// verdict === 'concern' intentionally
+  // excluded`. Reviewers who used `concern` as their primary
+  // signal got zero credit and registered as uncalibrated forever.
+  // This test pins the contract directly so the documented v1
+  // alignment rules can't quietly drift again.
+  const { root, cleanup } = bootstrap();
+  try {
+    runGate(root, ['register', '--name', 'carol']);
+    // 5 cycles, all failures, carol flags `concern` on each. Pre-
+    // fix: 0 samples (uncalibrated). Post-fix: 5 aligned, trusted.
+    for (let n = 1; n <= 5; n++) {
+      const id = rid(n);
+      runGate(
+        root,
+        ['request', '--from', 'alice', '--action', `t${n}`, '--reason', 'r', '--executor', 'alice'],
+        { GUILD_ACTOR: 'alice' },
+      );
+      runGate(root, ['approve', id, '--by', 'alice']);
+      runGate(root, ['execute', id, '--by', 'alice']);
+      runGate(root, ['fail', id, '--by', 'alice', '--reason', 'nope']);
+      runGate(root, [
+        'review', id, '--by', 'carol',
+        '--lense', 'devil', '--verdict', 'concern', '--comment', 'flagged',
+      ]);
+    }
+    const { stdout } = runGate(
+      root,
+      ['voices', 'carol', '--format', 'json', '--with-calibration'],
+      { GUILD_ACTOR: 'alice' },
+    );
+    const calib = JSON.parse(stdout).calibration;
+    assert.equal(calib.by_lens.devil.aligned, 5);
+    assert.equal(calib.by_lens.devil.missed, 0);
+    assert.equal(calib.by_lens.devil.sample_count, 5);
+    assert.equal(calib.by_lens.devil.status, 'trusted');
+  } finally {
+    cleanup();
+  }
+});
+
+test('voices calibration: verdict=concern + state=completed stays excluded (soft)', () => {
+  // The other concern branch — concern+completed = "soft", neither
+  // a win nor a miss. The header rationale: the work landed, which
+  // is consistent with "concern was noted and addressed" AND with
+  // "concern was overblown" — counting it either way would bias
+  // the score. Excluded from sample_count entirely.
+  //
+  // Pre-fix this was already the de-facto behaviour (because ALL
+  // concerns were excluded). Post-fix, concern+failed counts as
+  // aligned but concern+completed must stay excluded — pin that
+  // boundary so a future "count all concerns somehow" refactor
+  // doesn't quietly change the soft semantic.
+  const { root, cleanup } = bootstrap();
+  try {
+    runGate(root, ['register', '--name', 'carol']);
+    // 5 cycles, all completed, carol's concerns. Expected: 0 samples
+    // (all soft, all excluded), uncalibrated.
+    for (let n = 1; n <= 5; n++) {
+      const id = rid(n);
+      runGate(
+        root,
+        ['request', '--from', 'alice', '--action', `t${n}`, '--reason', 'r', '--executor', 'alice'],
+        { GUILD_ACTOR: 'alice' },
+      );
+      runGate(root, ['approve', id, '--by', 'alice']);
+      runGate(root, ['execute', id, '--by', 'alice']);
+      runGate(root, ['complete', id, '--by', 'alice']);
+      runGate(root, [
+        'review', id, '--by', 'carol',
+        '--lense', 'devil', '--verdict', 'concern', '--comment', 'noted',
+      ]);
+    }
+    const { stdout } = runGate(
+      root,
+      ['voices', 'carol', '--format', 'json', '--with-calibration'],
+      { GUILD_ACTOR: 'alice' },
+    );
+    const calib = JSON.parse(stdout).calibration;
+    // The bucket exists (it's created on first sight of any verdict
+    // for the lense) but soft verdicts don't increment aligned or
+    // missed — sample_count stays 0 and status reads as uncalibrated.
+    // The boundary we're pinning: soft does NOT bias the score.
+    const devil = calib.by_lens.devil;
+    assert.ok(devil, 'devil bucket should exist for the touched lense');
+    assert.equal(devil.aligned, 0);
+    assert.equal(devil.missed, 0);
+    assert.equal(devil.sample_count, 0);
+    assert.equal(devil.status, 'uncalibrated');
+  } finally {
+    cleanup();
+  }
+});
+
 // ── gate thank: cross-actor appreciation primitive ──────────────
 
 test('thank: records appreciation with by/to/reason on the request', () => {

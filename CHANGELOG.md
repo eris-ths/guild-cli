@@ -8,6 +8,32 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 ## [Unreleased]
 
 ### Fixed
+- **Voice calibration: `verdict=concern + state=failed` counts as
+  aligned.** The source-code header in `src/interface/gate/voices.ts`
+  documented v1 alignment rules including
+  `verdict=concern + state=failed → aligned (you flagged it, it
+  broke)`, but the implementation had `// verdict === 'concern'
+  intentionally excluded` and dropped ALL concern verdicts from
+  both counts. Reviewers who used `concern` as their primary signal
+  got zero calibration credit and registered as `uncalibrated`
+  forever. Doc-code drift; the code now matches the documented
+  rules: `concern + failed → aligned`, `concern + completed → soft`
+  (excluded). The `reject + completed → overruled` case keeps its
+  existing "counted as missed" semantic, and a comment now names
+  the choice (the alternative — "the risk you flagged was
+  reviewed and held" — isn't separately observable from the record
+  alone, so we pick the conservative work-as-evidence read).
+  Devil-reviewed (`2026-05-01-0001`/`0002`).
+
+- **`gate schema`: voices entry declares `--with-calibration`** with
+  a description that names the JSON-only semantic honestly: the
+  flag opts into the `{utterances, calibration}` JSON object shape
+  (default: bare array), but text mode emits the calibration footer
+  regardless of this flag. Pre-fix the runtime accepted the flag
+  via `KNOWN_FLAGS` but the schema didn't declare it, and the
+  text-mode behaviour was undocumented — fresh agents reading the
+  schema saw an undocumented flag and a hidden text-mode override.
+
 - **`gate review`: empty editor body aborts with a context-aware
   error.** Pre-fix, when the user opened the editor (no
   `--comment`/positional/stdin) and saved without writing,
