@@ -75,7 +75,7 @@ gate review <id> --by <m> --lense <l> --verdict <v> --comment "..."
 ## Reading
 
 ```bash
-gate show <id>                          # request detail (JSON default)
+gate show <id> [--fields k1,k2] [--plain]  # request detail (JSON default; --fields trims, --plain unquotes a single field for shell substitution)
 gate list --state <s> [--for <m>]       # filtered list
 gate pending [--for <m>]                # shortcut for --state pending
 gate board [--for <m>]                  # pending + approved + executing in one view
@@ -204,11 +204,37 @@ CHANGELOG before relying on either behavior.)
 This affects AI agents particularly often: an agent reading
 `.mcp.json` may assume the env works for direct CLI calls, and the
 error message ("no such member") points at the actor name rather
-than the real cause (cwd). `gate boot` surfaces this via
-`hints.misconfigured_cwd: true` (JSON) and a warning block
-(text) — it fires only when no `guild.config.yaml` was found
-AND the fallback content_root is empty, so intentional fresh
-starts are not flagged.
+than the real cause (cwd). Three orientation surfaces flag this,
+each catching a different version of the gap (per
+[`lore/principles/09-orientation-disclosure.md`](./lore/principles/09-orientation-disclosure.md)):
+
+1. **`gate register`** — emits one stderr notice on success naming
+   the absolute path written + config in effect:
+   `notice: wrote /abs/members/<name>.yaml (config: /abs/guild.config.yaml)`.
+   When no config was discovered: `(config: none — cwd used as
+   fallback root)`. The JSON envelope also carries
+   `where_written` and `config_file` fields. Catches the
+   write-side disorientation at the moment the file lands.
+
+2. **`gate boot`** — JSON envelope carries
+   `hints.cwd_outside_content_root: bool` + `hints.config_file: string|null`
+   + `hints.resolved_content_root: string` + `hints.misconfigured_cwd: bool`.
+   Text mode emits a `content root: <abs> (config: <abs>)` line
+   when surprising (cwd != content_root, or no config found with
+   data present). The bigger `misconfigured_cwd` warning
+   (no-config + no-data) takes precedence and emits its own
+   block — only one disclosure surface fires at a time.
+
+3. **`gate doctor`** — text mode also emits the same
+   `content root: <abs> (config: <abs>)` line under the same
+   conditions, so an operator running `doctor` for a health
+   check sees which content_root produced the findings without
+   needing to round-trip through `boot`.
+
+The disclosure stays silent at the alignment case (cwd ===
+content_root, config present at `cwd/guild.config.yaml`) — voice
+budget. Phrasing is identical across the three surfaces so the
+cue carries cross-verb without re-reading.
 
 ## Deep dives
 

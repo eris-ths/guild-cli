@@ -817,15 +817,33 @@ Now:
 
 ```
 $ gate register --name claude --category professional
-✓ registered: claude (professional)
+✓ registered: claude [professional]
+  next: export GUILD_ACTOR=claude && gate boot
+notice: wrote /abs/path/members/claude.yaml (config: /abs/path/guild.config.yaml)
 ```
 
 - `--category` defaults to `professional` (aliases: `pro`, `prof`,
   `member`).
 - Re-registering the same name is a no-op error, not a silent
   overwrite.
-- `--dry-run` previews the YAML without writing.
+- `--dry-run` previews the YAML without writing — the preview
+  header now shows the absolute path, and a stderr notice fires
+  with `would write` instead of `wrote` (symmetric with the
+  real-write disclosure).
 - `--category host` is rejected — hosts go in `guild.config.yaml`.
+
+**Path-disclosure notice (post-PR #108).** The stderr `notice:`
+line names where the YAML actually landed, plus which
+`guild.config.yaml` was in effect. When gate walked up to a
+parent's config — or fell back to cwd because no config was
+found — that's where the silent gap used to be. The notice
+makes both cases visible. The JSON envelope (`--format json`)
+carries the same disclosure as structured fields:
+`{where_written: "/abs/path/members/<name>.yaml", config_file:
+"/abs/path/guild.config.yaml" | null}`. See
+[`lore/principles/09-orientation-disclosure.md`](../lore/principles/09-orientation-disclosure.md)
+for the rule the disclosure honours, and `gate boot` /
+`gate doctor` for the read-side counterparts.
 
 **Design note.** Registration must be frictionless so an agent's
 first interaction with a content_root doesn't stall on schema
