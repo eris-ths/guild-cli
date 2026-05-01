@@ -18,6 +18,8 @@ export type DiagnosticKind =
   | 'hydration_error'
   | 'yaml_parse_error'
   | 'duplicate_id'
+  | 'unrecognized_file'
+  | 'unrecognized_directory'
   | 'unknown';
 
 export interface DiagnosticFinding {
@@ -75,6 +77,16 @@ export function classifyMessage(message: string): DiagnosticKind {
   }
   if (m.includes('duplicate') || m.includes('collision')) {
     return 'duplicate_id';
+  }
+  // Match the directory-prefix BEFORE the file-prefix so a message
+  // mentioning "unrecognized directory: ..." doesn't get misclassified
+  // as 'unrecognized_file'. Both prefixes come from the diagnostic's
+  // unrecognized-entry scan in YamlRequestRepository.listUnrecognizedFiles.
+  if (m.includes('unrecognized directory')) {
+    return 'unrecognized_directory';
+  }
+  if (m.includes('unrecognized file')) {
+    return 'unrecognized_file';
   }
   if (
     m.includes('skipping') ||

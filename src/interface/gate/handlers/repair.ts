@@ -48,6 +48,8 @@ const VALID_KINDS: ReadonlySet<DiagnosticKind> = new Set([
   'hydration_error',
   'yaml_parse_error',
   'duplicate_id',
+  'unrecognized_file',
+  'unrecognized_directory',
   'unknown',
 ]);
 

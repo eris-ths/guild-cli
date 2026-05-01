@@ -8,6 +8,34 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 ## [Unreleased]
 
 ### Fixed
+- **`gate doctor` surfaces unrecognized .yaml files and unexpected
+  subdirectories under `requests/`.** Pre-fix, `listByState`'s regex
+  filter (`^\d{4}-\d{2}-\d{2}-\d{3,4}\.yaml$`) silently dropped
+  off-pattern entries — a `bad.yaml` in `requests/pending/`, a
+  `2026-05-01-7.yaml` (wrong digit count), an `oops-dir/`
+  subdirectory under `<state>/`, or even a properly-named
+  `2026-05-01-9999.yaml` placed at `requests/` root (wrong directory
+  level) — all stayed there forever and `gate doctor` reported the
+  root as clean. Two new finding kinds: `unrecognized_file` (off-
+  pattern .yaml in any record location) maps to quarantine in
+  repair (gate ignores them anyway; moving to `quarantine/` is safe
+  and reversible). `unrecognized_directory` (subdir under `<state>/`
+  or non-state directory at requests/ root) maps to **no-op** —
+  contents are unknown and quarantining a tree is invasive; the
+  operator must inspect first. Boundary: only `.yaml` files and
+  directories are flagged; `notes.txt`, `README.md`, `.gitkeep`
+  and other repo artifacts are intentionally ignored. Devil-
+  reviewed (`2026-05-01-0001`/`0002`).
+
+### Deferred
+- **Unrecognized-file scan for `issues/` and `members/`.** These
+  directories have flat (non-state) layouts and their own filename
+  patterns (`i-YYYY-MM-DD-NNNN.yaml` and `[a-z][a-z0-9_-]{0,31}.yaml`
+  respectively). The first cut ships requests-only; extending the
+  same scanner to issues and members is mechanical but distinct
+  enough to warrant its own PR. Recorded so a future reader who
+  hits "doctor missed my misplaced issue.yaml" finds the trail.
+
 - **Voice calibration: `verdict=concern + state=failed` counts as
   aligned.** The source-code header in `src/interface/gate/voices.ts`
   documented v1 alignment rules including

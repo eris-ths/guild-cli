@@ -62,6 +62,15 @@ class FakeRequestRepo implements RequestRepository {
     }
     return this.items;
   }
+  async listUnrecognizedFiles(): Promise<
+    Array<{ path: string; kind: 'file' | 'directory'; reason: string }>
+  > {
+    // Test fakes don't simulate directory walks; the diagnostic
+    // off-pattern surface is exercised end-to-end in the interface
+    // test (tests/interface/doctorUnrecognized.test.ts) where a
+    // real filesystem fixture provides realistic input.
+    return [];
+  }
   async findById(_id: RequestId): Promise<Request | null> {
     return null;
   }
