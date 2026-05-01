@@ -741,11 +741,11 @@ function renderBootText(p: BootPayload): string {
     lines.push(`recent (${p.tail.length}):`);
     for (const u of p.tail.slice(0, 5)) {
       if (u.kind === 'review') {
-        lines.push(`  ${u.at}  req=${u.requestId}  [${u.lense}/${u.verdict}] by ${u.by}`);
+        lines.push(`  ${u.at}  req=${u.request_id}  [${u.lense}/${u.verdict}] by ${u.by}`);
       } else if (u.kind === 'thank') {
-        lines.push(`  ${u.at}  req=${u.requestId}  thank ${u.by} → ${u.to}`);
+        lines.push(`  ${u.at}  req=${u.request_id}  thank ${u.by} → ${u.to}`);
       } else {
-        lines.push(`  ${u.at}  req=${u.requestId}  authored by ${u.from}`);
+        lines.push(`  ${u.at}  req=${u.request_id}  authored by ${u.from}`);
       }
     }
   }
@@ -754,9 +754,9 @@ function renderBootText(p: BootPayload): string {
     lines.push(`your recent (${p.your_recent.length}):`);
     for (const u of p.your_recent.slice(0, 3)) {
       if (u.kind === 'review') {
-        lines.push(`  ${u.at}  req=${u.requestId}  [${u.lense}/${u.verdict}]`);
+        lines.push(`  ${u.at}  req=${u.request_id}  [${u.lense}/${u.verdict}]`);
       } else {
-        lines.push(`  ${u.at}  req=${u.requestId}  authored`);
+        lines.push(`  ${u.at}  req=${u.request_id}  authored`);
       }
     }
   }

@@ -386,19 +386,19 @@ function composeRestorationProseEn(ctx: {
   if (lastUtterance) {
     const age = ageHint(lastUtterance.at, new Date().toISOString());
     if (lastUtterance.kind === 'review') {
-      const proxyHint = lastUtterance.invokedBy
-        ? ` (invoked by ${lastUtterance.invokedBy})`
+      const proxyHint = lastUtterance.invoked_by
+        ? ` (invoked by ${lastUtterance.invoked_by})`
         : '';
       lines.push(
-        `Your last voice (utterance, ${age}) was a review on req=${lastUtterance.requestId} — [${lastUtterance.lense}/${lastUtterance.verdict}]${proxyHint}:`,
+        `Your last voice (utterance, ${age}) was a review on req=${lastUtterance.request_id} — [${lastUtterance.lense}/${lastUtterance.verdict}]${proxyHint}:`,
       );
       lines.push(`  "${truncate(lastUtterance.comment, 240)}"`);
     } else if (lastUtterance.kind === 'thank') {
-      const proxyHint = lastUtterance.invokedBy
-        ? ` (invoked by ${lastUtterance.invokedBy})`
+      const proxyHint = lastUtterance.invoked_by
+        ? ` (invoked by ${lastUtterance.invoked_by})`
         : '';
       lines.push(
-        `Your last voice (utterance, ${age}) was a thank → ${lastUtterance.to} on req=${lastUtterance.requestId}${proxyHint}:`,
+        `Your last voice (utterance, ${age}) was a thank → ${lastUtterance.to} on req=${lastUtterance.request_id}${proxyHint}:`,
       );
       lines.push(`  re: ${truncate(lastUtterance.action, 120)}`);
       if (lastUtterance.reason !== undefined) {
@@ -409,15 +409,15 @@ function composeRestorationProseEn(ctx: {
         lastUtterance.with && lastUtterance.with.length > 0
           ? ` (shaped with ${lastUtterance.with.join(', ')})`
           : '';
-      const proxyHint = lastUtterance.invokedBy
-        ? ` (invoked by ${lastUtterance.invokedBy})`
+      const proxyHint = lastUtterance.invoked_by
+        ? ` (invoked by ${lastUtterance.invoked_by})`
         : '';
       lines.push(
-        `Your last voice (utterance, ${age}) was authoring req=${lastUtterance.requestId}${proxyHint}${withHint}:`,
+        `Your last voice (utterance, ${age}) was authoring req=${lastUtterance.request_id}${proxyHint}${withHint}:`,
       );
       lines.push(`  action: ${truncate(lastUtterance.action, 120)}`);
-      if (lastUtterance.completionNote) {
-        lines.push(`  note:   ${truncate(lastUtterance.completionNote, 240)}`);
+      if (lastUtterance.completion_note) {
+        lines.push(`  note:   ${truncate(lastUtterance.completion_note, 240)}`);
       }
     }
   } else {
@@ -528,19 +528,19 @@ function composeRestorationProseJa(ctx: {
   if (lastUtterance) {
     const age = ageHint(lastUtterance.at, new Date().toISOString());
     if (lastUtterance.kind === 'review') {
-      const proxyHint = lastUtterance.invokedBy
-        ? `（${lastUtterance.invokedBy} が代行）`
+      const proxyHint = lastUtterance.invoked_by
+        ? `（${lastUtterance.invoked_by} が代行）`
         : '';
       lines.push(
-        `直近の発話 (utterance, ${age}): req=${lastUtterance.requestId} へのレビュー — [${lastUtterance.lense}/${lastUtterance.verdict}]${proxyHint}:`,
+        `直近の発話 (utterance, ${age}): req=${lastUtterance.request_id} へのレビュー — [${lastUtterance.lense}/${lastUtterance.verdict}]${proxyHint}:`,
       );
       lines.push(`  「${truncate(lastUtterance.comment, 240)}」`);
     } else if (lastUtterance.kind === 'thank') {
-      const proxyHint = lastUtterance.invokedBy
-        ? `（${lastUtterance.invokedBy} が代行）`
+      const proxyHint = lastUtterance.invoked_by
+        ? `（${lastUtterance.invoked_by} が代行）`
         : '';
       lines.push(
-        `直近の発話 (utterance, ${age}): req=${lastUtterance.requestId} への感謝 → ${lastUtterance.to}${proxyHint}:`,
+        `直近の発話 (utterance, ${age}): req=${lastUtterance.request_id} への感謝 → ${lastUtterance.to}${proxyHint}:`,
       );
       lines.push(`  re: ${truncate(lastUtterance.action, 120)}`);
       if (lastUtterance.reason !== undefined) {
@@ -551,15 +551,15 @@ function composeRestorationProseJa(ctx: {
         lastUtterance.with && lastUtterance.with.length > 0
           ? `（${lastUtterance.with.join('、')} と一緒に）`
           : '';
-      const proxyHint = lastUtterance.invokedBy
-        ? `（${lastUtterance.invokedBy} が代行）`
+      const proxyHint = lastUtterance.invoked_by
+        ? `（${lastUtterance.invoked_by} が代行）`
         : '';
       lines.push(
-        `直近の発話 (utterance, ${age}): req=${lastUtterance.requestId} の起票${proxyHint}${withHint}:`,
+        `直近の発話 (utterance, ${age}): req=${lastUtterance.request_id} の起票${proxyHint}${withHint}:`,
       );
       lines.push(`  action: ${truncate(lastUtterance.action, 120)}`);
-      if (lastUtterance.completionNote) {
-        lines.push(`  note:   ${truncate(lastUtterance.completionNote, 240)}`);
+      if (lastUtterance.completion_note) {
+        lines.push(`  note:   ${truncate(lastUtterance.completion_note, 240)}`);
       }
     }
   } else {
