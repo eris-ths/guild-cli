@@ -1,3 +1,4 @@
+import { resolve } from 'node:path';
 import {
   ParsedArgs,
   optionalOption,
@@ -98,6 +99,19 @@ interface BootPayload {
    */
   hints: {
     misconfigured_cwd: boolean;
+    /**
+     * `cwd_outside_content_root`: true iff the caller's cwd is NOT
+     * the same directory as `resolved_content_root`. Distinguishes
+     * "you ran gate from a subdir of an active guild and your write
+     * went into the parent's records" (true) from "you ran gate at
+     * the guild root, everything is where you expect" (false). The
+     * silent-parent-config-pickup gap a fresh-agent dogfood
+     * surfaced after #107 was the case this flag detects.
+     *
+     * Always false when `misconfigured_cwd` is true (the misconfigured
+     * block already discloses verbosely; we don't double-up).
+     */
+    cwd_outside_content_root: boolean;
     config_file: string | null;
     resolved_content_root: string;
     content_root_health: {
@@ -255,6 +269,18 @@ export async function bootCmd(c: C, args: ParsedArgs): Promise<number> {
     members.length === 0 &&
     allRequests.length === 0;
 
+  // Subdir-pickup detection: cwd is NOT the same directory as the
+  // resolved content_root. The case the post-#107 fresh-agent
+  // dogfood surfaced — running gate from `/foo/sub/` when an
+  // `/foo/guild.config.yaml` exists silently writes into `/foo/`.
+  // Suppressed when misconfiguredCwd already fired so the bigger
+  // warning isn't doubled. Kept false at exactly the alignment
+  // case (`cwd === resolved_content_root`) to keep the 99% normal
+  // run quiet — voice budget.
+  const cwdOutsideContentRoot =
+    !misconfiguredCwd &&
+    resolve(process.cwd()) !== resolve(c.config.contentRoot);
+
   // Content-root health: lightweight summary of malformed records.
   // We piggyback on DiagnosticUseCases which already walks every
   // area; its onMalformed collector picks up YAML that failed to
@@ -318,6 +344,7 @@ export async function bootCmd(c: C, args: ParsedArgs): Promise<number> {
     last_activity: status.last_activity,
     hints: {
       misconfigured_cwd: misconfiguredCwd,
+      cwd_outside_content_root: cwdOutsideContentRoot,
       config_file: c.config.configFile,
       resolved_content_root: c.config.contentRoot,
       content_root_health: contentRootHealth,
@@ -704,6 +731,24 @@ function renderBootText(p: BootPayload): string {
     );
     lines.push(
       `        or use a wrapper that cd's before invoking gate.mjs.`,
+    );
+  } else if (
+    p.hints.cwd_outside_content_root ||
+    p.hints.config_file === null
+  ) {
+    // Surface the resolved content_root + config when the cwd is
+    // surprising (subdir of an active guild) or implicit (no config
+    // found, cwd silently used as fallback root). Suppressed at the
+    // alignment case to keep the normal run quiet — voice budget.
+    // Phrasing matches the `(config: ...)` segment of `gate
+    // register`'s notice (PR #108) for cross-verb recognition.
+    const configSegment =
+      p.hints.config_file === null
+        ? 'config: none — cwd used as fallback root'
+        : `config: ${p.hints.config_file}`;
+    lines.push('');
+    lines.push(
+      `content root: ${p.hints.resolved_content_root} (${configSegment})`,
     );
   }
   const health = p.hints.content_root_health;

@@ -303,3 +303,145 @@ test('gate boot: suggested_next=null for registered member', () => {
     cleanup();
   }
 });
+
+// ---------------------------------------------------------------
+// content_root disclosure (designed in 2026-05-01-0001/0002).
+//
+// Pre-fix, `gate boot --format text` showed neither config_file
+// nor resolved_content_root, so an agent who ran gate from a
+// subdir of an active guild — the silent parent-config-pickup
+// gap PR #108 closed on the WRITE side — got no signal on the
+// READ side either. The fix surfaces the orientation line ONLY
+// when the situation is surprising (subdir / no-config), keeping
+// the 99% normal run quiet (voice budget). JSON payload now
+// carries the boolean `cwd_outside_content_root` for
+// orchestrators.
+// ---------------------------------------------------------------
+
+test('gate boot text: aligned cwd (cwd === content_root) emits NO content-root disclosure', () => {
+  // Voice budget: the 99% case (operator at the guild root) stays
+  // exactly as it was. Pin the absence so a future "always
+  // disclose" refactor can't regress the noise level.
+  const { root, cleanup } = bootstrap();
+  try {
+    const { stdout, status } = runGate(
+      root,
+      ['boot', '--format', 'text'],
+      { GUILD_ACTOR: 'alice' },
+    );
+    assert.equal(status, 0);
+    assert.doesNotMatch(stdout, /^content root:/m);
+  } finally {
+    cleanup();
+  }
+});
+
+test('gate boot text: subdir of active guild discloses content_root + parent config', () => {
+  // The case PR #108 closed on the write side. boot is the
+  // orientation surface — agents running boot to "see where I am"
+  // need the same disclosure.
+  const { root, cleanup } = bootstrap();
+  try {
+    const sub = join(root, 'sub');
+    mkdirSync(sub);
+    const { stdout, status } = runGate(
+      sub,
+      ['boot', '--format', 'text'],
+      { GUILD_ACTOR: 'alice' },
+    );
+    assert.equal(status, 0);
+    assert.match(
+      stdout,
+      // Line shape matches PR #108's `(config: ...)` segment for
+      // cross-verb recognition.
+      new RegExp(
+        `^content root: ${escapeRegex(root)} \\(config: ${escapeRegex(join(root, 'guild.config.yaml'))}\\)$`,
+        'm',
+      ),
+    );
+  } finally {
+    cleanup();
+  }
+});
+
+test('gate boot text: no-config-found case discloses cwd-as-fallback', () => {
+  // The other half of the gap: an agent in /tmp/foo with no
+  // parent guild gets cwd silently used as content_root. Pre-fix
+  // they had no signal that the implicit default was in play.
+  // Post-fix the line names it: `(config: none — cwd used as
+  // fallback root)`. The misconfigured_cwd block (no-config + no-
+  // data) keeps its bigger warning; this fires for the no-config
+  // + has-data case (someone deliberately using cwd as root).
+  const root = mkdtempSync(join(tmpdir(), 'guild-boot-nocfg-'));
+  try {
+    // Plant a member so we're past the misconfigured_cwd trigger.
+    mkdirSync(join(root, 'members'));
+    writeFileSync(
+      join(root, 'members', 'solo.yaml'),
+      'name: solo\ncategory: professional\nactive: true\n',
+    );
+    const { stdout, status } = runGate(
+      root,
+      ['boot', '--format', 'text'],
+      { GUILD_ACTOR: 'solo' },
+    );
+    assert.equal(status, 0);
+    assert.match(
+      stdout,
+      new RegExp(
+        `^content root: ${escapeRegex(root)} \\(config: none — cwd used as fallback root\\)$`,
+        'm',
+      ),
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('gate boot JSON: cwd_outside_content_root flag distinguishes aligned from subdir', () => {
+  // Orchestrator contract: the disclosure also reaches MCP via a
+  // structured boolean, not just the text rendering. Pin both
+  // truth values so a future refactor can't drop the field.
+  const { root, cleanup } = bootstrap();
+  try {
+    // aligned: cwd === root → false
+    const aligned = JSON.parse(
+      runGate(root, ['boot'], { GUILD_ACTOR: 'alice' }).stdout,
+    );
+    assert.equal(aligned.hints.cwd_outside_content_root, false);
+
+    // subdir: cwd is one level deeper → true
+    const sub = join(root, 'sub');
+    mkdirSync(sub);
+    const subdir = JSON.parse(
+      runGate(sub, ['boot'], { GUILD_ACTOR: 'alice' }).stdout,
+    );
+    assert.equal(subdir.hints.cwd_outside_content_root, true);
+  } finally {
+    cleanup();
+  }
+});
+
+test('gate boot text: misconfigured_cwd block suppresses content_root disclosure (no double-up)', () => {
+  // When misconfigured_cwd fires (no config + no data), the bigger
+  // warning block already discloses the resolved path. The new
+  // disclosure must NOT also fire — voice budget says one
+  // surface owns the disclosure at a time.
+  const root = mkdtempSync(join(tmpdir(), 'guild-boot-misconf-'));
+  try {
+    const { stdout } = runGate(
+      root,
+      ['boot', '--format', 'text'],
+      { GUILD_ACTOR: '' },
+    );
+    assert.match(stdout, /no guild.config.yaml found/);
+    // The new line must NOT fire alongside the bigger warning.
+    assert.doesNotMatch(stdout, /^content root:/m);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}

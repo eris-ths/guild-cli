@@ -7,6 +7,39 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 
 ## [Unreleased]
 
+### Fixed
+- **`gate boot --format text` surfaces `content root: <path>
+  (config: <path>)` when the situation is surprising.** Sibling
+  to the PR #108 register-notice fix: closes the silent parent-
+  config-pickup gap on the READ side. Pre-fix, `gate boot --format
+  text` showed neither `config_file` nor `resolved_content_root`
+  (both fields existed in the JSON envelope but the text
+  rendering omitted them), so an agent who ran boot for
+  orientation got no path signal even when the cwd was a subdir
+  of an active guild and gate had silently walked up to a
+  parent's `guild.config.yaml`.
+
+  Post-fix, the orientation block emits one line **only when the
+  situation is surprising** — voice budget is preserved by
+  staying silent at the alignment case (cwd === resolved
+  content_root, config present and discovered). Two trigger
+  cases:
+
+  - **Subdir of an active guild** (`cwd != resolved_content_root`)
+    — `content root: /abs/path (config: /abs/path/guild.config.yaml)`
+  - **No config found, cwd used as fallback** (`config_file ===
+    null` and there's data) — `content root: /abs/path (config:
+    none — cwd used as fallback root)`
+
+  Suppressed when `misconfigured_cwd` already fired (no-config +
+  no-data, the bigger warning takes over) so the disclosure is
+  surfaced exactly once. JSON envelope gains `cwd_outside_content_root`
+  boolean for orchestrators reading the structured contract.
+  Phrasing matches PR #108's `(config: ...)` segment for cross-
+  verb recognition. Devil-reviewed (`2026-05-01-0001`/`0002`);
+  v2 absorbed the voice-budget concern (D1) by gating the
+  emission on the surprising cases.
+
 ### Changed
 - **`gate voices` / `gate tail` JSON: `request_id` / `invoked_by` /
   `completion_note` / `deny_reason` / `failure_reason` (was:
