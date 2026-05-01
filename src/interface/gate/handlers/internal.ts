@@ -138,6 +138,13 @@ export function isDryRun(args: ParsedArgs): boolean {
  * (review). `preview` always reflects the unsaved in-memory object
  * so the caller sees exactly what would land if they dropped
  * `--dry-run`.
+ *
+ * When the caller passed `--format text`, the envelope is still JSON
+ * (the dry_run/verb/would_transition triple has no useful text
+ * rendering) — but a one-line stderr notice names that contract so
+ * the format-flag override doesn't read as silent fail-open. The
+ * notice points at WHY the format is fixed (the envelope is
+ * structured) rather than just announcing the override.
  */
 export function emitDryRunPreview(p: {
   verb: string;
@@ -146,7 +153,14 @@ export function emitDryRunPreview(p: {
   fromState?: string;
   toState?: string;
   after: { toJSON(): Record<string, unknown> };
+  format?: string;
 }): void {
+  if (p.format !== undefined && p.format !== 'json') {
+    process.stderr.write(
+      '# --dry-run preview is structured (json envelope); --format ' +
+        `${p.format} would lose dry_run/verb/would_transition.\n`,
+    );
+  }
   const envelope: Record<string, unknown> = {
     dry_run: true,
     verb: p.verb,

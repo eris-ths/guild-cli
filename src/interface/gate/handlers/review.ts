@@ -90,7 +90,7 @@ export async function reqReview(c: C, args: ParsedArgs): Promise<number> {
     });
     // Review doesn't transition state — omit would_transition, let
     // the preview payload carry the new review entry in `reviews`.
-    emitDryRunPreview({ verb: 'review', id, by, after: updated });
+    emitDryRunPreview({ verb: 'review', id, by, after: updated, format: parseFormat(args) });
     return 0;
   }
   const updated = await c.requestUC.review({
