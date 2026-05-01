@@ -110,6 +110,20 @@ function actionForKind(f: DiagnosticFinding): RepairAction {
         rationale:
           'duplicate id — automatic resolution risks data loss; operator must compare and reconcile manually',
       };
+    case 'unrecognized_file':
+      return {
+        finding: f,
+        kind: 'quarantine',
+        rationale:
+          'off-pattern .yaml in a record directory; gate ignores it via the regex filter, so quarantining moves it out of clutter without losing the contents (recoverable from quarantine/)',
+      };
+    case 'unrecognized_directory':
+      return {
+        finding: f,
+        kind: 'no_op',
+        rationale:
+          'unexpected directory; contents unknown and quarantining a tree is invasive — operator must inspect and decide whether the directory is recoverable elsewhere or should be removed',
+      };
     case 'unknown':
       return {
         finding: f,

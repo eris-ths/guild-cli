@@ -14,7 +14,21 @@ import {
   RequestRepository,
   RequestIdCollision,
   RequestVersionConflict,
+  UnrecognizedRequestFile,
 } from '../../application/ports/RequestRepository.js';
+import { lstatSync, type Stats } from 'node:fs';
+
+// Best-effort lstat — returns null for entries that disappear between
+// the listing and the stat call (e.g. concurrent transition writing
+// then deleting the old-state file). Diagnostic shouldn't crash on
+// races, so a missing entry just gets dropped from the finding set.
+function lstatSafe(path: string): Stats | null {
+  try {
+    return lstatSync(path);
+  } catch {
+    return null;
+  }
+}
 import {
   MAX_DIR_ENTRIES,
   existsSafe,
@@ -82,6 +96,72 @@ export class YamlRequestRepository implements RequestRepository {
       REQUEST_STATES.map((state) => this.listByState(state)),
     );
     return dedupeRequestsById(perState.flat());
+  }
+
+  async listUnrecognizedFiles(): Promise<UnrecognizedRequestFile[]> {
+    // Scope: .yaml files only — the diagnostic is opinionated about
+    // *attempted records*. notes.txt / README.md / .gitkeep are
+    // legitimately useful for repo authors to leave in record
+    // directories and not surfaced as health issues. Subdirectories
+    // under <state>/ ARE surfaced (nothing legitimately ever lands
+    // there).
+    const out: UnrecognizedRequestFile[] = [];
+    const idPattern = /^\d{4}-\d{2}-\d{2}-\d{3,4}\.yaml$/;
+    const stateSet = new Set<string>(REQUEST_STATES);
+
+    // 1. Walk each state directory: surface .yaml files that don't
+    //    match the id pattern (typo, wrong digit count, hand-edited
+    //    name) and any subdirectories (no legitimate place there).
+    for (const state of REQUEST_STATES) {
+      const entries = listDirSafe(this.config.paths.requests, state);
+      for (const name of entries) {
+        const abs = join(this.config.paths.requests, state, name);
+        const stat = lstatSafe(abs);
+        if (stat === null) continue;
+        if (stat.isDirectory()) {
+          out.push({
+            path: abs,
+            kind: 'directory',
+            reason: `subdirectory under <state>/ — no legitimate place for nested directories in the request layout`,
+          });
+          continue;
+        }
+        if (!name.endsWith('.yaml')) continue;
+        if (idPattern.test(name)) continue;
+        out.push({
+          path: abs,
+          kind: 'file',
+          reason: `.yaml filename does not match YYYY-MM-DD-NNNN.yaml — likely typo or hand-edited`,
+        });
+      }
+    }
+
+    // 2. Walk requests/ root: surface .yaml files at this level
+    //    (they belong inside a state subdirectory) and any
+    //    non-state-named directories.
+    const rootEntries = listDirSafe(this.config.paths.requests, '.');
+    for (const name of rootEntries) {
+      const abs = join(this.config.paths.requests, name);
+      const stat = lstatSafe(abs);
+      if (stat === null) continue;
+      if (stat.isDirectory()) {
+        if (stateSet.has(name)) continue; // expected
+        out.push({
+          path: abs,
+          kind: 'directory',
+          reason: `directory at requests/ root that is not a state name (expected: ${REQUEST_STATES.join(', ')})`,
+        });
+        continue;
+      }
+      if (!name.endsWith('.yaml')) continue;
+      out.push({
+        path: abs,
+        kind: 'file',
+        reason: `.yaml file at requests/ root — should live under <state>/`,
+      });
+    }
+
+    return out;
   }
 
   async saveNew(request: Request): Promise<void> {
