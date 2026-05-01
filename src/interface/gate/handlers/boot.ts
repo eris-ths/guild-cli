@@ -19,6 +19,15 @@ export interface BootSuggestedNext {
   verb: string;
   args: Record<string, string>;
   reason: string;
+  /**
+   * True iff `args.by` is absent or matches the calling actor.
+   * Mirrors `SuggestedNext.actor_resolved` from writeFormat.ts so
+   * orchestrators see the same shape across boot / suggest / resume /
+   * write-response surfaces. False when the suggestion names a
+   * different actor (e.g. "approve by host" while the caller isn't
+   * a host) — read `reason` and decide whether to escalate.
+   */
+  actor_resolved: boolean;
 }
 
 /**
@@ -91,26 +100,40 @@ interface BootPayload {
    * Discoverability hint: what verbs are applicable right now?
    *
    * `actionable` names the state-transition verbs whose preconditions
-   * are met for the caller's current queues. Each entry carries the
-   * target id + a human-readable reason so a first-time agent can see
-   * not just "approve exists" but "approve is valid on 2026-04-19-0001
-   * because you're its executor and it's pending". `suggested_next`
-   * picks ONE of these to lead with; `actionable` names the rest so
-   * an agent that wants to branch can see the siblings.
+   * are met for the caller's current queues — verbs the caller can
+   * dispatch as themselves (--by = current actor). Each entry carries
+   * the target id + a human-readable reason. `suggested_next` picks
+   * ONE of these to lead with; `actionable` names the rest so an
+   * agent that wants to branch can see the siblings.
+   *
+   * `requires_other_actor` names verbs that exist on the actor's
+   * record (request they authored or own) but cannot be dispatched
+   * by them — they require a different actor's --by. Each entry
+   * names `candidates` (a list of names — typically hosts) and the
+   * `reason` the actor can't act alone. Surfaces blockers so the
+   * caller can see WHY their request is stuck (waiting for host
+   * approval, etc.) without having to read suggested_next's prose.
+   * Empty when nothing is blocked on another actor.
    *
    * `always_readable` is the flat catalog of side-effect-free verbs
    * an identified (or even anonymous) actor can always call — the
    * "map of the readable world" for initial exploration.
    *
-   * The two lists never overlap: write verbs belong to `actionable`
-   * (when they're valid) or are absent; read verbs belong to
-   * `always_readable`. Keeping them separate makes it obvious which
-   * calls change state and which don't.
+   * The three lists never overlap: each entry sits in exactly one.
+   * Keeping them separate makes it obvious which calls the agent
+   * can do (actionable), which need someone else (requires_other_actor),
+   * and which never change state (always_readable).
    */
   verbs_available_now: {
     actionable: Array<{
       verb: string;
       id: string;
+      reason: string;
+    }>;
+    requires_other_actor: Array<{
+      verb: string;
+      id: string;
+      candidates: readonly string[];
       reason: string;
     }>;
     always_readable: readonly string[];
@@ -251,7 +274,12 @@ export async function bootCmd(c: C, args: ParsedArgs): Promise<number> {
     members,
     allRequests,
   );
-  const verbsAvailableNow = deriveVerbsAvailableNow(actor, role, allRequests);
+  const verbsAvailableNow = deriveVerbsAvailableNow(
+    actor,
+    role,
+    allRequests,
+    c.config.hostNames,
+  );
 
   const payload: BootPayload = {
     actor,
@@ -301,34 +329,34 @@ export function deriveBootSuggestedNext(
 ): BootSuggestedNext | null {
   if (actor === null) {
     if (members.length === 0) {
-      return {
+      return stampActorResolved({
         verb: 'register',
         args: { name: '<your-name>' },
         reason:
           'No GUILD_ACTOR and no members on this content_root — register yourself to join.',
-      };
+      }, actor);
     }
     // Members exist; this is most likely a returning session that
     // just hasn't exported GUILD_ACTOR yet. Name a few concrete
     // options so the hint is actionable.
     const sample = members.slice(0, 3).map((m) => m.name.value);
-    return {
+    return stampActorResolved({
       verb: 'export',
       args: { GUILD_ACTOR: '<your-name>' },
       reason:
         `No GUILD_ACTOR set. Existing members: ${sample.join(', ')}` +
         (members.length > 3 ? ` (+${members.length - 3} more)` : '') +
         `. Export GUILD_ACTOR=<your-name>, or run gate register --name <your-name> if new.`,
-    };
+    }, actor);
   }
   if (role === 'unknown') {
-    return {
+    return stampActorResolved({
       verb: 'register',
       args: { name: actor },
       reason:
         `GUILD_ACTOR=${actor} but "${actor}" is not a registered member or host. ` +
         `Run gate register --name ${actor} to create the member file.`,
-    };
+    }, actor);
   }
   // Known actor: pick the most actionable open loop. Priority reflects
   // "which one would surprise the agent most if missed":
@@ -349,39 +377,58 @@ export function deriveBootSuggestedNext(
   const id = top.request.id.value;
   switch (top.kind) {
     case 'executing-mine':
-      return {
+      return stampActorResolved({
         verb: 'complete',
         args: { id, by: actor },
         reason:
           `you are executing ${id} — ` +
           `complete it (or 'gate fail <id> --reason <s>' if it can't land).`,
-      };
+      }, actor);
     case 'unreviewed-mine':
-      return {
+      return stampActorResolved({
         verb: 'review',
         args: { id, by: actor, lense: 'devil' },
         reason:
           `${id} completed with auto-review assigned to you; ` +
           `pick --verdict <ok|concern|reject> and --comment after reading the work.`,
-      };
+      }, actor);
     case 'approved-for-me':
-      return {
+      return stampActorResolved({
         verb: 'execute',
         args: { id, by: actor },
         reason:
           `${id} is approved and names you as executor — ` +
           `start the work (gate execute), then complete/fail when done.`,
-      };
+      }, actor);
     case 'pending-as-executor':
-      return {
+      return stampActorResolved({
         verb: 'approve',
         args: { id, by: actor },
         reason:
           `${id} is pending and names you as executor ` +
           `(authored by ${top.request.from.value}); approve it to unblock, ` +
           `or deny with --reason if it shouldn't proceed.`,
-      };
+      }, actor);
   }
+}
+
+/**
+ * Tag a verb/args/reason triple with whether the calling actor can
+ * dispatch it as themselves. Mirrors `withActorResolved` in
+ * writeFormat.ts — same field, same semantics, exported on
+ * BootSuggestedNext so consumers see one consistent shape.
+ */
+function stampActorResolved(
+  partial: Omit<BootSuggestedNext, 'actor_resolved'>,
+  actor: string | null,
+): BootSuggestedNext {
+  const required = partial.args['by'];
+  const resolved =
+    required === undefined ||
+    (typeof actor === 'string' &&
+      actor.length > 0 &&
+      required.toLowerCase() === actor.toLowerCase());
+  return { ...partial, actor_resolved: resolved };
 }
 
 type ActionableKind =
@@ -472,6 +519,7 @@ function actionableTransitions(
 const ALWAYS_READABLE_VERBS: readonly string[] = [
   'boot', 'suggest', 'status', 'show', 'board', 'list', 'pending',
   'tail', 'voices', 'chain', 'whoami', 'schema', 'doctor', 'resume',
+  'unresponded', 'transcript', 'summarize', 'why',
 ];
 
 /**
@@ -490,10 +538,16 @@ function deriveVerbsAvailableNow(
   actor: string | null,
   role: BootPayload['role'],
   allRequests: ReadonlyArray<Request>,
+  hostNames: readonly string[],
 ): BootPayload['verbs_available_now'] {
   const actionable: BootPayload['verbs_available_now']['actionable'] = [];
+  const requiresOtherActor: BootPayload['verbs_available_now']['requires_other_actor'] = [];
   if (actor === null || role === 'unknown') {
-    return { actionable, always_readable: ALWAYS_READABLE_VERBS };
+    return {
+      actionable,
+      requires_other_actor: requiresOtherActor,
+      always_readable: ALWAYS_READABLE_VERBS,
+    };
   }
 
   // Single source of truth shared with `deriveBootSuggestedNext`.
@@ -547,7 +601,52 @@ function deriveVerbsAvailableNow(
     }
   }
 
-  return { actionable, always_readable: ALWAYS_READABLE_VERBS };
+  // requires_other_actor: blockers on the actor's own record.
+  // Surfaces "your pending request needs approval by host X" so
+  // the actor sees WHY their queue isn't moving without having
+  // to read suggested_next's prose. Skipped when the actor is
+  // already the candidate (e.g. host approving their own request)
+  // — that case shows up under actionable instead via the
+  // pending-as-executor predicate. Empty when nothing waits.
+  //
+  // Shape decision: `candidates` is a list, not a single name, so
+  // a content_root with N hosts (or zero) does not have to embed
+  // a "first host" assumption in the payload. `reason` carries the
+  // category of role required ("host approval"), not the host
+  // name — readers in domains where "host" is the wrong word can
+  // re-interpret without the field shape pushing back.
+  const actorLower = actor.toLowerCase();
+  const isHost = hostNames.some((h) => h.toLowerCase() === actorLower);
+  if (!isHost) {
+    for (const r of allRequests) {
+      if (r.state !== 'pending') continue;
+      // Only surface blockers on records the actor is involved in.
+      // Otherwise every pending request in the content_root would
+      // show up for every member, which is noise.
+      const isAuthor = r.from.value === actorLower;
+      const isExecutor = r.executor?.value === actorLower;
+      const isPair = r.with.some((p) => p.value === actorLower);
+      if (!isAuthor && !isExecutor && !isPair) continue;
+      requiresOtherActor.push({
+        verb: 'approve',
+        id: r.id.value,
+        candidates: hostNames,
+        reason:
+          `${r.id.value} is pending; approval requires a host actor` +
+          (hostNames.length === 0
+            ? ' (none configured — see guild.config.yaml host_names)'
+            : `. You are the ${
+                isAuthor ? 'author' : isExecutor ? 'executor' : 'pair'
+              } but cannot approve as yourself.`),
+      });
+    }
+  }
+
+  return {
+    actionable,
+    requires_other_actor: requiresOtherActor,
+    always_readable: ALWAYS_READABLE_VERBS,
+  };
 }
 
 function renderBootText(p: BootPayload): string {
