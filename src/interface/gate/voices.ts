@@ -86,24 +86,24 @@ export type ThankJSON = {
 export type AuthoredUtterance = {
   readonly kind: 'authored';
   readonly at: string;
-  readonly requestId: string;
+  readonly request_id: string;
   // Who authored the containing request. Useful when tail streams
   // utterances from every actor and the reader needs to see who said
   // what without looking up the id.
   readonly from: string;
   // Actual CLI invoker when the creation was proxied (GUILD_ACTOR
-  // differed from --from). Same semantic as ReviewUtterance.invokedBy;
+  // differed from --from). Same semantic as ReviewUtterance.invoked_by;
   // the source is the `invoked_by` field on the status_log[0] entry.
   // Undefined for the self-invocation common case.
-  readonly invokedBy?: string;
+  readonly invoked_by?: string;
   readonly action: string;
   readonly reason: string;
   // Any closure text the lifecycle ended on. Only one of these is
-  // populated for a given request: completed → completionNote,
-  // denied → denyReason, failed → failureReason.
-  readonly completionNote?: string;
-  readonly denyReason?: string;
-  readonly failureReason?: string;
+  // populated for a given request: completed → completion_note,
+  // denied → deny_reason, failed → failure_reason.
+  readonly completion_note?: string;
+  readonly deny_reason?: string;
+  readonly failure_reason?: string;
   // Pair-mode Layer 1: dialogue partners during formation (empty if
   // solo). Surfaced on the utterance so readers of voices / tail /
   // resume see "with whom" without fetching the raw request.
@@ -113,12 +113,12 @@ export type AuthoredUtterance = {
 export type ReviewUtterance = {
   readonly kind: 'review';
   readonly at: string;
-  readonly requestId: string;
+  readonly request_id: string;
   // Who wrote the review. Same rationale as AuthoredUtterance.from.
   readonly by: string;
   // Actual CLI invoker when different from `by` (typically an AI
   // agent acting on the member's behalf). Undefined when they agree.
-  readonly invokedBy?: string;
+  readonly invoked_by?: string;
   // The action of the containing request, so the reader has context
   // for what the review was *about* without chasing the id.
   readonly action: string;
@@ -140,10 +140,10 @@ export type ReviewUtterance = {
 export type ThankUtterance = {
   readonly kind: 'thank';
   readonly at: string;
-  readonly requestId: string;
+  readonly request_id: string;
   readonly by: string;
   readonly to: string;
-  readonly invokedBy?: string;
+  readonly invoked_by?: string;
   // Action of the containing request for context, same rationale as
   // ReviewUtterance.action.
   readonly action: string;
@@ -197,7 +197,7 @@ export function collectUtterances(
       const u: AuthoredUtterance = {
         kind: 'authored',
         at: r.created_at,
-        requestId: r.id,
+        request_id: r.id,
         from: r.from,
         action: r.action,
         reason: r.reason,
@@ -208,19 +208,19 @@ export function collectUtterances(
       // proxy-reviews. Guarded so pre-invoked_by records stay clean.
       const createdEntry = r.status_log?.[0];
       if (createdEntry && createdEntry.invoked_by !== undefined) {
-        (u as { invokedBy?: string }).invokedBy = createdEntry.invoked_by;
+        (u as { invoked_by?: string }).invoked_by = createdEntry.invoked_by;
       }
       // Pick whichever closure field the lifecycle produced. A request
       // can only be in one terminal state at a time, so at most one of
       // these is set.
       if (r.completion_note) {
-        (u as { completionNote?: string }).completionNote = r.completion_note;
+        (u as { completion_note?: string }).completion_note = r.completion_note;
       }
       if (r.deny_reason) {
-        (u as { denyReason?: string }).denyReason = r.deny_reason;
+        (u as { deny_reason?: string }).deny_reason = r.deny_reason;
       }
       if (r.failure_reason) {
-        (u as { failureReason?: string }).failureReason = r.failure_reason;
+        (u as { failure_reason?: string }).failure_reason = r.failure_reason;
       }
       if (r.with && r.with.length > 0) {
         (u as { with?: ReadonlyArray<string> }).with = r.with;
@@ -237,7 +237,7 @@ export function collectUtterances(
       const reviewUtterance: ReviewUtterance = {
         kind: 'review',
         at: rv.at,
-        requestId: r.id,
+        request_id: r.id,
         action: r.action,
         by: rv.by,
         lense: rv.lense,
@@ -245,7 +245,7 @@ export function collectUtterances(
         comment: rv.comment,
       };
       if (rv.invoked_by !== undefined) {
-        (reviewUtterance as { invokedBy?: string }).invokedBy = rv.invoked_by;
+        (reviewUtterance as { invoked_by?: string }).invoked_by = rv.invoked_by;
       }
       out.push(reviewUtterance);
     }
@@ -266,7 +266,7 @@ export function collectUtterances(
         const thankUtterance: ThankUtterance = {
           kind: 'thank',
           at: th.at,
-          requestId: r.id,
+          request_id: r.id,
           action: r.action,
           by: th.by,
           to: th.to,
@@ -275,7 +275,7 @@ export function collectUtterances(
           (thankUtterance as { reason?: string }).reason = th.reason;
         }
         if (th.invoked_by !== undefined) {
-          (thankUtterance as { invokedBy?: string }).invokedBy = th.invoked_by;
+          (thankUtterance as { invoked_by?: string }).invoked_by = th.invoked_by;
         }
         out.push(thankUtterance);
       }
@@ -376,24 +376,24 @@ export function renderUtterance(
     // includeActor=false (voices groups by actor so `from` is
     // redundant, but the proxy invoker isn't). Matches the review
     // branch's treatment.
-    const proxy = u.invokedBy ? ` [invoked_by=${u.invokedBy}]` : '';
-    lines.push(`[${u.at}] req=${u.requestId} authored${actor}${proxy}${withSuffix}`);
+    const proxy = u.invoked_by ? ` [invoked_by=${u.invoked_by}]` : '';
+    lines.push(`[${u.at}] req=${u.request_id} authored${actor}${proxy}${withSuffix}`);
     pushMultilineField(lines, '  action: ', u.action);
     pushMultilineField(lines, '  reason: ', u.reason);
     // At most one of these is set per request (completed / denied /
     // failed are mutually exclusive terminal states).
-    if (u.completionNote) pushMultilineField(lines, '  note:   ', u.completionNote);
-    if (u.denyReason) pushMultilineField(lines, '  denied: ', u.denyReason);
-    if (u.failureReason) pushMultilineField(lines, '  failed: ', u.failureReason);
+    if (u.completion_note) pushMultilineField(lines, '  note:   ', u.completion_note);
+    if (u.deny_reason) pushMultilineField(lines, '  denied: ', u.deny_reason);
+    if (u.failure_reason) pushMultilineField(lines, '  failed: ', u.failure_reason);
   } else if (u.kind === 'review') {
     // Always expose `invoked_by` when present, even when includeActor
     // is false (voices groups by actor, so the `by` is redundant —
     // but the proxy-invoker isn't). Keeps the stream honest about
     // who actually ran the command vs who the act is attributed to.
     const actor = includeActor ? ` by ${u.by}` : '';
-    const proxy = u.invokedBy ? ` [invoked_by=${u.invokedBy}]` : '';
+    const proxy = u.invoked_by ? ` [invoked_by=${u.invoked_by}]` : '';
     lines.push(
-      `[${u.at}] req=${u.requestId} [${u.lense}/${u.verdict}]${actor}${proxy}`,
+      `[${u.at}] req=${u.request_id} [${u.lense}/${u.verdict}]${actor}${proxy}`,
     );
     lines.push(`  re: ${u.action}`);
     for (const line of u.comment.split('\n')) {
@@ -406,9 +406,9 @@ export function renderUtterance(
     // have a giver AND a receiver, and both are load-bearing. Hiding
     // `by` when voices groups by one of them would leave the reader
     // asking "thanked by whom?" on every line.
-    const proxy = u.invokedBy ? ` [invoked_by=${u.invokedBy}]` : '';
+    const proxy = u.invoked_by ? ` [invoked_by=${u.invoked_by}]` : '';
     lines.push(
-      `[${u.at}] req=${u.requestId} thank ${u.by} → ${u.to}${proxy}`,
+      `[${u.at}] req=${u.request_id} thank ${u.by} → ${u.to}${proxy}`,
     );
     lines.push(`  re: ${u.action}`);
     if (u.reason !== undefined) {

@@ -68,9 +68,9 @@ test('collectUtterances returns all authored + review utterances for an actor', 
   // kiri authored req 001 and 003, reviewed nothing.
   assert.equal(result.length, 2);
   assert.equal(result[0]?.kind, 'authored');
-  assert.equal(result[0]?.requestId, '2026-04-14-001');
+  assert.equal(result[0]?.request_id, '2026-04-14-001');
   assert.equal(result[1]?.kind, 'authored');
-  assert.equal(result[1]?.requestId, '2026-04-14-003');
+  assert.equal(result[1]?.request_id, '2026-04-14-003');
 });
 
 test('collectUtterances returns mixed authored + review for an actor who wears both hats', () => {
@@ -79,11 +79,11 @@ test('collectUtterances returns mixed authored + review for an actor who wears b
   // Sorted by timestamp: devil@11:00, noir-authored@12:00, user@14:00.
   assert.equal(result.length, 3);
   assert.equal(result[0]?.kind, 'review');
-  assert.equal(result[0]?.requestId, '2026-04-14-001');
+  assert.equal(result[0]?.request_id, '2026-04-14-001');
   assert.equal(result[1]?.kind, 'authored');
-  assert.equal(result[1]?.requestId, '2026-04-14-002');
+  assert.equal(result[1]?.request_id, '2026-04-14-002');
   assert.equal(result[2]?.kind, 'review');
-  assert.equal(result[2]?.requestId, '2026-04-14-003');
+  assert.equal(result[2]?.request_id, '2026-04-14-003');
 });
 
 test('collectUtterances: --lense filter excludes authored and non-matching reviews', () => {
@@ -133,39 +133,39 @@ test('collectUtterances: sorts results chronologically ascending', () => {
 test('collectUtterances: authored utterance captures deny_reason when present', () => {
   const result = collectUtterances(corpus, { name: 'noir' });
   const authored = result.find(
-    (u) => u.kind === 'authored' && u.requestId === '2026-04-14-002',
+    (u) => u.kind === 'authored' && u.request_id === '2026-04-14-002',
   );
   assert.ok(authored, 'expected noir-authored denied request');
   if (authored?.kind === 'authored') {
-    assert.equal(authored.denyReason, 'scope creep');
-    assert.equal(authored.completionNote, undefined);
-    assert.equal(authored.failureReason, undefined);
+    assert.equal(authored.deny_reason, 'scope creep');
+    assert.equal(authored.completion_note, undefined);
+    assert.equal(authored.failure_reason, undefined);
   }
 });
 
 test('collectUtterances: authored utterance captures failure_reason when present', () => {
   const result = collectUtterances(corpus, { name: 'kiri' });
   const failed = result.find(
-    (u) => u.kind === 'authored' && u.requestId === '2026-04-14-003',
+    (u) => u.kind === 'authored' && u.request_id === '2026-04-14-003',
   );
   assert.ok(failed, 'expected kiri-authored failed request');
   if (failed?.kind === 'authored') {
-    assert.equal(failed.failureReason, 'upstream outage');
-    assert.equal(failed.completionNote, undefined);
-    assert.equal(failed.denyReason, undefined);
+    assert.equal(failed.failure_reason, 'upstream outage');
+    assert.equal(failed.completion_note, undefined);
+    assert.equal(failed.deny_reason, undefined);
   }
 });
 
 test('collectUtterances: authored utterance captures completion_note when present', () => {
   const result = collectUtterances(corpus, { name: 'kiri' });
   const completed = result.find(
-    (u) => u.kind === 'authored' && u.requestId === '2026-04-14-001',
+    (u) => u.kind === 'authored' && u.request_id === '2026-04-14-001',
   );
   assert.ok(completed, 'expected kiri-authored completed request');
   if (completed?.kind === 'authored') {
-    assert.equal(completed.completionNote, 'shipped');
-    assert.equal(completed.denyReason, undefined);
-    assert.equal(completed.failureReason, undefined);
+    assert.equal(completed.completion_note, 'shipped');
+    assert.equal(completed.deny_reason, undefined);
+    assert.equal(completed.failure_reason, undefined);
   }
 });
 
@@ -219,9 +219,9 @@ test('collectUtterances: limit truncates after sort', () => {
   const asc = collectUtterances(corpus, { limit: 2 });
   assert.equal(asc.length, 2);
   // ascending: earliest two are 001-authored (10:00) and 001-review-devil (11:00)
-  assert.equal(asc[0]?.requestId, '2026-04-14-001');
+  assert.equal(asc[0]?.request_id, '2026-04-14-001');
   assert.equal(asc[0]?.kind, 'authored');
-  assert.equal(asc[1]?.requestId, '2026-04-14-001');
+  assert.equal(asc[1]?.request_id, '2026-04-14-001');
   assert.equal(asc[1]?.kind, 'review');
 });
 
@@ -229,7 +229,7 @@ test('collectUtterances: order desc reverses the chronology', () => {
   const desc = collectUtterances(corpus, { order: 'desc', limit: 1 });
   assert.equal(desc.length, 1);
   // descending: most recent is 003-review-user (14:00)
-  assert.equal(desc[0]?.requestId, '2026-04-14-003');
+  assert.equal(desc[0]?.request_id, '2026-04-14-003');
   assert.equal(desc[0]?.kind, 'review');
 });
 
@@ -321,15 +321,15 @@ test('collectUtterances: review invoked_by flows onto the utterance', () => {
   assert.ok(u);
   assert.equal(u.kind, 'review');
   if (u.kind === 'review') {
-    assert.equal(u.invokedBy, 'claude');
+    assert.equal(u.invoked_by, 'claude');
   }
 });
 
-test('collectUtterances: review without invoked_by leaves invokedBy undefined', () => {
+test('collectUtterances: review without invoked_by leaves invoked_by undefined', () => {
   const [u] = collectUtterances(corpus, { name: 'noir', lense: 'devil' });
   assert.ok(u);
   if (u.kind === 'review') {
-    assert.equal(u.invokedBy, undefined);
+    assert.equal(u.invoked_by, undefined);
   }
 });
 
@@ -465,11 +465,11 @@ test('collectUtterances: authored utterance lifts invoked_by from status_log[0]'
   assert.ok(u);
   assert.equal(u.kind, 'authored');
   if (u.kind === 'authored') {
-    assert.equal(u.invokedBy, 'claude');
+    assert.equal(u.invoked_by, 'claude');
   }
 });
 
-test('collectUtterances: authored utterance leaves invokedBy undefined when not proxied', () => {
+test('collectUtterances: authored utterance leaves invoked_by undefined when not proxied', () => {
   const reqs: RequestJSON[] = [
     {
       id: '2026-04-18-0099',
@@ -484,7 +484,7 @@ test('collectUtterances: authored utterance leaves invokedBy undefined when not 
   ];
   const [u] = collectUtterances(reqs, { name: 'eris' });
   assert.ok(u);
-  if (u.kind === 'authored') assert.equal(u.invokedBy, undefined);
+  if (u.kind === 'authored') assert.equal(u.invoked_by, undefined);
 });
 
 test('renderUtterance authored: shows [invoked_by=<actor>] when present', () => {
