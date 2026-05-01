@@ -27,14 +27,52 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
   and other repo artifacts are intentionally ignored. Devil-
   reviewed (`2026-05-01-0001`/`0002`).
 
+- **`gate doctor` extends the unrecognized-file scan to `issues/`
+  and `members/`.** Same shape of fix as the requests-side scan,
+  for the same class of bug. Pre-fix, an `i-bogus.yaml` in
+  `issues/` (typo'd id), a capitalised-prefix `I-2026-05-01-0001.yaml`,
+  or — most painfully — an `Alice.yaml` in `members/` (uppercase
+  first letter) were silently dropped by each repository's listAll
+  regex (`^i-\d{4}-\d{2}-\d{2}-\d{3,4}\.yaml$` for issues,
+  `^[a-z][a-z0-9_-]{0,31}\.yaml$` for members) and `gate doctor`
+  reported a clean root while the member was missing from `gate
+  list`. Now each off-pattern `.yaml` surfaces as
+  `unrecognized_file` (→ quarantine in repair) and any
+  subdirectory under `issues/` or `members/` surfaces as
+  `unrecognized_directory` (→ no-op in repair, contents unknown
+  and quarantining a tree is invasive). The four common
+  member-name typos covered explicitly by tests: uppercase first
+  letter, leading digit, leading underscore, name >32 chars.
+  Boundary unchanged: only `.yaml` files and subdirectories are
+  flagged; `notes.txt`, `README.md`, `.gitkeep` ignored.
+
+  Internal cleanup absorbed (devil-review concern D1 from
+  `2026-05-01-0001`): each repo now exports a single
+  `*_FILE_PATTERN` constant that both `listAll` (filters records)
+  and `listUnrecognizedFiles` (surfaces non-matches) consume, so
+  the two paths cannot drift. Pre-fix, `YamlRequestRepository`
+  duplicated the same regex literal across two methods — latent
+  drift bug surfaced by the design sandbox and fixed at the same
+  time. The shared port type renamed `UnrecognizedRequestFile` →
+  `UnrecognizedRecordEntry` and moved to its own module
+  (`src/application/ports/UnrecognizedRecordEntry.ts`); 5
+  callsites updated mechanically. Devil-reviewed
+  (`2026-05-01-0001`/`0002`).
+
 ### Deferred
-- **Unrecognized-file scan for `issues/` and `members/`.** These
-  directories have flat (non-state) layouts and their own filename
-  patterns (`i-YYYY-MM-DD-NNNN.yaml` and `[a-z][a-z0-9_-]{0,31}.yaml`
-  respectively). The first cut ships requests-only; extending the
-  same scanner to issues and members is mechanical but distinct
-  enough to warrant its own PR. Recorded so a future reader who
-  hits "doctor missed my misplaced issue.yaml" finds the trail.
+- **Cross-area unrecognized-file scan.** A file with the wrong
+  area's pattern sitting in the wrong area (e.g., an
+  `i-2026-05-01-0001.yaml` left under `members/`, or
+  `alice.yaml` left under `issues/`) is still invisible because
+  each scan only walks its own area and only flags files that
+  don't match its OWN pattern. The misplaced file matches the
+  member pattern so the issues-area scan ignores it, and vice
+  versa. Out of scope for this PR — the cross-area decision
+  depends on whether such files should auto-relocate or just be
+  flagged, which is a policy choice this PR doesn't have a basis
+  for. Recorded so a future reader who hits "I have an
+  i-prefix file in members/ and doctor doesn't see it" finds the
+  trail. Devil-reviewed concern D3 from `2026-05-01-0001`.
 
 - **Voice calibration: `verdict=concern + state=failed` counts as
   aligned.** The source-code header in `src/interface/gate/voices.ts`

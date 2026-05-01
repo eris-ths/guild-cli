@@ -14,8 +14,8 @@ import {
   RequestRepository,
   RequestIdCollision,
   RequestVersionConflict,
-  UnrecognizedRequestFile,
 } from '../../application/ports/RequestRepository.js';
+import { UnrecognizedRecordEntry } from '../../application/ports/UnrecognizedRecordEntry.js';
 import { lstatSync, type Stats } from 'node:fs';
 
 // Best-effort lstat — returns null for entries that disappear between
@@ -41,6 +41,13 @@ import {
 import { GuildConfig } from '../config/GuildConfig.js';
 import { OnMalformed } from '../../application/ports/OnMalformed.js';
 import { parseYamlSafe } from './parseYamlSafe.js';
+
+// Single source of truth for the on-disk request filename pattern.
+// listByState filters by it; listUnrecognizedFiles surfaces anything
+// .yaml that does NOT match. Defined once so the two paths cannot
+// drift — if listByState ever tightens (e.g. to require 4-digit
+// sequences), the unrecognized scan tightens with it.
+const REQUEST_ID_FILE_PATTERN = /^\d{4}-\d{2}-\d{2}-\d{3,4}\.yaml$/;
 
 /**
  * Layout: <paths.requests>/<state>/<id>.yaml
@@ -72,7 +79,7 @@ export class YamlRequestRepository implements RequestRepository {
 
   async listByState(state: RequestState): Promise<Request[]> {
     const files = listDirSafe(this.config.paths.requests, state)
-      .filter((f) => /^\d{4}-\d{2}-\d{2}-\d{3,4}\.yaml$/.test(f))
+      .filter((f) => REQUEST_ID_FILE_PATTERN.test(f))
       .slice(0, MAX_DIR_ENTRIES);
     const out: Request[] = [];
     for (const f of files) {
@@ -98,15 +105,14 @@ export class YamlRequestRepository implements RequestRepository {
     return dedupeRequestsById(perState.flat());
   }
 
-  async listUnrecognizedFiles(): Promise<UnrecognizedRequestFile[]> {
+  async listUnrecognizedFiles(): Promise<UnrecognizedRecordEntry[]> {
     // Scope: .yaml files only — the diagnostic is opinionated about
     // *attempted records*. notes.txt / README.md / .gitkeep are
     // legitimately useful for repo authors to leave in record
     // directories and not surfaced as health issues. Subdirectories
     // under <state>/ ARE surfaced (nothing legitimately ever lands
     // there).
-    const out: UnrecognizedRequestFile[] = [];
-    const idPattern = /^\d{4}-\d{2}-\d{2}-\d{3,4}\.yaml$/;
+    const out: UnrecognizedRecordEntry[] = [];
     const stateSet = new Set<string>(REQUEST_STATES);
 
     // 1. Walk each state directory: surface .yaml files that don't
@@ -127,7 +133,7 @@ export class YamlRequestRepository implements RequestRepository {
           continue;
         }
         if (!name.endsWith('.yaml')) continue;
-        if (idPattern.test(name)) continue;
+        if (REQUEST_ID_FILE_PATTERN.test(name)) continue;
         out.push({
           path: abs,
           kind: 'file',

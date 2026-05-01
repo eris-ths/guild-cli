@@ -28,6 +28,11 @@ class ShuffledIssueRepo implements IssueRepository {
   async listAll(): Promise<Issue[]> {
     return [...this.items];
   }
+  async listUnrecognizedFiles(): Promise<
+    Array<{ path: string; kind: 'file' | 'directory'; reason: string }>
+  > {
+    return [];
+  }
   async save(_i: Issue): Promise<void> {}
   async saveNew(_i: Issue): Promise<void> {}
   async nextSequence(_d: string): Promise<number> {
@@ -43,6 +48,11 @@ class StubMemberRepo implements MemberRepository {
     return true;
   }
   async listAll(): Promise<Member[]> {
+    return [];
+  }
+  async listUnrecognizedFiles(): Promise<
+    Array<{ path: string; kind: 'file' | 'directory'; reason: string }>
+  > {
     return [];
   }
   async save(_m: Member): Promise<void> {}

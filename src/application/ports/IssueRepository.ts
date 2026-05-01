@@ -1,4 +1,5 @@
 import { Issue, IssueId, IssueState } from '../../domain/issue/Issue.js';
+import { UnrecognizedRecordEntry } from './UnrecognizedRecordEntry.js';
 
 export interface IssueRepository {
   findById(id: IssueId): Promise<Issue | null>;
@@ -10,6 +11,14 @@ export interface IssueRepository {
    * commands (gate chain) that need the full corpus.
    */
   listAll(): Promise<Issue[]>;
+  /**
+   * Walk the issues directory and surface entries that don't match
+   * the expected layout — .yaml files whose name doesn't match the
+   * `i-YYYY-MM-DD-NNNN.yaml` pattern (silent listAll drops) and
+   * subdirectories (issues is a flat layout; nested dirs have no
+   * legitimate place). Used exclusively by the diagnostic.
+   */
+  listUnrecognizedFiles(): Promise<UnrecognizedRecordEntry[]>;
   save(issue: Issue): Promise<void>;
   /**
    * Create a brand-new issue file. Must fail with `IssueIdCollision` if

@@ -15,6 +15,7 @@ import {
   IssueIdCollision,
   IssueVersionConflict,
 } from '../../application/ports/IssueRepository.js';
+import { UnrecognizedRecordEntry } from '../../application/ports/UnrecognizedRecordEntry.js';
 import {
   MAX_DIR_ENTRIES,
   existsSafe,
@@ -24,11 +25,27 @@ import {
   writeTextSafeAtomic,
 } from './safeFs.js';
 import { join } from 'node:path';
+import { lstatSync, type Stats } from 'node:fs';
 import { GuildConfig } from '../config/GuildConfig.js';
 import { OnMalformed } from '../../application/ports/OnMalformed.js';
 import { parseYamlSafe } from './parseYamlSafe.js';
 
+// Single source of truth for the on-disk issue filename pattern.
+// listAll filters by it; listUnrecognizedFiles surfaces any .yaml
+// that does NOT match. Defined once so the two paths cannot drift.
 const FILE_PATTERN = /^i-\d{4}-\d{2}-\d{2}-\d{3,4}\.yaml$/;
+
+// Best-effort lstat — returns null for entries that disappear between
+// the listing and the stat call. Diagnostic shouldn't crash on races,
+// so a missing entry just gets dropped from the finding set. Mirrors
+// the helper in YamlRequestRepository.
+function lstatSafe(path: string): Stats | null {
+  try {
+    return lstatSync(path);
+  } catch {
+    return null;
+  }
+}
 
 export class YamlIssueRepository implements IssueRepository {
   constructor(private readonly config: GuildConfig) {}
@@ -60,6 +77,37 @@ export class YamlIssueRepository implements IssueRepository {
       if (parsed === undefined) continue;
       const issue = hydrate(parsed, absSource, this.config.onMalformed);
       if (issue) out.push(issue);
+    }
+    return out;
+  }
+
+  async listUnrecognizedFiles(): Promise<UnrecognizedRecordEntry[]> {
+    // Scope: .yaml files only — repo authors may legitimately leave
+    // notes.txt / README.md / .gitkeep here. Subdirectories ARE
+    // surfaced (issues is a flat layout; nested dirs have no
+    // legitimate place). The diagnostic targets *attempted records*,
+    // not arbitrary repo artifacts.
+    const out: UnrecognizedRecordEntry[] = [];
+    const entries = listDirSafe(this.config.paths.issues, '.');
+    for (const name of entries) {
+      const abs = join(this.config.paths.issues, name);
+      const stat = lstatSafe(abs);
+      if (stat === null) continue;
+      if (stat.isDirectory()) {
+        out.push({
+          path: abs,
+          kind: 'directory',
+          reason: `subdirectory under issues/ — no legitimate place for nested directories in the issue layout`,
+        });
+        continue;
+      }
+      if (!name.endsWith('.yaml')) continue;
+      if (FILE_PATTERN.test(name)) continue;
+      out.push({
+        path: abs,
+        kind: 'file',
+        reason: `.yaml filename does not match i-YYYY-MM-DD-NNNN.yaml — likely typo or hand-edited`,
+      });
     }
     return out;
   }
