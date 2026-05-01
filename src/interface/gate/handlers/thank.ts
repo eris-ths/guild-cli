@@ -61,7 +61,7 @@ export async function reqThank(c: C, args: ParsedArgs): Promise<number> {
 
   if (isDryRun(args)) {
     const updated = await c.requestUC.thank({ ...ucInput, dryRun: true });
-    emitDryRunPreview({ verb: 'thank', id, by, after: updated });
+    emitDryRunPreview({ verb: 'thank', id, by, after: updated, format: parseFormat(args) });
     return 0;
   }
 

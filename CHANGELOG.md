@@ -7,6 +7,42 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 
 ## [Unreleased]
 
+### Fixed
+- **`gate schema` declares `dry-run` on every write verb that
+  accepts it.** Pre-fix the schema entries for approve / deny /
+  execute / complete / fail / review / thank did NOT declare
+  `dry-run` as an input property — so MCP wirings reading `gate
+  schema` saw a tool surface strictly less capable than the
+  runtime (which accepted `--dry-run` via KNOWN_FLAGS). `register`
+  declared it but as a string; the parser treats it as a boolean
+  flag with optional `=true`/`=false` suffix. Now all eight verbs
+  share a single `dryRunField` declaration (`{type: 'boolean'}`)
+  pointing at the preview-envelope contract. Fresh-agent dogfood
+  surfaced; devil-reviewed (`2026-05-01-0001`/`0002`) to extend
+  the fix to register so the asymmetry doesn't just move.
+
+- **`gate <verb> --dry-run --format text` emits a one-line stderr
+  notice naming why the format is fixed.** The dry-run envelope
+  (dry_run / verb / would_transition / preview) has no useful
+  text rendering, so stdout stays JSON regardless of `--format`.
+  Pre-fix: silent JSON when `--format text` was passed. Post-fix:
+  `# --dry-run preview is structured (json envelope); --format
+  text would lose dry_run/verb/would_transition.` Suppressed for
+  `--format json` (pipelines stay clean).
+
+### Deferred
+- **`--dry-run` coverage on creation/annotation verbs.** Ten verbs
+  do not yet support the preview envelope: `request`, `fast-track`,
+  `message`, `broadcast`, `issues add`, `issues note`,
+  `issues start`/`defer`/`resolve`/`reopen`, `issues promote`. The
+  help text scopes "any write verb above" to the
+  approve/deny/execute/complete/fail/review/thank set, so the
+  current state is asymmetry-by-design rather than a bug; expanding
+  to the creation/annotation set requires either handler-side
+  preview construction or use-case-side dry-run flag plumbing.
+  Recorded here so a future reader who hits `gate request --dry-run:
+  unknown flag` finds the trail rather than silence.
+
 ### Changed
 - **Member YAML: `displayName` → `display_name` on save.** Aligns the
   one camelCase field on disk with the rest of the project's

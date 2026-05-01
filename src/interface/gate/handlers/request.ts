@@ -468,7 +468,7 @@ export async function reqApprove(c: C, args: ParsedArgs): Promise<number> {
     if (!prior) throw new Error(`Request not found: ${id}`);
     const fromState = prior.state;
     const r = await c.requestUC.approve(id, by, note, invokedBy, { dryRun: true });
-    emitDryRunPreview({ verb: 'approve', id, by, fromState, toState: r.state, after: r });
+    emitDryRunPreview({ verb: 'approve', id, by, fromState, toState: r.state, after: r, format: parseFormat(args) });
     return 0;
   }
   const r = await c.requestUC.approve(id, by, note, invokedBy);
@@ -504,7 +504,7 @@ export async function reqDeny(c: C, args: ParsedArgs): Promise<number> {
     if (!prior) throw new Error(`Request not found: ${id}`);
     const fromState = prior.state;
     const r = await c.requestUC.deny(id, by, reason, invokedBy, { dryRun: true });
-    emitDryRunPreview({ verb: 'deny', id, by, fromState, toState: r.state, after: r });
+    emitDryRunPreview({ verb: 'deny', id, by, fromState, toState: r.state, after: r, format: parseFormat(args) });
     return 0;
   }
   const r = await c.requestUC.deny(id, by, reason, invokedBy);
@@ -524,7 +524,7 @@ export async function reqExecute(c: C, args: ParsedArgs): Promise<number> {
     if (!prior) throw new Error(`Request not found: ${id}`);
     const fromState = prior.state;
     const r = await c.requestUC.execute(id, by, note, invokedBy, { dryRun: true });
-    emitDryRunPreview({ verb: 'execute', id, by, fromState, toState: r.state, after: r });
+    emitDryRunPreview({ verb: 'execute', id, by, fromState, toState: r.state, after: r, format: parseFormat(args) });
     return 0;
   }
   const r = await c.requestUC.execute(id, by, note, invokedBy);
@@ -544,7 +544,7 @@ export async function reqComplete(c: C, args: ParsedArgs): Promise<number> {
     if (!prior) throw new Error(`Request not found: ${id}`);
     const fromState = prior.state;
     const r = await c.requestUC.complete(id, by, note, invokedBy, { dryRun: true });
-    emitDryRunPreview({ verb: 'complete', id, by, fromState, toState: r.state, after: r });
+    emitDryRunPreview({ verb: 'complete', id, by, fromState, toState: r.state, after: r, format: parseFormat(args) });
     return 0;
   }
   const r = await c.requestUC.complete(id, by, note, invokedBy);
@@ -578,7 +578,7 @@ export async function reqFail(c: C, args: ParsedArgs): Promise<number> {
     if (!prior) throw new Error(`Request not found: ${id}`);
     const fromState = prior.state;
     const r = await c.requestUC.fail(id, by, reason, invokedBy, { dryRun: true });
-    emitDryRunPreview({ verb: 'fail', id, by, fromState, toState: r.state, after: r });
+    emitDryRunPreview({ verb: 'fail', id, by, fromState, toState: r.state, after: r, format: parseFormat(args) });
     return 0;
   }
   const r = await c.requestUC.fail(id, by, reason, invokedBy);
