@@ -317,3 +317,140 @@ test('register: assertActor error surfaces the register hint', () => {
     cleanup();
   }
 });
+
+// ---------------------------------------------------------------
+// Path-disclosure notice (designed in 2026-05-01-0001/0002).
+//
+// Pre-this, `gate register` from a subdir of an active guild
+// silently wrote into the parent's members/ directory — fresh
+// agents had no signal where their YAML actually landed. Same gap
+// hit no-config-found cases (cwd used as fallback root). The
+// fix surfaces the absolute path on stderr (humans) AND in the
+// JSON envelope (orchestrators) so both contracts stay honest.
+// ---------------------------------------------------------------
+
+test('register: success-text emits stderr notice naming the absolute path written + config in use', () => {
+  const { root, cleanup } = bootstrap();
+  try {
+    const r = runGate(root, ['register', '--name', 'pathy']);
+    assert.equal(r.status, 0);
+    // Stderr carries one notice line; stdout stays parseable.
+    assert.match(
+      r.stderr,
+      new RegExp(
+        `^notice: wrote ${escapeRegex(join(root, 'members', 'pathy.yaml'))} \\(config: ${escapeRegex(join(root, 'guild.config.yaml'))}\\)\\n$`,
+      ),
+    );
+    assert.doesNotMatch(r.stdout, /notice:/);
+  } finally {
+    cleanup();
+  }
+});
+
+test('register: success-json adds where_written + config_file fields AND emits the stderr notice', () => {
+  // Devil concern D2 on req 2026-05-01-0002: JSON is the
+  // orchestrator contract, stderr is the human contract — both
+  // must be honest. Pin both surfaces so a future refactor
+  // can't drop one quietly.
+  const { root, cleanup } = bootstrap();
+  try {
+    const r = runGate(root, [
+      'register',
+      '--name', 'jsony',
+      '--format', 'json',
+    ]);
+    assert.equal(r.status, 0);
+    const payload = JSON.parse(r.stdout);
+    assert.equal(payload.ok, true);
+    assert.equal(
+      payload.where_written,
+      join(root, 'members', 'jsony.yaml'),
+    );
+    assert.equal(
+      payload.config_file,
+      join(root, 'guild.config.yaml'),
+    );
+    assert.match(r.stderr, /^notice: wrote /);
+  } finally {
+    cleanup();
+  }
+});
+
+test('register: dry-run preview also surfaces the absolute path + config (devil D3 — dry-run not less honest than real write)', () => {
+  // Pre-fix the dry-run preview said `would write
+  // members/<name>.yaml` (relative path) while the real write
+  // was about to land at an absolute path possibly on a parent
+  // guild. That asymmetry was the whole gap. Both paths now
+  // disclose the same way.
+  const { root, cleanup } = bootstrap();
+  try {
+    const r = runGate(root, [
+      'register',
+      '--name', 'dryone',
+      '--dry-run',
+    ]);
+    assert.equal(r.status, 0);
+    // Preview header carries the absolute path now.
+    assert.match(
+      r.stdout,
+      new RegExp(`^dry-run: would write ${escapeRegex(join(root, 'members', 'dryone.yaml'))}:`),
+    );
+    // Stderr notice fires on dry-run too, with `would write` (not
+    // `wrote`) so the verb stays honest.
+    assert.match(r.stderr, /^notice: would write /);
+    assert.match(
+      r.stderr,
+      new RegExp(`config: ${escapeRegex(join(root, 'guild.config.yaml'))}`),
+    );
+  } finally {
+    cleanup();
+  }
+});
+
+test('register: error case (collision) does NOT emit the path notice', () => {
+  // Devil concern D4 on req 2026-05-01-0002: the notice claims a
+  // write happened. It must fire ONLY after memberUC.create
+  // succeeds. Collisions throw before reaching the emit point;
+  // host-name reservation and validation errors throw earlier
+  // still. Pin the boundary so a future refactor doesn't move
+  // the emit ahead of the create.
+  const { root, cleanup } = bootstrap();
+  try {
+    const r = runGate(root, ['register', '--name', 'alice']);
+    assert.notEqual(r.status, 0);
+    assert.match(r.stderr, /already exists/);
+    assert.doesNotMatch(r.stderr, /^notice: wrote/m);
+    assert.doesNotMatch(r.stderr, /^notice: would write/m);
+  } finally {
+    cleanup();
+  }
+});
+
+test('register: no-config fallback path surfaces "config: none" so the implicit-cwd case is named explicitly', () => {
+  // The other half of the silent-pickup gap: an agent who runs
+  // gate register in an empty dir with no parent config gets cwd
+  // used as content_root with no warning. Post-fix the notice
+  // names it (`config: none — cwd used as fallback root`) so the
+  // agent learns the implicit default exists.
+  const root = mkdtempSync(join(tmpdir(), 'guild-register-nocfg-'));
+  try {
+    const r = runGate(root, ['register', '--name', 'cwdsolo']);
+    assert.equal(r.status, 0);
+    assert.match(
+      r.stderr,
+      new RegExp(
+        `^notice: wrote ${escapeRegex(join(root, 'members', 'cwdsolo.yaml'))} \\(config: none — cwd used as fallback root\\)\\n$`,
+      ),
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// Escape regex special chars so absolute paths from tmpdir() can
+// be embedded in `new RegExp(...)`. Native path separators differ
+// across CI runners (POSIX `/`, Windows `\`) and `\` would
+// otherwise consume the next character of the literal path.
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}

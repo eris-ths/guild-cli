@@ -1,3 +1,4 @@
+import { join } from 'node:path';
 import {
   ParsedArgs,
   optionalOption,
@@ -98,6 +99,14 @@ export async function reqRegister(c: C, args: ParsedArgs): Promise<number> {
     );
   }
 
+  // Where the file will land — resolved once and shared by the
+  // dry-run preview, the JSON success envelope, and the stderr
+  // notice. The dry-run path uses the same value so the preview is
+  // not less honest about location than the real write (devil
+  // concern D3 on req 2026-05-01-0002).
+  const whereWritten = join(c.config.paths.members, `${parsedName.value}.yaml`);
+  const configFile = c.config.configFile;
+
   if (dryRun) {
     // Compose the YAML shape without hitting disk. Lets an agent
     // confirm what's about to land before committing. Run the
@@ -117,16 +126,27 @@ export async function reqRegister(c: C, args: ParsedArgs): Promise<number> {
     };
     if (format === 'json') {
       process.stdout.write(
-        JSON.stringify({ ok: true, dry_run: true, preview }, null, 2) + '\n',
+        JSON.stringify(
+          {
+            ok: true,
+            dry_run: true,
+            preview,
+            where_written: whereWritten,
+            config_file: configFile,
+          },
+          null,
+          2,
+        ) + '\n',
       );
     } else {
       process.stdout.write(
-        `dry-run: would write members/${parsedName.value}.yaml:\n` +
+        `dry-run: would write ${whereWritten}:\n` +
           Object.entries(preview)
             .map(([k, v]) => `  ${k}: ${JSON.stringify(v)}`)
             .join('\n') +
           '\n',
       );
+      process.stderr.write(formatPathNotice(whereWritten, configFile, true));
     }
     return 0;
   }
@@ -145,6 +165,8 @@ export async function reqRegister(c: C, args: ParsedArgs): Promise<number> {
           id: member.name.value,
           state: 'active',
           message: `registered: ${member.name.value} (${member.category})`,
+          where_written: whereWritten,
+          config_file: configFile,
           suggested_next: {
             verb: 'boot',
             args: {},
@@ -163,5 +185,36 @@ export async function reqRegister(c: C, args: ParsedArgs): Promise<number> {
         `  next: export GUILD_ACTOR=${member.name.value} && gate boot\n`,
     );
   }
+  // Notice fires AFTER memberUC.create succeeds — collisions /
+  // host-name reservation / validation errors throw earlier and
+  // never reach here, so the line never falsely claims a write
+  // (devil concern D4). Stderr keeps stdout machine-readable in
+  // both --format text and --format json.
+  process.stderr.write(formatPathNotice(whereWritten, configFile, false));
   return 0;
+}
+
+/**
+ * One-line stderr notice surfacing where the member YAML landed and
+ * which `guild.config.yaml` was in effect. Solves the silent
+ * parent-config-pickup gap (`gate register` from a subdir of an
+ * active guild silently writing into the parent's members/) and
+ * the no-config fallback case (no guild.config.yaml found, cwd
+ * used as content_root) at the same time. The fresh-agent dogfood
+ * surfacing this gap is recorded in the design sandbox under
+ * `2026-05-01-0001`/`0002`.
+ */
+function formatPathNotice(
+  whereWritten: string,
+  configFile: string | null,
+  dryRun: boolean,
+): string {
+  const wherePart = dryRun
+    ? `would write ${whereWritten}`
+    : `wrote ${whereWritten}`;
+  const configPart =
+    configFile === null
+      ? `config: none — cwd used as fallback root`
+      : `config: ${configFile}`;
+  return `notice: ${wherePart} (${configPart})\n`;
 }
