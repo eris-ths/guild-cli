@@ -8,6 +8,42 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 ## [Unreleased]
 
 ### Added
+- **Schema/KNOWN_FLAGS drift detector test.** Mechanical CI
+  enforcement of principle 10's input-side obligation: every flag
+  the runtime accepts must appear in the schema, and vice versa.
+  PRs #103 (`--dry-run`), #105 (`--with-calibration`), #111 (tail
+  `--format`) all hit drift after-the-fact during fresh-agent
+  dogfood; this test catches it at PR time.
+
+  The test parses each handler's `*_KNOWN_FLAGS` declaration and
+  the `rejectUnknownFlags(args, X, 'verb-name')` calls via static
+  regex (no source export needed — KNOWN_FLAGS stays internal),
+  builds a verb→flag-set map, and compares to the live `gate
+  schema` output. Subcommand umbrellas (`issues`, `inbox`) are
+  skipped because the schema collapses multi-handler verbs into a
+  single entry — aligning that requires a schema-model change
+  rather than drift fixing. The `list`/`pending` indirection
+  (one function with conditional const choice) is handled via an
+  explicit `INDIRECT_VERB_TO_CONST` allowlist in the test.
+
+  **8 existing drift instances fixed in the same PR**, surfaced
+  by running the detector against main:
+  - `fail`/`review`/`transcript`: `id` description didn't start
+    with `positional;` so the detector treated it as a flag.
+    Updated the shared `idStr` const + `transcript`'s inline
+    description to mark them positional.
+  - `thank.for`: was using `idStr` (which is now positional) as
+    a flag-typed id reference. Inlined a non-positional
+    description for `for`.
+  - `show`: schema lacked `--plain` and `--fields` (which the
+    runtime accepted). Added with descriptions naming the
+    agent-facing shell-composition use case.
+  - `message`/`broadcast`: schema lacked `--type`. Added.
+  - `repair`: schema lacked `--format`. Added.
+
+  Going forward, a PR adding a flag to `KNOWN_FLAGS` without
+  the matching `schema.input.properties` entry fails at CI.
+
 - **`lore/principles/10-schema-as-contract.md`.** Names the rule
   three input-side drift PRs (#103 dry-run, #105 with-calibration,
   #111 tail format) and ~10 read verbs with bare output schemas
