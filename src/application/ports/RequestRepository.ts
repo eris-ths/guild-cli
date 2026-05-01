@@ -1,23 +1,7 @@
 import { Request } from '../../domain/request/Request.js';
 import { RequestId } from '../../domain/request/RequestId.js';
 import { RequestState } from '../../domain/request/RequestState.js';
-
-/**
- * One unrecognized file discovered by a directory walk under
- * `<contentRoot>/requests/`. These are files that listByState's
- * regex filter silently drops — off-pattern names, .yaml files at
- * the wrong directory level, or subdirectories where leaf files
- * are expected. Surfaced by the diagnostic so doctor can warn
- * about them; pre-this they were invisible.
- */
-export interface UnrecognizedRequestFile {
-  /** Absolute path to the entry. */
-  readonly path: string;
-  /** What kind of entry was found (file vs directory). */
-  readonly kind: 'file' | 'directory';
-  /** Why it was flagged — short, suitable for inclusion in a finding message. */
-  readonly reason: string;
-}
+import { UnrecognizedRecordEntry } from './UnrecognizedRecordEntry.js';
 
 export interface RequestRepository {
   findById(id: RequestId): Promise<Request | null>;
@@ -39,7 +23,7 @@ export interface RequestRepository {
    * (no legitimate place there). Used exclusively by the
    * diagnostic; never affects lifecycle reads.
    */
-  listUnrecognizedFiles(): Promise<UnrecognizedRequestFile[]>;
+  listUnrecognizedFiles(): Promise<UnrecognizedRecordEntry[]>;
   /** Persist; positions file under current state directory. */
   save(request: Request): Promise<void>;
   /**

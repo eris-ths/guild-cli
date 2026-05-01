@@ -2,6 +2,7 @@ import YAML from 'yaml';
 import { Member } from '../../domain/member/Member.js';
 import { MemberName } from '../../domain/member/MemberName.js';
 import { MemberRepository } from '../../application/ports/MemberRepository.js';
+import { UnrecognizedRecordEntry } from '../../application/ports/UnrecognizedRecordEntry.js';
 import {
   MAX_DIR_ENTRIES,
   existsSafe,
@@ -10,9 +11,25 @@ import {
   writeTextSafe,
 } from './safeFs.js';
 import { join } from 'node:path';
+import { lstatSync, type Stats } from 'node:fs';
 import { GuildConfig } from '../config/GuildConfig.js';
 import { OnMalformed } from '../../application/ports/OnMalformed.js';
 import { parseYamlSafe } from './parseYamlSafe.js';
+
+// Single source of truth for the on-disk member filename pattern.
+// listAll filters by it; listUnrecognizedFiles surfaces any .yaml
+// that does NOT match. Defined once so the two paths cannot drift —
+// e.g. an `Alice.yaml` (uppercase) silently dropped from listAll
+// must surface as unrecognized so the operator sees the typo.
+const MEMBER_FILE_PATTERN = /^[a-z][a-z0-9_-]{0,31}\.yaml$/;
+
+function lstatSafe(path: string): Stats | null {
+  try {
+    return lstatSync(path);
+  } catch {
+    return null;
+  }
+}
 
 /**
  * File layout: <config.paths.members>/<name>.yaml
@@ -40,7 +57,7 @@ export class YamlMemberRepository implements MemberRepository {
 
   async listAll(): Promise<Member[]> {
     const files = listDirSafe(this.config.paths.members, '.').filter((f) =>
-      /^[a-z][a-z0-9_-]{0,31}\.yaml$/.test(f),
+      MEMBER_FILE_PATTERN.test(f),
     );
     const out: Member[] = [];
     for (const f of files.slice(0, MAX_DIR_ENTRIES)) {
@@ -51,6 +68,42 @@ export class YamlMemberRepository implements MemberRepository {
       if (data === undefined) continue;
       const m = hydrate(data, name, absSource, this.config.onMalformed);
       if (m) out.push(m);
+    }
+    return out;
+  }
+
+  async listUnrecognizedFiles(): Promise<UnrecognizedRecordEntry[]> {
+    // Scope: .yaml files only — repo authors may legitimately leave
+    // notes.txt / README.md / .gitkeep here. Subdirectories ARE
+    // surfaced (members is a flat layout; nested dirs have no
+    // legitimate place).
+    //
+    // The pattern catches the most likely typos that drop a member
+    // from `gate list` silently: `Alice.yaml` (uppercase first
+    // letter), `1alice.yaml` (leading digit), `_alice.yaml` (leading
+    // underscore), or names exceeding 32 characters. Pre-this they
+    // disappeared without trace; now doctor flags the file by name.
+    const out: UnrecognizedRecordEntry[] = [];
+    const entries = listDirSafe(this.config.paths.members, '.');
+    for (const name of entries) {
+      const abs = join(this.config.paths.members, name);
+      const stat = lstatSafe(abs);
+      if (stat === null) continue;
+      if (stat.isDirectory()) {
+        out.push({
+          path: abs,
+          kind: 'directory',
+          reason: `subdirectory under members/ — no legitimate place for nested directories in the member layout`,
+        });
+        continue;
+      }
+      if (!name.endsWith('.yaml')) continue;
+      if (MEMBER_FILE_PATTERN.test(name)) continue;
+      out.push({
+        path: abs,
+        kind: 'file',
+        reason: `.yaml filename does not match [a-z][a-z0-9_-]{0,31}.yaml — likely typo (uppercase, leading digit, leading underscore, or too long)`,
+      });
     }
     return out;
   }

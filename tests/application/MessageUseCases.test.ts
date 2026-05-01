@@ -35,6 +35,11 @@ class FakeMemberRepo implements MemberRepository {
   async listAll(): Promise<Member[]> {
     return Array.from(this.members.values());
   }
+  async listUnrecognizedFiles(): Promise<
+    Array<{ path: string; kind: 'file' | 'directory'; reason: string }>
+  > {
+    return [];
+  }
   async save(_m: Member): Promise<void> {}
   async listHostNames(): Promise<string[]> {
     return this.hosts;

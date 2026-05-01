@@ -77,34 +77,40 @@ export class DiagnosticUseCases {
           message: msg,
         });
 
+    // Three areas, one shape: each gets its hydration pass via
+    // listAll (any malformed file → onMalformed → finding) AND a
+    // directory-walk pass via listUnrecognizedFiles (anything the
+    // listAll regex silently drops → finding). The unrecognized
+    // walk is what closed the requests-area "bad.yaml stayed
+    // invisible" gap (CHANGELOG #106); extending the same pattern
+    // to issues + members closes the same class of gap there
+    // (e.g. an Alice.yaml uppercase typo silently dropping the
+    // member from gate list).
     const beforeMembers = findings.length;
     const memberBundle = this.buildRepos(areaCollector('members'));
     const members = await memberBundle.members.listAll();
+    const memberCollector = areaCollector('members');
+    for (const u of await memberBundle.members.listUnrecognizedFiles()) {
+      memberCollector(u.path, `unrecognized ${u.kind}: ${u.reason}`);
+    }
     const memberMalformed = findings.length - beforeMembers;
 
     const beforeRequests = findings.length;
     const requestBundle = this.buildRepos(areaCollector('requests'));
     const requests = await requestBundle.requests.listAll();
-    // Off-pattern .yaml files (typo'd names) and subdirectories
-    // under <state>/ are silently dropped by listByState's regex.
-    // Surface them as findings so a misplaced file that gate
-    // ignored is no longer invisible. Fresh-agent dogfood
-    // surfaced this gap (2026-05-01 design sandbox) — pre-fix,
-    // a bad.yaml in requests/pending/ stayed there forever and
-    // doctor reported the root as clean.
-    const unrecognized = await requestBundle.requests.listUnrecognizedFiles();
     const requestCollector = areaCollector('requests');
-    for (const u of unrecognized) {
-      requestCollector(
-        u.path,
-        `unrecognized ${u.kind}: ${u.reason}`,
-      );
+    for (const u of await requestBundle.requests.listUnrecognizedFiles()) {
+      requestCollector(u.path, `unrecognized ${u.kind}: ${u.reason}`);
     }
     const requestMalformed = findings.length - beforeRequests;
 
     const beforeIssues = findings.length;
     const issueBundle = this.buildRepos(areaCollector('issues'));
     const issues = await issueBundle.issues.listAll();
+    const issueCollector = areaCollector('issues');
+    for (const u of await issueBundle.issues.listUnrecognizedFiles()) {
+      issueCollector(u.path, `unrecognized ${u.kind}: ${u.reason}`);
+    }
     const issueMalformed = findings.length - beforeIssues;
 
     // Run doctor plugins (if any)
