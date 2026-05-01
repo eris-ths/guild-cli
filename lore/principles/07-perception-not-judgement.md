@@ -60,7 +60,7 @@ This principle is about the tool's *posture*. It describes what
 the tool is *for*: structuring perception. Not just
 `suggested_next`, but every read verb, every diagnostic, every
 narrative rendering. The tool's job is to make the record legible
-enough that the reader's own judgement can engage. It is a lens,
+enough that the reader's own judgement can engage. It is a lense,
 not an oracle.
 
 ## Implications

@@ -68,7 +68,7 @@ export async function reqVoices(c: C, args: ParsedArgs): Promise<number> {
   }
   const utterances = collectUtterances(allJson, filter);
 
-  // Voice calibration: per-(actor, lens) score derived from historical
+  // Voice calibration: per-(actor, lense) score derived from historical
   // verdicts vs outcomes. Hidden when viewing your own voice (the
   // voter shouldn't game their own score); shown otherwise. See the
   // `computeVoiceCalibration` header in voices.ts for semantics.
@@ -122,7 +122,7 @@ export async function reqVoices(c: C, args: ParsedArgs): Promise<number> {
   for (const u of utterances) {
     process.stdout.write(renderUtterance(u, false) + '\n\n');
   }
-  // Calibration footer: one line per lens with recorded activity.
+  // Calibration footer: one line per lense with recorded activity.
   // Placed after the utterances so a reader who scanned the prose
   // sees the summary below without it fighting for attention. Self-
   // view skips this entirely (see isSelfView above).

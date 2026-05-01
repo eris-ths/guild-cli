@@ -47,7 +47,7 @@ GUILD_ACTOR=narrator node "$GATE" fast-track --from mira \
   --reason "父が最後に見た光を確かめに行く" \
   > /dev/null
 
-# Authorial critique of the beat (structure lens)
+# Authorial critique of the beat (structure lense)
 GUILD_ACTOR=narrator node "$GATE" review 2026-04-18-0001 \
   --by narrator --lense devil --verdict concern \
   "一人で登らせるのは筋が通る、情報量は不足"
@@ -159,7 +159,7 @@ extra process.
 
 ---
 
-## 3. Game design brainstorming — proposal + multi-lens critique
+## 3. Game design brainstorming — proposal + multi-lense critique
 
 **Use case**: exploring a game mechanic, surfacing failure modes,
 variant proposals that respond to specific critiques.
@@ -203,7 +203,7 @@ GUILD_ACTOR=designer node "$GATE" issues add \
 
 - devil / layer / user lenses map to **player-behavior critique /
   mechanical coherence / player experience** without renaming.
-  This is surprising and suggests the default lens set has a
+  This is surprising and suggests the default lense set has a
   generality beyond the tool's origin.
 - Variant proposals referencing the original by ID create a
   design-decision genealogy that chain can walk.
@@ -411,12 +411,12 @@ GUILD_ACTOR=me node "$GATE" fast-track \
   `config.lenses` to hydrate; `listByState` didn't. Fixed.
 - Single-principal state machine still has no traction. Every
   entry is fast-tracked.
-- ⚠ self-review warnings fire on every lens — semantically
+- ⚠ self-review warnings fire on every lense — semantically
   correct but noisy when the pattern is intentional. A future
   convention might be `--self-review-ok` to suppress when the
   solo-dialogue use is declared.
 
-**Fit verdict**: partial. The custom-lens mechanism generalizes
+**Fit verdict**: partial. The custom-lense mechanism generalizes
 review beautifully to multi-voice self-dialogue, but the lifecycle
 machinery sits unused. Good case study of how review and state
 machine are orthogonal axes of fit.
@@ -429,7 +429,7 @@ machine are orthogonal axes of fit.
 |---|---|---|---|---|---|
 | Story | ✗ (fast-track) | ✓ authorial | ✓ foreshadowing | ○ beat refs | partial |
 | Meeting | ✓ deny→refile | ✓ multi-POV | ✓ parking lot | ✓ decision graph | **max** |
-| Game design | ✗ | ✓ multi-lens | ✓ open Qs | ○ | strong |
+| Game design | ✗ | ✓ multi-lense | ✓ open Qs | ○ | strong |
 | Research | ✗ | ✓ self-critique | ✓ open Qs | ✓✓ citations | partial |
 | Incident | ✓✓ isomorphic | ✓ triad | ✓ follow-ups | ○ | **max** |
 | Solo journal | ✗ | ✓ custom lenses | — | — | partial |

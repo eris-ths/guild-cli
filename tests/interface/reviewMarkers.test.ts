@@ -20,28 +20,28 @@ test('formatReviewMarkers: non-array yields padded empty string', () => {
   assert.equal(result.length, WIDTH);
 });
 
-test('formatReviewMarkers: single ok review renders as ✓<lens>', () => {
+test('formatReviewMarkers: single ok review renders as ✓<lense>', () => {
   const result = formatReviewMarkers([
     { lense: 'devil', verdict: 'ok' },
   ]);
   assert.ok(result.startsWith('✓devil'));
 });
 
-test('formatReviewMarkers: single concern review renders as !<lens>', () => {
+test('formatReviewMarkers: single concern review renders as !<lense>', () => {
   const result = formatReviewMarkers([
     { lense: 'devil', verdict: 'concern' },
   ]);
   assert.ok(result.startsWith('!devil'));
 });
 
-test('formatReviewMarkers: reject renders as x<lens>', () => {
+test('formatReviewMarkers: reject renders as x<lense>', () => {
   const result = formatReviewMarkers([
     { lense: 'devil', verdict: 'reject' },
   ]);
   assert.ok(result.startsWith('xdevil'));
 });
 
-test('formatReviewMarkers: unknown verdict renders as ?<lens> (defensive)', () => {
+test('formatReviewMarkers: unknown verdict renders as ?<lense> (defensive)', () => {
   const result = formatReviewMarkers([
     { lense: 'devil', verdict: 'weird' },
   ]);
@@ -57,7 +57,7 @@ test('formatReviewMarkers: multi-review output is space-separated', () => {
 });
 
 test('formatReviewMarkers: long marker strings are not truncated', () => {
-  // Three long-lens reviews exceed the 16-char padding width;
+  // Three long-lense reviews exceed the 16-char padding width;
   // the function should not clip — padding is a floor, not a cap.
   const result = formatReviewMarkers([
     { lense: 'cognitive', verdict: 'concern' },

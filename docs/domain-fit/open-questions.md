@@ -25,7 +25,7 @@ POV, tense, draft state). Question: is that 20% worth building?
 
 - **Layer 0 — config-only conventions**. Document the "story
   convention for guild-cli" as a file in `examples/` showing
-  custom lens set (reader / structure / voice / continuity),
+  custom lense set (reader / structure / voice / continuity),
   fast-track as the default verb, issues-as-foreshadowing. Zero
   new code. Gets 80%.
 
@@ -90,7 +90,7 @@ six domains tried.
 
 **The tension**: `gate review --by X` when the request's author
 is also X emits a `⚠ self-review` warning (intentional, see #38).
-In solo-journal mode the warning fires on every lens because the
+In solo-journal mode the warning fires on every lense because the
 pattern is intentional — one person deliberately reviewing their
 own decision from four separate vantage points. The warning is
 correct at a micro level but noisy when the convention is solo-
@@ -105,8 +105,8 @@ multi-voice.
   `allow_self_review: true`. Declarative, whole-content_root.
   Loses the per-call visibility.
 
-- **Suppress when custom lens is active**: if the reviewer uses
-  a custom lens (not in the built-in 4), treat it as intentional
+- **Suppress when custom lense is active**: if the reviewer uses
+  a custom lense (not in the built-in 4), treat it as intentional
   multi-voice and skip the warning. Implicit, potentially too
   magical.
 
@@ -170,7 +170,7 @@ principal separation or state machinery; it was that
 externalizing an internal voice and seeing it in writing changed
 how the voice felt. This is a property of records, not of gate
 specifically. But the affordances gate provides — append-only,
-timestamped, cross-referenceable, lens-tagged — might amplify
+timestamped, cross-referenceable, lense-tagged — might amplify
 the effect vs. a plain text file.
 
 **Options explored**:

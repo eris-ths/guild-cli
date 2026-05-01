@@ -148,7 +148,7 @@ function buildTranscript(r: Request): TranscriptPayload {
             ? ` — "${comment}"`
             : `\n    "${comment}"`;
       reviewLines.push(
-        `${capitalise(by)}${invokedBy} reviewed through the ${lense} lens ` +
+        `${capitalise(by)}${invokedBy} reviewed through the ${lense} lense ` +
           `with a verdict of ${verdict}${commentFrag}`,
       );
     }

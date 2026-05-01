@@ -670,7 +670,7 @@ function printSummary(r: Request, markerWidth = 16): void {
   );
 }
 
-// Render a compact per-lens verdict summary like "✓devil ✓layer" or
+// Render a compact per-lense verdict summary like "✓devil ✓layer" or
 // "!devil ✓layer". See comments in the prior index.ts implementation
 // for design notes (UTF-16 width caveat, icon map, etc).
 export function formatReviewMarkers(reviews: unknown, width = 16): string {

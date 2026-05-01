@@ -1,6 +1,6 @@
 // YamlRequestRepository — optimistic lock, findById dedupe, save() guards.
 //
-// Focused on the invariants added in the "fix: address 4-lens review"
+// Focused on the invariants added in the "fix: address 4-lense review"
 // commit: concurrent writes must conflict, mid-transition state is
 // deterministically resolvable, and save() refuses fresh aggregates.
 
@@ -253,14 +253,14 @@ test('save() produces no top-level duplicated completion_note in writer path', a
   }
 });
 
-test('listByState passes config.lenses to hydrate (custom lens YAML round-trips)', async () => {
+test('listByState passes config.lenses to hydrate (custom lense YAML round-trips)', async () => {
   // Regression: listByState used to drop config.lenses when calling
-  // hydrate, so a request whose reviews used a custom lens (declared
+  // hydrate, so a request whose reviews used a custom lense (declared
   // in guild.config.yaml `lenses:`) became unreadable on any
   // listAll-backed verb (chain / voices / tail). findById worked;
   // listByState did not. Silent breakage — the warn-and-skip
   // swallowed the error and callers saw an empty result.
-  const root = mkdtempSync(join(tmpdir(), 'guild-cli-repo-lens-'));
+  const root = mkdtempSync(join(tmpdir(), 'guild-cli-repo-lense-'));
   try {
     writeFileSync(
       join(root, 'guild.config.yaml'),
@@ -272,12 +272,12 @@ test('listByState passes config.lenses to hydrate (custom lens YAML round-trips)
     const req = Request.create({
       id: RequestId.generate(new Date('2026-04-18T00:00:00Z'), 1),
       from: 'alice',
-      action: 'try a custom lens',
+      action: 'try a custom lense',
       reason: 'r',
     });
     await repo.saveNew(req);
 
-    // Hand-author a review with a custom lens by writing YAML directly,
+    // Hand-author a review with a custom lense by writing YAML directly,
     // bypassing Review.create (which also needs `allowedLenses`).
     // This mirrors the wire contract on disk.
     const path = join(root, 'requests', 'pending', `${req.id.value}.yaml`);
@@ -290,7 +290,7 @@ test('listByState passes config.lenses to hydrate (custom lens YAML round-trips)
         by: 'alice',
         lense: 'rational',
         verdict: 'concern',
-        comment: 'custom lens on disk',
+        comment: 'custom lense on disk',
         at: '2026-04-18T00:00:01Z',
       },
     ];
@@ -385,7 +385,7 @@ test('save() does not throw spurious VersionConflict when reviews carries non-ob
   // entries that are not objects (loose-shape YAML, legacy import,
   // hand-edited file), but readVersion() used to count the raw
   // length. This created an identical loadedVersion vs maxOnDisk
-  // drift on a different field. Surfaced by a noir-lens devil
+  // drift on a different field. Surfaced by a noir-lense devil
   // review on the status_log fix that asked whether "any hydrate
   // skip rule ↔ counter mismatch" was closed as a class, not just
   // the one instance.

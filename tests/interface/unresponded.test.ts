@@ -179,6 +179,42 @@ test('unresponded: missing actor (no GUILD_ACTOR, no --for) is an error', (t) =>
   assert.match(out.stderr, /actor/i);
 });
 
+test('unresponded: text output names --max-age-days at the point of consumption', (t) => {
+  // Discoverability: a reader scanning unresponded results who wants
+  // older items needs to see the flag without leaving for --help.
+  // Both the populated header and the empty-case prose carry the hint.
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  runGate(root, ['register', '--name', 'alice', '--category', 'professional']);
+
+  // Empty case
+  const empty = runGate(root, ['unresponded'], { GUILD_ACTOR: 'alice' });
+  assert.equal(empty.status, 0);
+  assert.match(empty.stdout, /--max-age-days/);
+
+  // Populated case: file a fast-track + concern review on it
+  const created = runGate(root, [
+    'fast-track',
+    '--from', 'alice',
+    '--action', 'something to review',
+    '--reason', 'r',
+    '--executor', 'alice',
+  ]);
+  const id = extractId(created.stdout)!;
+  runGate(root, ['register', '--name', 'bob', '--category', 'professional']);
+  runGate(root, [
+    'review', id,
+    '--by', 'bob',
+    '--lense', 'devil',
+    '--verdict', 'concern',
+    '--comment', 'flagged',
+  ]);
+
+  const populated = runGate(root, ['unresponded'], { GUILD_ACTOR: 'alice' });
+  assert.equal(populated.status, 0);
+  assert.match(populated.stdout, /window: 30 days, --max-age-days to change/);
+});
+
 test('unresponded: rejects unknown flags', (t) => {
   // Read-verb strict-flag discipline: a typo like `--max-age-day 7`
   // (singular) silently falling back to the 30-day default would be

@@ -97,7 +97,7 @@ test('collectUtterances: --lense filter excludes authored and non-matching revie
   }
 });
 
-test('collectUtterances: --verdict filter is independent of lens filter', () => {
+test('collectUtterances: --verdict filter is independent of lense filter', () => {
   const result = collectUtterances(corpus, { name: 'noir', verdict: 'ok' });
   // noir has two ok reviews (layer on 001? no, rin; user on 003 — noir).
   // Only user/ok on 003.
@@ -169,7 +169,7 @@ test('collectUtterances: authored utterance captures completion_note when presen
   }
 });
 
-test('collectUtterances: lens+verdict filters combine via AND', () => {
+test('collectUtterances: lense+verdict filters combine via AND', () => {
   const result = collectUtterances(corpus, {
     name: 'noir',
     lense: 'devil',

@@ -71,7 +71,13 @@ export async function suggestCmd(c: C, args: ParsedArgs): Promise<number> {
         .join(' ');
       process.stdout.write(`→ ${suggestion.verb} ${argsStr}\n`);
       process.stdout.write(`  ${suggestion.reason}\n`);
-      process.stderr.write('# advisory — override freely\n');
+      // Suppress the advisory footer when the suggestion is `export`
+      // (a shell builtin used to prompt for GUILD_ACTOR setup, not a
+      // gate verb). "override freely" speaks to heuristic gate
+      // dispatches; a missing-actor bootstrap hint is not a heuristic.
+      if (suggestion.verb !== 'export') {
+        process.stderr.write('# advisory — override freely\n');
+      }
     }
   }
   return 0;

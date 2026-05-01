@@ -96,14 +96,15 @@ export async function unrespondedCmd(
 
   if (entries.length === 0) {
     process.stdout.write(
-      `(no unresponded concerns for ${actor} within ${maxAgeDays} days)\n`,
+      `(no unresponded concerns for ${actor} within ${maxAgeDays} days; ` +
+        `--max-age-days to widen)\n`,
     );
     return 0;
   }
 
   process.stdout.write(
     `${entries.length} unresponded concern record(s) for ${actor} ` +
-      `(window: ${maxAgeDays} days)\n\n`,
+      `(window: ${maxAgeDays} days, --max-age-days to change)\n\n`,
   );
   for (const e of entries) {
     process.stdout.write(`${e.request_id}  ${e.action}\n`);

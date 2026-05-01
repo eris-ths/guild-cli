@@ -37,7 +37,7 @@ import { UnrespondedConcernsEntry } from '../../../application/concern/Unrespond
  *     - inbox unread (boot surfaces this)
  *     - requests where the actor is named in `--with` but didn't
  *       author or execute (pair-mode receiver)
- *   These are orientation concerns, and the orientation lens is
+ *   These are orientation concerns, and the orientation lense is
  *   `gate boot`. Resume's empty-path prose points at boot so a
  *   newcomer who ran resume as part of a handoff learns the right
  *   verb to reach for.
@@ -490,7 +490,7 @@ function composeRestorationProseEn(ctx: {
     lines.push(
       'Nothing is waiting — pick up fresh work (`gate pending`) or file a new request.',
     );
-    // resume is a same-actor continuation lens: it reconstructs what
+    // resume is a same-actor continuation lense: it reconstructs what
     // THIS actor was doing. Cross-actor signals (inbox unread,
     // named-as-`--with` on someone else's request, etc.) are not part
     // of its scope by design. Point at `gate boot` so a newcomer who
