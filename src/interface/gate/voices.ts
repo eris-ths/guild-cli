@@ -445,12 +445,18 @@ export function renderUtterance(
 //                                                 absorbed; neither a
 //                                                 win nor a miss)
 //   verdict=reject   + state=failed    → aligned (you said no, it broke)
-//   verdict=reject   + state=completed → overruled (you said no, it
+//   verdict=reject   + state=completed → overruled — counted as missed
+//                                                   (you said no, it
 //                                                   shipped anyway;
 //                                                   ambiguous signal —
 //                                                   could be wrong call,
 //                                                   could be reviewed
-//                                                   risk that held)
+//                                                   risk that held; we
+//                                                   pick the conservative
+//                                                   read because the
+//                                                   alternative is not
+//                                                   separately observable
+//                                                   from the record alone)
 //
 // Denied requests don't contribute (they never executed; no outcome
 // to compare against). `concern + completed` is counted as soft —
@@ -503,12 +509,30 @@ export function computeVoiceCalibration(
       const v = rv.verdict;
       if (v === 'ok') {
         if (state === 'completed') bucket.aligned += 1;
+        // verdict=ok + state=failed → missed. you said fine, it wasn't.
         else bucket.missed += 1;
       } else if (v === 'reject') {
         if (state === 'failed') bucket.aligned += 1;
+        // verdict=reject + state=completed: header calls this
+        // `overruled` (you said no, it shipped anyway). counted as
+        // missed here — conservative read: from a work-as-evidence
+        // lens, the no was wrong because the work landed. the
+        // alternative ("the risk you flagged was reviewed and held")
+        // is plausible but not separately observable from this
+        // record alone, so we don't try to distinguish.
         else bucket.missed += 1;
+      } else if (v === 'concern') {
+        // verdict=concern + state=failed → aligned. you flagged it,
+        // it broke. pre-fix this branch was missing — concern was
+        // excluded entirely, so reviewers who used `concern` as
+        // their primary signal got zero calibration credit and
+        // registered as uncalibrated forever. matches v1 alignment
+        // rules in the header above.
+        if (state === 'failed') bucket.aligned += 1;
+        // verdict=concern + state=completed → soft. issues may have
+        // been absorbed; neither a win nor a miss. excluded from
+        // both counts so the score doesn't get biased either way.
       }
-      // verdict === 'concern' intentionally excluded — see header.
     }
   }
 

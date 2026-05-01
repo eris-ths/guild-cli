@@ -367,6 +367,13 @@ const VERBS: readonly VerbSchema[] = [
         verdict: str,
         limit: str,
         format: formatField,
+        'with-calibration': {
+          type: 'boolean',
+          description:
+            'JSON mode only: opts into the {utterances, calibration} ' +
+            'object shape (default bare array). Text mode emits the ' +
+            'calibration footer regardless of this flag.',
+        },
       },
       required: ['name'],
     },
