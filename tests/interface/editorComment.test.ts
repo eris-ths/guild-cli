@@ -4,7 +4,16 @@ import {
   EDITOR_SCISSORS,
   stripEditorComments,
   pickEditor,
+  readCommentViaEditor,
 } from '../../src/interface/gate/handlers/internal.js';
+import {
+  mkdtempSync,
+  writeFileSync,
+  rmSync,
+  chmodSync,
+} from 'node:fs';
+import { tmpdir, platform } from 'node:os';
+import { join } from 'node:path';
 
 // --- stripEditorComments -----------------------------------------------
 
@@ -154,3 +163,121 @@ test('pickEditor: platform fallback when all env vars unset', () => {
     },
   );
 });
+
+// --- readCommentViaEditor ----------------------------------------------
+//
+// The spawn path is hard to mock portably; here we provide a real fake-
+// editor (a small shell script) that mutates the file the way a real
+// editor would, so the spawn-and-readback contract is exercised end-to-
+// end. POSIX-only — Windows shell scripts have a different shape and
+// the editor flow on Windows is well-covered by readers' real Notepad
+// usage. The skip keeps `npm test` green on the CI windows matrix.
+
+// Async-aware env override. The synchronous `withEnv` above restores
+// the env synchronously around fn(), which is wrong for async work
+// (the env is restored before spawnSync runs inside the awaited fn).
+// This variant awaits before restoring.
+async function withEnvAsync<T>(
+  overrides: Record<string, string | undefined>,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const saved: Record<string, string | undefined> = {};
+  for (const key of Object.keys(overrides)) {
+    saved[key] = process.env[key];
+    if (overrides[key] === undefined) {
+      delete process.env[key];
+    } else {
+      process.env[key] = overrides[key];
+    }
+  }
+  try {
+    return await fn();
+  } finally {
+    for (const key of Object.keys(saved)) {
+      if (saved[key] === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = saved[key];
+      }
+    }
+  }
+}
+
+async function withFakeEditor<T>(
+  scriptBody: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const dir = mkdtempSync(join(tmpdir(), 'guild-fakeed-'));
+  const scriptPath = join(dir, 'fake-editor.sh');
+  writeFileSync(scriptPath, `#!/bin/sh\n${scriptBody}\n`, 'utf8');
+  chmodSync(scriptPath, 0o755);
+  return withEnvAsync(
+    { GIT_EDITOR: scriptPath, VISUAL: undefined, EDITOR: undefined },
+    async () => {
+      try {
+        return await fn();
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    },
+  );
+}
+
+const POSIX_ONLY = platform() === 'win32' ? { skip: true } : {};
+
+test(
+  'readCommentViaEditor: throws when editor leaves an empty body',
+  POSIX_ONLY,
+  async () => {
+    // The fake editor is a no-op — it leaves the template untouched.
+    // The template's only above-scissors content is two blank lines,
+    // so `stripEditorComments` returns ''. Pre-fix the function
+    // returned the empty string and the caller's generic "review
+    // comment is required" error fired with a hint that misled the
+    // user about what just happened ("or run interactively so $EDITOR
+    // opens" — which they just did). Post-fix, the editor flow throws
+    // its own context-aware abort message.
+    await withFakeEditor(': # no-op', async () => {
+      await assert.rejects(
+        readCommentViaEditor({
+          id: '2026-04-15-0001',
+          by: 'alice',
+          lense: 'devil',
+          verdict: 'concern',
+        }),
+        (err: Error) => {
+          assert.match(err.message, /editor returned an empty review body/);
+          assert.match(err.message, /aborting/);
+          // The message names the recovery paths the user actually has.
+          assert.match(err.message, /scissors line/);
+          assert.match(err.message, /--comment/);
+          return true;
+        },
+      );
+    });
+  },
+);
+
+test(
+  'readCommentViaEditor: returns the body when editor writes content',
+  POSIX_ONLY,
+  async () => {
+    // Sanity for the happy path: the function reads back what the
+    // editor wrote, runs it through stripEditorComments, returns the
+    // trimmed result.
+    //
+    // The fake editor writes "real review content" above the
+    // template's scissors line. stripEditorComments keeps it.
+    const script =
+      `printf '%s\\n' 'real review content' > "$1.tmp" && cat "$1" >> "$1.tmp" && mv "$1.tmp" "$1"`;
+    await withFakeEditor(script, async () => {
+      const result = await readCommentViaEditor({
+        id: '2026-04-15-0001',
+        by: 'alice',
+        lense: 'devil',
+        verdict: 'concern',
+      });
+      assert.equal(result, 'real review content');
+    });
+  },
+);

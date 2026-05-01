@@ -253,6 +253,14 @@ export function pickEditor(): string {
  *   - the editor exits with non-zero status (e.g. `:cq` in vim)
  *   - the cleaned body is empty after stripping the scissors block
  *
+ * The empty-body throw matches `git commit` semantics — empty
+ * message aborts with an explicit error, never silently records a
+ * blank entry. Pre-fix the function returned `''` and let the
+ * caller's generic "review comment is required (use --comment ...
+ * or run interactively so $EDITOR opens)" error fire — but the
+ * caller's hint is misleading when the user just *did* run
+ * interactively. The throw at this layer carries the right context.
+ *
  * The caller is expected to surface the thrown Error to the user
  * with the outer CLI error handler.
  */
@@ -308,7 +316,15 @@ export async function readCommentViaEditor(context: {
       );
     }
     const raw = fs.readFileSync(file, 'utf8');
-    return stripEditorComments(raw);
+    const body = stripEditorComments(raw);
+    if (body.length === 0) {
+      throw new Error(
+        'editor returned an empty review body; aborting. ' +
+          'Re-run and write content above the scissors line, ' +
+          'or use --comment / --comment - / a positional.',
+      );
+    }
+    return body;
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
