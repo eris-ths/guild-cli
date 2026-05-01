@@ -194,8 +194,12 @@ function findOccurrences(phrase: string): Occurrence[] {
       const lines = readFileSync(abs, 'utf8').split('\n');
       for (let i = 0; i < lines.length; i++) {
         if (lines[i]!.includes(phrase)) {
+          // Normalize to forward slashes so the same `allowed_files`
+          // entries match on both POSIX (where `relative` returns `/`)
+          // and Windows (where it returns `\`). VOICE_BUDGET is
+          // authored once in POSIX style.
           result.push({
-            file: relative(REPO_ROOT, abs),
+            file: relative(REPO_ROOT, abs).replace(/\\/g, '/'),
             line: i + 1,
           });
         }
