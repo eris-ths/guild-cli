@@ -110,9 +110,10 @@ export async function reqRegister(c: C, args: ParsedArgs): Promise<number> {
       name: parsedName.value,
       category: canonicalCategory,
       active: true,
-      // Key name mirrors the written YAML (`displayName`, camelCase)
-      // to preserve "what-you-see-is-what-gets-saved" parity.
-      ...(displayName ? { displayName } : {}),
+      // Key name mirrors the written YAML (`display_name`,
+      // snake_case) to preserve "what-you-see-is-what-gets-saved"
+      // parity.
+      ...(displayName ? { display_name: displayName } : {}),
     };
     if (format === 'json') {
       process.stdout.write(

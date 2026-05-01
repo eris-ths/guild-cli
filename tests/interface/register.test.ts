@@ -72,7 +72,100 @@ test('register: happy path writes members/<name>.yaml with canonical fields', ()
     assert.match(yaml, /name: klee/);
     assert.match(yaml, /category: professional/);
     assert.match(yaml, /active: true/);
-    assert.match(yaml, /displayName: Klee/);
+    // snake_case key on disk — matches the rest of the project's
+    // YAML convention. hydrate accepts both forms for back-compat
+    // with member YAMLs written by older versions; new writes
+    // always use snake_case.
+    assert.match(yaml, /display_name: Klee/);
+    // Negative: the camelCase key MUST NOT also appear (single-cycle
+    // cut, not dual-emit). Pre-fix shape used `displayName`; new
+    // writes are snake_case only.
+    assert.doesNotMatch(yaml, /displayName:/);
+  } finally {
+    cleanup();
+  }
+});
+
+test('register: dry-run preview uses display_name (snake_case), matches save shape', () => {
+  // What-you-see-is-what-gets-saved parity. Pre-fix the preview
+  // emitted `displayName` to mirror the (then-camelCase) save;
+  // the save is now snake_case so the preview matches.
+  const { root, cleanup } = bootstrap();
+  try {
+    const { status, stdout } = runGate(root, [
+      'register',
+      '--name', 'previewone',
+      '--display-name', 'Preview One',
+      '--dry-run',
+    ]);
+    assert.equal(status, 0);
+    assert.match(stdout, /display_name: "Preview One"/);
+    assert.doesNotMatch(stdout, /displayName:/);
+    // Side effect: dry-run does NOT actually write the file.
+    assert.equal(
+      existsSync(join(root, 'members', 'previewone.yaml')),
+      false,
+    );
+  } finally {
+    cleanup();
+  }
+});
+
+test('register: hydrate still accepts legacy camelCase displayName on read', () => {
+  // Backwards compatibility: member YAMLs written by older versions
+  // carry `displayName` (camelCase). The save path is now snake_case
+  // only, but hydrate must keep reading both — otherwise upgrading
+  // would orphan existing display names.
+  const { root, cleanup } = bootstrap();
+  try {
+    writeFileSync(
+      join(root, 'members', 'legacy.yaml'),
+      'name: legacy\ncategory: professional\nactive: true\ndisplayName: Legacy Display\n',
+    );
+    const { status, stdout } = runGate(
+      root,
+      ['whoami'],
+      { GUILD_ACTOR: 'legacy' },
+    );
+    assert.equal(status, 0);
+    // The display name from the legacy camelCase YAML is surfaced.
+    assert.match(stdout, /you are legacy — Legacy Display \(member\)/);
+  } finally {
+    cleanup();
+  }
+});
+
+test('whoami: surfaces display_name when present (em-dash separator)', () => {
+  // Pre-fix whoami showed only the name+role: "you are noir
+  // (member)". The display_name was stored on disk but invisible
+  // at the orientation surface. Now: "you are noir — Noir
+  // (Critic) (member)".
+  const { root, cleanup } = bootstrap();
+  try {
+    runGate(root, [
+      'register',
+      '--name', 'noir',
+      '--display-name', 'Noir (Critic)',
+    ]);
+    const { stdout } = runGate(root, ['whoami'], { GUILD_ACTOR: 'noir' });
+    assert.match(stdout, /you are noir — Noir \(Critic\) \(member\)/);
+  } finally {
+    cleanup();
+  }
+});
+
+test('whoami: omits the display_name chunk when absent', () => {
+  // Members without a display_name keep the original concise
+  // shape; the em-dash is conditional, not always present.
+  const { root, cleanup } = bootstrap();
+  try {
+    runGate(root, ['register', '--name', 'plain']);
+    const { stdout } = runGate(root, ['whoami'], { GUILD_ACTOR: 'plain' });
+    // Pin the first line shape exactly. (Other lines may carry em-
+    // dashes — e.g. the "no utterances yet — try ..." onboarding
+    // hint — which is unrelated to the display_name surfacing.)
+    const firstLine = stdout.split('\n')[0]!;
+    assert.equal(firstLine, 'you are plain (member)');
   } finally {
     cleanup();
   }
