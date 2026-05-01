@@ -57,6 +57,21 @@ const formatField: JsonSchema = {
   enum: ['json', 'text'],
   description: 'output format (agent-first default: json for read; text for write)',
 };
+// Shared dry-run schema field. Boolean (the parser accepts bare
+// `--dry-run`, `--dry-run=true`, `--dry-run=false`). Declared on every
+// write verb that supports the preview envelope (approve/deny/execute/
+// complete/fail/review/thank/register) so MCP wirings reading the
+// schema see the runtime contract honestly. Pre-this-fix, register
+// declared it as a string and the seven other verbs didn't declare
+// it at all — the runtime accepted --dry-run on all eight, but the
+// schema lied by omission.
+const dryRunField: JsonSchema = {
+  type: 'boolean',
+  description:
+    'preview the would-be write without persisting. Output is a ' +
+    'json envelope (dry_run/verb/would_transition/preview) regardless ' +
+    'of --format.',
+};
 
 // Inner property shape of every `suggested_next` payload, exported
 // as a named const so multiple verb output schemas (write response,
@@ -446,7 +461,7 @@ const VERBS: readonly VerbSchema[] = [
           'member category; defaults to "professional". Canonical: core/professional/assignee/trial/special/host. Host is NOT accepted via CLI (edit guild.config.yaml).',
         ),
         'display-name': strOpt('human-readable display label, optional'),
-        'dry-run': strOpt('preview the YAML without writing to disk'),
+        'dry-run': dryRunField,
         format: formatField,
       },
       required: ['name'],
@@ -484,6 +499,7 @@ const VERBS: readonly VerbSchema[] = [
         by: strOpt('approver (defaults to $GUILD_ACTOR)'),
         note: str,
         format: formatField,
+        'dry-run': dryRunField,
       },
       required: ['id'],
     },
@@ -501,6 +517,7 @@ const VERBS: readonly VerbSchema[] = [
         reason: strOpt('alias for --note'),
         note: strOpt('closure note; falls back to positional arg'),
         format: formatField,
+        'dry-run': dryRunField,
       },
       required: ['id'],
     },
@@ -512,7 +529,13 @@ const VERBS: readonly VerbSchema[] = [
     summary: 'transition approved → executing',
     input: {
       type: 'object',
-      properties: { id: idStr, by: str, note: str, format: formatField },
+      properties: {
+        id: idStr,
+        by: str,
+        note: str,
+        format: formatField,
+        'dry-run': dryRunField,
+      },
       required: ['id'],
     },
     output: writeResponseSchema,
@@ -523,7 +546,13 @@ const VERBS: readonly VerbSchema[] = [
     summary: 'transition executing → completed',
     input: {
       type: 'object',
-      properties: { id: idStr, by: str, note: str, format: formatField },
+      properties: {
+        id: idStr,
+        by: str,
+        note: str,
+        format: formatField,
+        'dry-run': dryRunField,
+      },
       required: ['id'],
     },
     output: writeResponseSchema,
@@ -534,7 +563,14 @@ const VERBS: readonly VerbSchema[] = [
     summary: 'transition executing → failed (terminal)',
     input: {
       type: 'object',
-      properties: { id: idStr, by: str, reason: str, note: str, format: formatField },
+      properties: {
+        id: idStr,
+        by: str,
+        reason: str,
+        note: str,
+        format: formatField,
+        'dry-run': dryRunField,
+      },
       required: ['id'],
     },
     output: writeResponseSchema,
@@ -552,6 +588,7 @@ const VERBS: readonly VerbSchema[] = [
         verdict: { type: 'string', enum: ['ok', 'concern', 'reject'] },
         comment: strOpt('review body; "-" for STDIN'),
         format: formatField,
+        'dry-run': dryRunField,
       },
       required: ['id', 'by', 'lense', 'verdict'],
     },
@@ -570,6 +607,7 @@ const VERBS: readonly VerbSchema[] = [
         by: str,
         reason: strOpt('optional prose; "-" for STDIN'),
         format: formatField,
+        'dry-run': dryRunField,
       },
       required: ['to', 'for'],
     },
