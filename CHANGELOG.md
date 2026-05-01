@@ -8,6 +8,25 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 ## [Unreleased]
 
 ### Added
+- **`gate issues list` JSON output + `--state all` + bare-issues
+  hint.** Closes four discoverability gaps a fresh-agent dogfood
+  surfaced. (1) `--format json` now emits an array of nested issue
+  objects (notes preserved as a sub-array, not flattened as in text
+  format). (2) `--state all` returns every state in one call;
+  previously a reader had to invoke list four times. (3) When
+  `--state` is omitted, a stderr hint discloses the implicit
+  open-only filter and names the open-vs-active distinction with
+  `gate status`'s count: `# filtered to state=open; status counts
+  open+in_progress (active) — --state to override`. (4) A bare
+  `gate issues` (no subcommand) used to silently fall through to
+  list; it now emits a short hint at the most-common subcommands
+  and exits 1, mirroring how `gate list` handles missing `--state`.
+  The list semantics (worklist = open) and the status semantics
+  (triage = open+in_progress) intentionally differ — the difference
+  is exposed at the surface that produces the count, not papered
+  over by aligning them. Devil-reviewed
+  (`2026-05-01-0001`/`0002` in design sandbox).
+
 - **`lore/principles/08-voice-as-doctrine.md` + voice-budget audit.**
   Names the principle that the tool's prose — `suggested_next.reason`,
   schema descriptions, footers, finding messages — is the running
