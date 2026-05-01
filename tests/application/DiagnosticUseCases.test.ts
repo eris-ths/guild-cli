@@ -40,6 +40,15 @@ class FakeMemberRepo implements MemberRepository {
     }
     return this.items;
   }
+  async listUnrecognizedFiles(): Promise<
+    Array<{ path: string; kind: 'file' | 'directory'; reason: string }>
+  > {
+    // Test fakes don't simulate directory walks; the diagnostic
+    // off-pattern surface is exercised end-to-end in the interface
+    // test (tests/interface/doctorUnrecognized.test.ts) where a
+    // real filesystem fixture provides realistic input.
+    return [];
+  }
   async save(_m: Member): Promise<void> {}
   async listHostNames(): Promise<string[]> {
     return [];
@@ -99,6 +108,11 @@ class FakeIssueRepo implements IssueRepository {
       this.onMalformed?.(`/fake${this.fakeArea}/${i}.yaml`, this.malformedMessages[i]!);
     }
     return this.items;
+  }
+  async listUnrecognizedFiles(): Promise<
+    Array<{ path: string; kind: 'file' | 'directory'; reason: string }>
+  > {
+    return [];
   }
   async save(_i: Issue): Promise<void> {}
   async saveNew(_i: Issue): Promise<void> {}
