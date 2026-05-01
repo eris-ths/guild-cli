@@ -123,7 +123,7 @@ Issues:
 Messages:
   gate message --from <m> --to <m> [--text <s> | --text -]
   gate broadcast --from <m> [--text <s> | --text -]
-  gate inbox --for <m> [--unread]
+  gate inbox --for <m> [--unread] [--format json|text]
   gate inbox mark-read [N] [--for <m>]
 
 States: pending | approved | executing | completed | failed | denied

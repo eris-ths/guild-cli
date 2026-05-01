@@ -8,6 +8,26 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 ## [Unreleased]
 
 ### Added
+- **`gate inbox --format json` + self/inactive message advisories.**
+  Three friction points on the messages surface a fresh-agent
+  dogfood surfaced. (1) `gate inbox --format json` now emits an
+  array of inbox-entry objects with snake_case keys
+  ({from, to, type, text, at, read, read_at?, read_by?,
+  invoked_by?, related?}). Optional fields are OMITTED when
+  undefined (matches `gate show` JSON convention). (2)
+  `gate message --from X --to X` (self-message) emits a stderr
+  notice — same shape as the existing self-approve notice. The
+  act is allowed and recorded; the writer sees the edge they
+  crossed. (3) `gate message --to <inactive>` emits a stderr
+  notice naming the consequence ("the message landed in their
+  inbox but they may not be reading it"). `gate broadcast`
+  already filters inactive recipients; the DM path was silent —
+  asymmetric. The notice closes the asymmetry without making a
+  policy choice (deliver-or-block) the PR doesn't have a basis
+  for. Devil-reviewed (`2026-05-01-0001`/`0002` in design
+  sandbox); v2 absorbed phrasing trims and the omit-when-
+  undefined JSON shape rule.
+
 - **`gate issues list` JSON output + `--state all` + bare-issues
   hint.** Closes four discoverability gaps a fresh-agent dogfood
   surfaced. (1) `--format json` now emits an array of nested issue

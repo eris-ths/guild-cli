@@ -10,6 +10,30 @@ import {
   emitInvokedByNotice,
   readStdin,
 } from './internal.js';
+import { InboxMessage } from '../../../application/ports/NotificationPort.js';
+
+/**
+ * Serialise an InboxMessage for `gate inbox --format json`. snake_case
+ * keys to match the on-disk YAML and the rest of the project's JSON
+ * surface (`gate show`, `gate issues list --format json`). Optional
+ * fields are omitted when undefined rather than emitted as null —
+ * pinned in design review 2026-05-01-0001/0002.
+ */
+function toInboxJson(m: InboxMessage): Record<string, unknown> {
+  const out: Record<string, unknown> = {
+    from: m.from,
+    to: m.to,
+    type: m.type,
+    text: m.text,
+    at: m.at,
+    read: m.read,
+  };
+  if (m.readAt !== undefined) out['read_at'] = m.readAt;
+  if (m.readBy !== undefined) out['read_by'] = m.readBy;
+  if (m.invokedBy !== undefined) out['invoked_by'] = m.invokedBy;
+  if (m.related !== undefined) out['related'] = m.related;
+  return out;
+}
 
 const MESSAGE_SEND_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'from',
@@ -25,6 +49,7 @@ const MESSAGE_BROADCAST_KNOWN_FLAGS: ReadonlySet<string> = new Set([
 const INBOX_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'for',
   'unread',
+  'format',
 ]);
 
 export async function msgSend(c: C, args: ParsedArgs): Promise<number> {
@@ -40,6 +65,35 @@ export async function msgSend(c: C, args: ParsedArgs): Promise<number> {
   if (text === '-') text = (await readStdin()).trim();
   const type = optionalOption(args, 'type');
   const invokedBy = deriveInvokedBy(from);
+
+  // Self-message advisory: matches the `gate approve` self-approval
+  // notice pattern. The act is allowed and recorded; the writer sees
+  // the edge they crossed. Catches typos (--to alice when --from
+  // alice) without forcing the writer to defend an intentional
+  // self-note.
+  if (from === to) {
+    process.stderr.write(
+      `notice: ${from} messaged themselves (self-message recorded).\n`,
+    );
+  }
+
+  // Inactive-recipient advisory: gate broadcast filters inactive
+  // members; gate message used to deliver silently. Asymmetric.
+  // Fetch the recipient member here to read the active flag — if
+  // the member doesn't exist at all, leave the lookup to
+  // MessageUseCases.send (it produces a richer error). Skip the
+  // active-check noise on self-message: if the writer just messaged
+  // themselves they already know their own state.
+  if (from !== to) {
+    const recipient = await c.memberUC.show(to);
+    if (recipient !== null && !recipient.active) {
+      process.stderr.write(
+        `notice: ${to} is inactive; the message landed in their inbox ` +
+          `but they may not be reading it.\n`,
+      );
+    }
+  }
+
   await c.messageUC.send({
     from,
     to,
@@ -102,10 +156,28 @@ export async function msgInbox(c: C, args: ParsedArgs): Promise<number> {
   rejectUnknownFlags(args, INBOX_KNOWN_FLAGS, 'inbox');
   const forName = requireOption(args, 'for', '--for required', 'GUILD_ACTOR');
   const unreadOnly = args.options['unread'] === true;
+  const format = optionalOption(args, 'format') ?? 'text';
+  if (format !== 'text' && format !== 'json') {
+    throw new Error(`--format must be 'text' or 'json', got: ${format}`);
+  }
   const messages = await c.messageUC.inbox(forName);
   const filtered = unreadOnly
     ? messages.filter((m) => !m.read)
     : messages;
+
+  // JSON output: array of messages with snake_case keys (matches the
+  // on-disk YAML and `gate show` JSON convention) and omit-when-
+  // undefined for optional fields (read_at, read_by, invoked_by,
+  // related). Devil-reviewed in 2026-05-01-0001/0002 (design sandbox):
+  // omit beats null because the absent signal is honest — null would
+  // suggest "explicitly not yet" which we don't mean for sender-side
+  // optional fields.
+  if (format === 'json') {
+    process.stdout.write(
+      JSON.stringify(filtered.map(toInboxJson), null, 2) + '\n',
+    );
+    return 0;
+  }
 
   if (filtered.length === 0) {
     const suffix = unreadOnly ? ' (unread only)' : '';
