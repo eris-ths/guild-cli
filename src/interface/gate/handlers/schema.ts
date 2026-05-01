@@ -656,9 +656,20 @@ const VERBS: readonly VerbSchema[] = [
     summary: 'list messages for a member; mark-read as subcommand',
     input: {
       type: 'object',
-      properties: { for: str, unread: { type: 'boolean' } },
+      properties: {
+        for: str,
+        unread: { type: 'boolean' },
+        format: formatField,
+      },
     },
-    output: { type: 'array' },
+    output: {
+      type: 'array',
+      description:
+        '--format json: array of inbox-entry objects with snake_case ' +
+        "keys ({from, to, type, text, at, read, read_at?, read_by?, " +
+        'invoked_by?, related?}). Optional fields are omitted when ' +
+        'undefined.',
+    },
   },
   {
     name: 'doctor',
