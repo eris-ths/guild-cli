@@ -52,23 +52,30 @@ const formatField: JsonSchema = {
   description: 'output format (agent-first default: json for read; text for write)',
 };
 
+// Inner property shape of every `suggested_next` payload, exported
+// as a named const so multiple verb output schemas (write response,
+// boot, suggest) can share a single source of truth. Hand-rolled
+// inline copies in older revisions drifted (devil's B2 review on
+// 2026-05-01-0005); this prevents that recurring.
+const suggestedNextProperties: Record<string, JsonSchema> = {
+  verb: str,
+  args: {
+    type: 'object',
+    description: 'pre-filled argument hints — agent may override',
+  },
+  reason: str,
+  actor_resolved: {
+    type: 'boolean',
+    description:
+      'true iff `args.by` is absent or matches the calling actor (GUILD_ACTOR). ' +
+      'When false, the suggestion names a different actor — orchestrators should ' +
+      'branch (escalate / hand off) rather than naively dispatching with their own --by.',
+  },
+};
+
 const suggestedNextSchema: JsonSchema = {
   type: 'object',
-  properties: {
-    verb: str,
-    args: {
-      type: 'object',
-      description: 'pre-filled argument hints — agent may override',
-    },
-    reason: str,
-    actor_resolved: {
-      type: 'string',
-      description:
-        'true iff `args.by` is absent or matches the calling actor (GUILD_ACTOR). ' +
-        'When false, the suggestion names a different actor — orchestrators should ' +
-        'branch (escalate / hand off) rather than naively dispatching with their own --by.',
-    },
-  },
+  properties: suggestedNextProperties,
 };
 
 const writeResponseSchema: JsonSchema = {
@@ -121,6 +128,35 @@ const VERBS: readonly VerbSchema[] = [
             'about what to do next, derived from queues + open loops. ' +
             "Read `reason` and override when your judgement differs. " +
             'Priority is shared with `gate suggest`; both are hints.',
+          // Same canonical sub-schema as suggest so the two surfaces
+          // never disagree on the suggested_next shape.
+          properties: suggestedNextProperties,
+        },
+        verbs_available_now: {
+          type: 'object',
+          description:
+            "Discoverability hint: which verbs are dispatchable right now. " +
+            "`actionable` lists transitions the caller can fire as themselves; " +
+            "`requires_other_actor` names blockers (e.g. pending requests waiting " +
+            'on a host) with `candidates` so domain-specific actor models can ' +
+            "re-interpret without the payload pre-baking a host assumption; " +
+            "`always_readable` is the side-effect-free verb catalog.",
+          properties: {
+            actionable: { type: 'array', items: { type: 'object' } },
+            requires_other_actor: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  verb: str,
+                  id: str,
+                  candidates: { type: 'array', items: str },
+                  reason: str,
+                },
+              },
+            },
+            always_readable: { type: 'array', items: str },
+          },
         },
       },
     },
@@ -156,11 +192,12 @@ const VERBS: readonly VerbSchema[] = [
             'judgement differs; a `suggest` loop that dispatches the verb ' +
             'without reading the reason is treating a heuristic as a ' +
             'command, which is the shape this field is trying to avoid.',
-          properties: {
-            verb: str,
-            args: { type: 'object' },
-            reason: str,
-          },
+          // Mirror the canonical suggestedNextSchema so this surface
+          // never drifts from the write-response shape (devil B2:
+          // hand-rolled inline schema went stale when actor_resolved
+          // was added). Keeps `actor_resolved` and any future field
+          // visible to schema-aware consumers without a second edit.
+          properties: suggestedNextProperties,
         },
       },
     },

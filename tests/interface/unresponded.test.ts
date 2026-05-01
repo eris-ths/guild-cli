@@ -178,3 +178,21 @@ test('unresponded: missing actor (no GUILD_ACTOR, no --for) is an error', (t) =>
   assert.notEqual(out.status, 0);
   assert.match(out.stderr, /actor/i);
 });
+
+test('unresponded: rejects unknown flags', (t) => {
+  // Read-verb strict-flag discipline: a typo like `--max-age-day 7`
+  // (singular) silently falling back to the 30-day default would be
+  // the exact fail-open shape rejectUnknownFlags exists to prevent.
+  // Mirrors the behavior of gate tail / doctor / repair.
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  runGate(root, ['register', '--name', 'alice', '--category', 'professional']);
+  const out = runGate(
+    root,
+    ['unresponded', '--max-age-day', '7'],
+    { GUILD_ACTOR: 'alice' },
+  );
+  assert.notEqual(out.status, 0);
+  assert.match(out.stderr, /unknown flag/i);
+  assert.match(out.stderr, /--max-age-days/);
+});

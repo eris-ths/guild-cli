@@ -1,9 +1,19 @@
-import { ParsedArgs, optionalOption } from '../../shared/parseArgs.js';
+import {
+  ParsedArgs,
+  optionalOption,
+  rejectUnknownFlags,
+} from '../../shared/parseArgs.js';
 import { C, parseOptionalIntOption } from './internal.js';
 import {
   DEFAULT_MAX_AGE_DAYS,
   UnrespondedConcernsEntry,
 } from '../../../application/concern/UnrespondedConcernsQuery.js';
+
+const UNRESPONDED_KNOWN_FLAGS: ReadonlySet<string> = new Set([
+  'for',
+  'max-age-days',
+  'format',
+]);
 
 /**
  * gate unresponded [--for <m>] [--max-age-days <N>] [--format json|text]
@@ -42,6 +52,12 @@ export async function unrespondedCmd(
   c: C,
   args: ParsedArgs,
 ): Promise<number> {
+  // Strict-flag rejection: keeps consistency with `gate tail` /
+  // `gate doctor` / `gate repair` (read verbs that have already
+  // adopted the discipline). A typo like `--max-age-day 7`
+  // silently falling back to the 30-day default would be the
+  // exact fail-open shape this guard exists to prevent.
+  rejectUnknownFlags(args, UNRESPONDED_KNOWN_FLAGS, 'unresponded');
   const format = optionalOption(args, 'format') ?? 'text';
   if (format !== 'json' && format !== 'text') {
     throw new Error(`--format must be 'json' or 'text', got: ${format}`);

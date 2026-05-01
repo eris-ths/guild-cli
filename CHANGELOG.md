@@ -24,14 +24,19 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
   not visible from any read path short of re-running `gate resume`.
   (refines 2026-05-01-0003)
 
-- **`gate show` adds a concern marker line.** A 3-state existence
+- **`gate show` adds a concern marker line.** A binary existence
   signal — `no concerns recorded` / `concern recorded — walk gate
-  chain ...` — sits next to the existing `chain hint` line. Three
-  states deliberately, NOT a count: counting ("3 concerns, 1
-  follow-up") would invite the reader to play a "drive the number
-  down" game (principle 03 — performance-for-the-record). The
-  reader walks `gate chain` to see actual references and judges
-  status themselves; the tool only asserts existence.
+  chain ...` — sits next to the existing `chain hint` line.
+  Existence-language deliberately, NOT a count: counting ("3
+  concerns, 1 follow-up") would invite the reader to play a "drive
+  the number down" game (principle 03 — performance-for-the-record).
+  The original design called for a 3-state marker (concern + inbound
+  / concern + no inbound / no concerns); resolving inbound presence
+  at show time would require an async repository scan, so the
+  shipped form punts that resolution to `gate chain <id>` (named
+  inline in the marker text). The reader gets the same perception
+  affordance with one extra command rather than via formatRequestText
+  becoming async.
 
 - **`gate boot` adds `verbs_available_now.requires_other_actor`.**
   A sibling array to `actionable` (which keeps its existing flat
