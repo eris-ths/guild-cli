@@ -7,7 +7,29 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 
 ## [Unreleased]
 
+### Changed
+- **Member YAML: `displayName` → `display_name` on save.** Aligns the
+  one camelCase field on disk with the rest of the project's
+  snake_case convention (`auto_review`, `read_at`, `status_log`,
+  `created_at`, `invoked_by`). The hydrate path
+  (`YamlMemberRepository`) already accepts both forms; new writes
+  always use snake_case. Existing member YAMLs in users'
+  content_roots keep loading. Bundled fixtures
+  (`examples/quick-start`, `examples/dogfood-session`,
+  `examples/agent-voices`) migrated mechanically. Single-cycle cut
+  per 0.x policy — no dual-emit phase. Devil-reviewed
+  (2026-05-01-0001/0002).
+
 ### Added
+- **`gate whoami` surfaces `display_name`.** When a member YAML
+  carries a `display_name`, the orientation line now reads
+  `you are noir — Noir (Critic) (member)` rather than the pre-fix
+  `you are noir (member)` which hid the chosen presentation. Em-
+  dash separator follows the pattern other surfaces use to compose
+  name/label pairs; the trailing role-in-parens is unchanged. When
+  no display_name exists, the line stays in its original concise
+  form.
+
 - **`gate inbox --format json` + self/inactive message advisories.**
   Three friction points on the messages surface a fresh-agent
   dogfood surfaced. (1) `gate inbox --format json` now emits an

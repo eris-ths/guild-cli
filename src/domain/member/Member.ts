@@ -62,8 +62,13 @@ export class Member {
       category: this.props.category,
       active: this.props.active,
     };
+    // snake_case key on disk to match the rest of the project's
+    // YAML convention (auto_review, status_log, created_at,
+    // invoked_by). hydrate accepts both `display_name` and
+    // `displayName` for backwards-compatibility with member YAMLs
+    // written by older versions; new writes always use snake_case.
     if (this.props.displayName !== undefined) {
-      out['displayName'] = this.props.displayName;
+      out['display_name'] = this.props.displayName;
     }
     return out;
   }

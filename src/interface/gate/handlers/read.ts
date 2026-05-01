@@ -209,7 +209,8 @@ export async function reqWhoami(c: C, args: ParsedArgs): Promise<number> {
 
   const members = await c.memberUC.list();
   const actorLower = actor.toLowerCase();
-  const isMember = members.some((m) => m.name.value === actorLower);
+  const memberRecord = members.find((m) => m.name.value === actorLower);
+  const isMember = memberRecord !== undefined;
   const isHost = c.config.hostNames.includes(actorLower);
   const role = isMember
     ? 'member'
@@ -217,7 +218,16 @@ export async function reqWhoami(c: C, args: ParsedArgs): Promise<number> {
       ? 'host'
       : 'unknown (not in members/ or host_names)';
 
-  process.stdout.write(`you are ${actor} (${role})\n`);
+  // Surface display_name when present: name and display_name carry
+  // different signals — name is identity, display_name is the
+  // human-facing label. Hiding display_name at the orientation
+  // surface meant the member's chosen presentation lived only in
+  // YAML and `guild list`. Em-dash separator follows how other
+  // surfaces compose name/label pairs; the role parens stay so the
+  // visual block parses left-to-right (name — label (role)).
+  const displayName = memberRecord?.displayName;
+  const displayChunk = displayName ? ` — ${displayName}` : '';
+  process.stdout.write(`you are ${actor}${displayChunk} (${role})\n`);
 
   const limit = parseOptionalIntOption(args, 'limit') ?? 5;
 
