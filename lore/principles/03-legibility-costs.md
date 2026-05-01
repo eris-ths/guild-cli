@@ -46,7 +46,7 @@ What `gate` does instead:
 
 ## Implications
 
-- **Resist adding "gamification" features without this lens.**
+- **Resist adding "gamification" features without this lense.**
   Points / badges / streaks reward volume, which amplifies
   performance-for-record. The gamification we keep (calibration)
   refuses to be visible to the scored party, which is the shape

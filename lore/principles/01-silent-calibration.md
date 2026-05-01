@@ -24,7 +24,7 @@ this voice — they get the benefit without the gaming pressure.
 
 ## In practice
 
-`gate voices <other_actor>` shows calibration ("devil lens:
+`gate voices <other_actor>` shows calibration ("devil lense:
 trusted — 7 of 7 verdicts aligned"). `gate voices $GUILD_ACTOR`
 hides it. Implemented in `src/interface/gate/voices.ts`
 (`computeVoiceCalibration`) and `handlers/read.ts` (the

@@ -24,7 +24,7 @@ They compose on the same record (a request's YAML holds both
 `reviews` and `thanks` arrays), but they are read by different
 parts of the tool:
 
-- Reviews drive `voices <name>` calibration, the per-lens
+- Reviews drive `voices <name>` calibration, the per-lense
   alignment score that surfaces as prose to other readers.
 - Thanks drive nothing quantitative. They are visible in
   `voices`, `tail`, `transcript`; they participate in the
@@ -48,7 +48,7 @@ Keeping them orthogonal lets each be honest.
   are separate value objects. Neither imports the other.
 - `computeVoiceCalibration` (in `voices.ts`) iterates reviews
   only. Thanks are invisible to it.
-- `gate voices <name>` text footer composes both: "devil lens:
+- `gate voices <name>` text footer composes both: "devil lense:
   trusted — N of M aligned" (calibration from reviews) plus the
   thanks-received stream (the `kind: 'thank'` utterances). Same
   surface, different signals, side by side.

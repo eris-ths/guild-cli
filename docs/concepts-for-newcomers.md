@@ -20,12 +20,12 @@ the next session — or the next agent — can pick up where you left off.
 
 | You used… | Closest guild-cli concept | Key difference |
 |-----------|--------------------------|----------------|
-| **Jira / Linear** (issues + assignees) | `request` has `executor` like assignee, `state` like status | `request` also carries multi-lens `review`s and forced `reason`; it's closer to an ADR + ticket fused together |
+| **Jira / Linear** (issues + assignees) | `request` has `executor` like assignee, `state` like status | `request` also carries multi-lense `review`s and forced `reason`; it's closer to an ADR + ticket fused together |
 | **`issues` in guild-cli** | `issue` | In guild-cli, `issue` is a lightweight observation that hasn't become a decision yet. Promote it to a `request` when someone commits to act. |
-| **GitHub pull request review** | `gate review --lense X --verdict Y` | Reviews in gate attach to *requests* (decisions), not diffs. Multiple reviewers can each apply different lenses to the same request. |
+| **GitHub pull request review** | `gate review --lense X --verdict Y` | Reviews in gate attach to *requests* (decisions), not diffs. Multiple reviewers can each apply different lenses to the same request. (`lense` is the project's spelling — see vocabulary below.) |
 | **Slack / Discord DM** | `gate message --from A --to B` | Push-based messaging with an `inbox`, same channel as the decision log — you can DM about a specific `request` and the reference persists. |
 | **ADR** (architecture decision record) | `request` + `reason` + `review`s | Same spirit, but *alive*: reviews and messages keep accruing after the decision is made. |
-| **Standup / retro notes** | `gate tail` / `gate voices <actor>` | Replay the content_root's dialogue, filtered by actor or lens, instead of scrolling chat history. |
+| **Standup / retro notes** | `gate tail` / `gate voices <actor>` | Replay the content_root's dialogue, filtered by actor or lense, instead of scrolling chat history. |
 
 ## Quick vocabulary
 
@@ -33,7 +33,7 @@ the next session — or the next agent — can pick up where you left off.
 - **host** — an actor that runs the content_root (not a member, but can `--by` / `--from` anything). Listed under `host_names:` in `guild.config.yaml`.
 - **request** — a decision-in-motion. Has `action`, `reason`, optional `executor` / `auto-review`, and moves through `pending → approved → executing → completed` (or `denied` / `failed`).
 - **review** — multi-perspective feedback on a request. Carries a `lense` (one of `devil | layer | cognitive | user` by default — extend via config) and a `verdict` (`ok | concern | reject`).
-- **lense** — the angle a reviewer is taking. `devil` = "what breaks?", `layer` = "which structural layer is this on?", `cognitive` = "where would someone hesitate?", `user` = "whose happiness (LDD)?". Add domain lenses (`security`, `perf`, `a11y`, ...) in `guild.config.yaml`.
+- **lense** — the angle a reviewer is taking. (Spelled with a trailing `e` throughout this project — the value object, the CLI flag, and prose all align.) `devil` = "what breaks?", `layer` = "which structural layer is this on?", `cognitive` = "where would someone hesitate?", `user` = "whose happiness (LDD)?". Add domain lenses (`security`, `perf`, `a11y`, ...) in `guild.config.yaml`.
 - **verdict** — `ok` (landed cleanly), `concern` (lives with the decision but you want it named), `reject` (don't do this). The word is deliberately soft — `concern` is usable, not a veto.
 - **fast-track** — single-actor shortcut for the full lifecycle when self-approved work is appropriate. Still requires `reason`; `review`s can be attached after.
 - **issue** — a standalone observation that has not yet become a decision. Lightweight, optional `severity` / `area`. Promote to `request` via `gate issues promote <id>`.
@@ -75,7 +75,7 @@ guild-cli is **not** trying to *automate* the decision. It's trying
 to make the decision and its dialogue **legible later** — to you,
 to another agent, to the next session of the same agent. The value
 compounds: one `fast-track` with one review is fine, ten sessions
-of accrued reviews across four lenses become an agent's memory.
+of accrued reviews across the four lenses become an agent's memory.
 
 ## Where to go next
 

@@ -378,11 +378,11 @@ $ gate voices kiri
 
 Each entry is an *utterance* — either an authored request (action +
 reason + whichever closure note the lifecycle produced:
-`note:` / `denied:` / `failed:`) or a review (lens + verdict +
+`note:` / `denied:` / `failed:`) or a review (lense + verdict +
 comment). Filters combine via AND:
 
 - `--lense <devil|layer|cognitive|user>` — only reviews with that
-  lens (implies review-only; authored requests carry no lens)
+  lense (implies review-only; authored requests carry no lense)
 - `--verdict <ok|concern|reject>` — only reviews with that verdict
   (implies review-only)
 - `--format text` — human-readable output (default is JSON since 0.2.0)
@@ -501,7 +501,7 @@ as `(+10s)` and a day-later afterthought as `(+1d)`.
 ### Review markers on `gate list` / `gate pending`
 
 Each row in `gate list` and `gate pending` carries a compact
-per-lens verdict summary so you can scan a whole list of completed
+per-lense verdict summary so you can scan a whole list of completed
 work and pick out the requests that closed with an unresolved
 concern:
 
@@ -694,10 +694,10 @@ lowercased on load. The validation error message lists all
 configured lenses so mistyped values are easy to correct.
 
 **Design note.** Lenses are an extension point for the review
-system. Each lens is a perspective, not a role — the same reviewer
+system. Each lense is a perspective, not a role — the same reviewer
 can write `devil` and `security` reviews on the same request. The
 config makes the set of valid perspectives explicit for a given
-content root, which prevents lens drift across long-lived projects.
+content root, which prevents lense drift across long-lived projects.
 
 ### Editor-based review comments
 
