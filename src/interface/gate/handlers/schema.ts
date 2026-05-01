@@ -50,7 +50,8 @@ const strOpt = (description?: string): JsonSchema =>
   description ? { type: 'string', description } : { type: 'string' };
 const idStr: JsonSchema = {
   type: 'string',
-  description: 'request id (YYYY-MM-DD-NNNN) or issue id (i-YYYY-MM-DD-NNNN)',
+  description:
+    'positional; request id (YYYY-MM-DD-NNNN) or issue id (i-YYYY-MM-DD-NNNN)',
 };
 const formatField: JsonSchema = {
   type: 'string',
@@ -345,7 +346,7 @@ const VERBS: readonly VerbSchema[] = [
     input: {
       type: 'object',
       properties: {
-        id: { type: 'string', description: 'request id (YYYY-MM-DD-NNNN)' },
+        id: { type: 'string', description: 'positional; request id (YYYY-MM-DD-NNNN)' },
         format: {
           type: 'string',
           enum: ['text', 'json'],
@@ -510,7 +511,21 @@ const VERBS: readonly VerbSchema[] = [
     summary: 'detail view of one request',
     input: {
       type: 'object',
-      properties: { id: idStr, format: formatField },
+      properties: {
+        id: idStr,
+        format: formatField,
+        fields: strOpt(
+          'comma-separated key list to project the JSON payload to ' +
+            '(agent-facing; --format json only). e.g. `state,from`.',
+        ),
+        plain: {
+          type: 'boolean',
+          description:
+            '--plain + --fields <single-key>: emit just the value (no JSON ' +
+            'quotes), so shell composers can substitute directly: ' +
+            '`state=$(gate show $id --fields state --plain)`.',
+        },
+      },
       required: ['id'],
     },
     output: { type: 'object' },
@@ -735,7 +750,10 @@ const VERBS: readonly VerbSchema[] = [
       type: 'object',
       properties: {
         to: { type: 'string', description: 'positional; the actor being thanked' },
-        for: idStr,
+        for: {
+          type: 'string',
+          description: 'request id (YYYY-MM-DD-NNNN) the thanks pertains to',
+        },
         by: str,
         reason: strOpt('optional prose; "-" for STDIN'),
         format: formatField,
@@ -804,7 +822,12 @@ const VERBS: readonly VerbSchema[] = [
     summary: 'send a direct notification to one member',
     input: {
       type: 'object',
-      properties: { from: str, to: str, text: str },
+      properties: {
+        from: str,
+        to: str,
+        text: str,
+        type: strOpt('optional message kind label (e.g. "handoff", "note") — free-form, surfaced verbatim in inbox'),
+      },
       required: ['to', 'text'],
     },
     output: { type: 'object' },
@@ -815,7 +838,11 @@ const VERBS: readonly VerbSchema[] = [
     summary: 'post to every active member except sender',
     input: {
       type: 'object',
-      properties: { from: str, text: str },
+      properties: {
+        from: str,
+        text: str,
+        type: strOpt('optional message kind label (e.g. "handoff", "note") — free-form, surfaced verbatim in each recipient inbox'),
+      },
       required: ['text'],
     },
     output: { type: 'object' },
@@ -852,7 +879,14 @@ const VERBS: readonly VerbSchema[] = [
     name: 'repair',
     category: 'admin',
     summary: 'quarantine malformed records (reads gate doctor json)',
-    input: { type: 'object', properties: { apply: { type: 'boolean' }, 'from-doctor': str } },
+    input: {
+      type: 'object',
+      properties: {
+        apply: { type: 'boolean' },
+        'from-doctor': str,
+        format: formatField,
+      },
+    },
     output: { type: 'object' },
   },
   {
