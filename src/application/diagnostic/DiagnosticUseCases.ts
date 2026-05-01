@@ -85,6 +85,21 @@ export class DiagnosticUseCases {
     const beforeRequests = findings.length;
     const requestBundle = this.buildRepos(areaCollector('requests'));
     const requests = await requestBundle.requests.listAll();
+    // Off-pattern .yaml files (typo'd names) and subdirectories
+    // under <state>/ are silently dropped by listByState's regex.
+    // Surface them as findings so a misplaced file that gate
+    // ignored is no longer invisible. Fresh-agent dogfood
+    // surfaced this gap (2026-05-01 design sandbox) — pre-fix,
+    // a bad.yaml in requests/pending/ stayed there forever and
+    // doctor reported the root as clean.
+    const unrecognized = await requestBundle.requests.listUnrecognizedFiles();
+    const requestCollector = areaCollector('requests');
+    for (const u of unrecognized) {
+      requestCollector(
+        u.path,
+        `unrecognized ${u.kind}: ${u.reason}`,
+      );
+    }
     const requestMalformed = findings.length - beforeRequests;
 
     const beforeIssues = findings.length;
