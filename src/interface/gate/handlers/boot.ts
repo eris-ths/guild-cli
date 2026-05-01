@@ -209,6 +209,22 @@ export async function bootCmd(c: C, args: ParsedArgs): Promise<number> {
     }
   }
 
+  // Unresponded-concerns count: same detector as `gate unresponded`
+  // so the two surfaces never disagree. Without it, the orientation
+  // status block reads "everything 0" for an actor who has unaddressed
+  // concerns on completed records — the gap that boot exists to close.
+  if (actor) {
+    try {
+      const entries = await c.unrespondedConcernsQ.run({
+        actor,
+        now: new Date(),
+      });
+      status.unresponded = entries.length;
+    } catch {
+      // requests/issues dirs may be missing — non-fatal.
+    }
+  }
+
   // tail + personal utterances share one JSON projection of the
   // request corpus so collectUtterances isn't double-invoked on the
   // same data — it's O(N*status_log) and N grows with history.
@@ -605,9 +621,11 @@ function deriveVerbsAvailableNow(
   // Surfaces "your pending request needs approval by host X" so
   // the actor sees WHY their queue isn't moving without having
   // to read suggested_next's prose. Skipped when the actor is
-  // already the candidate (e.g. host approving their own request)
-  // — that case shows up under actionable instead via the
-  // pending-as-executor predicate. Empty when nothing waits.
+  // already the candidate (e.g. host approving their own request,
+  // or executor != author approving as the named executor) — those
+  // cases show up under actionable via pending-as-executor, and
+  // double-listing the same id+verb here would contradict it.
+  // Empty when nothing waits.
   //
   // Shape decision: `candidates` is a list, not a single name, so
   // a content_root with N hosts (or zero) does not have to embed
@@ -627,6 +645,11 @@ function deriveVerbsAvailableNow(
       const isExecutor = r.executor?.value === actorLower;
       const isPair = r.with.some((p) => p.value === actorLower);
       if (!isAuthor && !isExecutor && !isPair) continue;
+      // Executor (when not also author) can self-approve via the
+      // pending-as-executor predicate — that already lives under
+      // actionable. Listing the same id+verb here as a blocker
+      // would contradict actionable for the same record.
+      if (isExecutor && !isAuthor) continue;
       requiresOtherActor.push({
         verb: 'approve',
         id: r.id.value,
@@ -636,7 +659,7 @@ function deriveVerbsAvailableNow(
           (hostNames.length === 0
             ? ' (none configured — see guild.config.yaml host_names)'
             : `. You are the ${
-                isAuthor ? 'author' : isExecutor ? 'executor' : 'pair'
+                isAuthor ? 'author' : isPair ? 'pair' : 'executor'
               } but cannot approve as yourself.`),
       });
     }

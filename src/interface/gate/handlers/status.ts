@@ -17,6 +17,14 @@ export interface StatusSummary {
   executing: { total: number; by_actor: number };
   open_issues: number;
   unreviewed: number;
+  /**
+   * Concern/reject verdicts on this actor's authored (or pair-made)
+   * requests with no follow-up record yet. Same detector as
+   * `gate unresponded`; populated by the caller when an actor is
+   * resolved (the underlying query is per-actor by definition).
+   * 0 when no actor is set, or when no concerns match.
+   */
+  unresponded: number;
   inbox_unread: number;
   last_activity: string | null;
 }
@@ -79,6 +87,7 @@ export function collectStatus(
     },
     open_issues: 0, // filled by caller if issues are available
     unreviewed,
+    unresponded: 0, // filled by caller (per-actor query; needs UC access)
     inbox_unread: 0, // filled by caller if inbox is available
     last_activity: lastActivity,
   };
@@ -121,6 +130,9 @@ function renderStatusText(s: StatusSummary): string {
   // Issues & inbox
   if (s.open_issues > 0) lines.push(`open issues: ${s.open_issues}`);
   if (s.unreviewed > 0) lines.push(`unreviewed: ${s.unreviewed}`);
+  if (s.unresponded > 0) {
+    lines.push(`unresponded concerns: ${s.unresponded} (gate unresponded)`);
+  }
   if (s.inbox_unread > 0) lines.push(`inbox unread: ${s.inbox_unread}`);
 
   // Last activity
@@ -160,6 +172,25 @@ export async function statusCmd(c: C, args: ParsedArgs): Promise<number> {
       summary.inbox_unread = msgs.filter((m) => !m.read).length;
     } catch {
       // inbox may not exist for this actor — non-fatal
+    }
+  }
+
+  // Enrich with unresponded-concerns count. Runs through the same
+  // query as `gate unresponded` so the two surfaces never disagree
+  // on the count. Per-actor by definition, so skip when no actor
+  // resolved. Default 30-day window matches the verb's default;
+  // no flag to widen here — boot/status are orientation surfaces,
+  // and the verb itself exposes `--max-age-days` for sweeps.
+  if (actor) {
+    try {
+      const entries = await c.unrespondedConcernsQ.run({
+        actor,
+        now: new Date(),
+      });
+      summary.unresponded = entries.length;
+    } catch {
+      // requests/issues dirs may be missing on a half-set-up root —
+      // non-fatal.
     }
   }
 
