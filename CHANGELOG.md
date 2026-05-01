@@ -7,6 +7,24 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 
 ## [Unreleased]
 
+### Added
+- **`gate tail --format json`** closes the asymmetry that left
+  `tail` as the lone read verb without JSON output. Sibling verbs
+  (`voices`, `list`, `board`, `show`, `status`, `whoami`,
+  `inbox`, `issues list`) all support `--format json|text`; tail
+  was bare-text-only. Empty stream emits `[]` (not an error
+  envelope) so `jq` pipelines don't have to branch on "is this
+  an array or an error". Utterance keys are snake_case
+  (`request_id` / `invoked_by` / `completion_note` /
+  `deny_reason` / `failure_reason`) inheriting the post-#109
+  contract — shipping the rename first means tail's JSON debuts
+  in the right shape and never goes through a transient
+  camelCase phase. The `gate schema` entry for tail now
+  advertises both `limit` and `format` flags so MCP wirings
+  discover them. A typo on the format value (`--format josn`)
+  rejects loudly rather than silently degrading. Devil-reviewed
+  in design sandbox (`2026-05-01-0001`).
+
 ### Fixed
 - **`gate boot --format text` surfaces `content root: <path>
   (config: <path>)` when the situation is surprising.** Sibling
