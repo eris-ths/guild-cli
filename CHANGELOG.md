@@ -8,6 +8,75 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 ## [Unreleased]
 
 ### Added
+- **`lore/principles/10-schema-as-contract.md`.** Names the rule
+  three input-side drift PRs (#103 dry-run, #105 with-calibration,
+  #111 tail format) and ~10 read verbs with bare output schemas
+  had been making necessary without articulating: `gate schema`
+  is the agent dispatch contract, in BOTH directions. Input side:
+  every flag the runtime accepts must appear in
+  `schema.input.properties`. Output side: every field the runtime
+  emits must appear in `schema.output` (no bare `{ type: 'array'
+  }` / `{ type: 'object' }` placeholders). This principle is
+  **structurally one level UP from principle 09** — without
+  schema-as-contract, "boot's missing-disclosure was a contract
+  bug" reduces to "it was annoying"; with it, the asymmetry
+  between schema claim and runtime delivery IS the bug.
+  Surfaced via the kiri-author / noir-devil / mira-mirror three-
+  voice review session in the dogfood sandbox. Mira's mirror
+  role flagged that 09 was implicitly leaning on a foundation
+  that wasn't named.
+
+- **`gate tail` and `gate voices` output schemas fleshed out
+  (first instance of principle 10's output obligation).** Pre-fix,
+  both verbs declared `output: { type: 'array' }` with no `items`
+  — an MCP wiring saw "an array of something" and had to
+  discover the utterance shape empirically. Post-fix, a shared
+  `utteranceArraySchema` describes every utterance kind
+  (authored / review / thank), every shared field (`kind`, `at`,
+  `request_id`), every kind-specific field
+  (`from`/`completion_note`/`with` for authored;
+  `by`/`lense`/`verdict`/`comment` for review;
+  `to`/`reason` for thank), and the optional `invoked_by` proxy
+  field. All snake_case (post-#109). Field documentation names
+  which kind each field applies to so a JSON-Schema-driven
+  consumer reads the discriminated-union semantics without
+  needing `oneOf` (the JsonSchema subset gate uses doesn't
+  include it). Tracked follow-ups for the remaining bare-output
+  read verbs (`status`, `whoami`, `show`, `chain`, `list`,
+  `pending`, `repair`, `issues *`) are listed in principle 10.
+
+- **Runtime-validates-schema test for tail + voices.** Mira's
+  design suggestion (review on req `2026-05-01-0001`): the
+  schema becomes unforgeable when the actual JSON output is
+  validated against the declared schema in CI. If the runtime
+  emits a shape that doesn't match the schema, EITHER the
+  runtime regressed OR the schema is wrong; either way, CI
+  catches it at the boundary that matters (what an MCP wiring
+  would actually receive). Hand-rolled draft-07-subset
+  validator (no new dependencies); validator self-tests its
+  own failure modes so the suite can't silently pass with a
+  buggy validator. Same approach extends to the other read
+  verbs as their schemas are fleshed in follow-ups.
+
+### Tracked follow-ups
+- **Schema/KNOWN_FLAGS drift detector test (input side).** PRs
+  #103, #105, #111 each added a flag to a verb's `KNOWN_FLAGS`
+  but had to add the matching `schema.input.properties` entry
+  separately. A CI-level test that compares each handler's
+  `KNOWN_FLAGS` against its schema entry is the natural
+  enforcement vehicle. Queued as the next mechanical follow-up
+  to principle 10 — the principle file names this explicitly.
+
+- **Output schemas for the remaining bare-typed read verbs.**
+  `status`, `whoami`, `show`, `chain`, `list`, `pending`,
+  `repair`, and `issues *` still declare `output: { type:
+  'object' }` / `{ type: 'array' }`. Each is mechanical (read
+  the runtime, translate to JsonSchema, add a runtime-validates
+  test). Done in clusters where multiple verbs share a shape:
+  `show`/`list`/`pending` share the `Request` shape;
+  `status`/`board` share the `StatusSummary` shape.
+
+### Added
 - **`lore/principles/09-orientation-disclosure.md`.** Names the
   rule three empirical PRs (#108 register stderr notice, #110
   boot text disclosure, this PR's doctor disclosure) had been

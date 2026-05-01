@@ -119,6 +119,120 @@ const writeResponseSchema: JsonSchema = {
   required: ['ok', 'id', 'state', 'message', 'suggested_next'],
 };
 
+// Shared utterance shape — emitted by `gate voices --format json`,
+// `gate tail --format json`, and the `tail`/`your_recent` fields of
+// `gate boot`. Fleshed out per principle 10 (schema as contract):
+// pre-fix, both tail and voices declared `output: { type: 'array' }`
+// with no `items`, so an MCP wiring saw "an array of something"
+// and had to discover the shape empirically. All keys are
+// snake_case post-#109. Field unions are NOT modelled with `oneOf`
+// (the JsonSchema subset doesn't include it); instead we describe
+// the discriminated union via the `kind` enum and document
+// kind-specific fields in their `description`.
+const utteranceSchema: JsonSchema = {
+  type: 'object',
+  description:
+    'A single utterance — authored / review / thank — emitted in the order ' +
+    'requested by the verb (asc for voices, desc for tail). Fields below ' +
+    'are the union across kinds; each individual utterance only carries ' +
+    'the fields applicable to its kind.',
+  properties: {
+    kind: {
+      type: 'string',
+      enum: ['authored', 'review', 'thank'],
+      description:
+        'Discriminator. authored = a request was filed; review = a reviewer ' +
+        'rendered judgement on a request; thank = an actor thanked another for work.',
+    },
+    at: {
+      type: 'string',
+      description: 'ISO timestamp when the utterance was made.',
+    },
+    request_id: {
+      type: 'string',
+      description: 'YYYY-MM-DD-NNNN id of the containing request.',
+    },
+    // authored fields
+    from: {
+      type: 'string',
+      description: '[authored only] member who authored the request.',
+    },
+    action: {
+      type: 'string',
+      description:
+        '[authored | review | thank] action of the containing request, ' +
+        'mirrored onto review/thank utterances so readers see context ' +
+        'without chasing the id.',
+    },
+    reason: {
+      type: 'string',
+      description:
+        '[authored | thank] free-form reason; required on authored, ' +
+        'optional on thank.',
+    },
+    completion_note: {
+      type: 'string',
+      description:
+        '[authored only, terminal=completed] closure note. Mutually ' +
+        'exclusive with deny_reason and failure_reason — at most one ' +
+        'is set per request.',
+    },
+    deny_reason: {
+      type: 'string',
+      description:
+        '[authored only, terminal=denied] denial reason. Mutually ' +
+        'exclusive with completion_note and failure_reason.',
+    },
+    failure_reason: {
+      type: 'string',
+      description:
+        '[authored only, terminal=failed] failure reason. Mutually ' +
+        'exclusive with completion_note and deny_reason.',
+    },
+    with: {
+      type: 'array',
+      items: { type: 'string' },
+      description: '[authored only] pair-mode dialogue partners.',
+    },
+    // review fields
+    by: {
+      type: 'string',
+      description: '[review | thank] member who wrote the review or thank.',
+    },
+    lense: {
+      type: 'string',
+      description: '[review only] reviewer lens (devil/layer/cognitive/user).',
+    },
+    verdict: {
+      type: 'string',
+      description: '[review only] reviewer verdict (ok/concern/reject).',
+    },
+    comment: {
+      type: 'string',
+      description: '[review only] review comment.',
+    },
+    // thank fields
+    to: {
+      type: 'string',
+      description: '[thank only] member receiving the thanks.',
+    },
+    // shared optional
+    invoked_by: {
+      type: 'string',
+      description:
+        '[any kind, optional] actual CLI invoker when proxied — set when ' +
+        'GUILD_ACTOR differed from the attributed actor (`from` / `by`). ' +
+        'Absent in the self-invocation common case.',
+    },
+  },
+  required: ['kind', 'at', 'request_id'],
+};
+
+const utteranceArraySchema: JsonSchema = {
+  type: 'array',
+  items: utteranceSchema,
+};
+
 const VERBS: readonly VerbSchema[] = [
   {
     name: 'boot',
@@ -359,7 +473,7 @@ const VERBS: readonly VerbSchema[] = [
         format: formatField,
       },
     },
-    output: { type: 'array' },
+    output: utteranceArraySchema,
   },
   {
     name: 'voices',
@@ -383,7 +497,12 @@ const VERBS: readonly VerbSchema[] = [
       },
       required: ['name'],
     },
-    output: { type: 'array' },
+    // voices defaults to a bare array; with --with-calibration the
+    // shape becomes `{utterances, calibration}` (json mode only).
+    // The schema declares the bare-array case; the calibration
+    // wrapper is documented in the --with-calibration field's
+    // description and remains the agent's opt-in.
+    output: utteranceArraySchema,
   },
   {
     name: 'show',
