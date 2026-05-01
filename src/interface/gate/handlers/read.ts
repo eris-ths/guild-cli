@@ -148,14 +148,15 @@ export async function reqVoices(c: C, args: ParsedArgs): Promise<number> {
   return 0;
 }
 
-const TAIL_KNOWN_FLAGS: ReadonlySet<string> = new Set(['limit']);
+const TAIL_KNOWN_FLAGS: ReadonlySet<string> = new Set(['limit', 'format']);
 
 export async function reqTail(c: C, args: ParsedArgs): Promise<number> {
   // Strict-reject unknown flags. `gate tail` has a small surface
-  // (positional N + --limit); typos like `--from noir` would otherwise
-  // be silently ignored and the caller would read "unfiltered" as
-  // "filtered" — exactly the fail-open pattern we want surfaced.
-  // Pilot opt-in: other verbs migrate individually in follow-up PRs.
+  // (positional N + --limit + --format); typos like `--from noir`
+  // would otherwise be silently ignored and the caller would read
+  // "unfiltered" as "filtered" — exactly the fail-open pattern we
+  // want surfaced. Pilot opt-in: other verbs migrate individually
+  // in follow-up PRs.
   rejectUnknownFlags(args, TAIL_KNOWN_FLAGS, 'tail');
 
   let n: number | undefined;
@@ -173,11 +174,26 @@ export async function reqTail(c: C, args: ParsedArgs): Promise<number> {
   }
   const limit = n ?? 20;
 
+  const format = optionalOption(args, 'format') ?? 'text';
+  if (format !== 'json' && format !== 'text') {
+    throw new Error(`--format must be 'json' or 'text', got: ${format}`);
+  }
+
   const allJson = await loadAllRequestsAsJson(c);
   const utterances = collectUtterances(allJson, {
     limit,
     order: 'desc',
   });
+
+  if (format === 'json') {
+    // Empty list emits `[]` (not an error envelope) so pipeline
+    // consumers can `jq` over the result without branching on
+    // "is this an array or an error?". Same shape as `gate
+    // voices --format json`. Keys are snake_case post-#109
+    // (request_id / invoked_by / completion_note / ...).
+    process.stdout.write(JSON.stringify(utterances, null, 2) + '\n');
+    return 0;
+  }
 
   if (utterances.length === 0) {
     process.stdout.write('(no utterances on this content_root yet)\n');

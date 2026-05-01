@@ -352,7 +352,13 @@ const VERBS: readonly VerbSchema[] = [
     name: 'tail',
     category: 'read',
     summary: 'unified recent-activity stream across all actors',
-    input: { type: 'object' },
+    input: {
+      type: 'object',
+      properties: {
+        limit: { type: 'string', description: 'max utterances (default 20); --limit or positional N' },
+        format: formatField,
+      },
+    },
     output: { type: 'array' },
   },
   {
