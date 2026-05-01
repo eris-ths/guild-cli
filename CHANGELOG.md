@@ -8,6 +8,28 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 ## [Unreleased]
 
 ### Fixed
+- **`gate review`: empty editor body aborts with a context-aware
+  error.** Pre-fix, when the user opened the editor (no
+  `--comment`/positional/stdin) and saved without writing,
+  `readCommentViaEditor` returned an empty string and the caller's
+  generic "review comment is required (use --comment <s>, …, or
+  run interactively so $EDITOR opens)" error fired — but the
+  "run interactively" hint was misleading because the user had
+  just done so. Post-fix the editor flow throws its own message:
+
+      editor returned an empty review body; aborting. Re-run and
+      write content above the scissors line, or use --comment /
+      --comment - / a positional.
+
+  Surfaces the empty effort at the layer that produced it; matches
+  `git commit`'s "empty message aborts" semantic. The function
+  docstring (which already named this throw, but pre-fix the
+  implementation only honored the editor-failure cases) is now
+  honest. Devil-reviewed (`2026-05-01-0001`/`0002`); the user-
+  facing message dropped its "matches git commit behavior"
+  rationale — that justification belongs in the source comment,
+  not in the recovery instructions.
+
 - **`gate schema` declares `dry-run` on every write verb that
   accepts it.** Pre-fix the schema entries for approve / deny /
   execute / complete / fail / review / thank did NOT declare
