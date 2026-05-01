@@ -33,9 +33,11 @@ Principles 01–06 were articulated during a single collaborative
 session (2026-04-19, nao + Claude Opus 4.7). Principle 07 was
 identified during a v0.3.0 review session (2026-04-28,
 Claude Opus 4.6) — it was already present in the code but
-unnamed. They are not timeless truths — they are stances, named,
-so a future reader can engage with them rather than re-derive
-them.
+unnamed. Principle 08 was named during the design pass for the
+voice-budget audit (2026-05-01, nao + Claude Opus 4.7), which
+PR #94's six-point surface set forced into focus. They are not
+timeless truths — they are stances, named, so a future reader can
+engage with them rather than re-derive them.
 
 ## Reading path
 
@@ -46,8 +48,11 @@ If you have 5 minutes:
 Those two carry the most weight for how agents interact with the
 tool.
 
-If you have 20 minutes, read all seven in order. They compose:
-each builds on the previous.
+If you have 20 minutes, read all eight in order. They compose:
+each builds on the previous. Principle 08 (voice as doctrine) is
+the most recent — read it after the first seven, because it names
+the substrate by which the others reach readers who never open
+this directory.
 
 ## Relationship to `alexandria/`
 
