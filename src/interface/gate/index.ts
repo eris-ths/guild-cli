@@ -296,7 +296,7 @@ export async function main(argv: readonly string[]): Promise<number> {
       case 'request':
         return await reqCreate(c, args);
       case 'pending':
-        return await reqList(c, 'pending', args);
+        return await reqList(c, 'pending', args, 'pending');
       case 'board':
         return await boardCmd(c, args);
       case 'list': {
@@ -313,7 +313,7 @@ export async function main(argv: readonly string[]): Promise<number> {
           );
           return 1;
         }
-        return await reqList(c, state, args);
+        return await reqList(c, state, args, 'list');
       }
       case 'show':
         return await reqShow(c, args);

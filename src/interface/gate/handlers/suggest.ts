@@ -1,6 +1,12 @@
-import { ParsedArgs, optionalOption } from '../../shared/parseArgs.js';
+import {
+  ParsedArgs,
+  optionalOption,
+  rejectUnknownFlags,
+} from '../../shared/parseArgs.js';
 import { C } from './internal.js';
 import { deriveBootSuggestedNext, BootSuggestedNext } from './boot.js';
+
+const SUGGEST_KNOWN_FLAGS: ReadonlySet<string> = new Set(['format']);
 
 /**
  * gate suggest [--format json|text]
@@ -29,6 +35,7 @@ interface SuggestPayload {
 }
 
 export async function suggestCmd(c: C, args: ParsedArgs): Promise<number> {
+  rejectUnknownFlags(args, SUGGEST_KNOWN_FLAGS, 'suggest');
   const format = optionalOption(args, 'format') ?? 'json';
   if (format !== 'json' && format !== 'text') {
     throw new Error(`--format must be 'json' or 'text', got: ${format}`);
