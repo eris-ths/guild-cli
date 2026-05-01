@@ -8,6 +8,22 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 ## [Unreleased]
 
 ### Added
+- **`lore/principles/08-voice-as-doctrine.md` + voice-budget audit.**
+  Names the principle that the tool's prose — `suggested_next.reason`,
+  schema descriptions, footers, finding messages — is the running
+  embodiment of lore, the substrate by which 02 (advisory not
+  directive), 03 (legibility costs), and 07 (perception not judgement)
+  reach readers who do not open `lore/`. The companion test
+  `tests/interface/voiceBudget.test.ts` enumerates named pedagogical
+  phrases ("all first-class", "DETECTOR, not an enforcer", "advisory —
+  override freely", and four others), each with a budget and an
+  allowed-files list. New occurrences fail the test until
+  `VOICE_BUDGET` is updated with rationale in the same commit. The
+  test is a detector for proliferation; paraphrase escapes it
+  (LLM-difficult to detect verbatim) and that limitation is named in
+  the test header. `CONTRIBUTING.md` (new) documents the workflow.
+  No source-code behavior changes — this is a discipline added at
+  the CI surface, not the runtime surface.
 - **`gate unresponded` (read verb).** Surfaces concern/reject
   verdicts on the actor's authored or pair-made requests that have
   no follow-up record yet. Thin wrapper over the same
