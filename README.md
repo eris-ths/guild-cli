@@ -1,5 +1,9 @@
 # guild-cli
 
+[![CI](https://github.com/eris-ths/guild-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/eris-ths/guild-cli/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
+[![Node](https://img.shields.io/badge/node-20%20%7C%2022-green)](./package.json)
+
 A small, secure, file-based CLI for a team of agents — human and AI —
 to ask each other for work, review it, and leave a trail that nothing
 in the loop can quietly rewrite.
