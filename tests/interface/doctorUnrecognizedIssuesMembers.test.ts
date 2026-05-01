@@ -4,8 +4,8 @@
 // Pre-fix gap: YamlIssueRepository.listAll's regex filter
 // (^i-\d{4}-\d{2}-\d{2}-\d{3,4}\.yaml$) and YamlMemberRepository's
 // regex filter (^[a-z][a-z0-9_-]{0,31}\.yaml$) silently dropped
-// off-pattern entries. An `i-bogus.yaml` in `issues/` or an
-// `Alice.yaml` in `members/` (uppercase first letter) was invisible
+// off-pattern entries. An `i-bogus.yaml` in `issues/` or a
+// `Dave.yaml` in `members/` (uppercase first letter) was invisible
 // to gate forever; doctor reported the root as clean while the
 // member was missing from `gate list`. This test pins:
 //   - off-pattern .yaml files surface as `unrecognized_file`
@@ -14,6 +14,11 @@
 //     leading digit, leading underscore, too long)
 //   - the boundary stays consistent with requests: .txt / .md /
 //     dotfiles ignored, only .yaml + dirs surfaced.
+//
+// Cross-platform note: the uppercase typo cases use names that
+// don't case-fold-collide with anything in `bootstrap()` because
+// Windows NTFS is case-insensitive by default — `Alice.yaml` and
+// `alice.yaml` would resolve to the same file there.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -135,9 +140,15 @@ test('doctor: off-pattern .yaml under members/ surfaces (the four common typos)'
   // the root as clean while the file sat there in plain view.
   const { root, cleanup } = bootstrap();
   t.after(cleanup);
+  // Pick uppercase-prefix typo names that DON'T case-fold to any
+  // lowercase fixture name — Windows NTFS is case-insensitive by
+  // default, so `Alice.yaml` would be the same file as the
+  // `alice.yaml` planted by bootstrap() and the test would see only
+  // 3 findings instead of 4. `Dave` has no lowercase counterpart in
+  // the fixture, so the case test stays portable across CI runners.
   writeFileSync(
-    join(root, 'members', 'Alice.yaml'),
-    'name: Alice\ncategory: professional\nactive: true\n',
+    join(root, 'members', 'Dave.yaml'),
+    'name: Dave\ncategory: professional\nactive: true\n',
   );
   writeFileSync(
     join(root, 'members', '1bob.yaml'),
@@ -147,9 +158,12 @@ test('doctor: off-pattern .yaml under members/ surfaces (the four common typos)'
     join(root, 'members', '_carol.yaml'),
     'name: carol\ncategory: professional\nactive: true\n',
   );
-  // Name >32 chars: 'a' + 32 chars = 33 chars before .yaml
+  // Name >32 chars: 'z' + 32 chars = 33 chars before .yaml.
+  // (Use `z` not `a` so this also doesn't case-fold-collide with
+  // any other planted file.)
+  const tooLongName = 'z' + 'y'.repeat(32);
   writeFileSync(
-    join(root, 'members', 'a' + 'b'.repeat(32) + '.yaml'),
+    join(root, 'members', `${tooLongName}.yaml`),
     'name: too-long\ncategory: professional\nactive: true\n',
   );
 
@@ -179,9 +193,9 @@ test('doctor: off-pattern .yaml under members/ surfaces (the four common typos)'
   // Sort is by codepoint so digits (0x31) < uppercase (0x41) <
   // underscore (0x5f) < lowercase (0x61).
   assert.equal(basenames[0], '1bob.yaml');
-  assert.equal(basenames[1], 'Alice.yaml');
+  assert.equal(basenames[1], 'Dave.yaml');
   assert.equal(basenames[2], '_carol.yaml');
-  assert.equal(basenames[3], 'a' + 'b'.repeat(32) + '.yaml');
+  assert.equal(basenames[3], `${tooLongName}.yaml`);
   // The message names the pattern so the operator can debug without
   // leaving for --help.
   for (const f of offPattern) {
@@ -238,9 +252,12 @@ test('repair --apply: off-pattern issue file is quarantined; off-pattern member 
   const { root, cleanup } = bootstrap();
   t.after(cleanup);
   writeFileSync(join(root, 'issues', 'bogus.yaml'), 'stray');
+  // Use `Dave.yaml` (no `dave.yaml` in the bootstrap fixture) so the
+  // case-insensitive Windows filesystem doesn't fold this into the
+  // existing `alice.yaml` and silently un-plant the test input.
   writeFileSync(
-    join(root, 'members', 'Alice.yaml'),
-    'name: Alice\ncategory: professional\nactive: true\n',
+    join(root, 'members', 'Dave.yaml'),
+    'name: Dave\ncategory: professional\nactive: true\n',
   );
 
   const planJson = runGate(root, ['doctor', '--format', 'json']);
@@ -253,5 +270,5 @@ test('repair --apply: off-pattern issue file is quarantined; off-pattern member 
   assert.equal(r.status, 0);
   // Both files were quarantined.
   assert.match(r.stdout, /\[quarantined\].*bogus\.yaml/);
-  assert.match(r.stdout, /\[quarantined\].*Alice\.yaml/);
+  assert.match(r.stdout, /\[quarantined\].*Dave\.yaml/);
 });
