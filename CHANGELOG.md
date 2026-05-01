@@ -7,6 +7,34 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 
 ## [Unreleased]
 
+### Changed
+- **`gate voices` / `gate tail` JSON: `request_id` / `invoked_by` /
+  `completion_note` / `deny_reason` / `failure_reason` (was:
+  `requestId` / `invokedBy` / `completionNote` / `denyReason` /
+  `failureReason`).** The voices stream is the project's
+  highest-traffic JSON surface and was the lone camelCase outlier;
+  every other JSON surface (`gate show`, `gate inbox`, `gate
+  status`, `gate register` JSON envelope, `gate boot.hints`, etc.)
+  was already snake_case (`created_at`, `read_at`, `display_name`,
+  `auto_review`, `status_log`, `where_written`, `config_file`).
+  The mismatch made cross-tool consumers carry a translation layer
+  for one stream only.
+
+  Single-cycle cut per 0.x policy (same shape as the `displayName
+  → display_name` rename in PR #102) — no dual-emit phase. Fresh-
+  agent dogfood (post-PR #107) surfaced the inconsistency; devil-
+  reviewed (`2026-05-01-0001`/`0002`) to confirm scope: rename
+  the TS fields too so the text-path readers (`renderUtterance`
+  in `voices.ts`, the `tail` summary block in `boot.ts`, the
+  bilingual `resume.ts`) stay consistent with the JSON. The
+  `gate schema` declarations did not advertise the voices output
+  shape, so no schema update was needed.
+
+  Downstream JSON parsers (MCP wirings, ad-hoc scripts) that
+  read these fields must update key names. Records on disk are
+  unchanged — this is purely an output-shape rename, not a
+  storage migration.
+
 ### Fixed
 - **`gate register` surfaces the absolute path it wrote, on both
   stderr (humans) and JSON (orchestrators).** Closes the silent

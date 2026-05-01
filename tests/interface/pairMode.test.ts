@@ -78,7 +78,7 @@ test('renderUtterance appends "(with ...)" on authored lines; unchanged when sol
     {
       kind: 'authored',
       at: '2026-04-16T00:00:00Z',
-      requestId: 'x',
+      request_id: 'x',
       from: 'alice',
       action: 'a',
       reason: 'r',
@@ -91,7 +91,7 @@ test('renderUtterance appends "(with ...)" on authored lines; unchanged when sol
     {
       kind: 'authored',
       at: '2026-04-16T00:00:00Z',
-      requestId: 'x',
+      request_id: 'x',
       from: 'alice',
       action: 'a',
       reason: 'r',
