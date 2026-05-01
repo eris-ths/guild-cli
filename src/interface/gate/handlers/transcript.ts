@@ -197,6 +197,28 @@ function buildTranscript(r: Request): TranscriptPayload {
     `Final state: ${finalState}. ${capitalise(actorFrag)}${durationFrag}.`,
   );
 
+  // 5. Concerns recorded — bare enumeration of concern/reject
+  // verdicts. Deliberately descriptive: no "still open", no
+  // "addressed by", no severity language (principle 07 — the tool
+  // surfaces existence, the reader judges status). When a reader
+  // wants to know whether something already references these
+  // concerns, `gate chain <id>` walks the actual links.
+  const concernLines: string[] = [];
+  for (const rv of reviews) {
+    const verdict = String(rv['verdict'] ?? '');
+    if (verdict !== 'concern' && verdict !== 'reject') continue;
+    const by = String(rv['by'] ?? '');
+    const lense = String(rv['lense'] ?? '');
+    const at = String(rv['at'] ?? '');
+    concernLines.push(`  - [${lense}/${verdict}] by ${by} at ${at}`);
+  }
+  if (concernLines.length > 0) {
+    const header =
+      `Concerns recorded (${concernLines.length}):` +
+      ` walk \`gate chain ${id}\` to see references.`;
+    paragraphs.push([header, ...concernLines].join('\n'));
+  }
+
   return { id, arc: paragraphs.join('\n\n'), summary };
 }
 

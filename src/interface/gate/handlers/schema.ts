@@ -61,6 +61,13 @@ const suggestedNextSchema: JsonSchema = {
       description: 'pre-filled argument hints — agent may override',
     },
     reason: str,
+    actor_resolved: {
+      type: 'string',
+      description:
+        'true iff `args.by` is absent or matches the calling actor (GUILD_ACTOR). ' +
+        'When false, the suggestion names a different actor — orchestrators should ' +
+        'branch (escalate / hand off) rather than naively dispatching with their own --by.',
+    },
   },
 };
 
@@ -614,6 +621,51 @@ const VERBS: readonly VerbSchema[] = [
     summary: 'this introspection payload',
     input: { type: 'object', properties: { verb: str, format: formatField } },
     output: { type: 'object' },
+  },
+  {
+    name: 'unresponded',
+    category: 'read',
+    summary:
+      'concern/reject verdicts on the actor\'s authored or pair-made requests with no follow-up record yet. Deliberately coarse follow-up detector (existence-only); the reader walks `gate chain <id>` to verify whether existing references actually address a concern. Perception, not judgement.',
+    input: {
+      type: 'object',
+      properties: {
+        for: strOpt('actor to inspect (default: GUILD_ACTOR)'),
+        'max-age-days': strOpt('window for concern detection (default: 30)'),
+        format: formatField,
+      },
+    },
+    output: {
+      type: 'object',
+      properties: {
+        actor: str,
+        max_age_days: { type: 'integer' },
+        count: { type: 'integer' },
+        entries: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              request_id: str,
+              action: str,
+              concerns: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    by: str,
+                    lense: str,
+                    verdict: { type: 'string', enum: ['concern', 'reject'] },
+                    at: str,
+                    age_days: { type: 'integer' },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
   },
 ];
 

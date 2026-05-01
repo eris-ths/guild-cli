@@ -156,7 +156,7 @@ export async function resumeCmd(c: C, args: ParsedArgs): Promise<number> {
   if (openLoops.length > 0) {
     const top = openLoops[0]!;
     const req = all.find((r) => r.id.value === top.id);
-    if (req) suggested = deriveSuggestedNext(req, c.config);
+    if (req) suggested = deriveSuggestedNext(req, c.config, actor);
   }
 
   // Unresponded concerns: concern/reject verdicts on the actor's
