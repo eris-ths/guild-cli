@@ -113,8 +113,13 @@ test('doctor: .yaml file at requests/ root (wrong directory level) is surfaced',
   assert.notEqual(r.status, 0);
   const payload = JSON.parse(r.stdout);
   const findings = payload.findings as Array<{ kind: string; message: string; source: string }>;
+  // Path separator: source carries native separators (`/` on POSIX,
+  // `\` on Windows). Normalise to forward slashes for the suffix
+  // assertion so the test passes on both CI runners.
   const rootFiles = findings.filter(
-    (f) => f.kind === 'unrecognized_file' && /requests\/2026-05-01-9999\.yaml$/.test(f.source),
+    (f) =>
+      f.kind === 'unrecognized_file' &&
+      /requests\/2026-05-01-9999\.yaml$/.test(f.source.replace(/\\/g, '/')),
   );
   assert.equal(rootFiles.length, 1);
   assert.match(rootFiles[0]!.message, /should live under <state>\//);
