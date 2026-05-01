@@ -40,6 +40,7 @@ import { suggestCmd } from './handlers/suggest.js';
 import { transcriptCmd } from './handlers/transcript.js';
 import { summarizeCmd } from './handlers/summarize.js';
 import { whyCmd } from './handlers/why.js';
+import { unrespondedCmd } from './handlers/unresponded.js';
 
 // Re-export for test backward-compat (tests/interface/reviewMarkers.test.ts).
 // formatReviewMarkers and computeReviewMarkerWidth live in handlers/request.ts
@@ -205,6 +206,17 @@ Status:
                        Same-actor continuation only — for a newcomer
                        arriving via handoff, use 'gate boot' to see
                        cross-actor signals (inbox, --with assignments).
+  gate unresponded [--for <m>] [--max-age-days <N>] [--format json|text]
+                       Read-only surface for concern/reject verdicts on
+                       the actor's authored or pair-made requests that
+                       have no follow-up record yet. Thin wrapper over
+                       UnrespondedConcernsQuery — same detector that
+                       drives 'gate resume'. Default actor is
+                       GUILD_ACTOR; default window is 30 days. The
+                       detector is deliberately coarse (does not infer
+                       whether a follow-up actually addresses a
+                       concern); 'gate chain <id>' walks the actual
+                       references when the reader wants to verify.
 
 Meta:
   gate schema [--verb <name>] [--format json|text]
@@ -223,6 +235,7 @@ const KNOWN_COMMANDS = [
   'complete', 'fail', 'review', 'thank', 'fast-track', 'issues', 'message',
   'broadcast', 'inbox', 'doctor', 'repair', 'status', 'boot',
   'suggest', 'transcript', 'summarize', 'why', 'resume', 'schema',
+  'unresponded',
 ] as const;
 
 function levenshtein(a: string, b: string): number {
@@ -358,6 +371,8 @@ export async function main(argv: readonly string[]): Promise<number> {
         return await resumeCmd(c, args);
       case 'schema':
         return await schemaCmd(c, args);
+      case 'unresponded':
+        return await unrespondedCmd(c, args);
       default: {
         const hint = nearestCommand(cmd);
         const suggest = hint ? `\n  did you mean: gate ${hint}?` : '';

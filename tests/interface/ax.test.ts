@@ -384,9 +384,86 @@ test('boot.verbs_available_now: always_readable present for anonymous caller', (
     const { stdout } = runGate(root, ['boot']);
     const p = JSON.parse(stdout);
     assert.equal(p.verbs_available_now.actionable.length, 0);
+    assert.equal(p.verbs_available_now.requires_other_actor.length, 0);
     assert.ok(p.verbs_available_now.always_readable.length >= 10);
     assert.ok(p.verbs_available_now.always_readable.includes('suggest'));
     assert.ok(p.verbs_available_now.always_readable.includes('schema'));
+    assert.ok(p.verbs_available_now.always_readable.includes('unresponded'));
+  } finally {
+    cleanup();
+  }
+});
+
+test('boot.verbs_available_now: requires_other_actor surfaces pending blockers', () => {
+  // 2.A: a non-host author who filed a pending request sees the
+  // approval blocker — verb=approve, candidates=[host], reason
+  // explains why they can't act alone. This is the gap that bit
+  // first-time agents: suggested_next would return "by: host" with
+  // no obvious context for why the actor's own --by wouldn't work.
+  const { root, cleanup } = bootstrap();
+  try {
+    runGate(
+      root,
+      ['request', '--from', 'alice', '--action', 'pending', '--reason', 'r', '--executor', 'alice'],
+      { GUILD_ACTOR: 'alice' },
+    );
+    const { stdout } = runGate(root, ['boot'], { GUILD_ACTOR: 'alice' });
+    const p = JSON.parse(stdout);
+    assert.equal(p.verbs_available_now.actionable.length, 0);
+    assert.ok(
+      p.verbs_available_now.requires_other_actor.length >= 1,
+      'expected a pending-approval blocker for alice',
+    );
+    const blocker = p.verbs_available_now.requires_other_actor[0];
+    assert.equal(blocker.verb, 'approve');
+    assert.deepEqual(blocker.candidates, ['human']);
+    assert.match(blocker.reason, /pending/i);
+  } finally {
+    cleanup();
+  }
+});
+
+test('boot.verbs_available_now: host self-approval doesnt double-list as blocker', () => {
+  // When the actor IS the host, pending requests on their own
+  // record show up under actionable (pending-as-executor) — NOT
+  // under requires_other_actor, since the host can self-approve.
+  const { root, cleanup } = bootstrap();
+  try {
+    // human is the host; have human file + name self executor
+    runGate(
+      root,
+      ['request', '--from', 'human', '--action', 'self', '--reason', 'r', '--executor', 'human'],
+      { GUILD_ACTOR: 'human' },
+    );
+    const { stdout } = runGate(root, ['boot'], { GUILD_ACTOR: 'human' });
+    const p = JSON.parse(stdout);
+    assert.equal(
+      p.verbs_available_now.requires_other_actor.length,
+      0,
+      'host should not see their own pending-approval as blocker',
+    );
+  } finally {
+    cleanup();
+  }
+});
+
+test('write response suggested_next carries actor_resolved', () => {
+  // 2.E: the boolean lets an orchestrator branch without parsing
+  // `args.by` against the env. True when args.by is absent or
+  // matches GUILD_ACTOR, false otherwise.
+  const { root, cleanup } = bootstrap();
+  try {
+    const created = runGate(
+      root,
+      ['request', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executor', 'alice', '--format', 'json'],
+      { GUILD_ACTOR: 'alice' },
+    );
+    const payload = JSON.parse(created.stdout);
+    // Pending state suggests approve by host (human). alice is not
+    // the host, so actor_resolved=false.
+    assert.equal(payload.suggested_next.verb, 'approve');
+    assert.equal(payload.suggested_next.args.by, 'human');
+    assert.equal(payload.suggested_next.actor_resolved, false);
   } finally {
     cleanup();
   }

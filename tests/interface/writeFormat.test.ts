@@ -155,6 +155,140 @@ test('completed without auto-review → suggested_next is null', () => {
   }
 });
 
+test('actor_resolved is true when GUILD_ACTOR matches suggested args.by', () => {
+  const { cfg, cleanup } = mkConfig(['human']);
+  try {
+    const r = Request.create({
+      id: RequestId.generate(d, 1),
+      from: 'alice',
+      action: 'a',
+      reason: 'r',
+      executor: 'alice',
+    });
+    r.approve(MemberName.of('human'));
+    // approved → execute, args.by=alice
+    const sAsAlice = deriveSuggestedNext(r, cfg, 'alice');
+    assert.equal(sAsAlice?.actor_resolved, true);
+    const sAsBob = deriveSuggestedNext(r, cfg, 'bob');
+    assert.equal(sAsBob?.actor_resolved, false);
+  } finally {
+    cleanup();
+  }
+});
+
+test('actor_resolved is true when args has no by (caller-agnostic)', () => {
+  // Multiple hosts → suggested_next has no `by` (per existing
+  // behavior). actor_resolved falls back to true because there's
+  // no actor constraint to mismatch against.
+  const { cfg, cleanup } = mkConfig(['alice', 'bob']);
+  try {
+    const r = Request.create({
+      id: RequestId.generate(d, 1),
+      from: 'alice',
+      action: 'a',
+      reason: 'r',
+    });
+    const s = deriveSuggestedNext(r, cfg, 'someone');
+    assert.equal(s?.args['by'], undefined);
+    assert.equal(s?.actor_resolved, true);
+  } finally {
+    cleanup();
+  }
+});
+
+test('completed with concern review and no auto-review → chain advisory', () => {
+  // 3.A: when a completed request carries a concern verdict, the
+  // suggested_next becomes a `chain` walk (read-only) so the reader
+  // can see what (if anything) already references it. The `reason`
+  // names "leaving as-is, conversing it out, or letting it fade —
+  // all first-class" so absence-of-action stays a valid choice.
+  const { cfg, cleanup } = mkConfig(['human']);
+  try {
+    const r = Request.create({
+      id: RequestId.generate(d, 1),
+      from: 'alice',
+      action: 'a',
+      reason: 'r',
+    });
+    r.approve(MemberName.of('human'));
+    r.execute(MemberName.of('alice'));
+    r.complete(MemberName.of('alice'));
+    r.addReview(
+      Review.create({
+        by: 'bob',
+        lense: 'devil',
+        verdict: 'concern',
+        comment: 'subtle issue',
+      }),
+    );
+    const s = deriveSuggestedNext(r, cfg);
+    assert.equal(s?.verb, 'chain');
+    assert.match(s!.reason, /concern recorded/i);
+    assert.match(s!.reason, /leaving as-is/i);
+    assert.match(s!.reason, /first-class/i);
+  } finally {
+    cleanup();
+  }
+});
+
+test('completed with auto-review done AND concern present → chain advisory', () => {
+  // Auto-review fired but its verdict was concern. The advisory
+  // (chain walk + first-class options) replaces the otherwise-null
+  // suggested_next, so the concern doesn't go quiet.
+  const { cfg, cleanup } = mkConfig(['human']);
+  try {
+    const r = Request.create({
+      id: RequestId.generate(d, 1),
+      from: 'alice',
+      action: 'a',
+      reason: 'r',
+      executor: 'alice',
+      autoReview: 'bob',
+    });
+    r.approve(MemberName.of('human'));
+    r.execute(MemberName.of('alice'));
+    r.complete(MemberName.of('alice'));
+    r.addReview(
+      Review.create({
+        by: 'bob',
+        lense: 'devil',
+        verdict: 'concern',
+        comment: 'careful',
+      }),
+    );
+    const s = deriveSuggestedNext(r, cfg);
+    assert.equal(s?.verb, 'chain');
+    assert.match(s!.reason, /first-class/i);
+  } finally {
+    cleanup();
+  }
+});
+
+test('completed with auto-review done AND ok verdict → still null', () => {
+  // The advisory only fires for concern/reject. A clean ok review
+  // closes the arc without further suggestion (existing behavior).
+  const { cfg, cleanup } = mkConfig(['human']);
+  try {
+    const r = Request.create({
+      id: RequestId.generate(d, 1),
+      from: 'alice',
+      action: 'a',
+      reason: 'r',
+      executor: 'alice',
+      autoReview: 'bob',
+    });
+    r.approve(MemberName.of('human'));
+    r.execute(MemberName.of('alice'));
+    r.complete(MemberName.of('alice'));
+    r.addReview(
+      Review.create({ by: 'bob', lense: 'devil', verdict: 'ok', comment: 'lgtm' }),
+    );
+    assert.equal(deriveSuggestedNext(r, cfg), null);
+  } finally {
+    cleanup();
+  }
+});
+
 test('terminal states (denied/failed) return null', () => {
   const { cfg, cleanup } = mkConfig(['human']);
   try {

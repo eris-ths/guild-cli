@@ -8,6 +8,77 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 ## [Unreleased]
 
 ### Added
+- **`gate unresponded` (read verb).** Surfaces concern/reject
+  verdicts on the actor's authored or pair-made requests that have
+  no follow-up record yet. Thin wrapper over the same
+  `UnrespondedConcernsQuery` that drives `gate resume`'s concerns
+  surface, so the two cannot diverge. Default actor is GUILD_ACTOR;
+  `--for <m>` and `--max-age-days <N>` override. Naming aligns with
+  the underlying detector's "unresponded" semantic — explicitly NOT
+  `gate concerns` (which would suggest "all concerns" rather than
+  "concerns without follow-up"). The detector is deliberately coarse
+  (existence-only follow-up detection); `gate chain <id>` walks the
+  actual references when the reader wants to verify whether a
+  follow-up addresses anything specific. Surfaces the gap that bit
+  first-time agents: a `concern` verdict on a completed request was
+  not visible from any read path short of re-running `gate resume`.
+  (refines 2026-05-01-0003)
+
+- **`gate show` adds a concern marker line.** A binary existence
+  signal — `no concerns recorded` / `concern recorded — walk gate
+  chain ...` — sits next to the existing `chain hint` line.
+  Existence-language deliberately, NOT a count: counting ("3
+  concerns, 1 follow-up") would invite the reader to play a "drive
+  the number down" game (principle 03 — performance-for-the-record).
+  The original design called for a 3-state marker (concern + inbound
+  / concern + no inbound / no concerns); resolving inbound presence
+  at show time would require an async repository scan, so the
+  shipped form punts that resolution to `gate chain <id>` (named
+  inline in the marker text). The reader gets the same perception
+  affordance with one extra command rather than via formatRequestText
+  becoming async.
+
+- **`gate boot` adds `verbs_available_now.requires_other_actor`.**
+  A sibling array to `actionable` (which keeps its existing flat
+  shape — additive change). Each entry names `{verb, id, candidates,
+  reason}`: a verb that exists on the actor's record but cannot be
+  dispatched by them as themselves. Surfaces blockers (e.g. "your
+  pending request needs approval by host X") so the actor sees WHY
+  their queue isn't moving without parsing `suggested_next` prose.
+  `candidates` is a list, not a single name, so a content_root with
+  N hosts (or zero) doesn't have to embed a "first host" assumption
+  in the payload. The host-self case is filtered out (a host who
+  authored a pending request sees it under `actionable` via
+  pending-as-executor, not under `requires_other_actor`).
+
+- **`SuggestedNext.actor_resolved: boolean`.** New field on the
+  write-response, boot, and resume `suggested_next` payloads. True
+  iff `args.by` is absent or matches the calling actor (GUILD_ACTOR);
+  false when the suggestion names a different actor. Lets an
+  orchestrator branch (escalate / hand off vs. dispatch as self)
+  without parsing the verb's `--by` against the env. Hint, not gate
+  — the underlying verb still validates `--by` at the boundary.
+  Schema description names the discipline so a reason-skipping loop
+  is structurally redirected.
+
+- **Concern advisory on completed-with-concern reviews.** When a
+  completed request carries a `concern`/`reject` review (and its
+  auto-reviewer, if any, has recorded), `suggested_next` returns a
+  `chain` walk advisory rather than null: verb is read-only (`chain`)
+  to avoid embedding a dispute-resolution flow in the tool's voice;
+  reason names follow-up paths AND explicitly lists "leaving as-is,
+  conversing it out, or letting it fade — all first-class." The
+  absence of action stays structurally legitimate. Replaces the
+  prior null-after-review behavior for the concern case only — `ok`
+  verdicts still close the arc cleanly with `null`.
+
+- **`gate transcript` ends with a `Concerns recorded` section.**
+  Bare enumeration of `concern`/`reject` verdicts in the request,
+  pointing at `gate chain <id>` for reference resolution. No
+  status language ("still open", "addressed by"), no severity —
+  the tool surfaces existence; status judgement stays with the
+  reader (principle 07).
+
 - **`FsInboxNotification.post` / `markRead` retry once on
   `InboxVersionConflict`.** When a concurrent writer advances the
   on-disk version between our read and the CAS check, the first

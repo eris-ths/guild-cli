@@ -149,6 +149,71 @@ test('show text: N refs → lists the ids', (t) => {
   );
 });
 
+test('show text: concern marker line — no concerns recorded', (t) => {
+  // 1.A: a fresh record with no concern review surfaces an
+  // explicit "no concerns recorded" line. The 3-state existence
+  // marker (no concern / concern + chain says inbound / concern
+  // + chain says no inbound) is the perception aid.
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  runGate(root, ['register', '--name', 'alice', '--category', 'professional']);
+  const created = runGate(root, [
+    'fast-track',
+    '--from', 'alice',
+    '--action', 'no concerns yet',
+    '--reason', 'baseline',
+    '--executor', 'alice',
+  ]);
+  const id = extractId(created.stdout)!;
+  const shown = runGate(root, ['show', id, '--format', 'text']);
+  assert.equal(shown.status, 0);
+  assert.match(
+    shown.stdout,
+    /concern marker: no concerns recorded/,
+    'expected explicit no-concerns line',
+  );
+});
+
+test('show text: concern marker line — concern recorded', (t) => {
+  // 1.A: once a concern verdict lands, the line flips to
+  // "concern recorded — walk gate chain ..." referring the
+  // reader to the actual link walker rather than asserting
+  // resolution status (which the tool refuses to judge).
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  runGate(root, ['register', '--name', 'alice', '--category', 'professional']);
+  runGate(root, ['register', '--name', 'bob', '--category', 'professional']);
+  const created = runGate(root, [
+    'fast-track',
+    '--from', 'alice',
+    '--action', 'gets a concern',
+    '--reason', 'baseline',
+    '--executor', 'alice',
+  ]);
+  const id = extractId(created.stdout)!;
+  runGate(root, [
+    'review', id,
+    '--by', 'bob',
+    '--lense', 'devil',
+    '--verdict', 'concern',
+    '--comment', 'careful here',
+  ]);
+  const shown = runGate(root, ['show', id, '--format', 'text']);
+  assert.equal(shown.status, 0);
+  assert.match(
+    shown.stdout,
+    /concern marker: concern recorded/,
+    'expected concern-recorded line',
+  );
+  // Must NOT contain a count — principle 03's performance-for-
+  // the-record concern rules out "concerns: N; resolving: M".
+  assert.doesNotMatch(
+    shown.stdout,
+    /concerns: \d+/,
+    'concern marker must use existence-language, not counts',
+  );
+});
+
 test('show text: short-form (0004) is NOT detected', (t) => {
   const { root, cleanup } = bootstrap();
   t.after(cleanup);

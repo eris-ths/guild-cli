@@ -398,6 +398,33 @@ function formatRequestText(r: Request): string {
     );
   }
 
+  // Concern marker: a 3-state existence signal, not a count. Counting
+  // ("3 concerns, 1 follow-up") would invite the reader to play a
+  // "drive the number down" game — performance-for-the-record
+  // (principle 03). Three states keep perception engaged without
+  // setting a target:
+  //   - no concerns recorded
+  //   - concern recorded; no inbound reference
+  //   - concern recorded; inbound reference present
+  // The reader walks `gate chain` to see the actual references and
+  // judges for themselves whether they address the concerns. The
+  // tool only asserts existence.
+  const hasConcernReview = (reviews as Array<Record<string, unknown>>).some(
+    (rv) => rv['verdict'] === 'concern' || rv['verdict'] === 'reject',
+  );
+  if (hasConcernReview) {
+    // We don't have the cross-record inbound count here without an
+    // extra repository pass; instead say "see gate chain" and let
+    // the reader resolve presence vs absence with one command. This
+    // keeps formatRequestText synchronous + repo-free.
+    lines.push(
+      `  concern marker: concern recorded — ` +
+        `walk \`gate chain ${selfId}\` to see inbound references (if any)`,
+    );
+  } else {
+    lines.push('  concern marker: no concerns recorded');
+  }
+
   return lines.join('\n');
 }
 
