@@ -1,5 +1,11 @@
-import { ParsedArgs, optionalOption } from '../../shared/parseArgs.js';
+import {
+  ParsedArgs,
+  optionalOption,
+  rejectUnknownFlags,
+} from '../../shared/parseArgs.js';
 import { C } from './internal.js';
+
+const RESUME_KNOWN_FLAGS: ReadonlySet<string> = new Set(['format', 'locale']);
 import { Request, StatusLogEntry } from '../../../domain/request/Request.js';
 import { collectUtterances, Utterance, RequestJSON } from '../voices.js';
 import { deriveSuggestedNext, SuggestedNext } from './writeFormat.js';
@@ -98,6 +104,7 @@ interface ResumePayload {
 }
 
 export async function resumeCmd(c: C, args: ParsedArgs): Promise<number> {
+  rejectUnknownFlags(args, RESUME_KNOWN_FLAGS, 'resume');
   const format = optionalOption(args, 'format') ?? 'json';
   if (format !== 'json' && format !== 'text') {
     throw new Error(`--format must be 'json' or 'text', got: ${format}`);

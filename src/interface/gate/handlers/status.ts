@@ -1,6 +1,12 @@
-import { ParsedArgs, optionalOption } from '../../shared/parseArgs.js';
+import {
+  ParsedArgs,
+  optionalOption,
+  rejectUnknownFlags,
+} from '../../shared/parseArgs.js';
 import { Request } from '../../../domain/request/Request.js';
 import { C, warnIfMisconfiguredCwd } from './internal.js';
+
+const STATUS_KNOWN_FLAGS: ReadonlySet<string> = new Set(['for', 'format']);
 
 /**
  * gate status [--for <name>] [--format json|text]
@@ -146,6 +152,7 @@ function renderStatusText(s: StatusSummary): string {
 }
 
 export async function statusCmd(c: C, args: ParsedArgs): Promise<number> {
+  rejectUnknownFlags(args, STATUS_KNOWN_FLAGS, 'status');
   const actor = optionalOption(args, 'for') ?? process.env['GUILD_ACTOR'] ?? null;
   const format = optionalOption(args, 'format') ?? 'json';
 

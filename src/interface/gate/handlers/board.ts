@@ -1,5 +1,11 @@
-import { ParsedArgs, optionalOption } from '../../shared/parseArgs.js';
+import {
+  ParsedArgs,
+  optionalOption,
+  rejectUnknownFlags,
+} from '../../shared/parseArgs.js';
 import { C } from './internal.js';
+
+const BOARD_KNOWN_FLAGS: ReadonlySet<string> = new Set(['for', 'format']);
 import { Request } from '../../../domain/request/Request.js';
 import {
   computeReviewMarkerWidth,
@@ -37,6 +43,7 @@ import {
 const BOARD_STATES = ['pending', 'approved', 'executing'] as const;
 
 export async function boardCmd(c: C, args: ParsedArgs): Promise<number> {
+  rejectUnknownFlags(args, BOARD_KNOWN_FLAGS, 'board');
   const format = optionalOption(args, 'format') ?? 'text';
   if (format !== 'json' && format !== 'text') {
     throw new Error(`--format must be 'json' or 'text', got: ${format}`);

@@ -33,7 +33,16 @@ import {
  * intended for session orientation and narrative walks.
  */
 
+const VOICES_KNOWN_FLAGS: ReadonlySet<string> = new Set([
+  'lense',
+  'verdict',
+  'limit',
+  'format',
+  'with-calibration',
+]);
+
 export async function reqVoices(c: C, args: ParsedArgs): Promise<number> {
+  rejectUnknownFlags(args, VOICES_KNOWN_FLAGS, 'voices');
   const name = args.positional[0];
   if (!name) {
     throw new Error(
@@ -183,7 +192,10 @@ export async function reqTail(c: C, args: ParsedArgs): Promise<number> {
   return 0;
 }
 
+const WHOAMI_KNOWN_FLAGS: ReadonlySet<string> = new Set(['limit']);
+
 export async function reqWhoami(c: C, args: ParsedArgs): Promise<number> {
+  rejectUnknownFlags(args, WHOAMI_KNOWN_FLAGS, 'whoami');
   const actor = process.env['GUILD_ACTOR'];
   if (!actor || actor.length === 0) {
     process.stderr.write(
@@ -233,7 +245,13 @@ export async function reqWhoami(c: C, args: ParsedArgs): Promise<number> {
   return 0;
 }
 
+// gate chain takes only positionals (id), no flags. Strict-reject keeps
+// noise like `--format json` from being silently ignored — chain is
+// text-only by design, and a typo should fail closed.
+const CHAIN_KNOWN_FLAGS: ReadonlySet<string> = new Set();
+
 export async function reqChain(c: C, args: ParsedArgs): Promise<number> {
+  rejectUnknownFlags(args, CHAIN_KNOWN_FLAGS, 'chain');
   const rootId = args.positional[0];
   if (!rootId) {
     throw new Error('Usage: gate chain <request-id | issue-id>');

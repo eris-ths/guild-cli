@@ -1,6 +1,12 @@
-import { ParsedArgs, optionalOption } from '../../shared/parseArgs.js';
+import {
+  ParsedArgs,
+  optionalOption,
+  rejectUnknownFlags,
+} from '../../shared/parseArgs.js';
 import { C } from './internal.js';
 import { Request } from '../../../domain/request/Request.js';
+
+const WHY_KNOWN_FLAGS: ReadonlySet<string> = new Set(['format']);
 
 /**
  * gate why <id> [--format text|json]
@@ -45,6 +51,7 @@ interface WhyPayload {
 }
 
 export async function whyCmd(c: C, args: ParsedArgs): Promise<number> {
+  rejectUnknownFlags(args, WHY_KNOWN_FLAGS, 'why');
   const id = args.positional[0];
   if (!id) throw new Error('Usage: gate why <id> [--format text|json]');
   const format = optionalOption(args, 'format') ?? 'text';

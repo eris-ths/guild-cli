@@ -142,3 +142,50 @@ test('gate tail (no flags) still works', (t) => {
   const r = runGate(root, ['tail']);
   assert.equal(r.status, 0);
 });
+
+// --- read-verb sweep: every read verb rejects unknown flags ---
+//
+// Pre-sweep, only tail/doctor/repair/unresponded had this discipline;
+// the rest fail-opened. A typo like `gate pending --format json` would
+// silently render text instead of error. Each entry below uses
+// `--bogus-flag-xyz` (deliberately implausible) so the test surfaces
+// the discipline, not a flag-name overlap with future legitimate flags.
+//
+// Verbs that need a positional id are given a placeholder; the strict-
+// flag check fires before the id is parsed, so any value works.
+
+const READ_VERB_CASES: ReadonlyArray<{
+  verb: string;
+  args: readonly string[];
+}> = [
+  { verb: 'boot', args: [] },
+  { verb: 'status', args: [] },
+  { verb: 'board', args: [] },
+  { verb: 'suggest', args: [] },
+  { verb: 'resume', args: [] },
+  { verb: 'schema', args: [] },
+  { verb: 'show', args: ['2026-01-01-0001'] },
+  { verb: 'chain', args: ['2026-01-01-0001'] },
+  { verb: 'pending', args: [] },
+  { verb: 'list', args: ['--state', 'pending'] },
+  { verb: 'voices', args: ['alice'] },
+  { verb: 'whoami', args: [] },
+  { verb: 'summarize', args: ['2026-01-01-0001'] },
+  { verb: 'why', args: ['2026-01-01-0001'] },
+  { verb: 'transcript', args: ['2026-01-01-0001'] },
+];
+
+for (const { verb, args } of READ_VERB_CASES) {
+  test(`gate ${verb} rejects unknown flag --bogus-flag-xyz`, (t) => {
+    const { root, cleanup } = bootstrap();
+    t.after(cleanup);
+    runGate(root, ['register', '--name', 'alice', '--category', 'professional']);
+    const r = runGate(root, [verb, ...args, '--bogus-flag-xyz']);
+    assert.notEqual(r.status, 0, `${verb} should exit non-zero on unknown flag`);
+    assert.match(
+      r.stderr,
+      new RegExp(`gate ${verb}: unknown flag.*--bogus-flag-xyz`),
+      `${verb} stderr should name the verb and the bogus flag`,
+    );
+  });
+}

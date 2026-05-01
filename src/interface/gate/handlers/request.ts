@@ -62,6 +62,25 @@ const FAST_TRACK_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'with',
   'format',
 ]);
+// `gate list` and `gate pending` share `reqList`. pending only takes
+// `--for`; list adds the four narrowing filters. The list set is the
+// superset and is used at the reqList layer; the index dispatch
+// pre-checks the pending case before delegating, so unknown flags on
+// `gate pending` (e.g. `--from x`) are still caught with the right
+// verb name in the error.
+const LIST_KNOWN_FLAGS: ReadonlySet<string> = new Set([
+  'state',
+  'for',
+  'from',
+  'executor',
+  'auto-review',
+]);
+const PENDING_KNOWN_FLAGS: ReadonlySet<string> = new Set(['for']);
+const SHOW_KNOWN_FLAGS: ReadonlySet<string> = new Set([
+  'plain',
+  'format',
+  'fields',
+]);
 import { Request } from '../../../domain/request/Request.js';
 import { formatDelta, pushMultilineField } from '../voices.js';
 import {
@@ -126,7 +145,15 @@ export async function reqList(
   c: C,
   state: string,
   args: ParsedArgs,
+  verb: 'list' | 'pending' = 'list',
 ): Promise<number> {
+  // Different known-flag sets per verb so a typo on `gate pending`
+  // doesn't get a list-grade hint, and the error names the right verb.
+  rejectUnknownFlags(
+    args,
+    verb === 'pending' ? PENDING_KNOWN_FLAGS : LIST_KNOWN_FLAGS,
+    verb,
+  );
   const fromFilter = optionalOption(args, 'from');
   const executorFilter = optionalOption(args, 'executor');
   const autoReviewFilter = optionalOption(args, 'auto-review');
@@ -201,6 +228,7 @@ function describeFilters(filters: Record<string, string | undefined>): string {
 }
 
 export async function reqShow(c: C, args: ParsedArgs): Promise<number> {
+  rejectUnknownFlags(args, SHOW_KNOWN_FLAGS, 'show');
   const id = args.positional[0];
   if (!id)
     throw new Error(

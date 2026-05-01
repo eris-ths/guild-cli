@@ -97,7 +97,7 @@ test('gate resume: mid-execution → executing loop + complete suggestion', () =
     // Discover the just-minted id rather than hardcoding a date —
     // `gate request` generates `<today>-<seq>` and the test must
     // run on any day.
-    const pending = runGate(root, ['pending', '--format', 'text']);
+    const pending = runGate(root, ['pending']);
     const id = pending.stdout.match(/(\d{4}-\d{2}-\d{2}-\d{4})/)?.[1];
     assert.ok(id, 'expected a pending request after gate request');
     runGate(root, ['approve', id!, '--by', 'eris']);
@@ -131,7 +131,7 @@ test('gate resume: pending review → pending_review loop + review suggestion wi
       '--executor', 'alice',
       '--auto-review', 'bob',
     ]);
-    const list = runGate(root, ['list', '--state', 'pending', '--format', 'text']);
+    const list = runGate(root, ['list', '--state', 'pending']);
     const id = list.stdout.match(/(\d{4}-\d{2}-\d{2}-\d{4})/)?.[1];
     assert.ok(id);
     runGate(root, ['approve', id!, '--by', 'eris']);
@@ -170,7 +170,7 @@ test('gate resume: unresponded concern on completed request surfaces in payload 
       '--reason', 'tech debt',
       '--auto-review', 'alice',
     ]);
-    const list = runGate(root, ['list', '--state', 'completed', '--format', 'text']);
+    const list = runGate(root, ['list', '--state', 'completed']);
     const id = list.stdout.match(/(\d{4}-\d{2}-\d{2}-\d{4})/)?.[1];
     assert.ok(id);
     runGate(root, [

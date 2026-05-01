@@ -1,5 +1,15 @@
-import { ParsedArgs, optionalOption } from '../../shared/parseArgs.js';
+import {
+  ParsedArgs,
+  optionalOption,
+  rejectUnknownFlags,
+} from '../../shared/parseArgs.js';
 import { C, loadAllRequestsAsJson, parseOptionalIntOption } from './internal.js';
+
+const BOOT_KNOWN_FLAGS: ReadonlySet<string> = new Set([
+  'format',
+  'tail',
+  'utterances',
+]);
 import { collectStatus, StatusSummary } from './status.js';
 import { collectUtterances } from '../voices.js';
 import { Request } from '../../../domain/request/Request.js';
@@ -155,6 +165,7 @@ interface BootPayload {
 }
 
 export async function bootCmd(c: C, args: ParsedArgs): Promise<number> {
+  rejectUnknownFlags(args, BOOT_KNOWN_FLAGS, 'boot');
   const format = optionalOption(args, 'format') ?? 'json';
   if (format !== 'json' && format !== 'text') {
     throw new Error(`--format must be 'json' or 'text', got: ${format}`);

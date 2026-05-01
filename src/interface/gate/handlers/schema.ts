@@ -1,5 +1,11 @@
-import { ParsedArgs, optionalOption } from '../../shared/parseArgs.js';
+import {
+  ParsedArgs,
+  optionalOption,
+  rejectUnknownFlags,
+} from '../../shared/parseArgs.js';
 import { C } from './internal.js';
+
+const SCHEMA_KNOWN_FLAGS: ReadonlySet<string> = new Set(['format', 'verb']);
 
 /**
  * gate schema [--verb <name>] [--format json|text]
@@ -707,6 +713,7 @@ const VERBS: readonly VerbSchema[] = [
 ];
 
 export async function schemaCmd(_c: C, args: ParsedArgs): Promise<number> {
+  rejectUnknownFlags(args, SCHEMA_KNOWN_FLAGS, 'schema');
   const format = optionalOption(args, 'format') ?? 'json';
   if (format !== 'json' && format !== 'text') {
     throw new Error(`--format must be 'json' or 'text', got: ${format}`);

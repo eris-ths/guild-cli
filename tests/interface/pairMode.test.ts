@@ -113,7 +113,7 @@ test('gate request --with eris persists the field and `gate show` renders it', (
       '--action', 'paired work',
       '--reason', 'felt like it',
     ]);
-    const list = runGate(root, ['list', '--state', 'pending', '--format', 'text']);
+    const list = runGate(root, ['list', '--state', 'pending']);
     const id = list.stdout.match(/(\d{4}-\d{2}-\d{2}-\d{4})/)?.[1];
     assert.ok(id);
     const show = runGate(root, ['show', id!, '--format', 'text']);
@@ -139,7 +139,7 @@ test('gate request --with accepts comma-separated list', () => {
       '--action', 'a',
       '--reason', 'r',
     ]);
-    const list = runGate(root, ['list', '--state', 'pending', '--format', 'text']);
+    const list = runGate(root, ['list', '--state', 'pending']);
     const id = list.stdout.match(/(\d{4}-\d{2}-\d{2}-\d{4})/)?.[1];
     const show = runGate(root, ['show', id!, '--format', 'json']);
     const payload = JSON.parse(show.stdout);

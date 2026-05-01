@@ -1,6 +1,12 @@
-import { ParsedArgs, optionalOption } from '../../shared/parseArgs.js';
+import {
+  ParsedArgs,
+  optionalOption,
+  rejectUnknownFlags,
+} from '../../shared/parseArgs.js';
 import { C } from './internal.js';
 import { Request } from '../../../domain/request/Request.js';
+
+const TRANSCRIPT_KNOWN_FLAGS: ReadonlySet<string> = new Set(['format']);
 
 /**
  * gate transcript <id> [--format text|json]
@@ -49,6 +55,7 @@ interface TranscriptPayload {
 }
 
 export async function transcriptCmd(c: C, args: ParsedArgs): Promise<number> {
+  rejectUnknownFlags(args, TRANSCRIPT_KNOWN_FLAGS, 'transcript');
   const id = args.positional[0];
   if (!id) throw new Error('Usage: gate transcript <id> [--format text|json]');
   const format = optionalOption(args, 'format') ?? 'text';
