@@ -4,7 +4,7 @@
  * a live filesystem.
  *
  * Also home to `computeVoiceCalibration` (see bottom of file), which
- * derives a per-(actor, lens) calibration score from historical
+ * derives a per-(actor, lense) calibration score from historical
  * review verdicts vs terminal-state outcomes. Exported from here so
  * the CLI handler and the schema can reuse the same definition.
  *
@@ -13,7 +13,7 @@
  *     appropriate closure note — completion_note / deny_reason /
  *     failure_reason, whichever the lifecycle produced).
  *   - `review`: a review they recorded on someone's (or their own)
- *     request, carrying the lens / verdict / comment.
+ *     request, carrying the lense / verdict / comment.
  *
  * The RequestJSON type below intentionally models only the fields
  * voices reads. Keeping it structural (rather than importing Request
@@ -130,7 +130,7 @@ export type ReviewUtterance = {
 /**
  * A `thank` utterance — someone thanking another actor for their
  * work on a specific request. Sibling of ReviewUtterance; simpler
- * (no lens, no verdict, no required comment) because the record
+ * (no lense, no verdict, no required comment) because the record
  * semantics are different. Reviews express judgement; thanks
  * express gratitude.
  *
@@ -175,7 +175,7 @@ export interface VoicesFilter {
  * returned; when omitted, every actor's utterances flow through.
  * When `lense` or `verdict` is set, only review utterances are
  * returned — authored requests don't carry those fields, so including
- * them in a lens-scoped query would be a category error.
+ * them in a lense-scoped query would be a category error.
  *
  * Name matching is case-insensitive. Timestamps are compared as
  * strings; ISO-8601 sorts correctly lexicographically.
@@ -254,7 +254,7 @@ export function collectUtterances(
     // surfaces the record. Reviews are one-sided (only `by` speaks),
     // so this is the one place the filter diverges. Lens/verdict
     // filters short-circuit the thanks loop entirely — thanks have
-    // no lens/verdict, so a lens-scoped query should not carry them.
+    // no lense/verdict, so a lense-scoped query should not carry them.
     const filteringReviewsOnly =
       filter.lense !== undefined || filter.verdict !== undefined;
     if (!filteringReviewsOnly) {
@@ -422,7 +422,7 @@ export function renderUtterance(
 
 // ── Voice calibration ─────────────────────────────────────────────
 //
-// A per-(actor, lens) score derived from historical review verdicts
+// A per-(actor, lense) score derived from historical review verdicts
 // vs terminal-state outcomes. Exists to let the Two-Persona Devil
 // Review frame *learn* — today every cross-actor critique weighs the
 // same, and over time the system has no memory of which voices
@@ -475,7 +475,7 @@ export interface CalibrationPerLens {
 
 export interface VoiceCalibration {
   readonly actor: string;
-  /** Per-lens calibration, keyed by lens name (e.g. "devil", "layer"). */
+  /** Per-lense calibration, keyed by lense name (e.g. "devil", "layer"). */
   readonly by_lens: Record<string, CalibrationPerLens>;
 }
 
@@ -487,7 +487,7 @@ export function computeVoiceCalibration(
   actor: string,
 ): VoiceCalibration {
   const actorLower = actor.toLowerCase();
-  const byLens: Record<string, { aligned: number; missed: number }> = {};
+  const byLense: Record<string, { aligned: number; missed: number }> = {};
 
   for (const r of all) {
     const state = r.state;
@@ -497,9 +497,9 @@ export function computeVoiceCalibration(
     const reviews = r.reviews ?? [];
     for (const rv of reviews) {
       if (rv.by !== actorLower) continue;
-      const lens = rv.lense;
-      if (!byLens[lens]) byLens[lens] = { aligned: 0, missed: 0 };
-      const bucket = byLens[lens]!;
+      const lense = rv.lense;
+      if (!byLense[lense]) byLense[lense] = { aligned: 0, missed: 0 };
+      const bucket = byLense[lense]!;
       const v = rv.verdict;
       if (v === 'ok') {
         if (state === 'completed') bucket.aligned += 1;
@@ -513,17 +513,17 @@ export function computeVoiceCalibration(
   }
 
   const out: Record<string, CalibrationPerLens> = {};
-  for (const [lens, counts] of Object.entries(byLens)) {
+  for (const [lense, counts] of Object.entries(byLense)) {
     const samples = counts.aligned + counts.missed;
     if (samples < CALIBRATION_MIN_SAMPLES) {
-      out[lens] = {
+      out[lense] = {
         sample_count: samples,
         aligned: counts.aligned,
         missed: counts.missed,
         alignment: null,
         status: 'uncalibrated',
         prose:
-          `${lens} lens: ${samples} sample${samples === 1 ? '' : 's'} so far — not yet calibrated ` +
+          `${lense} lense: ${samples} sample${samples === 1 ? '' : 's'} so far — not yet calibrated ` +
           `(need ${CALIBRATION_MIN_SAMPLES - samples} more with a terminal outcome).`,
       };
       continue;
@@ -535,13 +535,13 @@ export function computeVoiceCalibration(
       status === 'trusted'
         ? `trusted — ${counts.aligned} of ${samples} verdicts aligned with outcomes`
         : `still learning — ${counts.aligned} of ${samples} verdicts aligned`;
-    out[lens] = {
+    out[lense] = {
       sample_count: samples,
       aligned: counts.aligned,
       missed: counts.missed,
       alignment,
       status,
-      prose: `${lens} lens: ${proseFragment}.`,
+      prose: `${lense} lense: ${proseFragment}.`,
     };
   }
 

@@ -31,10 +31,10 @@ roles simultaneously, the gaps collapse — which is exactly what
 ## The dual: review lenses as perspective separation
 
 Where the state machine separates principals across _time_, the
-review-lens mechanism separates principals across _perspective_.
+review-lense mechanism separates principals across _perspective_.
 A single request can carry multiple reviews at the same moment in
-its lifecycle, each from a different lens (devil / layer / user /
-…). Each lens is effectively a distinct voice commenting on the
+its lifecycle, each from a different lense (devil / layer / user /
+…). Each lense is effectively a distinct voice commenting on the
 same artifact.
 
 The two separations are **orthogonal axes**:
@@ -144,7 +144,7 @@ Some consequences that follow if the claim is right:
   That's not a property of principal separation; it's a property
   of records-as-mirrors. The framework may be under-specifying
   this. (See also `lore/principles/07-perception-not-judgement.md`
-  — the tool as a lens that sharpens perception without closing
+  — the tool as a lense that sharpens perception without closing
   the judgement loop. The mirror effect may be a specific instance
   of that broader posture.)
 

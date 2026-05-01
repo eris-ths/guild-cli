@@ -497,7 +497,7 @@ test('boot.verbs_available_now: actionable entries carry id + reason', () => {
 
 test('voices --with-calibration: aligns verdicts against terminal outcomes', () => {
   // Carol files sharp concerns on things that later fail — her
-  // devil-lens calibration should read as "trusted". Bob rubber-
+  // devil-lense calibration should read as "trusted". Bob rubber-
   // stamps ok on things that fail — "learning".
   const { root, cleanup } = bootstrap();
   try {
@@ -895,9 +895,9 @@ test('voices <name>: surfaces thanks in BOTH directions (given and received)', (
   }
 });
 
-test('voices: lens/verdict filters DO NOT surface thanks (reviews only)', () => {
-  // thanks have no lens and no verdict. A lens-scoped query is
-  // asking for reviews through that lens; including thanks would
+test('voices: lense/verdict filters DO NOT surface thanks (reviews only)', () => {
+  // thanks have no lense and no verdict. A lense-scoped query is
+  // asking for reviews through that lense; including thanks would
   // be a category error.
   const { root, cleanup } = bootstrap();
   try {
@@ -971,7 +971,7 @@ test('transcript: narrative prose names filer, action, executor, reviews', () =>
     assert.match(stdout, /refactor parser/);
     assert.match(stdout, /bob as executor/);
     assert.match(stdout, /Bob moved it to completed/);
-    assert.match(stdout, /devil lens/);
+    assert.match(stdout, /devil lense/);
     assert.match(stdout, /verdict of ok/);
     assert.match(stdout, /LGTM/);
     assert.match(stdout, /Final state: completed/);
@@ -1157,6 +1157,51 @@ test('review --dry-run: preview includes new review without persisting', () => {
     // After dry-run, real reviews list is still empty.
     const after = JSON.parse(runGate(root, ['show', rid(1)]).stdout);
     assert.equal(after.reviews.length, 0);
+  } finally {
+    cleanup();
+  }
+});
+
+
+// ── suggest text-mode footer: context-sensitivity ─────────────────
+
+test('suggest --format text suppresses advisory footer for export verb', () => {
+  // GUILD_ACTOR-unset bootstrap: suggest returns verb=export which is
+  // a shell builtin used to set the env var, not a gate dispatch.
+  // The "# advisory — override freely" footer applies to heuristic
+  // gate verbs; pinning it onto an env-var bootstrap reads as
+  // "you can ignore this", which is wrong — without GUILD_ACTOR the
+  // agent stays anonymous. The footer is suppressed for export.
+  const { root, cleanup } = bootstrap();
+  try {
+    const out = runGate(root, ["suggest", "--format", "text"]);
+    assert.equal(out.status, 0);
+    assert.match(out.stdout, /export GUILD_ACTOR/);
+    // No advisory footer (which would land on stderr) for the
+    // export case.
+    assert.doesNotMatch(out.stderr, /advisory/);
+  } finally {
+    cleanup();
+  }
+});
+
+test('suggest --format text keeps advisory footer for gate verbs', () => {
+  // Regression: the footer should still appear when the suggestion
+  // is a real gate dispatch (not export). Drives a request to
+  // pending-as-executor so suggest returns a non-null gate verb.
+  const { root, cleanup } = bootstrap();
+  try {
+    runGate(root, [
+      "request",
+      "--from", "alice",
+      "--action", "do thing",
+      "--reason", "r",
+      "--executor", "bob",
+    ], { GUILD_ACTOR: "alice" });
+    const out = runGate(root, ["suggest", "--format", "text"], { GUILD_ACTOR: "bob" });
+    assert.equal(out.status, 0);
+    assert.match(out.stdout, /^→ approve/m);
+    assert.match(out.stderr, /advisory — override freely/);
   } finally {
     cleanup();
   }

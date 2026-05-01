@@ -19,7 +19,7 @@ of evaporating with a chat context.
 - [`design-notes.md`](./design-notes.md) — the design intuitions
   the tours surfaced. Central one: **gate's state machine encodes
   a social contract between principals, not a time axis.** The
-  review-lens mechanism is the dual — principal separation in the
+  review-lense mechanism is the dual — principal separation in the
   perspective dimension. Two axes; domains that hit both get the
   most out of the tool.
 - [`open-questions.md`](./open-questions.md) — unresolved design

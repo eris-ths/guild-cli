@@ -6,13 +6,13 @@
  * → completed (and, if applicable, a self-review) all bear the same
  * `by` field.
  *
- * Why this matters (the abyss in the 6-lens framing):
+ * Why this matters (the abyss in the 6-lense framing):
  *   gate lets any registered member approve any request, including
  *   their own. Policy-allowed, emits a stderr notice, and for a
  *   single casual self-flow `gate fast-track` is the expected form.
  *   But as agents take on more of the transitions autonomously, the
  *   pattern "agent files, agent approves, agent executes, agent
- *   reviews with own lens" quietly hollows the Two-Persona Devil
+ *   reviews with own lense" quietly hollows the Two-Persona Devil
  *   frame: the record exists, but the cross-actor signal that makes
  *   it trustworthy is absent.
  *
