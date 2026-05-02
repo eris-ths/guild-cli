@@ -88,10 +88,14 @@ export async function startPlay(deps: PlayDeps, args: ParsedArgs): Promise<numbe
           where_written,
           config_file: deps.config.configFile,
           suggested_next: {
+            // args.by intentionally omitted (issue #122) — agora doesn't
+            // recommend who acts next; the orchestrator (or human + AI
+            // pair) decides per their alternation model. Sandbox plays
+            // shouldn't be biased toward same-actor continuation.
             verb: 'move',
-            args: { play_id: play.id, by },
+            args: { play_id: play.id },
             reason:
-              'Play started — append a move to advance, or `agora suspend` to leave a cliff for the next session. (move/suspend/resume verbs land in subsequent commits.)',
+              'Play started. Append a move to advance, leave a cliff with `agora suspend`, or close with `agora conclude`.',
           },
         },
         null,

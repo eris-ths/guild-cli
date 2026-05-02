@@ -7,6 +7,50 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 
 ## [Unreleased]
 
+### Fixed
+- **agora `suggested_next.reason` no longer carries stale "(when
+  implemented)" / "(... lands in subsequent commits)" prose.**
+  ([#121](https://github.com/eris-ths/guild-cli/issues/121))
+  agora landed one verb per commit, and each commit's reason
+  string was written when the next verb was genuinely future.
+  Subsequent commits made those verbs real but didn't rewrite
+  the older reason strings. Post-fix, `agora new` and `agora
+  move` reason text reads as post-implementation. Regression
+  test in `tests/passages/agora/suggestedNextContract.test.ts`
+  scans every agora verb's `suggested_next.reason` for known
+  stale phrases — guards against drift returning.
+
+  Surfaced by another Claude instance playing agora interactively
+  with nao (see [#117](https://github.com/eris-ths/guild-cli/issues/117)).
+  Principle 09 (orientation disclosure) adjacent — surface
+  drifted from substrate.
+
+### Changed
+- **agora `suggested_next.args.by` is no longer pre-filled with
+  the just-acted actor.**
+  ([#122](https://github.com/eris-ths/guild-cli/issues/122))
+  Pre-fix, `agora play / move / suspend / resume` all set
+  `suggested_next.args.by` to the calling actor, implicitly
+  recommending **same-actor continuation**. For Sandbox plays
+  with multi-actor alternation (e.g., AI agent + human, or two
+  AI personas), this biased the orchestrator toward "same
+  person continues" — counter to the rhythm those plays take.
+
+  Post-fix, `args.by` is omitted from all four. `args` carries
+  only the load-bearing field (`play_id`); the orchestrator (or
+  human + AI pair) decides who acts next per their own
+  alternation model. Per principle 11 (AI-first, human as
+  projection): agora's substrate doesn't carry policy about
+  who runs verbs.
+
+  Behavior change for any orchestrator that read `args.by`
+  without questioning. The verb name (`suggested_next.verb`)
+  and `args.play_id` are unchanged and remain the load-bearing
+  recommendation.
+
+  Regression test pins the absence of `by` for play / move /
+  suspend / resume going forward.
+
 ### Added
 - **`agora` — second passage under guild (alpha).** A play / narrative
   surface alongside `gate`'s request-lifecycle / review surface.

@@ -107,8 +107,10 @@ export async function resumePlay(deps: ResumeDeps, args: ParsedArgs): Promise<nu
           where_written,
           config_file: deps.config.configFile,
           suggested_next: {
+            // args.by intentionally omitted (issue #122) — see play.ts
+            // for the rationale.
             verb: 'move',
-            args: { play_id: play.id, by },
+            args: { play_id: play.id },
             reason:
               'Play resumed. The cliff/invitation that paused you is in `resumed_suspension`; address it with the next move (or suspend again if the answer surfaces another cliff).',
           },
