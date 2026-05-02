@@ -11,6 +11,8 @@ import { Play, PlayMove, ResumeEntry, SuspensionEntry } from '../domain/Play.js'
 export interface PlayRepository {
   /** Find a play by its id (sequence is unique enough to scan). */
   findById(id: string): Promise<Play | null>;
+  /** Every play in the content_root, optionally scoped to one game. */
+  listAll(opts?: { gameSlug?: string }): Promise<Play[]>;
   /** Create a brand-new play; throws PlayIdCollision on duplicate. */
   saveNew(play: Play): Promise<void>;
   /**

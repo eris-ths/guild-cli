@@ -85,8 +85,8 @@ agora-specific records live under `<content_root>/agora/`:
 - [x] `agora move` — append a move (with optimistic CAS)
 - [x] `agora suspend` — pause with cliff + invitation (the design pivot)
 - [x] `agora resume` — pick up; surfaces closing cliff/invitation
+- [x] `agora list` — enumerate games + plays (with --game / --state filters)
 - [ ] `agora conclude` — terminal state from playing or suspended
-- [ ] `agora list` — list games + plays
 - [ ] `agora show <slug|play-id>` — detail view
 - [ ] `agora schema` — agent-dispatch contract (principle 10)
 

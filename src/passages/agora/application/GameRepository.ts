@@ -9,6 +9,8 @@ import { Game } from '../domain/Game.js';
 export interface GameRepository {
   /** Find a game by slug, or null if absent. */
   findBySlug(slug: string): Promise<Game | null>;
+  /** Every game in the content_root, sorted by slug. */
+  listAll(): Promise<Game[]>;
   /** Create a brand-new game; throws GameSlugCollision on duplicate. */
   saveNew(game: Game): Promise<void>;
   /**

@@ -45,55 +45,104 @@ export class YamlPlayRepository implements PlayRepository {
 
   async findById(id: string): Promise<Play | null> {
     parsePlayId(id);
-    // Find which game subdirectory this play lives under. Plays
-    // are unique by id within a game, but not necessarily across
-    // games (different games can have a 2026-05-02-001 each). We
-    // walk plays/ subdirectories to find a match. A future
-    // optimization would index id→game; v0 doesn't need it.
+    // Walk plays/<game>/ subdirectories looking for a file matching
+    // this id. Plays are unique-by-id within a game, but not across
+    // games — different games can have their own `2026-05-02-001`.
+    // findById returns the FIRST match found while walking, so it
+    // is unsuitable for cross-game disambiguation; listAll reads
+    // each game's directory directly via loadFromRel.
     const playsRoot = 'plays';
     const gameDirs = listDirSafe(this.base, playsRoot);
     for (const gameSlug of gameDirs) {
       const rel = join(playsRoot, gameSlug, `${id}.yaml`);
       if (!existsSafe(this.base, rel)) continue;
-      const raw = readTextSafe(this.base, rel);
-      const absSource = join(this.base, rel);
-      const parsed = parseYamlSafe(raw, absSource, this.config.onMalformed);
-      if (parsed === undefined) continue;
-      if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-        this.config.onMalformed(
-          absSource,
-          'top-level YAML is not a mapping; skipping',
-        );
-        continue;
-      }
-      const obj = parsed as Record<string, unknown>;
-      try {
-        return Play.restore({
-          id: typeof obj['id'] === 'string' ? (obj['id'] as string) : id,
-          game: typeof obj['game'] === 'string' ? (obj['game'] as string) : gameSlug,
-          state:
-            typeof obj['state'] === 'string'
-              ? ((obj['state'] as string) as never)
-              : 'playing',
-          started_at:
-            typeof obj['started_at'] === 'string'
-              ? (obj['started_at'] as string)
-              : new Date().toISOString(),
-          started_by:
-            typeof obj['started_by'] === 'string'
-              ? (obj['started_by'] as string)
-              : 'unknown',
-          moves: hydrateMoves(obj['moves']),
-          suspensions: hydrateSuspensions(obj['suspensions']),
-          resumes: hydrateResumes(obj['resumes']),
-        });
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        this.config.onMalformed(absSource, `hydrate failed (id=${id}), skipping: ${msg}`);
-        return null;
-      }
+      const play = this.loadFromRel(rel, gameSlug);
+      if (play) return play;
     }
     return null;
+  }
+
+  /**
+   * Read and hydrate a single play YAML at the given relative path
+   * (relative to `this.base`). Returns null if missing, malformed,
+   * or hydrate fails. Used by findById (walks all game subdirs) and
+   * listAll (walks per-game directly without id→game ambiguity).
+   */
+  private loadFromRel(rel: string, gameSlugHint: string): Play | null {
+    const raw = readTextSafe(this.base, rel);
+    const absSource = join(this.base, rel);
+    const parsed = parseYamlSafe(raw, absSource, this.config.onMalformed);
+    if (parsed === undefined) return null;
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      this.config.onMalformed(
+        absSource,
+        'top-level YAML is not a mapping; skipping',
+      );
+      return null;
+    }
+    const obj = parsed as Record<string, unknown>;
+    try {
+      return Play.restore({
+        id: typeof obj['id'] === 'string' ? (obj['id'] as string) : '',
+        game: typeof obj['game'] === 'string' ? (obj['game'] as string) : gameSlugHint,
+        state:
+          typeof obj['state'] === 'string'
+            ? ((obj['state'] as string) as never)
+            : 'playing',
+        started_at:
+          typeof obj['started_at'] === 'string'
+            ? (obj['started_at'] as string)
+            : new Date().toISOString(),
+        started_by:
+          typeof obj['started_by'] === 'string'
+            ? (obj['started_by'] as string)
+            : 'unknown',
+        moves: hydrateMoves(obj['moves']),
+        suspensions: hydrateSuspensions(obj['suspensions']),
+        resumes: hydrateResumes(obj['resumes']),
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      this.config.onMalformed(absSource, `hydrate failed, skipping: ${msg}`);
+      return null;
+    }
+  }
+
+  async listAll(opts: { gameSlug?: string } = {}): Promise<Play[]> {
+    const playsRoot = 'plays';
+    const out: Play[] = [];
+    const games = opts.gameSlug
+      ? [opts.gameSlug]
+      : listDirSafe(this.base, playsRoot);
+    for (const gameSlug of games) {
+      try {
+        parseGameSlug(gameSlug);
+      } catch {
+        // unrecognized directory under plays/ — skip silently;
+        // a future doctor scan would surface it.
+        continue;
+      }
+      const dir = join(playsRoot, gameSlug);
+      const files = listDirSafe(this.base, dir);
+      for (const f of files) {
+        if (!/^\d{4}-\d{2}-\d{2}-\d{3,4}\.yaml$/.test(f)) continue;
+        // Read each game's plays directly via loadFromRel — we
+        // already know the game subdir. Going through findById
+        // would mis-resolve cross-game id collisions (e.g. two
+        // games each with their own `2026-05-02-001`).
+        const rel = join(playsRoot, gameSlug, f);
+        const play = this.loadFromRel(rel, gameSlug);
+        if (play) out.push(play);
+      }
+    }
+    // Sort: most recent first (id is YYYY-MM-DD-NNN, lexicographic
+    // sort matches chronological for ISO-format dates). Tie-break
+    // on game slug so two games with same id sort deterministically.
+    out.sort((a, b) => {
+      const idCmp = b.id.localeCompare(a.id);
+      return idCmp !== 0 ? idCmp : a.game.localeCompare(b.game);
+    });
+    return out;
   }
 
   async saveNew(play: Play): Promise<void> {

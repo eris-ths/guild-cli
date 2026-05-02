@@ -25,6 +25,7 @@ import { startPlay } from './handlers/play.js';
 import { moveOnPlay } from './handlers/move.js';
 import { suspendPlay } from './handlers/suspend.js';
 import { resumePlay } from './handlers/resume.js';
+import { listAgora } from './handlers/list.js';
 
 const HELP = `agora — game / play passage (v0 skeleton)
 
@@ -59,6 +60,11 @@ Usage:
                               suspended → playing. Surfaces the closing
                               cliff/invitation in the success output so
                               the resuming actor reads what was paused on.
+
+  agora list [--game <slug>] [--state playing|suspended|concluded] [--format json|text]
+                              Enumerate games and plays. Filters: --game
+                              narrows plays to one game (drops games list);
+                              --state narrows plays to a single state.
 
   agora --help                 This help.
   agora --version              Print version and exit.
@@ -103,6 +109,8 @@ export async function main(argv: readonly string[]): Promise<number> {
         return await suspendPlay({ plays, config }, args);
       case 'resume':
         return await resumePlay({ plays, config }, args);
+      case 'list':
+        return await listAgora({ games, plays, config }, args);
       default:
         process.stderr.write(`agora: unknown verb: ${cmd}\n${HELP}`);
         return 1;

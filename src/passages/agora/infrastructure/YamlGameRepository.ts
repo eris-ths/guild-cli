@@ -5,6 +5,7 @@ import { GameRepository } from '../application/GameRepository.js';
 import { GuildConfig } from '../../../infrastructure/config/GuildConfig.js';
 import {
   existsSafe,
+  listDirSafe,
   readTextSafe,
   writeTextSafe,
 } from '../../../infrastructure/persistence/safeFs.js';
@@ -69,6 +70,26 @@ export class YamlGameRepository implements GameRepository {
       this.config.onMalformed(absSource, `hydrate failed (slug=${slug}), skipping: ${msg}`);
       return null;
     }
+  }
+
+  async listAll(): Promise<Game[]> {
+    const files = listDirSafe(this.base, 'games');
+    const out: Game[] = [];
+    for (const f of files) {
+      if (!f.endsWith('.yaml')) continue;
+      const slug = f.replace(/\.yaml$/, '');
+      try {
+        const game = await this.findBySlug(slug);
+        if (game) out.push(game);
+      } catch {
+        // Slug-validation failures (off-pattern filenames in
+        // games/) are surfaced via the diagnostic eventually;
+        // listAll just skips them so a typo file doesn't crash
+        // the listing. Same pattern as gate's listByState.
+      }
+    }
+    out.sort((a, b) => a.slug.localeCompare(b.slug));
+    return out;
   }
 
   async saveNew(game: Game): Promise<void> {
