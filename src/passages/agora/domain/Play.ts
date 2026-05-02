@@ -70,6 +70,8 @@ export interface PlayProps {
   readonly started_at: string;
   readonly started_by: string;
   readonly moves: readonly PlayMove[];
+  readonly suspensions: readonly SuspensionEntry[];
+  readonly resumes: readonly ResumeEntry[];
 }
 
 export interface PlayMove {
@@ -79,6 +81,38 @@ export interface PlayMove {
   readonly text: string;
 }
 
+/**
+ * One suspension event. Append-only. Every suspend appends a new
+ * entry; every resume appends a corresponding entry to `resumes`.
+ *
+ * The `cliff` is what just happened (the unfinished thread); the
+ * `invitation` is what the next opener should do. Both are
+ * required because the whole point of agora's pivot is that
+ * suspension is **information for re-entry**, not just "I left."
+ *
+ * Per principle 11, the prose is user-written — the substrate
+ * doesn't auto-generate it. An empty cliff/invitation defeats
+ * the purpose.
+ */
+export interface SuspensionEntry {
+  readonly at: string;
+  readonly by: string;
+  readonly cliff: string;
+  readonly invitation: string;
+}
+
+/**
+ * One resume event, paired with the most-recent suspension by index
+ * (resumes[N] resumes suspensions[N]). State-derivation invariant:
+ *   suspensions.length === resumes.length    → play is `playing` (or `concluded`)
+ *   suspensions.length === resumes.length + 1 → play is `suspended`
+ */
+export interface ResumeEntry {
+  readonly at: string;
+  readonly by: string;
+  readonly note?: string; // optional prose: "noir resumed and addressed the contradiction"
+}
+
 export class Play {
   readonly id: string;
   readonly game: string;
@@ -86,6 +120,8 @@ export class Play {
   readonly started_at: string;
   readonly started_by: string;
   readonly moves: readonly PlayMove[];
+  readonly suspensions: readonly SuspensionEntry[];
+  readonly resumes: readonly ResumeEntry[];
 
   private constructor(props: PlayProps) {
     this.id = props.id;
@@ -94,6 +130,8 @@ export class Play {
     this.started_at = props.started_at;
     this.started_by = props.started_by;
     this.moves = props.moves;
+    this.suspensions = props.suspensions;
+    this.resumes = props.resumes;
   }
 
   static start(input: {
@@ -123,6 +161,8 @@ export class Play {
       started_at,
       started_by: input.started_by,
       moves: [],
+      suspensions: [],
+      resumes: [],
     });
   }
 
@@ -134,11 +174,23 @@ export class Play {
       started_at: props.started_at,
       started_by: props.started_by,
       moves: props.moves,
+      suspensions: props.suspensions,
+      resumes: props.resumes,
     });
   }
 
+  /**
+   * Are we currently in a suspension? Derived from the array
+   * lengths — the source of truth is the append-only history,
+   * not a separate flag. (The `state` field on disk mirrors this
+   * for read convenience but the domain checks the arrays.)
+   */
+  get isSuspended(): boolean {
+    return this.suspensions.length === this.resumes.length + 1;
+  }
+
   toJSON(): Record<string, unknown> {
-    return {
+    const out: Record<string, unknown> = {
       id: this.id,
       game: this.game,
       state: this.state,
@@ -146,6 +198,13 @@ export class Play {
       started_by: this.started_by,
       moves: this.moves.map((m) => ({ ...m })),
     };
+    if (this.suspensions.length > 0) {
+      out['suspensions'] = this.suspensions.map((s) => ({ ...s }));
+    }
+    if (this.resumes.length > 0) {
+      out['resumes'] = this.resumes.map((r) => ({ ...r }));
+    }
+    return out;
   }
 }
 
@@ -210,5 +269,34 @@ export class PlayNotPlayable extends Error {
           : `Concluded plays are terminal.`),
     );
     this.name = 'PlayNotPlayable';
+  }
+}
+
+/** Tried to suspend a play that's already suspended (or concluded). */
+export class PlayCannotSuspend extends Error {
+  constructor(
+    readonly id: string,
+    readonly state: PlayState,
+  ) {
+    super(
+      `Play ${id} is in state "${state}"; only "playing" plays can be suspended. ` +
+        (state === 'suspended'
+          ? `Resume first if you want to suspend again with a new cliff.`
+          : `Concluded plays are terminal.`),
+    );
+    this.name = 'PlayCannotSuspend';
+  }
+}
+
+/** Tried to resume a play that isn't suspended. */
+export class PlayCannotResume extends Error {
+  constructor(
+    readonly id: string,
+    readonly state: PlayState,
+  ) {
+    super(
+      `Play ${id} is in state "${state}"; only "suspended" plays can be resumed.`,
+    );
+    this.name = 'PlayCannotResume';
   }
 }

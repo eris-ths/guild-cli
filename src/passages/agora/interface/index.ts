@@ -23,6 +23,8 @@ import { YamlPlayRepository } from '../infrastructure/YamlPlayRepository.js';
 import { newGame } from './handlers/new.js';
 import { startPlay } from './handlers/play.js';
 import { moveOnPlay } from './handlers/move.js';
+import { suspendPlay } from './handlers/suspend.js';
+import { resumePlay } from './handlers/resume.js';
 
 const HELP = `agora — game / play passage (v0 skeleton)
 
@@ -42,6 +44,21 @@ Usage:
                               CAS on moves.length protects re-entering
                               instances from silent overwrite. State-machine
                               boundary: only "playing" plays accept moves.
+
+  agora suspend <play-id> --cliff "<...>" --invitation "<...>"
+                          [--by <m>] [--format json|text]
+                              Pause a playing session with a cliff (what
+                              just happened) and an invitation (what the
+                              next opener should do). State: playing →
+                              suspended. The substrate-side Zeigarnik:
+                              future instances re-enter and act on the
+                              recorded invitation.
+
+  agora resume <play-id> [--note "<...>"] [--by <m>] [--format json|text]
+                              Pick up a suspended session. State:
+                              suspended → playing. Surfaces the closing
+                              cliff/invitation in the success output so
+                              the resuming actor reads what was paused on.
 
   agora --help                 This help.
   agora --version              Print version and exit.
@@ -82,6 +99,10 @@ export async function main(argv: readonly string[]): Promise<number> {
         return await startPlay({ games, plays, config }, args);
       case 'move':
         return await moveOnPlay({ plays, config }, args);
+      case 'suspend':
+        return await suspendPlay({ plays, config }, args);
+      case 'resume':
+        return await resumePlay({ plays, config }, args);
       default:
         process.stderr.write(`agora: unknown verb: ${cmd}\n${HELP}`);
         return 1;

@@ -5,6 +5,8 @@ import {
   PlayIdCollision,
   PlayMove,
   PlayVersionConflict,
+  ResumeEntry,
+  SuspensionEntry,
   parsePlayId,
 } from '../domain/Play.js';
 import { PlayRepository } from '../application/PlayRepository.js';
@@ -82,6 +84,8 @@ export class YamlPlayRepository implements PlayRepository {
               ? (obj['started_by'] as string)
               : 'unknown',
           moves: hydrateMoves(obj['moves']),
+          suspensions: hydrateSuspensions(obj['suspensions']),
+          resumes: hydrateResumes(obj['resumes']),
         });
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -114,37 +118,86 @@ export class YamlPlayRepository implements PlayRepository {
     expectedMovesCount: number,
     move: PlayMove,
   ): Promise<void> {
+    await this.appendArrayWithCAS(
+      play,
+      'moves',
+      expectedMovesCount,
+      move as unknown as Record<string, unknown>,
+      undefined, // no state transition on move
+    );
+  }
+
+  async appendSuspension(
+    play: Play,
+    expectedSuspensionsCount: number,
+    entry: SuspensionEntry,
+  ): Promise<void> {
+    await this.appendArrayWithCAS(
+      play,
+      'suspensions',
+      expectedSuspensionsCount,
+      entry as unknown as Record<string, unknown>,
+      'suspended',
+    );
+  }
+
+  async appendResume(
+    play: Play,
+    expectedResumesCount: number,
+    entry: ResumeEntry,
+  ): Promise<void> {
+    await this.appendArrayWithCAS(
+      play,
+      'resumes',
+      expectedResumesCount,
+      entry as unknown as Record<string, unknown>,
+      'playing',
+    );
+  }
+
+  /**
+   * Shared append-with-CAS helper. Re-reads the on-disk file,
+   * checks the named array's length matches `expectedCount`,
+   * appends the entry, optionally flips the `state` field,
+   * atomic-writes back. Same shape protects every state-changing
+   * append — principle 11 (AI-natural): re-entering instances
+   * detect concurrent appenders rather than silently overwrite.
+   */
+  private async appendArrayWithCAS(
+    play: Play,
+    arrayKey: 'moves' | 'suspensions' | 'resumes',
+    expectedCount: number,
+    entry: Record<string, unknown>,
+    newState: 'playing' | 'suspended' | 'concluded' | undefined,
+  ): Promise<void> {
     parseGameSlug(play.game);
     parsePlayId(play.id);
     const rel = join('plays', play.game, `${play.id}.yaml`);
     if (!existsSafe(this.base, rel)) {
-      // Caller is supposed to load before appending; if the file
-      // disappeared between load and write, surface the version
-      // conflict (the on-disk state is "no file" → equivalent to
-      // moves.length 0 mismatch with expected).
-      throw new PlayVersionConflict(play.id, expectedMovesCount, 0);
+      throw new PlayVersionConflict(play.id, expectedCount, 0);
     }
-    // CAS: re-read on-disk moves.length, compare against expected.
     const raw = readTextSafe(this.base, rel);
     const parsed = parseYamlSafe(raw, join(this.base, rel), this.config.onMalformed);
     if (parsed === undefined || parsed === null || typeof parsed !== 'object') {
-      throw new PlayVersionConflict(play.id, expectedMovesCount, 0);
+      throw new PlayVersionConflict(play.id, expectedCount, 0);
     }
     const obj = parsed as Record<string, unknown>;
-    const onDiskMoves = Array.isArray(obj['moves']) ? obj['moves'].length : 0;
-    if (onDiskMoves !== expectedMovesCount) {
-      throw new PlayVersionConflict(play.id, expectedMovesCount, onDiskMoves);
+    const onDiskCount = Array.isArray(obj[arrayKey])
+      ? (obj[arrayKey] as unknown[]).length
+      : 0;
+    if (onDiskCount !== expectedCount) {
+      throw new PlayVersionConflict(play.id, expectedCount, onDiskCount);
     }
-
-    // Compose the new on-disk shape: existing fields preserved,
-    // moves[] replaced with appended copy.
     const updated: Record<string, unknown> = {
       ...obj,
-      moves: [
-        ...(Array.isArray(obj['moves']) ? obj['moves'] : []),
-        { ...move },
+      [arrayKey]: [
+        ...(Array.isArray(obj[arrayKey]) ? (obj[arrayKey] as unknown[]) : []),
+        entry,
       ],
     };
+    if (newState !== undefined) {
+      updated['state'] = newState;
+    }
     writeTextSafeAtomic(this.base, rel, YAML.stringify(updated));
   }
 
@@ -183,6 +236,51 @@ function hydrateMoves(raw: unknown): PlayMove[] {
       by: r['by'] as string,
       text: r['text'] as string,
     });
+  }
+  return out;
+}
+
+function hydrateSuspensions(raw: unknown): SuspensionEntry[] {
+  if (!Array.isArray(raw)) return [];
+  const out: SuspensionEntry[] = [];
+  for (const entry of raw) {
+    if (!entry || typeof entry !== 'object') continue;
+    const r = entry as Record<string, unknown>;
+    if (
+      typeof r['at'] !== 'string' ||
+      typeof r['by'] !== 'string' ||
+      typeof r['cliff'] !== 'string' ||
+      typeof r['invitation'] !== 'string'
+    ) {
+      continue;
+    }
+    out.push({
+      at: r['at'] as string,
+      by: r['by'] as string,
+      cliff: r['cliff'] as string,
+      invitation: r['invitation'] as string,
+    });
+  }
+  return out;
+}
+
+function hydrateResumes(raw: unknown): ResumeEntry[] {
+  if (!Array.isArray(raw)) return [];
+  const out: ResumeEntry[] = [];
+  for (const entry of raw) {
+    if (!entry || typeof entry !== 'object') continue;
+    const r = entry as Record<string, unknown>;
+    if (typeof r['at'] !== 'string' || typeof r['by'] !== 'string') {
+      continue;
+    }
+    const e: ResumeEntry = {
+      at: r['at'] as string,
+      by: r['by'] as string,
+    };
+    if (typeof r['note'] === 'string') {
+      (e as { note?: string }).note = r['note'] as string;
+    }
+    out.push(e);
   }
   return out;
 }

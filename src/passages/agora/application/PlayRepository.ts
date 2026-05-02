@@ -1,4 +1,4 @@
-import { Play, PlayMove } from '../domain/Play.js';
+import { Play, PlayMove, ResumeEntry, SuspensionEntry } from '../domain/Play.js';
 
 /**
  * Port for play session storage.
@@ -28,6 +28,25 @@ export interface PlayRepository {
     play: Play,
     expectedMovesCount: number,
     move: PlayMove,
+  ): Promise<void>;
+  /**
+   * Append a suspension and flip state to `suspended`. CAS on
+   * `expectedSuspensionsCount` (the load-time suspensions.length)
+   * detects concurrent suspenders.
+   */
+  appendSuspension(
+    play: Play,
+    expectedSuspensionsCount: number,
+    entry: SuspensionEntry,
+  ): Promise<void>;
+  /**
+   * Append a resume and flip state back to `playing`. CAS on
+   * `expectedResumesCount` (the load-time resumes.length).
+   */
+  appendResume(
+    play: Play,
+    expectedResumesCount: number,
+    entry: ResumeEntry,
   ): Promise<void>;
   /**
    * Allocate a fresh sequence for the given game/date pair. Used by

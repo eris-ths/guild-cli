@@ -83,13 +83,22 @@ agora-specific records live under `<content_root>/agora/`:
 - [x] `agora new` — create a Game definition
 - [x] `agora play` — start a play session against a Game
 - [x] `agora move` — append a move (with optimistic CAS)
-- [ ] `agora suspend <play-id>` — first-class suspension with
-      cliff/invitation prose
-- [ ] `agora resume <play-id>` — pick up from a suspension
-- [ ] `agora conclude <play-id>` — terminal state from playing or suspended
+- [x] `agora suspend` — pause with cliff + invitation (the design pivot)
+- [x] `agora resume` — pick up; surfaces closing cliff/invitation
+- [ ] `agora conclude` — terminal state from playing or suspended
 - [ ] `agora list` — list games + plays
 - [ ] `agora show <slug|play-id>` — detail view
 - [ ] `agora schema` — agent-dispatch contract (principle 10)
+
+The substrate-side Zeigarnik (issue #117) is in place: every suspend
+records `cliff` (what just happened) and `invitation` (what the next
+opener should do), both append-only. Resume surfaces them in its
+success output so the agent re-entering reads the paused-on context
+without a separate query. Multi-suspend/resume cycles are preserved
+as separate entries; the state-derivation invariant holds:
+
+  suspensions.length === resumes.length     → playing (or concluded)
+  suspensions.length === resumes.length + 1 → suspended
 
 ## Play state machine (v0)
 
