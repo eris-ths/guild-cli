@@ -1,4 +1,4 @@
-import { Play } from '../domain/Play.js';
+import { Play, PlayMove } from '../domain/Play.js';
 
 /**
  * Port for play session storage.
@@ -13,6 +13,22 @@ export interface PlayRepository {
   findById(id: string): Promise<Play | null>;
   /** Create a brand-new play; throws PlayIdCollision on duplicate. */
   saveNew(play: Play): Promise<void>;
+  /**
+   * Append a move to an existing play with optimistic CAS. The
+   * caller passes the moves.length they loaded (`expectedMovesCount`);
+   * if the on-disk file has a different moves.length, the write
+   * fails with PlayVersionConflict. This protects re-entering
+   * instances from silently overwriting concurrent moves —
+   * AI-natural per principle 11.
+   *
+   * The new move is appended atomically (.tmp + rename) so readers
+   * never see a torn file.
+   */
+  appendMove(
+    play: Play,
+    expectedMovesCount: number,
+    move: PlayMove,
+  ): Promise<void>;
   /**
    * Allocate a fresh sequence for the given game/date pair. Used by
    * `agora play` when starting a session — the caller computes

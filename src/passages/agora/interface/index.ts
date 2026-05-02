@@ -22,6 +22,7 @@ import { YamlGameRepository } from '../infrastructure/YamlGameRepository.js';
 import { YamlPlayRepository } from '../infrastructure/YamlPlayRepository.js';
 import { newGame } from './handlers/new.js';
 import { startPlay } from './handlers/play.js';
+import { moveOnPlay } from './handlers/move.js';
 
 const HELP = `agora — game / play passage (v0 skeleton)
 
@@ -34,8 +35,13 @@ Usage:
   agora play --slug <game-slug> [--by <m>] [--format json|text]
                               Start a play session against an existing Game.
                               Lands at <content_root>/agora/plays/<slug>/<play-id>.yaml.
-                              Initial state: playing. Future verbs drive the
-                              state machine: move / suspend / resume / conclude.
+                              Initial state: playing.
+
+  agora move <play-id> [--by <m>] --text "<text>" [--format json|text]
+                              Append a move to a playing session. Optimistic
+                              CAS on moves.length protects re-entering
+                              instances from silent overwrite. State-machine
+                              boundary: only "playing" plays accept moves.
 
   agora --help                 This help.
   agora --version              Print version and exit.
@@ -74,6 +80,8 @@ export async function main(argv: readonly string[]): Promise<number> {
         return await newGame({ repo: games, config }, args);
       case 'play':
         return await startPlay({ games, plays, config }, args);
+      case 'move':
+        return await moveOnPlay({ plays, config }, args);
       default:
         process.stderr.write(`agora: unknown verb: ${cmd}\n${HELP}`);
         return 1;

@@ -4,6 +4,7 @@ import {
   Play,
   PlayIdCollision,
   PlayMove,
+  PlayVersionConflict,
   parsePlayId,
 } from '../domain/Play.js';
 import { PlayRepository } from '../application/PlayRepository.js';
@@ -14,6 +15,7 @@ import {
   listDirSafe,
   readTextSafe,
   writeTextSafe,
+  writeTextSafeAtomic,
 } from '../../../infrastructure/persistence/safeFs.js';
 import { parseYamlSafe } from '../../../infrastructure/persistence/parseYamlSafe.js';
 
@@ -105,6 +107,45 @@ export class YamlPlayRepository implements PlayRepository {
       }
       throw e;
     }
+  }
+
+  async appendMove(
+    play: Play,
+    expectedMovesCount: number,
+    move: PlayMove,
+  ): Promise<void> {
+    parseGameSlug(play.game);
+    parsePlayId(play.id);
+    const rel = join('plays', play.game, `${play.id}.yaml`);
+    if (!existsSafe(this.base, rel)) {
+      // Caller is supposed to load before appending; if the file
+      // disappeared between load and write, surface the version
+      // conflict (the on-disk state is "no file" → equivalent to
+      // moves.length 0 mismatch with expected).
+      throw new PlayVersionConflict(play.id, expectedMovesCount, 0);
+    }
+    // CAS: re-read on-disk moves.length, compare against expected.
+    const raw = readTextSafe(this.base, rel);
+    const parsed = parseYamlSafe(raw, join(this.base, rel), this.config.onMalformed);
+    if (parsed === undefined || parsed === null || typeof parsed !== 'object') {
+      throw new PlayVersionConflict(play.id, expectedMovesCount, 0);
+    }
+    const obj = parsed as Record<string, unknown>;
+    const onDiskMoves = Array.isArray(obj['moves']) ? obj['moves'].length : 0;
+    if (onDiskMoves !== expectedMovesCount) {
+      throw new PlayVersionConflict(play.id, expectedMovesCount, onDiskMoves);
+    }
+
+    // Compose the new on-disk shape: existing fields preserved,
+    // moves[] replaced with appended copy.
+    const updated: Record<string, unknown> = {
+      ...obj,
+      moves: [
+        ...(Array.isArray(obj['moves']) ? obj['moves'] : []),
+        { ...move },
+      ],
+    };
+    writeTextSafeAtomic(this.base, rel, YAML.stringify(updated));
   }
 
   async nextSequence(gameSlug: string, dateKey: string): Promise<number> {

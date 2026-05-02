@@ -82,13 +82,13 @@ agora-specific records live under `<content_root>/agora/`:
 
 - [x] `agora new` — create a Game definition
 - [x] `agora play` — start a play session against a Game
-- [ ] `agora list` — list games + plays
-- [ ] `agora show <slug|play-id>` — detail view
-- [ ] `agora move <play-id>` — append a move
+- [x] `agora move` — append a move (with optimistic CAS)
 - [ ] `agora suspend <play-id>` — first-class suspension with
       cliff/invitation prose
 - [ ] `agora resume <play-id>` — pick up from a suspension
 - [ ] `agora conclude <play-id>` — terminal state from playing or suspended
+- [ ] `agora list` — list games + plays
+- [ ] `agora show <slug|play-id>` — detail view
 - [ ] `agora schema` — agent-dispatch contract (principle 10)
 
 ## Play state machine (v0)

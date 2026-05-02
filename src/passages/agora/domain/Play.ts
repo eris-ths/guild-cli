@@ -164,3 +164,51 @@ export class GameNotFoundForPlay extends Error {
     this.name = 'GameNotFoundForPlay';
   }
 }
+
+export class PlayNotFound extends Error {
+  constructor(id: string) {
+    super(`Play "${id}" not found`);
+    this.name = 'PlayNotFound';
+  }
+}
+
+/**
+ * Optimistic-lock conflict on append-move. The expected version is
+ * the moves.length the caller loaded; the actual version is what's
+ * on disk now. AI-natural: an instance re-entering and appending
+ * sees a structured collision (not a silent overwrite).
+ */
+export class PlayVersionConflict extends Error {
+  readonly code = 'PLAY_VERSION_CONFLICT' as const;
+  constructor(
+    readonly id: string,
+    readonly expected: number,
+    readonly found: number,
+  ) {
+    super(
+      `Play ${id} changed on disk (expected moves count ${expected}, found ${found}); reload and retry`,
+    );
+    this.name = 'PlayVersionConflict';
+  }
+}
+
+/**
+ * State-machine refusal: caller tried to append a move to a play
+ * that's no longer accepting them (suspended or concluded). The
+ * agent gets a structured error that names the current state,
+ * not silent failure.
+ */
+export class PlayNotPlayable extends Error {
+  constructor(
+    readonly id: string,
+    readonly state: PlayState,
+  ) {
+    super(
+      `Play ${id} is in state "${state}"; only "playing" plays accept moves. ` +
+        (state === 'suspended'
+          ? `Resume first: agora resume ${id}`
+          : `Concluded plays are terminal.`),
+    );
+    this.name = 'PlayNotPlayable';
+  }
+}
