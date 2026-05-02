@@ -19,7 +19,9 @@ import { GuildConfig } from '../../../infrastructure/config/GuildConfig.js';
 import { parseArgs } from '../../../interface/shared/parseArgs.js';
 import { DomainError } from '../../../domain/shared/DomainError.js';
 import { YamlGameRepository } from '../infrastructure/YamlGameRepository.js';
+import { YamlPlayRepository } from '../infrastructure/YamlPlayRepository.js';
 import { newGame } from './handlers/new.js';
+import { startPlay } from './handlers/play.js';
 
 const HELP = `agora — game / play passage (v0 skeleton)
 
@@ -28,6 +30,12 @@ Usage:
                                                 [--description "<d>"] [--format json|text]
                               Create a new Game definition under
                               <content_root>/agora/games/<slug>.yaml.
+
+  agora play --slug <game-slug> [--by <m>] [--format json|text]
+                              Start a play session against an existing Game.
+                              Lands at <content_root>/agora/plays/<slug>/<play-id>.yaml.
+                              Initial state: playing. Future verbs drive the
+                              state machine: move / suspend / resume / conclude.
 
   agora --help                 This help.
   agora --version              Print version and exit.
@@ -57,13 +65,15 @@ export async function main(argv: readonly string[]): Promise<number> {
   const [cmd, ...rest] = argv;
   const args = parseArgs(rest);
   const config = GuildConfig.load();
-  const repo = new YamlGameRepository(config);
-  const deps = { repo, config };
+  const games = new YamlGameRepository(config);
+  const plays = new YamlPlayRepository(config);
 
   try {
     switch (cmd) {
       case 'new':
-        return await newGame(deps, args);
+        return await newGame({ repo: games, config }, args);
+      case 'play':
+        return await startPlay({ games, plays, config }, args);
       default:
         process.stderr.write(`agora: unknown verb: ${cmd}\n${HELP}`);
         return 1;

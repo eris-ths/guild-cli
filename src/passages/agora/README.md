@@ -36,16 +36,25 @@ suspend/resume centrality, the Quest/Sandbox over Match selection.
 
 ```
 src/passages/agora/
-  domain/Game.ts                    # Game value object
-  application/GameRepository.ts     # port
-  infrastructure/YamlGameRepository.ts  # adapter (uses gate's safeFs substrate)
+  domain/
+    Game.ts                         # Game value object
+    Play.ts                         # Play value object + state machine
+  application/
+    GameRepository.ts               # port
+    PlayRepository.ts               # port
+  infrastructure/
+    YamlGameRepository.ts           # adapter (uses gate's safeFs substrate)
+    YamlPlayRepository.ts           # adapter (per-game subdirs)
   interface/
     index.ts                        # CLI dispatcher (entry point)
     handlers/new.ts                 # `agora new` verb
+    handlers/play.ts                # `agora play` verb
   README.md                         # this file
 
 bin/agora.mjs                       # passage binary
-tests/passages/agora/new.test.ts    # contract tests (8 tests)
+tests/passages/agora/
+  new.test.ts                       # `agora new` contract (8 tests)
+  play.test.ts                      # `agora play` contract (7 tests)
 ```
 
 ## Substrate sharing with gate
@@ -72,14 +81,28 @@ agora-specific records live under `<content_root>/agora/`:
 ## Status
 
 - [x] `agora new` — create a Game definition
+- [x] `agora play` — start a play session against a Game
 - [ ] `agora list` — list games + plays
 - [ ] `agora show <slug|play-id>` — detail view
-- [ ] `agora play <slug>` — start a play session
 - [ ] `agora move <play-id>` — append a move
 - [ ] `agora suspend <play-id>` — first-class suspension with
       cliff/invitation prose
 - [ ] `agora resume <play-id>` — pick up from a suspension
+- [ ] `agora conclude <play-id>` — terminal state from playing or suspended
 - [ ] `agora schema` — agent-dispatch contract (principle 10)
+
+## Play state machine (v0)
+
+```
+playing ── suspend ──▶ suspended ── resume ──▶ playing
+   │                       │
+   └──── conclude ─────────┴───────▶ concluded (terminal)
+```
+
+`conclude` is allowed from both `playing` and `suspended` because a
+suspended play that's never picked back up is a valid outcome
+("the conversation drifted away"). The cliff/invitation prose
+remains in the record either way.
 
 Each verb lands as a separate commit on this branch with its own
 test surface. Lore graduates (e.g., suspend/resume mechanics
