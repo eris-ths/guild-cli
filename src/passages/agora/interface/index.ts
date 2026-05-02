@@ -28,6 +28,7 @@ import { resumePlay } from './handlers/resume.js';
 import { concludePlay } from './handlers/conclude.js';
 import { listAgora } from './handlers/list.js';
 import { showAgora } from './handlers/show.js';
+import { schemaCmd } from './handlers/schema.js';
 
 const HELP = `agora — game / play passage (v0 skeleton)
 
@@ -68,6 +69,10 @@ Usage:
                               "playing" or "suspended" — a suspended
                               play that drifts away is a valid outcome.
                               concluded plays accept no further verbs.
+
+  agora schema [--verb <name>] [--format json|text]
+                              Agent dispatch contract for this passage
+                              (principle 10). draft-07 JSON Schema subset.
 
   agora list [--game <slug>] [--state playing|suspended|concluded] [--format json|text]
                               Enumerate games and plays. Filters: --game
@@ -130,6 +135,8 @@ export async function main(argv: readonly string[]): Promise<number> {
         return await listAgora({ games, plays, config }, args);
       case 'show':
         return await showAgora({ games, plays, config }, args);
+      case 'schema':
+        return await schemaCmd(args);
       default:
         process.stderr.write(`agora: unknown verb: ${cmd}\n${HELP}`);
         return 1;
