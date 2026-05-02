@@ -8,6 +8,31 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 ## [Unreleased]
 
 ### Added
+- **`lore/principles/11-ai-first-human-as-projection.md`.** Names
+  the order-asymmetry every existing principle has been enacting
+  without declaring: design decisions start from "is this AI-
+  natural?", not from "is this human-friendly?" The substrate
+  belongs to the agent's cognition; human-facing ergonomics are
+  a projection layer assembled outside the substrate. Order is
+  substrate → projection, never projection → substrate.
+
+  Unlike principles 09 and 10 (which were waited-on for a third
+  instance to surface the pattern), 11 was named immediately on
+  recognition — it had been the latent stance the project chose
+  for every prior decision (`gate` JSON-default, snake_case JSON,
+  schema as contract, stderr-only notices, explicit flags refusing
+  human-default-intuition, etc.) but had no written rule pushing
+  back when "let's make it more human-friendly" PRs would chip
+  the substrate. With 11 named, the question becomes structural:
+  is the friendlier version a projection, or a substrate change?
+  Projections welcome; substrate changes for human-friendliness
+  not.
+
+  Cross-referenced from principle 10 (schema-as-contract is one
+  concrete face of 11). Will become the upstream rule for agora
+  design ([issue #117](https://github.com/eris-ths/guild-cli/issues/117))
+  so passage primitives don't re-litigate AI-first per primitive.
+
 - **Schema/KNOWN_FLAGS drift detector test.** Mechanical CI
   enforcement of principle 10's input-side obligation: every flag
   the runtime accepts must appear in the schema, and vice versa.

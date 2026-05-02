@@ -34,6 +34,14 @@ match the runtime in both directions:
 
 ## Why this is a separate principle
 
+Principle 11 (AI-first, human as projection) is the upstream
+stance this principle enacts. 11 says the substrate the agent
+reads must be AI-natural; 10 names *one* of the things "AI-
+natural" requires — a published, verifiable dispatch contract.
+Without 11, 10 reads as a schema-discipline rule. With 11, 10 is
+revealed as one concrete face of the deeper order asymmetry
+("derive from substrate, not from projection").
+
 Principle 02 (advisory not directive) says the tool flags edges
 without forbidding crossings. Schema-as-contract is a corollary:
 **the tool can only flag edges the agent knows exist.** A bare

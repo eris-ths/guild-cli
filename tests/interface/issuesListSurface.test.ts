@@ -61,6 +61,14 @@ function runGate(
 }
 
 // Seed two issues across three states so list filtering is observable.
+//
+// The `start` call must reference whatever id the second `add` actually
+// produced. Issue ids are date-derived (i-YYYY-MM-DD-NNNN) using the
+// runtime clock, so hard-coding a date here would silently break on
+// the next calendar roll. We derive today's date the same way the
+// runtime does and target the "0002" sequence, which is correct as
+// long as the bootstrap content_root starts empty (it does — every
+// test gets a fresh tmpdir).
 function seedFixture(root: string): void {
   runGate(root, [
     'issues', 'add',
@@ -74,8 +82,9 @@ function seedFixture(root: string): void {
   ], { GUILD_ACTOR: 'alice' });
   // Move the second one to in_progress so the open-vs-all distinction
   // is visible.
+  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
   runGate(root, [
-    'issues', 'start', 'i-2026-05-01-0002',
+    'issues', 'start', `i-${today}-0002`,
   ], { GUILD_ACTOR: 'alice' });
 }
 

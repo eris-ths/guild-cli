@@ -36,16 +36,25 @@ Claude Opus 4.6) — it was already present in the code but
 unnamed. Principle 08 was named during the design pass for the
 voice-budget audit (2026-05-01, nao + Claude Opus 4.7), which
 PR #94's six-point surface set forced into focus. Principles
-09 and 10 were named in a fresh-agent dogfood session
-(2026-05-01, nao + Claude Opus 4.7) using the **three-voice
-review pattern** (kiri-author / noir-devil / mira-mirror):
-multiple PRs each had been re-deriving the rule without naming
-it (#108/#110 register+boot orientation disclosure → 09;
-#103/#105/#111 schema-vs-runtime drift + ~10 bare output
-schemas → 10). The mira-mirror role surfaced each as a
-meta-question neither author nor devil had named. They are not
-timeless truths — they are stances, named, so a future reader
-can engage with them rather than re-derive them.
+09 and 10 were named in the same session, surfacing through the
+**three-voice review pattern** (kiri-author / noir-devil /
+mira-mirror): three PRs each had been re-deriving the rule
+without naming it (#108/#110 register+boot orientation
+disclosure → 09; #103/#105/#111 schema-vs-runtime drift +
+~10 bare output schemas → 10). The mira-mirror role surfaced
+each as a meta-question neither author nor devil had named.
+
+Principle 11 (AI-first, human as projection) was named on the
+same day, in the design conversation that opened agora as the
+second passage. Unlike 09 and 10, 11 wasn't waited-on for a
+third instance — it had been the latent stance the project
+consistently chose for every prior decision, but was never
+pinned. nao made the order asymmetry explicit ("人間でも AI-first
+は変わらない、 人間向けは projection で済む") and the principle
+was named immediately so agora design wouldn't re-litigate it.
+
+They are not timeless truths — they are stances, named, so a
+future reader can engage with them rather than re-derive them.
 
 ## Reading path
 
@@ -56,13 +65,21 @@ If you have 5 minutes:
 Those two carry the most weight for how agents interact with the
 tool.
 
-If you have 20 minutes, read all ten in order. They compose:
-each builds on the previous. Principles 09 (orientation
-disclosure) and 10 (schema as contract) are the most recent and
-the most agent-first — 10 is structurally the foundation 09 was
-implicitly leaning on (without "schema is contract," 09's
-"missing disclosure was a contract bug" claim doesn't have a
-contract to be a bug *of*). Read them after the first eight.
+If you have 20 minutes, read all eleven in order. They compose:
+each builds on the previous, and the most recent ones are the
+foundations the earlier ones implicitly lean on.
+
+- **Principle 11 (AI-first, human as projection)** is the most
+  upstream — the order asymmetry every other principle enacts
+  without naming. Read it first if you want the stance behind
+  the substrate; read it after the others if you want to feel
+  what each principle was leaning on without saying so.
+- **Principle 10 (schema as contract)** generalizes principle
+  11 to the agent-dispatchable surface and is the foundation
+  09 was leaning on.
+- **Principle 09 (orientation disclosure)** is the operational
+  test case for 10 + 11: when surface drifts from substrate,
+  the verb has to disclose.
 
 ## Relationship to `alexandria/`
 
