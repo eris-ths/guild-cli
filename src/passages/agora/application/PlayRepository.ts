@@ -9,6 +9,14 @@ import { Play, PlayMove, ResumeEntry, SuspensionEntry } from '../domain/Play.js'
  * the same flat directory.
  */
 export interface PlayRepository {
+  /**
+   * Find every play with the given id, scanning every game's
+   * subdirectory. Used by `agora show` when the user passes a
+   * play id without `--game` and there could be cross-game
+   * collisions (each game has its own sequence). Returns one
+   * entry per matching game; empty when no game has the id.
+   */
+  findAllById(id: string): Promise<Play[]>;
   /** Find a play by its id (sequence is unique enough to scan). */
   findById(id: string): Promise<Play | null>;
   /** Every play in the content_root, optionally scoped to one game. */

@@ -86,8 +86,9 @@ agora-specific records live under `<content_root>/agora/`:
 - [x] `agora suspend` — pause with cliff + invitation (the design pivot)
 - [x] `agora resume` — pick up; surfaces closing cliff/invitation
 - [x] `agora list` — enumerate games + plays (with --game / --state filters)
+- [x] `agora show <slug-or-play-id>` — detail view; for plays renders
+      full move + suspension/resume history paired by index
 - [ ] `agora conclude` — terminal state from playing or suspended
-- [ ] `agora show <slug|play-id>` — detail view
 - [ ] `agora schema` — agent-dispatch contract (principle 10)
 
 The substrate-side Zeigarnik (issue #117) is in place: every suspend

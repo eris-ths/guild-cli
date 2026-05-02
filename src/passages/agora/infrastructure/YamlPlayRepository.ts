@@ -50,7 +50,8 @@ export class YamlPlayRepository implements PlayRepository {
     // games — different games can have their own `2026-05-02-001`.
     // findById returns the FIRST match found while walking, so it
     // is unsuitable for cross-game disambiguation; listAll reads
-    // each game's directory directly via loadFromRel.
+    // each game's directory directly via loadFromRel. For
+    // disambiguation, callers should use findAllById.
     const playsRoot = 'plays';
     const gameDirs = listDirSafe(this.base, playsRoot);
     for (const gameSlug of gameDirs) {
@@ -60,6 +61,21 @@ export class YamlPlayRepository implements PlayRepository {
       if (play) return play;
     }
     return null;
+  }
+
+  async findAllById(id: string): Promise<Play[]> {
+    parsePlayId(id);
+    const out: Play[] = [];
+    const playsRoot = 'plays';
+    const gameDirs = listDirSafe(this.base, playsRoot);
+    for (const gameSlug of gameDirs) {
+      const rel = join(playsRoot, gameSlug, `${id}.yaml`);
+      if (!existsSafe(this.base, rel)) continue;
+      const play = this.loadFromRel(rel, gameSlug);
+      if (play) out.push(play);
+    }
+    out.sort((a, b) => a.game.localeCompare(b.game));
+    return out;
   }
 
   /**

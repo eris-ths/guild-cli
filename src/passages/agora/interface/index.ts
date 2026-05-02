@@ -26,6 +26,7 @@ import { moveOnPlay } from './handlers/move.js';
 import { suspendPlay } from './handlers/suspend.js';
 import { resumePlay } from './handlers/resume.js';
 import { listAgora } from './handlers/list.js';
+import { showAgora } from './handlers/show.js';
 
 const HELP = `agora — game / play passage (v0 skeleton)
 
@@ -65,6 +66,13 @@ Usage:
                               Enumerate games and plays. Filters: --game
                               narrows plays to one game (drops games list);
                               --state narrows plays to a single state.
+
+  agora show <slug-or-play-id> [--game <slug>] [--format json|text]
+                              Detail view of one game or one play. Argument
+                              auto-disambiguates: play ids match
+                              YYYY-MM-DD-NNN, anything else is a game slug.
+                              --game disambiguates cross-game id collisions
+                              for plays.
 
   agora --help                 This help.
   agora --version              Print version and exit.
@@ -111,6 +119,8 @@ export async function main(argv: readonly string[]): Promise<number> {
         return await resumePlay({ plays, config }, args);
       case 'list':
         return await listAgora({ games, plays, config }, args);
+      case 'show':
+        return await showAgora({ games, plays, config }, args);
       default:
         process.stderr.write(`agora: unknown verb: ${cmd}\n${HELP}`);
         return 1;
