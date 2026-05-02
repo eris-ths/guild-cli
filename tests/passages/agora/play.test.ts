@@ -115,7 +115,13 @@ test('agora play: JSON mode emits snake_case envelope', (t) => {
   assert.equal(payload.game, 'sandbox-game');
   assert.equal(payload.state, 'playing');
   assert.equal(payload.config_file, join(root, 'guild.config.yaml'));
-  assert.match(payload.where_written, /agora\/plays\/sandbox-game\/\d{4}-\d{2}-\d{2}-\d{3}\.yaml$/);
+  // Normalise path separators before regex match — Windows uses
+  // backslashes, POSIX uses forward slashes. Same pattern as
+  // tests/interface/doctorUnrecognized.test.ts (PR #107 fix).
+  assert.match(
+    payload.where_written.replace(/\\/g, '/'),
+    /agora\/plays\/sandbox-game\/\d{4}-\d{2}-\d{2}-\d{3}\.yaml$/,
+  );
   // suggested_next points at 'move' (the next verb in the lifecycle)
   assert.equal(payload.suggested_next.verb, 'move');
   // No camelCase keys (principle 11 + #109)
