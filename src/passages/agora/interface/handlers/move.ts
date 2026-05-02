@@ -94,10 +94,13 @@ export async function moveOnPlay(deps: MoveDeps, args: ParsedArgs): Promise<numb
           where_written,
           config_file: deps.config.configFile,
           suggested_next: {
+            // args.by intentionally omitted (issue #122) — see play.ts
+            // for the rationale. Multi-actor Sandbox plays alternate;
+            // agora doesn't bias toward same-actor continuation.
             verb: 'move',
-            args: { play_id: play.id, by },
+            args: { play_id: play.id },
             reason:
-              'Move appended. Continue with another `agora move`, leave a cliff with `agora suspend`, or close the session with `agora conclude` (suspend / resume / conclude land in subsequent commits).',
+              'Move appended. Continue with another `agora move`, leave a cliff with `agora suspend`, or close the session with `agora conclude`.',
           },
         },
         null,
