@@ -72,6 +72,15 @@ export interface PlayProps {
   readonly moves: readonly PlayMove[];
   readonly suspensions: readonly SuspensionEntry[];
   readonly resumes: readonly ResumeEntry[];
+  /**
+   * Set when state is `concluded`. Inline (not array) because
+   * `concluded` is terminal — at most one conclusion per play.
+   * Mirrors gate's pattern of putting closure prose on the closing
+   * status_log entry rather than in a separate stream.
+   */
+  readonly concluded_at?: string;
+  readonly concluded_by?: string;
+  readonly concluded_note?: string;
 }
 
 export interface PlayMove {
@@ -122,6 +131,9 @@ export class Play {
   readonly moves: readonly PlayMove[];
   readonly suspensions: readonly SuspensionEntry[];
   readonly resumes: readonly ResumeEntry[];
+  readonly concluded_at?: string;
+  readonly concluded_by?: string;
+  readonly concluded_note?: string;
 
   private constructor(props: PlayProps) {
     this.id = props.id;
@@ -132,6 +144,9 @@ export class Play {
     this.moves = props.moves;
     this.suspensions = props.suspensions;
     this.resumes = props.resumes;
+    if (props.concluded_at !== undefined) this.concluded_at = props.concluded_at;
+    if (props.concluded_by !== undefined) this.concluded_by = props.concluded_by;
+    if (props.concluded_note !== undefined) this.concluded_note = props.concluded_note;
   }
 
   static start(input: {
@@ -176,6 +191,9 @@ export class Play {
       moves: props.moves,
       suspensions: props.suspensions,
       resumes: props.resumes,
+      ...(props.concluded_at !== undefined ? { concluded_at: props.concluded_at } : {}),
+      ...(props.concluded_by !== undefined ? { concluded_by: props.concluded_by } : {}),
+      ...(props.concluded_note !== undefined ? { concluded_note: props.concluded_note } : {}),
     });
   }
 
@@ -204,6 +222,9 @@ export class Play {
     if (this.resumes.length > 0) {
       out['resumes'] = this.resumes.map((r) => ({ ...r }));
     }
+    if (this.concluded_at !== undefined) out['concluded_at'] = this.concluded_at;
+    if (this.concluded_by !== undefined) out['concluded_by'] = this.concluded_by;
+    if (this.concluded_note !== undefined) out['concluded_note'] = this.concluded_note;
     return out;
   }
 }
@@ -298,5 +319,15 @@ export class PlayCannotResume extends Error {
       `Play ${id} is in state "${state}"; only "suspended" plays can be resumed.`,
     );
     this.name = 'PlayCannotResume';
+  }
+}
+
+/** Tried to conclude a play that's already concluded. */
+export class PlayAlreadyConcluded extends Error {
+  constructor(readonly id: string) {
+    super(
+      `Play ${id} is already concluded — terminal state, no further transitions.`,
+    );
+    this.name = 'PlayAlreadyConcluded';
   }
 }

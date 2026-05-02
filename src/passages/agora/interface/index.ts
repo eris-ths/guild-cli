@@ -25,6 +25,7 @@ import { startPlay } from './handlers/play.js';
 import { moveOnPlay } from './handlers/move.js';
 import { suspendPlay } from './handlers/suspend.js';
 import { resumePlay } from './handlers/resume.js';
+import { concludePlay } from './handlers/conclude.js';
 import { listAgora } from './handlers/list.js';
 import { showAgora } from './handlers/show.js';
 
@@ -61,6 +62,12 @@ Usage:
                               suspended → playing. Surfaces the closing
                               cliff/invitation in the success output so
                               the resuming actor reads what was paused on.
+
+  agora conclude <play-id> [--note "<final note>"] [--by <m>] [--format json|text]
+                              Terminal state transition. Allowed from
+                              "playing" or "suspended" — a suspended
+                              play that drifts away is a valid outcome.
+                              concluded plays accept no further verbs.
 
   agora list [--game <slug>] [--state playing|suspended|concluded] [--format json|text]
                               Enumerate games and plays. Filters: --game
@@ -117,6 +124,8 @@ export async function main(argv: readonly string[]): Promise<number> {
         return await suspendPlay({ plays, config }, args);
       case 'resume':
         return await resumePlay({ plays, config }, args);
+      case 'conclude':
+        return await concludePlay({ plays, config }, args);
       case 'list':
         return await listAgora({ games, plays, config }, args);
       case 'show':

@@ -59,6 +59,20 @@ export interface PlayRepository {
     entry: ResumeEntry,
   ): Promise<void>;
   /**
+   * Set the conclusion fields and flip state to `concluded`.
+   * `expectedState` (the load-time state) is checked against the
+   * on-disk file — if it changed (concurrent suspend/resume), the
+   * write fails with PlayVersionConflict. concluded is terminal,
+   * so no further transitions are accepted after this returns.
+   */
+  saveConclusion(
+    play: Play,
+    expectedState: 'playing' | 'suspended',
+    concluded_at: string,
+    concluded_by: string,
+    concluded_note: string | undefined,
+  ): Promise<void>;
+  /**
    * Allocate a fresh sequence for the given game/date pair. Used by
    * `agora play` when starting a session — the caller computes
    * `today` (YYYY-MM-DD) and asks for the next available sequence

@@ -116,6 +116,15 @@ export class YamlPlayRepository implements PlayRepository {
         moves: hydrateMoves(obj['moves']),
         suspensions: hydrateSuspensions(obj['suspensions']),
         resumes: hydrateResumes(obj['resumes']),
+        ...(typeof obj['concluded_at'] === 'string'
+          ? { concluded_at: obj['concluded_at'] as string }
+          : {}),
+        ...(typeof obj['concluded_by'] === 'string'
+          ? { concluded_by: obj['concluded_by'] as string }
+          : {}),
+        ...(typeof obj['concluded_note'] === 'string'
+          ? { concluded_note: obj['concluded_note'] as string }
+          : {}),
       });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -218,6 +227,45 @@ export class YamlPlayRepository implements PlayRepository {
       entry as unknown as Record<string, unknown>,
       'playing',
     );
+  }
+
+  async saveConclusion(
+    play: Play,
+    expectedState: 'playing' | 'suspended',
+    concluded_at: string,
+    concluded_by: string,
+    concluded_note: string | undefined,
+  ): Promise<void> {
+    parseGameSlug(play.game);
+    parsePlayId(play.id);
+    const rel = join('plays', play.game, `${play.id}.yaml`);
+    if (!existsSafe(this.base, rel)) {
+      throw new PlayVersionConflict(play.id, 1, 0);
+    }
+    const raw = readTextSafe(this.base, rel);
+    const parsed = parseYamlSafe(raw, join(this.base, rel), this.config.onMalformed);
+    if (parsed === undefined || parsed === null || typeof parsed !== 'object') {
+      throw new PlayVersionConflict(play.id, 1, 0);
+    }
+    const obj = parsed as Record<string, unknown>;
+    // CAS on state: if the on-disk state changed since load (e.g.
+    // a concurrent suspend or resume slipped in between our load
+    // and write), surface the conflict rather than overwriting.
+    // We encode the state as a numeric proxy so PlayVersionConflict
+    // can carry it: expected=1 (state matched), found=0 (mismatch).
+    if (obj['state'] !== expectedState) {
+      throw new PlayVersionConflict(play.id, 1, 0);
+    }
+    const updated: Record<string, unknown> = {
+      ...obj,
+      state: 'concluded',
+      concluded_at,
+      concluded_by,
+    };
+    if (concluded_note !== undefined) {
+      updated['concluded_note'] = concluded_note;
+    }
+    writeTextSafeAtomic(this.base, rel, YAML.stringify(updated));
   }
 
   /**
