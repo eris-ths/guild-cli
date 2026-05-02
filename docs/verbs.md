@@ -943,6 +943,112 @@ findings. Plugin errors become findings (never crash doctor). See
 
 ---
 
+## Agora — the second passage (alpha)
+
+`agora` is the second passage under guild, alongside `gate`. Where
+gate is request-lifecycle / review / dialogue, agora is **play /
+narrative** with **suspend / resume as first-class primitives**.
+
+### When to reach for agora vs gate
+
+- **Use `gate`** when the work has a definite shape — a decision to
+  approve, work to execute, output to review. The lifecycle is
+  pending → approved → executing → completed. Each transition gets
+  recorded; reviews attach to specific requests.
+- **Use `agora`** when the work is exploratory, narrative, or
+  paused-and-resumed across sessions. Quest = goal-oriented branching;
+  Sandbox = no-goal, emergence-shaped. There is no "approve" — the
+  cliff/invitation prose is the substrate-side motivation for the
+  next instance to re-enter.
+
+### A worked session
+
+```bash
+# 1. Define a Game (one-time per design).
+$ agora new --slug design-loop --kind sandbox --title "Iterative design"
+✓ created game: design-loop [sandbox] — Iterative design
+notice: wrote /abs/path/agora/games/design-loop.yaml (config: ...)
+
+# 2. Start a play session against the Game.
+$ agora play --slug design-loop
+✓ play started: 2026-05-02-001 [playing] on game=design-loop
+
+# 3. Make moves.
+$ agora move 2026-05-02-001 --text "first thought, ran into a contradiction"
+✓ move 001 appended to 2026-05-02-001 on game=design-loop by alice
+
+# 4. Suspend with cliff + invitation when you have to step away.
+$ agora suspend 2026-05-02-001 \
+    --cliff "the contradiction between simplicity and completeness wasn't named" \
+    --invitation "name it explicitly, or absorb one of the two horns"
+✓ play suspended: 2026-05-02-001 [playing → suspended] by alice
+  cliff:      the contradiction between simplicity and completeness wasn't named
+  invitation: name it explicitly, or absorb one of the two horns
+
+# 5. Later session — pick up. Notice the cliff/invitation surfaces.
+$ agora resume 2026-05-02-001 --note "absorbed completeness; simplicity becomes the constraint"
+✓ play resumed: 2026-05-02-001 [suspended → playing] by alice
+  closing cliff:      the contradiction between simplicity and completeness wasn't named
+  closing invitation: name it explicitly, or absorb one of the two horns
+
+# 6. Continue, conclude, or suspend again.
+$ agora conclude 2026-05-02-001 --note "design landed; opening a new play for the next layer"
+```
+
+### The substrate-side Zeigarnik effect
+
+The pivot of agora is encoded in `agora suspend` requiring
+**both** `--cliff` and `--invitation`. Pre-this design, AI agents
+hitting context reset between sessions had no tool-level support
+for "I left this hanging on purpose, here's how to come back."
+The substrate stores both prose fields append-only, and `agora
+resume` surfaces them at re-entry — the next instance reads what
+was paused on without any psychology required. See
+[issue #117](https://github.com/eris-ths/guild-cli/issues/117) for
+the design rationale and translation from the human Zeigarnik
+effect / habit tracker.
+
+### State machine (compact)
+
+```
+playing  ── move ──────▶ playing
+         ── suspend ───▶ suspended
+         ── conclude ──▶ concluded   (terminal)
+suspended ── resume ──▶ playing
+         ── conclude ──▶ concluded   (drift-away outcome — the
+                                      cliff/invitation stay in the
+                                      record as audit trail)
+```
+
+### Files agora writes
+
+```
+<content_root>/agora/
+  games/<slug>.yaml              # Game definition
+  plays/<game-slug>/<play-id>.yaml   # Play session (per-game subdir)
+```
+
+agora reuses gate's substrate (`safeFs`, `parseYamlSafe`,
+`GuildConfig`, `MemberName`, `parseArgs`) — same content_root,
+same member identity. The container/passage architecture in action.
+
+### Discoverability
+
+```bash
+agora --help                    # full verb list
+agora schema [--verb <name>]    # principle 10 contract (JSON Schema)
+agora list                      # what games + plays exist
+agora show <slug-or-play-id>    # detail view
+```
+
+For the architectural rationale (container with passages, AI-first
+substrate, schema-as-contract) see lore principles 04, 09, 10, 11.
+The agora-specific README at
+[`src/passages/agora/README.md`](../src/passages/agora/README.md)
+covers layout, status, and lore upstream in more detail.
+
+---
+
 A fully worked multi-turn example — author/critic personas driving
 each of these verbs through a real request lifecycle — lives in
 [`examples/dogfood-session/`](./examples/dogfood-session/). It was

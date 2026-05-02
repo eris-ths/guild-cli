@@ -86,35 +86,46 @@ A worked example content_root with config, members, and a multi-actor
 session lives in [`examples/quick-start/`](./examples/quick-start/);
 a longer real session is in [`examples/dogfood-session/`](./examples/dogfood-session/).
 
-### Architecture: container with one passage
+### Architecture: container with two passages
 
 `guild` is the **container** — content_root, members, config, the
-YAML substrate records outlive sessions on. `gate` is **one
-passage** through it: the request-lifecycle / review / dialogue
-surface where most agent activity flows.
+YAML substrate records outlive sessions on. Two passages run
+through it today, each a distinct shape of agent interaction:
 
-- **`guild`** (CLI) — operator-facing meta layer for the container:
-  list members, validate the roster, create members from outside
-  any session. Small, stable, script-friendly.
-- **`gate`** (CLI) — agent-facing passage: requests, reviews,
-  issues, messages, doctor / repair, and the schema agents read
-  to dispatch. Larger, evolves faster, the surface most agents
-  live in.
+- **`gate`** (CLI) — the request-lifecycle / review / dialogue
+  passage. Decisions and the deliberation around them: file a
+  request, transition through approve / execute / complete,
+  attach multi-lens reviews, audit-trail forever. The surface
+  most agent work flows through.
+- **`agora`** (CLI) — the play / narrative passage (alpha,
+  shipping under `bin/agora.mjs`). Quest and Sandbox style games
+  with **suspend / resume as a first-class primitive**: an
+  agent leaves a `cliff` (what just happened) and an
+  `invitation` (what the next opener should do); the next
+  instance reads those and acts on the substrate-side Zeigarnik
+  effect. The design rationale lives in
+  [issue #117](https://github.com/eris-ths/guild-cli/issues/117).
 
-The two CLIs share the same content_root substrate. `gate
-register` and `guild new` write the same `members/<name>.yaml`
-files — two views of the same act (one from inside the passage,
-one from outside the container).
+Plus a thin operator helper:
 
-The container has one passage today and is shaped to accept
-others — different shapes of agent interaction on the same
-substrate could land alongside `gate` without absorbing into
-it. Until a second passage is needed, the inside of the container
-looks like one CLI for agents (`gate`) plus a thin operator
-helper (`guild`).
+- **`guild`** (CLI) — meta layer for the container itself: list
+  members, validate the roster, create members from outside any
+  session. Small, stable, script-friendly.
+
+All three CLIs share the same content_root substrate.
+`gate register` and `guild new` write the same
+`members/<name>.yaml` files — two views of the same act (one from
+inside a passage, one from outside the container). agora-specific
+records live under `<content_root>/agora/` (games, plays, casts).
+
+The architecture is shaped to accept additional passages —
+different shapes of agent interaction on the same substrate land
+alongside `gate` and `agora` without absorbing into either.
 
 Full surface in [`AGENT.md`](./AGENT.md); per-verb examples in
-[`docs/verbs.md`](./docs/verbs.md).
+[`docs/verbs.md`](./docs/verbs.md). Agora's own README
+([`src/passages/agora/README.md`](./src/passages/agora/README.md))
+covers its layout, status, and lore upstream.
 
 ### Test
 

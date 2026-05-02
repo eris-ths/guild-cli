@@ -124,6 +124,46 @@ guild validate                          # check all member YAMLs
 
 Categories: `core | professional | assignee | trial | special | host`
 
+## Agora (second passage — play / narrative)
+
+`agora` is the second passage under guild — alongside `gate`. Where
+gate is request-lifecycle / review, agora is play / narrative with
+**suspend / resume as first-class primitives** (per design issue
+[#117](https://github.com/eris-ths/guild-cli/issues/117)).
+
+```
+playing ── move ──────▶ playing
+        ── suspend ───▶ suspended ── resume ──▶ playing
+        ── conclude ──▶ concluded (terminal)
+suspended ── conclude ▶ concluded (drift-away outcome)
+```
+
+```bash
+agora new --slug <s> --kind <quest|sandbox> --title "<t>" [--by <m>] [--description "<d>"]
+agora play --slug <game-slug> [--by <m>]
+agora move <play-id> --text "<text>" [--by <m>]
+agora suspend <play-id> --cliff "<what just happened>" --invitation "<next move>" [--by <m>]
+agora resume <play-id> [--note "<resume prose>"] [--by <m>]
+agora conclude <play-id> [--note "<closure prose>"] [--by <m>]
+agora list [--game <slug>] [--state <playing|suspended|concluded>]
+agora show <slug-or-play-id> [--game <slug>]   # auto-disambiguates by pattern
+agora schema [--verb <name>]                   # principle 10 contract
+```
+
+agora records live under `<content_root>/agora/`:
+
+```
+<content_root>/agora/
+  games/<slug>.yaml           # game definitions
+  plays/<game-slug>/<play-id>.yaml  # play sessions (sequence per game per day)
+```
+
+Suspend/resume substrate (the `cliff` + `invitation` prose recorded
+on suspend, surfaced in resume's success output) is the
+**substrate-side Zeigarnik effect** — motivation for re-entry is in
+the substrate, not the agent's psychology. Per principle 11
+(AI-first, human as projection).
+
 ## Diagnostic
 
 ```bash

@@ -1,0 +1,154 @@
+// agora — passage entry point.
+//
+// agora is the second passage under guild (after gate). Where gate
+// is the request-lifecycle / review / dialogue surface, agora is
+// the play / narrative / cast surface — Quest and Sandbox style
+// games designed for AI-first interaction with suspend/resume as
+// a first-class primitive (per design issue #117).
+//
+// This is the v0 skeleton. Only `agora new` is implemented; `play`,
+// `move`, `suspend`, `resume`, `list`, `show` will land iteratively
+// as the prototype surfaces what shape they need (per the pull-
+// driven extraction strategy chosen at design time).
+//
+// AI-first per principle 11: the substrate is machine-parseable
+// JSON / snake_case YAML / explicit-flag CLI; any future human-
+// facing UI is a projection, not a substrate change.
+
+import { GuildConfig } from '../../../infrastructure/config/GuildConfig.js';
+import { parseArgs } from '../../../interface/shared/parseArgs.js';
+import { DomainError } from '../../../domain/shared/DomainError.js';
+import { YamlGameRepository } from '../infrastructure/YamlGameRepository.js';
+import { YamlPlayRepository } from '../infrastructure/YamlPlayRepository.js';
+import { newGame } from './handlers/new.js';
+import { startPlay } from './handlers/play.js';
+import { moveOnPlay } from './handlers/move.js';
+import { suspendPlay } from './handlers/suspend.js';
+import { resumePlay } from './handlers/resume.js';
+import { concludePlay } from './handlers/conclude.js';
+import { listAgora } from './handlers/list.js';
+import { showAgora } from './handlers/show.js';
+import { schemaCmd } from './handlers/schema.js';
+
+const HELP = `agora — game / play passage (v0 skeleton)
+
+Usage:
+  agora new --slug <s> --kind <quest|sandbox> --title "<t>" [--by <m>]
+                                                [--description "<d>"] [--format json|text]
+                              Create a new Game definition under
+                              <content_root>/agora/games/<slug>.yaml.
+
+  agora play --slug <game-slug> [--by <m>] [--format json|text]
+                              Start a play session against an existing Game.
+                              Lands at <content_root>/agora/plays/<slug>/<play-id>.yaml.
+                              Initial state: playing.
+
+  agora move <play-id> [--by <m>] --text "<text>" [--format json|text]
+                              Append a move to a playing session. Optimistic
+                              CAS on moves.length protects re-entering
+                              instances from silent overwrite. State-machine
+                              boundary: only "playing" plays accept moves.
+
+  agora suspend <play-id> --cliff "<...>" --invitation "<...>"
+                          [--by <m>] [--format json|text]
+                              Pause a playing session with a cliff (what
+                              just happened) and an invitation (what the
+                              next opener should do). State: playing →
+                              suspended. The substrate-side Zeigarnik:
+                              future instances re-enter and act on the
+                              recorded invitation.
+
+  agora resume <play-id> [--note "<...>"] [--by <m>] [--format json|text]
+                              Pick up a suspended session. State:
+                              suspended → playing. Surfaces the closing
+                              cliff/invitation in the success output so
+                              the resuming actor reads what was paused on.
+
+  agora conclude <play-id> [--note "<final note>"] [--by <m>] [--format json|text]
+                              Terminal state transition. Allowed from
+                              "playing" or "suspended" — a suspended
+                              play that drifts away is a valid outcome.
+                              concluded plays accept no further verbs.
+
+  agora schema [--verb <name>] [--format json|text]
+                              Agent dispatch contract for this passage
+                              (principle 10). draft-07 JSON Schema subset.
+
+  agora list [--game <slug>] [--state playing|suspended|concluded] [--format json|text]
+                              Enumerate games and plays. Filters: --game
+                              narrows plays to one game (drops games list);
+                              --state narrows plays to a single state.
+
+  agora show <slug-or-play-id> [--game <slug>] [--format json|text]
+                              Detail view of one game or one play. Argument
+                              auto-disambiguates: play ids match
+                              YYYY-MM-DD-NNN, anything else is a game slug.
+                              --game disambiguates cross-game id collisions
+                              for plays.
+
+  agora --help                 This help.
+  agora --version              Print version and exit.
+
+Passage status: v0 skeleton. Verbs landing iteratively per design issue #117.
+Substrate: shares content_root and members/ with gate; agora-specific data
+goes under <content_root>/agora/.
+
+Lore upstream:
+  lore/principles/11-ai-first-human-as-projection.md  (the substrate is AI-natural)
+  lore/principles/10-schema-as-contract.md            (gate schema-style contract pending)
+  lore/principles/04-records-outlive-writers.md       (records persist across sessions)
+`;
+
+export async function main(argv: readonly string[]): Promise<number> {
+  if (argv.length === 0 || argv[0] === '--help' || argv[0] === '-h') {
+    process.stdout.write(HELP);
+    return 0;
+  }
+  if (argv[0] === '--version') {
+    // Single-binary version reuse — agora ships under guild-cli's
+    // package.json. No separate version surface for v0.
+    process.stdout.write('agora (under guild-cli) — snapshot/agora\n');
+    return 0;
+  }
+
+  const [cmd, ...rest] = argv;
+  const args = parseArgs(rest);
+  const config = GuildConfig.load();
+  const games = new YamlGameRepository(config);
+  const plays = new YamlPlayRepository(config);
+
+  try {
+    switch (cmd) {
+      case 'new':
+        return await newGame({ repo: games, config }, args);
+      case 'play':
+        return await startPlay({ games, plays, config }, args);
+      case 'move':
+        return await moveOnPlay({ plays, config }, args);
+      case 'suspend':
+        return await suspendPlay({ plays, config }, args);
+      case 'resume':
+        return await resumePlay({ plays, config }, args);
+      case 'conclude':
+        return await concludePlay({ plays, config }, args);
+      case 'list':
+        return await listAgora({ games, plays, config }, args);
+      case 'show':
+        return await showAgora({ games, plays, config }, args);
+      case 'schema':
+        return await schemaCmd(args);
+      default:
+        process.stderr.write(`agora: unknown verb: ${cmd}\n${HELP}`);
+        return 1;
+    }
+  } catch (e) {
+    const msg =
+      e instanceof DomainError
+        ? `DomainError: ${e.message}${e.field ? ` (${e.field})` : ''}`
+        : e instanceof Error
+          ? e.message
+          : String(e);
+    process.stderr.write(`error: ${msg}\n`);
+    return 1;
+  }
+}

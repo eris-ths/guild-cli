@@ -8,6 +8,71 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 ## [Unreleased]
 
 ### Added
+- **`agora` — second passage under guild (alpha).** A play / narrative
+  surface alongside `gate`'s request-lifecycle / review surface.
+  Built on the container/passage architecture (PR #116) with
+  `gate`'s substrate (safeFs, parseYamlSafe, GuildConfig,
+  MemberName, parseArgs) reused without modification.
+
+  Verbs (8 + schema):
+
+  - `agora new` — create a Game definition (Quest or Sandbox)
+  - `agora play` — start a play session against a Game
+  - `agora move` — append a move (with optimistic CAS)
+  - `agora suspend` — pause with **cliff** + **invitation** prose
+    (the design pivot; substrate-side Zeigarnik effect)
+  - `agora resume` — pick up; surfaces the closing cliff/invitation
+    in success output so the re-entering instance reads what was
+    paused on without a separate query
+  - `agora conclude` — terminal state (playing or suspended →
+    concluded; drift-away outcome valid)
+  - `agora list` — enumerate games + plays (filterable)
+  - `agora show <slug-or-play-id>` — detail view; for plays
+    renders full move + suspension/resume history paired by index
+  - `agora schema` — principle 10 dispatch contract for the passage
+
+  Substrate path: `<content_root>/agora/games/<slug>.yaml` and
+  `<content_root>/agora/plays/<game-slug>/<play-id>.yaml` (per-game
+  subdirs scope plays to their definition; each game has its own
+  sequence counter).
+
+  Architecture in practice:
+  - principle 11 (AI-first): every verb's JSON envelope is the
+    agent contract (snake_case, `where_written`, `config_file`,
+    `suggested_next`); text mode is a projection
+  - principle 10 (schema as contract): `agora schema` advertises
+    every verb's input + output; mechanical drift detector test
+    enforces input-side equivalence (`tests/passages/agora/schema.test.ts`)
+  - principle 09 (orientation disclosure): every write verb emits
+    the same `notice: wrote <abs> (config: <abs>)` line shape as
+    `gate register`
+  - principle 04 (records outlive writers): all state mutations
+    are append-only; suspensions and resumes are separate arrays
+    paired by index; multi-cycle history preserved
+
+  State machine:
+  ```
+  playing  ── move ──────▶ playing
+           ── suspend ───▶ suspended
+           ── conclude ──▶ concluded   (terminal)
+  suspended ── resume ──▶ playing
+           ── conclude ──▶ concluded   (drift-away outcome)
+  ```
+
+  All state-changing appends use optimistic CAS (`PlayVersionConflict`)
+  — re-entering instances detect concurrent appenders rather than
+  silently overwrite.
+
+  Design rationale (Zeigarnik / rabbit tracker translation for
+  AI agents, three-axis convergence of AI-first + gamification +
+  human learning) lives in
+  [issue #117](https://github.com/eris-ths/guild-cli/issues/117).
+  Designed via the kiri/noir/mira three-voice review pattern; the
+  pivot of `suspend / resume` as first-class primitives was
+  surfaced by mira's mirror role.
+
+  ~3500 LOC, 62 contract tests across 8 test files.
+
 - **`lore/principles/11-ai-first-human-as-projection.md`.** Names
   the order-asymmetry every existing principle has been enacting
   without declaring: design decisions start from "is this AI-
