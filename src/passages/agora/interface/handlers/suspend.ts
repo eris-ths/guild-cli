@@ -107,8 +107,12 @@ export async function suspendPlay(
           where_written,
           config_file: deps.config.configFile,
           suggested_next: {
+            // args.by intentionally omitted (issue #122) — the next
+            // resumer is often a different actor (and frequently a
+            // different session of the same actor). agora doesn't
+            // pre-fill the recommendation.
             verb: 'resume',
-            args: { play_id: play.id, by },
+            args: { play_id: play.id },
             reason:
               'Play suspended. The cliff and invitation are recorded; the next instance reading this play sees the suspension and acts on the invitation. To pick up: agora resume <play-id>.',
           },

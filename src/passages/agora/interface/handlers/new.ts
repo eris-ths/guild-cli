@@ -98,7 +98,7 @@ export async function newGame(deps: NewGameDeps, args: ParsedArgs): Promise<numb
             verb: 'list',
             args: {},
             reason:
-              'New game definition saved. `agora list` shows every game and play in the content root; `agora play --slug <slug>` (when implemented) starts a session against this definition.',
+              'New game definition saved. `agora list` shows every game and play in the content root; `agora play --slug <slug>` starts a session against this definition.',
           },
         },
         null,
