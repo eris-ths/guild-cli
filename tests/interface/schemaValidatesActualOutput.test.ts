@@ -185,10 +185,15 @@ test('schema/runtime: gate tail --format json output validates against declared 
     ['request', '--from', 'alice', '--action', 'b', '--reason', 'r'],
     { GUILD_ACTOR: 'alice' },
   );
+  // Date-derived id matches the runtime clock (YYYY-MM-DD-NNNN);
+  // the second `request` above gets sequence 0002 (a fresh tmpdir
+  // means 0001 was the fast-track above). Hard-coding the date here
+  // would silently break on the next calendar roll.
+  const today = new Date().toISOString().slice(0, 10);
   runGate(
     root,
     [
-      'review', '2026-05-01-0002',
+      'review', `${today}-0002`,
       '--by', 'bob',
       '--lense', 'devil',
       '--verdict', 'concern',
