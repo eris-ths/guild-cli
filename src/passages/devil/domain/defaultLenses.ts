@@ -148,6 +148,20 @@ const DEFAULTS_RAW: ReadonlyArray<Parameters<typeof Lense.create>[0]> = [
       'expiry comparison in different timezones',
     ],
   },
+  {
+    name: 'coherence',
+    title: 'Coherence (cross-lense / cross-target)',
+    description:
+      "Cross-lense / cross-target consistency. Catches drift between docs and code, naming inconsistencies, internal contradictions between findings, and architectural-posture observations that a single-lense audit cannot reach. Bird's-eye perspective: reads the system as a whole, not file-by-file. Surfaced as a methodology gap by mirror persona's e-014 synthesis during devil-on-devil dogfood; promoted to a first-class lense so the audit posture itself is auditable.",
+    ingest_sources: [],
+    examples: [
+      'docs say "v1 catalog" but code docstring still says "v0"',
+      'two lenses use the same vocabulary with different enforcement semantics',
+      'a "mandatory delegate" claimed in docs but not enforced at runtime',
+      'one verb output uses dismissed_by while sibling verbs use just by, breaking the JSON-envelope visual pattern',
+      'a finding under one lense contradicts an assumption declared under another',
+    ],
+  },
 ];
 
 /**

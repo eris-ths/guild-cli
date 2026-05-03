@@ -392,11 +392,11 @@ test('ingest refuses after conclude (terminal-state)', (t) => {
   const { root, cleanup } = bootstrap();
   t.after(cleanup);
   const reviewId = openReview(root);
-  // Cover all 11 lenses so conclude can fire.
+  // Cover all 12 lenses so conclude can fire.
   const ALL_LENSES = [
     'injection', 'injection-parser', 'path-network', 'auth-access',
     'memory-safety', 'crypto', 'deserialization', 'protocol-encoding',
-    'supply-chain', 'composition', 'temporal',
+    'supply-chain', 'composition', 'temporal', 'coherence',
   ];
   for (const lense of ALL_LENSES) {
     runDevil(

@@ -9,6 +9,25 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 
 ### Added
 
+- **`coherence` lense added to devil-review's bundled catalog (12th
+  lense, bird's-eye-as-feature).** Surfaced as a methodology gap by
+  mirror persona's e-014 synthesis during a post-merge devil-on-devil
+  dogfood: the lense-coverage gate enforces lense-by-lense thinking
+  but cannot detect cross-lense coherence drift; bird's-eye review
+  had no first-class verb. Promoted to a lense so the audit posture
+  itself is auditable. Catches: doc/code drift, naming
+  inconsistencies between sibling verbs, contradictions between
+  findings under different lenses, architectural-posture
+  observations. Reviewers can now write `kind=finding` /
+  `kind=resistance` / `kind=synthesis` entries on the `coherence`
+  lense to record the bird's-eye observations a single-lense audit
+  cannot reach. The `conclude` lense-coverage gate now requires an
+  entry on `coherence` (or an explicit `kind=skip` with reason)
+  alongside the other 11 — explicit-skip is the substrate-honest
+  way to declare "we did not bird's-eye on this review."
+
+### Added
+
 - **`devil` — third passage under guild (alpha, security
   backstop).** ([#127](https://github.com/eris-ths/guild-cli/pull/127))
   A multi-persona, lense-enforced review surface that

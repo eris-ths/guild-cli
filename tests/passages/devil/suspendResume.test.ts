@@ -272,7 +272,7 @@ test('suspend refuses after conclude', (t) => {
   const ALL_LENSES = [
     'injection', 'injection-parser', 'path-network', 'auth-access',
     'memory-safety', 'crypto', 'deserialization', 'protocol-encoding',
-    'supply-chain', 'composition', 'temporal',
+    'supply-chain', 'composition', 'temporal', 'coherence',
   ];
   for (const lense of ALL_LENSES) {
     runDevil(
@@ -310,7 +310,7 @@ test('resume refuses after conclude', (t) => {
   const REMAINING_LENSES = [
     'injection', 'injection-parser', 'path-network', 'auth-access',
     'memory-safety', 'crypto', 'deserialization', 'protocol-encoding',
-    'supply-chain', 'composition', 'temporal',
+    'supply-chain', 'composition', 'temporal', 'coherence',
   ];
   for (const lense of REMAINING_LENSES) {
     runDevil(
