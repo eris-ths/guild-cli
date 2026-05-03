@@ -74,8 +74,9 @@ const LIST_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'from',
   'executor',
   'auto-review',
+  'format',
 ]);
-const PENDING_KNOWN_FLAGS: ReadonlySet<string> = new Set(['for']);
+const PENDING_KNOWN_FLAGS: ReadonlySet<string> = new Set(['for', 'format']);
 const SHOW_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'plain',
   'format',
@@ -187,6 +188,40 @@ export async function reqList(
     process.stderr.write(
       `# filtered by GUILD_ACTOR=${envActor} (use --for <m> or unset GUILD_ACTOR to override)\n`,
     );
+  }
+
+  // --format closes the asymmetry surfaced in the post-merge bird's-eye
+  // check (2026-05-03): every other gate read verb (board / status /
+  // voices / tail / show / why / summarize) accepts --format json|text;
+  // list / pending were text-only. JSON envelope mirrors board's shape:
+  // top-level `requests` array of full request.toJSON(), `_meta` carries
+  // the state being listed (informational for both list and pending) and
+  // any active filter so a JSON consumer sees what the stderr notice
+  // shows to humans.
+  const format = optionalOption(args, 'format') ?? 'text';
+  if (format !== 'json' && format !== 'text') {
+    throw new Error(`--format must be 'json' or 'text', got: ${format}`);
+  }
+
+  if (format === 'json') {
+    const filterEcho: Record<string, string> = {};
+    if (fromFilter !== undefined) filterEcho['from'] = fromFilter;
+    if (executorFilter !== undefined) filterEcho['executor'] = executorFilter;
+    if (autoReviewFilter !== undefined) filterEcho['auto_review'] = autoReviewFilter;
+    if (forFilter !== undefined) {
+      filterEcho['for'] = forFilter;
+      filterEcho['for_source'] = explicitFor !== undefined ? '--for' : 'GUILD_ACTOR';
+    }
+    const payload: Record<string, unknown> = {
+      requests: items.map((r) => r.toJSON()),
+      _meta: {
+        state,
+        verb,
+        ...(Object.keys(filterEcho).length > 0 ? { filter: filterEcho } : {}),
+      },
+    };
+    process.stdout.write(JSON.stringify(payload, null, 2) + '\n');
+    return 0;
   }
 
   if (items.length === 0) {

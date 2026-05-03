@@ -560,17 +560,32 @@ const VERBS: readonly VerbSchema[] = [
         from: str,
         executor: str,
         'auto-review': str,
+        format: {
+          type: 'string',
+          enum: ['json', 'text'],
+          description: "default 'text'; --format json emits {requests, _meta} envelope",
+        },
       },
       required: ['state'],
     },
-    output: { type: 'array' },
+    output: { type: 'object' },
   },
   {
     name: 'pending',
     category: 'read',
     summary: 'list requests in pending state',
-    input: { type: 'object', properties: { for: str } },
-    output: { type: 'array' },
+    input: {
+      type: 'object',
+      properties: {
+        for: str,
+        format: {
+          type: 'string',
+          enum: ['json', 'text'],
+          description: "default 'text'; --format json emits {requests, _meta} envelope",
+        },
+      },
+    },
+    output: { type: 'object' },
   },
   {
     name: 'board',
