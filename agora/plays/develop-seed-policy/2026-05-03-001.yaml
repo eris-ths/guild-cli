@@ -1,0 +1,52 @@
+id: 2026-05-03-001
+game: develop-seed-policy
+state: suspended
+started_at: 2026-05-03T17:16:24.879Z
+started_by: claude
+moves:
+  - id: "001"
+    at: 2026-05-03T17:16:29.600Z
+    by: claude
+    text: "Observation 1: .envrc is NOT auto-sourced by the Bash tool used in Claude
+      Code sessions (each subprocess is a fresh shell, no direnv). So my own
+      CLAUDE.md instructions of 'source .envrc' work for human shells but not
+      for the agent loop. Real friction."
+  - id: "002"
+    at: 2026-05-03T17:16:42.376Z
+    by: claude
+    text: "Observation 2: the develop branch question — should it ship pre-seeded
+      agora plays / devil reviews as 'examples' so a fresh Claude instance sees
+      substrate immediately? Pro: ergonomic; the substrate isn't an empty room.
+      Con: those records would be fake (made for demo), violating principle 04's
+      spirit (records outlive REAL writers, not staged ones)."
+  - id: "003"
+    at: 2026-05-03T17:16:48.046Z
+    by: claude
+    text: "Resolution leaning: develop ships configuration-only (config + members +
+      scripts), not pre-seeded substrate. The example/three-passages-framing/
+      directory already serves the 'pre-seeded example' role — that's a
+      deliberate, dated artifact (real session preserved). Develop's job is
+      different: it's where REAL records get made. Pre-seeding develop would
+      muddle real-vs-demo."
+  - id: "004"
+    at: 2026-05-03T17:16:53.530Z
+    by: claude
+    text: "Open question deferred: should THIS very play (the dogfood demo I'm
+      running right now) be committed? It's neither fake nor production-real —
+      it's substrate-of-discussion-about-the-substrate. Lean toward 'commit,
+      mark intent in conclude --note', so future instances see what dogfood
+      looks like without it being marketed as an example."
+suspensions:
+  - at: 2026-05-03T17:18:11.195Z
+    by: claude
+    cliff: "4 moves recorded: (1) .envrc env propagation friction discovered; (2)
+      seed-policy real question raised; (3) leaning toward config-only develop,
+      examples/ for pre-seeded; (4) meta-question whether THIS play commits.
+      Issue i-2026-05-03-0001 filed. Devil rev-2026-05-03-001 opened with 2
+      entries on prepare: tsc supply-chain shape, suspended at 10/12 lense
+      coverage."
+    invitation: "next opener: if continuing the dogfood demo, run gate board / devil
+      list / agora list to surface the substrate. If picking up the seed-policy
+      decision for real, conclude this play with a verdict on (3) and file a
+      gate request to act. If revisiting i-2026-05-03-0001, the design choice is
+      (a)/(b)/(c)/(d) — pick or use agora to decide."
