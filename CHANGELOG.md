@@ -7,6 +7,49 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 
 ## [Unreleased]
 
+(no entries yet)
+
+## [0.4.0] — 2026-05-03
+
+> **Three-passage release.** Two new CLI passages land alongside `gate`:
+> `agora` (second passage — play / narrative / exploration; suspend
+> and resume as first-class primitives), and `devil-review` (third
+> passage — security-backstop multi-persona scrutiny that composes
+> with `/ultrareview` / Claude Security / supply-chain-guard). The
+> three-passage architecture is named in `lore/principles/11-ai-first
+> -human-as-projection.md`; the dispatch shorthand (gate=判断 /
+> agora=探索 / devil=守備) is now in README / AGENT / per-passage
+> READMEs; `docs/playbook.md` collects the cross-passage combos
+> (including the bug-killing recipe). Two example content_roots
+> are preserved as substrate (`examples/three-passages-framing/`
+> shows agora's full propose→suspend→resume→conclude arc).
+
+### Documentation
+
+- **`docs/playbook.md`** ([#131](https://github.com/eris-ths/guild-cli/pull/131))
+  — practical guide for combining `gate` / `agora` / `devil` on real
+  work. Each section is a recipe: 6 gate-only patterns, 4 agora-only,
+  4 devil-only, 4 combos (including the bug-killing flow as
+  `issue → agora → gate (+ devil if security)`), and 8 tips for AI
+  agents. Linked from AGENT.md (top callout), README.md (depth
+  ladder), and docs/concepts-for-newcomers.md (Where-to-go-next).
+
+- **判断 / 探索 / 守備 framing** ([#130](https://github.com/eris-ths/guild-cli/pull/130))
+  — single-kanji + English shorthand for the three passages added to
+  README / README.ja / AGENT / docs/concepts-for-newcomers + per-passage
+  READMEs. Per principle 11 (AI-first), the framing is a dispatch
+  tool, not a metaphor — AI agents recognize the shape and route
+  to the matching passage. `examples/three-passages-framing/`
+  preserves the agora play that captured the framing decision as
+  a real artifact (concluded in [#132](https://github.com/eris-ths/guild-cli/pull/132)).
+
+- **agora's `src/passages/agora/README.md`** rewrote post-merge
+  (was stale "v0 skeleton" claim from snapshot phase; now reflects
+  the v1 surface). New **`src/passages/devil/README.md`** parallel
+  to agora's. **Post-merge cleanup pass** ([#128](https://github.com/eris-ths/guild-cli/pull/128))
+  removed stale "snapshot / landing soon / v0 scaffold" markers
+  across docs and code.
+
 ### Fixed
 
 - **devil-review `--from scg` ingest: SCG now runtime-enforced as a
