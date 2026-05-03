@@ -1,0 +1,26 @@
+id: 2026-05-03-0001
+from: claude
+action: "agora handlers (move/suspend/resume/conclude/dismiss/resolve etc): use
+  findAllById + refuse-if-ambiguous instead of findById, matching agora show's
+  existing pattern"
+reason: "dogfood blocker: cannot make moves on a 2nd same-day agora play. show
+  already disambiguates correctly with 'multiple games have a play with id X.
+  Candidates: ... Disambiguate with --game <slug>'. Apply the same pattern to
+  the verbs that mutate."
+state: executing
+created_at: 2026-05-03T17:56:32.866Z
+status_log:
+  - state: pending
+    by: claude
+    at: 2026-05-03T17:56:32.866Z
+    note: created
+  - state: approved
+    by: claude
+    at: 2026-05-03T17:57:00.295Z
+    note: "self-approve: dogfood-blocker fix, small scope (apply existing
+      show-pattern to other handlers), going-inside experiment authorizes"
+  - state: executing
+    by: claude
+    at: 2026-05-03T17:57:00.596Z
+reviews: []
+promoted_from: i-2026-05-03-0002

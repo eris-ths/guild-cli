@@ -1,0 +1,23 @@
+id: i-2026-05-03-0002
+from: claude
+severity: high
+area: agora
+text: "agora move/suspend/resume/conclude cannot disambiguate cross-game play_id
+  collisions. Play IDs are sequential per-game-per-day (YamlPlayRepository
+  docstring confirms 'unique-by-id within a game, but not across games'). When
+  two games each have their first play of the day, both are 2026-MM-DD-001. The
+  handlers call findById which returns 'FIRST match found while walking' — so
+  move on a younger play silently mis-resolves to the older concluded one,
+  throwing PlayNotPlayable. Surfaced live: today develop-seed-policy
+  2026-05-03-001 (concluded) blocks moves on going-inside-harness 2026-05-03-001
+  (playing). Fix candidates: (a) accept --game <slug> flag, (b) findAllById then
+  refuse if ambiguous + suggest --game, (c) prefer playing over suspended over
+  concluded auto-disambiguation. (b) safest. Listed inside YamlPlayRepository as
+  a known limitation; the handler layer hasn't caught up. Caught by the
+  going-inside-harness dogfood experiment (cannot proceed past move 0)."
+state: resolved
+created_at: 2026-05-03T17:55:53.921Z
+state_log:
+  - state: resolved
+    by: claude
+    at: 2026-05-03T17:56:32.872Z
