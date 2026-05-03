@@ -38,6 +38,33 @@ below). The **expectation on this branch is that you use
 gate / agora / devil for your development work** — not as a
 separate concern, as the working surface itself.
 
+### Branch convention: harness vs release
+
+The three branch shapes are intentional:
+
+| Branch | Role | Merges to main? |
+|--------|------|-----------------|
+| `main` | release substrate — clean, ships | (target) |
+| `develop` | dogfood **harness** — config, members, `.guild-actor`, accumulated agora/devil/issues records | **never** |
+| `feat/*` / `fix/*` / `docs/*` | ephemeral feature branches | yes, then deleted |
+
+`develop` is a *test fixture for the CLI itself* — its
+unique content (root-level `guild.config.yaml`, `members/`,
+substrate state) exists so a fresh Claude Code instance has
+something to work against, not because it ships. Keeping
+the harness off main is the same discipline as keeping test
+fixtures out of production code: harness ergonomics are
+allowed to bend rules main holds firm. (Frozen example
+harnesses live under `examples/` — e.g.
+`examples/three-passages-framing/` — same shape, different
+lifecycle: dated and final, not live and accumulating.)
+
+Adding new harnesses (e.g. a `demo` branch with a different
+seeded substrate, a `review` branch reset per PR) follows
+the same rule: harness branches are sibling long-lived
+environments, never main-merged. Each lives or dies on its
+own utility.
+
 ```bash
 # Once per checkout:
 npm install                         # `prepare` script auto-runs tsc → dist/
