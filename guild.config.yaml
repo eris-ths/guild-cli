@@ -1,0 +1,3 @@
+content_root: .
+host_names: [nao]
+lenses: [devil, layer, cognitive, user]
