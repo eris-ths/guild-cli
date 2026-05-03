@@ -1,3 +1,4 @@
+import { resolveGuildActor } from '../../shared/resolveGuildActor.js';
 import { Request } from '../../../domain/request/Request.js';
 import { GuildConfig } from '../../../infrastructure/config/GuildConfig.js';
 import { ParsedArgs, optionalOption } from '../../shared/parseArgs.js';
@@ -212,7 +213,7 @@ export function buildWriteResponse(
   message: string,
   config: GuildConfig,
 ): WriteResponse {
-  const envActor = process.env['GUILD_ACTOR'] ?? null;
+  const envActor = resolveGuildActor() ?? null;
   return {
     ok: true,
     id: req.id.value,

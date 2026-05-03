@@ -62,7 +62,7 @@ export async function openReview(deps: OpenDeps, args: ParsedArgs): Promise<numb
   // bubble to the dispatcher's catch (turns into stderr error: ...).
   const type = parseTargetType(typeRaw);
 
-  const by = optionalOption(args, 'by') ?? process.env['GUILD_ACTOR'];
+  const by = optionalOption(args, 'by', 'GUILD_ACTOR');
   if (!by) {
     process.stderr.write(
       'error: --by required (or set GUILD_ACTOR). devil open attributes the review opener.\n',

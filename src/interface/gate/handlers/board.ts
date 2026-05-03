@@ -1,3 +1,4 @@
+import { resolveGuildActor } from '../../shared/resolveGuildActor.js';
 import {
   ParsedArgs,
   optionalOption,
@@ -51,8 +52,8 @@ export async function boardCmd(c: C, args: ParsedArgs): Promise<number> {
 
   const explicitFor = optionalOption(args, 'for');
   const envActor =
-    explicitFor === undefined && process.env['GUILD_ACTOR']
-      ? process.env['GUILD_ACTOR']
+    explicitFor === undefined && resolveGuildActor()
+      ? resolveGuildActor()
       : undefined;
   const forFilter = explicitFor ?? envActor;
 

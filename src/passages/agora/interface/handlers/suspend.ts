@@ -63,7 +63,7 @@ export async function suspendPlay(
     'invitation',
     '--invitation required (what the next opener should do, prose)',
   );
-  const by = optionalOption(args, 'by') ?? process.env['GUILD_ACTOR'];
+  const by = optionalOption(args, 'by', 'GUILD_ACTOR');
   if (!by) {
     process.stderr.write(
       'error: --by required (or set GUILD_ACTOR). agora suspend attributes the suspension to an actor.\n',

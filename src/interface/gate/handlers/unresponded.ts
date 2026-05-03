@@ -1,3 +1,4 @@
+import { resolveGuildActor } from '../../shared/resolveGuildActor.js';
 import {
   ParsedArgs,
   optionalOption,
@@ -64,7 +65,7 @@ export async function unrespondedCmd(
   }
 
   const explicit = optionalOption(args, 'for');
-  const envActor = process.env['GUILD_ACTOR'];
+  const envActor = resolveGuildActor();
   const actor = explicit ?? envActor ?? '';
   if (!actor) {
     process.stderr.write(
