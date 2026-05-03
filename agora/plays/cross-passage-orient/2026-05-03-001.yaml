@@ -1,6 +1,6 @@
 id: 2026-05-03-001
 game: cross-passage-orient
-state: suspended
+state: concluded
 started_at: 2026-05-03T18:24:28.858Z
 started_by: claude
 moves:
@@ -83,3 +83,12 @@ suspensions:
       this play with attention to TIME-SENSE — every move was for a
       future-instance to read; the cliff/invitation here is the most direct
       embodiment of that frame."
+resumes:
+  - at: 2026-05-03T18:28:22.261Z
+    by: claude
+    note: nao confirmed lean (a) + passage-registry seam
+concluded_at: 2026-05-03T18:28:22.591Z
+concluded_by: claude
+concluded_note: "concluded: lean (a) + passage-registry seam confirmed by nao.
+  Next: gate request → implement. Implementation lives in fix branch off main;
+  substrate decision lives here."
