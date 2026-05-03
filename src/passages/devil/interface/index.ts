@@ -71,9 +71,12 @@ Usage:
                               Terminal state transition (open → concluded).
                               Verdict-less by design — synthesis prose is
                               required; unresolved is the explicit list of
-                              entry ids deliberately left open. After
-                              conclude no further entries / suspensions /
-                              resumes / re-runs are accepted.
+                              entry ids deliberately left open. Lense-coverage
+                              gate: every lense in the catalog needs at least
+                              one entry (skip with reason counts) before this
+                              accepts the close. After conclude no further
+                              entries / suspensions / resumes / re-runs are
+                              accepted.
 
   devil schema [--verb <name>] [--format json|text]
                               Agent dispatch contract for this passage
@@ -136,7 +139,7 @@ export async function main(argv: readonly string[]): Promise<number> {
       case 'show':
         return await showReview({ reviews, config }, args);
       case 'conclude':
-        return await concludeReview({ reviews, config }, args);
+        return await concludeReview({ reviews, lenses, config }, args);
       default:
         process.stderr.write(
           `devil: unknown verb: ${cmd}\n` +

@@ -44,10 +44,53 @@ function openReview(root: string): string {
   return JSON.parse(r.stdout).review_id;
 }
 
+/**
+ * Add a `kind: skip` entry per default lense so the lense-coverage
+ * gate (issue #126, e-006 fix) is satisfied. Returns the next
+ * available entry-id sequence so callers that add their own entries
+ * after this know what number to expect (1-based, from 1 + N skips).
+ *
+ * Tests that genuinely care about a specific lense being touched in
+ * a non-skip way should call this then add their domain-specific
+ * entries on top — the skip baseline is the substrate-honest "we
+ * looked at this lense and it doesn't apply" gesture.
+ */
+const ALL_LENSES = [
+  'injection',
+  'injection-parser',
+  'path-network',
+  'auth-access',
+  'memory-safety',
+  'crypto',
+  'deserialization',
+  'protocol-encoding',
+  'supply-chain',
+  'composition',
+  'temporal',
+];
+
+function fillAllLensesWithSkips(root: string, reviewId: string): void {
+  for (const lense of ALL_LENSES) {
+    const r = runDevil(
+      root,
+      [
+        'entry', reviewId,
+        '--persona', 'red-team',
+        '--lense', lense,
+        '--kind', 'skip',
+        '--text', `test bootstrap: ${lense} not exercised in this fixture`,
+      ],
+      { GUILD_ACTOR: 'alice' },
+    );
+    if (r.status !== 0) throw new Error(`fillAllLenses(${lense}) failed: ${r.stderr}`);
+  }
+}
+
 test('conclude: synthesis flips state and returns null suggested_next', (t) => {
   const { root, cleanup } = bootstrap();
   t.after(cleanup);
   const id = openReview(root);
+  fillAllLensesWithSkips(root, id);
   const r = runDevil(
     root,
     [
@@ -80,7 +123,10 @@ test('conclude: --unresolved with valid entry ids succeeds', (t) => {
   const { root, cleanup } = bootstrap();
   t.after(cleanup);
   const id = openReview(root);
-  // Add 2 entries so we have e-001, e-002 to mark unresolved.
+  fillAllLensesWithSkips(root, id); // e-001..e-011 are skips
+  // Add 2 resistance entries on top so we have e-012, e-013 to
+  // mark unresolved. The skips already cover lense gate; these
+  // are the substantive threads being deliberately left open.
   for (const text of ['first', 'second']) {
     runDevil(
       root,
@@ -99,14 +145,14 @@ test('conclude: --unresolved with valid entry ids succeeds', (t) => {
     [
       'conclude', id,
       '--synthesis', 'two threads stay open, deliberately',
-      '--unresolved', 'e-001,e-002',
+      '--unresolved', 'e-012,e-013',
       '--format', 'json',
     ],
     { GUILD_ACTOR: 'alice' },
   );
   assert.equal(r.status, 0, `stderr: ${r.stderr}`);
   const payload = JSON.parse(r.stdout);
-  assert.deepEqual(payload.conclusion.unresolved, ['e-001', 'e-002']);
+  assert.deepEqual(payload.conclusion.unresolved, ['e-012', 'e-013']);
 });
 
 test('conclude: --unresolved referencing missing entry fails', (t) => {
@@ -142,6 +188,7 @@ test('conclude: second call surfaces DevilReviewAlreadyConcluded', (t) => {
   const { root, cleanup } = bootstrap();
   t.after(cleanup);
   const id = openReview(root);
+  fillAllLensesWithSkips(root, id);
   const first = runDevil(
     root,
     ['conclude', id, '--synthesis', 'first'],
@@ -164,6 +211,7 @@ test('concluded review refuses subsequent entries', (t) => {
   const { root, cleanup } = bootstrap();
   t.after(cleanup);
   const id = openReview(root);
+  fillAllLensesWithSkips(root, id);
   runDevil(
     root,
     ['conclude', id, '--synthesis', 'done'],
@@ -188,6 +236,7 @@ test('conclude: text-mode reports terminal status', (t) => {
   const { root, cleanup } = bootstrap();
   t.after(cleanup);
   const id = openReview(root);
+  fillAllLensesWithSkips(root, id);
   const r = runDevil(
     root,
     ['conclude', id, '--synthesis', 'done'],
@@ -203,6 +252,7 @@ test('conclude: persists across processes (round-trip via show)', (t) => {
   const { root, cleanup } = bootstrap();
   t.after(cleanup);
   const id = openReview(root);
+  fillAllLensesWithSkips(root, id);
   runDevil(
     root,
     ['conclude', id, '--synthesis', 'persisted'],
@@ -214,4 +264,89 @@ test('conclude: persists across processes (round-trip via show)', (t) => {
   const payload = JSON.parse(r.stdout);
   assert.equal(payload.review.state, 'concluded');
   assert.equal(payload.review.conclusion.synthesis, 'persisted');
+});
+
+// ---- e-006 fix: lense-coverage gate ----
+
+test('conclude: refuses when no lenses are touched (lense-coverage gate)', (t) => {
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  const id = openReview(root);
+  // No fillAllLensesWithSkips call — every catalog lense is missing.
+  const r = runDevil(
+    root,
+    ['conclude', id, '--synthesis', 'attempt without coverage'],
+    { GUILD_ACTOR: 'alice' },
+  );
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /cannot conclude — these lenses have no entries:/);
+  // Names every missing lense — alphabetical or catalog order, but
+  // every default lense should be in the message.
+  for (const lense of ALL_LENSES) {
+    assert.match(r.stderr, new RegExp(lense));
+  }
+  // Hint at the fix path
+  assert.match(r.stderr, /devil entry .* --kind skip --text/);
+});
+
+test('conclude: refuses when a single lense is missing (names only that one)', (t) => {
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  const id = openReview(root);
+  // Cover all but one lense.
+  for (const lense of ALL_LENSES) {
+    if (lense === 'crypto') continue;
+    runDevil(
+      root,
+      [
+        'entry', id,
+        '--persona', 'red-team',
+        '--lense', lense,
+        '--kind', 'skip',
+        '--text', 'irrelevant for this fixture',
+      ],
+      { GUILD_ACTOR: 'alice' },
+    );
+  }
+  const r = runDevil(
+    root,
+    ['conclude', id, '--synthesis', 'almost there'],
+    { GUILD_ACTOR: 'alice' },
+  );
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /these lenses have no entries: crypto\b/);
+});
+
+test('conclude: skip entries satisfy lense coverage', (t) => {
+  // The whole point of the substrate-as-floor design — `kind: skip`
+  // counts toward coverage as long as it explicitly declares why.
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  const id = openReview(root);
+  fillAllLensesWithSkips(root, id);
+  const r = runDevil(
+    root,
+    ['conclude', id, '--synthesis', 'all skipped, all explicit'],
+    { GUILD_ACTOR: 'alice' },
+  );
+  assert.equal(r.status, 0, `stderr: ${r.stderr}`);
+});
+
+test('conclude: lense gate fires AFTER unresolved validation (typo path)', (t) => {
+  // unresolved validation comes first so a typo'd id surfaces
+  // immediately, regardless of catalog coverage state. Pin this so
+  // a future refactor doesn't accidentally hide the typo behind the
+  // (more intimidating) lense-coverage error.
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  const id = openReview(root);
+  // No lense fill — both gates would refuse, but unresolved fires first.
+  const r = runDevil(
+    root,
+    ['conclude', id, '--synthesis', 'x', '--unresolved', 'e-099'],
+    { GUILD_ACTOR: 'alice' },
+  );
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /unresolved entry id "e-099" not found/);
+  assert.doesNotMatch(r.stderr, /these lenses have no entries/);
 });

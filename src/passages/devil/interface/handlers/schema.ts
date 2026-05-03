@@ -249,7 +249,10 @@ const VERBS: readonly VerbSchema[] = [
     summary:
       'terminal state transition (open → concluded). Synthesis prose is required ' +
       '(verdict-less close per issue #126); --unresolved names entry ids deliberately ' +
-      'left open. suggested_next is null on success (terminal verb).',
+      'left open. Lense-coverage gate: every lense in the catalog must have at least ' +
+      "one entry (a 'skip' entry counts when its text declares why) before conclude " +
+      'will accept the close — silent skipping defeats the floor-raising design. ' +
+      'suggested_next is null on success (terminal verb).',
     input: {
       type: 'object',
       properties: {

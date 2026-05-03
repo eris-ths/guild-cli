@@ -5,6 +5,7 @@ import {
   parseReviewId,
 } from '../../domain/DevilReview.js';
 import { DevilReviewRepository } from '../../application/DevilReviewRepository.js';
+import { LenseCatalog } from '../../application/LenseCatalog.js';
 import {
   ParsedArgs,
   optionalOption,
@@ -41,6 +42,15 @@ const CONCLUDE_KNOWN_FLAGS: ReadonlySet<string> = new Set([
  * — distinct from "these are all closed", and distinct from
  * "we forgot to update them."
  *
+ * Lense coverage gate (issue #126's substrate-as-floor design):
+ *   Before flipping state, every lense in the catalog must have
+ *   at least one entry in this review (a `kind: skip` entry
+ *   counts when its text declares why the lense is irrelevant).
+ *   Silent skipping defeats the floor-raising design — reviewers
+ *   either touch the lense or explicitly skip with reason. The
+ *   gate refuses conclude until the catalog is covered, naming
+ *   the missing lenses so the reviewer knows what to add.
+ *
  * Once concluded, no further entries / suspensions / resumes /
  * re-runs are accepted (terminal state).
  *
@@ -49,6 +59,7 @@ const CONCLUDE_KNOWN_FLAGS: ReadonlySet<string> = new Set([
  */
 export interface ConcludeDeps {
   readonly reviews: DevilReviewRepository;
+  readonly lenses: LenseCatalog;
   readonly config: GuildConfig;
 }
 
@@ -102,7 +113,9 @@ export async function concludeReview(
 
   // Validate unresolved entry ids: every id must exist in this
   // review. The substrate stays honest — you can't reference an
-  // entry that isn't there.
+  // entry that isn't there. Validated before the lense gate so a
+  // typo in --unresolved surfaces immediately, regardless of
+  // catalog coverage state.
   for (const id of unresolved) {
     if (review.findEntry(id) === null) {
       throw new DomainError(
@@ -110,6 +123,24 @@ export async function concludeReview(
         'unresolved',
       );
     }
+  }
+
+  // Lense coverage gate (issue #126 substrate-as-floor; surfaced
+  // by mirror-persona dogfood e-006). Every lense in the catalog
+  // must have at least one entry — `kind: skip` counts when its
+  // text declares why the lense is irrelevant. The substrate
+  // refuses silent skipping by construction.
+  const catalogLenses = deps.lenses.names();
+  const touchedLenses = new Set(review.entries.map((e) => e.lense));
+  const missingLenses = catalogLenses.filter((l) => !touchedLenses.has(l));
+  if (missingLenses.length > 0) {
+    process.stderr.write(
+      `error: cannot conclude — these lenses have no entries: ${missingLenses.join(', ')}\n` +
+        `  Per #126's substrate-as-floor design, every lense in the catalog requires at least one entry before conclude.\n` +
+        `  A 'skip' entry counts when explicitly declared with reason. For each missing lense:\n` +
+        `    devil entry ${review.id} --persona <p> --lense <l> --kind skip --text "irrelevant because ..."\n`,
+    );
+    return 1;
   }
 
   const conclusion: Conclusion = {
