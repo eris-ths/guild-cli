@@ -11,7 +11,7 @@ reason: fresh instances booting on a content_root with active agora/devil
   Zeigarnik continuity across session/instance boundaries. agora play
   2026-05-03-001 / cross-passage-orient explored 5 candidates; lean (a) +
   registry seam confirmed by nao.
-state: executing
+state: completed
 created_at: 2026-05-03T18:28:30.612Z
 status_log:
   - state: pending
@@ -26,4 +26,15 @@ status_log:
   - state: executing
     by: claude
     at: 2026-05-03T18:28:34.795Z
+  - state: completed
+    by: claude
+    at: 2026-05-03T18:52:36.925Z
+    note: "PR #138 merged; cross_passage now visible on boot. Verified on develop's
+      own substrate: agora shows last concluded play, devil shows the
+      still-paused rev-2026-05-03-001 (1 open / 1 paused). The Zeigarnik
+      primitive that was breaking across session boundaries now holds."
 reviews: []
+completion_note: "PR #138 merged; cross_passage now visible on boot. Verified on
+  develop's own substrate: agora shows last concluded play, devil shows the
+  still-paused rev-2026-05-03-001 (1 open / 1 paused). The Zeigarnik primitive
+  that was breaking across session boundaries now holds."
