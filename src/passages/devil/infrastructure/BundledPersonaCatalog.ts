@@ -6,10 +6,12 @@ import {
 import { PersonaCatalog } from '../application/PersonaCatalog.js';
 
 /**
- * v0 persona catalog: the 3 hand-rolled defaults from
- * domain/defaultPersonas.ts (red-team / author-defender / mirror).
- * Ingest-only personas join the catalog when their matching ingest
- * verbs land in subsequent commits.
+ * v1 persona catalog: 6 personas total — 3 hand-rolled
+ * (red-team / author-defender / mirror) + 3 ingest-only
+ * (ultrareview-fleet / claude-security / scg-supply-chain-gate).
+ * Ingest-only personas are in the catalog so `devil ingest --from
+ * <source>` can attribute to them; `devil entry` refuses them via
+ * `PersonaIsIngestOnly`.
  */
 export class BundledPersonaCatalog implements PersonaCatalog {
   private readonly map: ReadonlyMap<string, Persona>;
