@@ -1,0 +1,85 @@
+id: 2026-05-03-001
+game: cross-passage-orient
+state: suspended
+started_at: 2026-05-03T18:24:28.858Z
+started_by: claude
+moves:
+  - id: "001"
+    at: 2026-05-03T18:24:35.106Z
+    by: claude
+    text: "Move 1 — observed gap: fresh boot from a future instance shows
+      last_activity from gate only. agora plays (going-inside-harness,
+      develop-seed-policy, this very play) and devil review (rev-2026-05-03-001)
+      are invisible at the orientation entry point. The future instance must
+      know to also run 'agora list' and 'devil list' separately to see the full
+      picture."
+  - id: "002"
+    at: 2026-05-03T18:24:43.259Z
+    by: claude
+    text: "Move 2 — temporal framing: this is not just an information-asymmetry bug.
+      It is a TIME ARCHITECTURE question. boot is the future-instance's primary
+      read of the past. If boot only surfaces gate's past, future-instance's
+      PAST is partial. They proceed as if agora/devil activity didn't happen.
+      The substrate-side Zeigarnik (agora's cliff/invitation) breaks across this
+      boundary: a play suspended yesterday is invisible to today's boot, so the
+      cliff goes unread. Records-outlive-writers (principle 04) requires that
+      records also be FINDABLE on re-entry, not merely present on disk."
+  - id: "003"
+    at: 2026-05-03T18:24:51.805Z
+    by: claude
+    text: "Move 3 — design candidates: (a) gate boot grows a cross_passage hint
+      section: agora.suspended_plays_count, agora.last_play_id,
+      devil.open_reviews_count, devil.last_rev_id. Cheap, advisory only. (b)
+      Promote 'guild' to a container-level orientation verb that aggregates:
+      'guild boot' returns gate.summary + agora.summary + devil.summary. Gate
+      retains its own boot. (c) Each passage publishes a slim 'orientation
+      envelope' (e.g., agora boot / devil boot) and a fresh instance is expected
+      to call all three. (d) Do nothing; document that fresh instances run boot
+      + agora list + devil list in sequence. (e) Provide an MCP-style discovery:
+      'guild status' aggregates whichever passages have records."
+  - id: "004"
+    at: 2026-05-03T18:25:00.306Z
+    by: claude
+    text: "Move 4 — tradeoff read: (a) is small/cheap but couples gate's schema to
+      agora and devil. Every new passage forces a gate boot schema bump. (b) is
+      architecturally clean (container-level lives in guild) but introduces a
+      2nd boot verb; agents need to know 'use guild boot, not gate boot, on
+      develop'. (c) is most principle-10-aligned: each passage has its own
+      orientation envelope, and the agent reads the schemas to know which to
+      call. But it pushes work onto the agent (3 calls) rather than 1. (d) is
+      honest about the limit but loses substrate-as-floor (the gap is
+      documentation, not enforcement). (e) is variant of (b)."
+  - id: "005"
+    at: 2026-05-03T18:25:23.470Z
+    by: claude
+    text: "Move 5 — lean: (a) is the right starting move. small additive change to
+      gate boot's existing JSON envelope, opt-in for each passage to declare its
+      presence via a discovery hook. The reason it beats (b) is
+      principle-11-shaped: gate boot is already the AI-natural orientation
+      surface, and asking agents to learn 'use guild boot on develop, gate boot
+      otherwise' adds projection-shaped cognitive overhead. The clean (c)
+      version is right in the long run but bigger refactor, and (a) gives the
+      floor immediately. (a) does NOT couple gate to specific passages — it
+      polls a registered passage list at runtime; new passages register a
+      'orientation_summary' provider, gate boot calls each, present them under
+      cross_passage. The seam is a small interface, not a hardcoded dependency.
+      (b) and (c) become available as later refactors without breaking (a)'s
+      shape."
+suspensions:
+  - at: 2026-05-03T18:25:34.261Z
+    by: claude
+    cliff: "5 moves recorded: gap observed (boot is gate-only) → temporal reframing
+      (boot is future-instance's primary read of the past; agora/devil records
+      are findable on disk but not surfaced at orientation; this breaks
+      Zeigarnik continuity across session boundaries) → 5 design candidates
+      (a-e) → tradeoff read → lean = (a) with a passage-registry seam (each
+      passage exposes orientation_summary; gate boot polls). Lean has the
+      property that (b) and (c) remain reachable as later refactors without
+      re-doing (a)."
+    invitation: "next opener: weigh the lean. If nao confirms (a) + registry seam,
+      file as gate request and implement. If nao prefers (b) or (c), we drop (a)
+      and start the larger refactor. If 'do nothing' is acceptable for now,
+      conclude this play with a 'documented as known limit' note. Note: writing
+      this play with attention to TIME-SENSE — every move was for a
+      future-instance to read; the cliff/invitation here is the most direct
+      embodiment of that frame."
