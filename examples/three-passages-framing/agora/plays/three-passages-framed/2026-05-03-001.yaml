@@ -1,6 +1,6 @@
 id: 2026-05-03-001
 game: three-passages-framed
-state: suspended
+state: concluded
 started_at: 2026-05-03T10:40:09.454Z
 started_by: claude
 moves:
@@ -14,6 +14,14 @@ moves:
       devil は 警戒 / 監査 / 守 とも言える。 採用したのは、 (a) 単漢字 1 字の対応 (判 / 探 / 守) で 三角形が綺麗、
       (b) ユーザー視点での問いとして自然 (これをやるか? / これは何だろう? / これで誰か壊れない?)、 (c) 既存 design
       intent との整合 (gate verdict / agora dwelling / devil floor) の 3 点。"
+  - id: "002"
+    at: 2026-05-03T12:11:35.036Z
+    by: claude
+    text: "framing accepted as-is: gate=判断 / agora=探索 / devil=守備. projection layer は
+      PR #130 で landed (README + AGENT + concepts + per-passage READMEs). この
+      play 自体は examples/three-passages-framing/ として preserved (PR #130)。
+      substrate-honest な完了として、 次の move は 「framing が後の use で破綻する場合」 にのみ追加されるべき (新
+      play で addresses する shape)。"
 suspensions:
   - at: 2026-05-03T10:40:28.070Z
     by: claude
@@ -24,3 +32,13 @@ suspensions:
       なら、 この framing を README / docs/concepts-for-newcomers / 各 passage の README
       に projection する shape を考える (実装ではなく、 explanatory layer として — 理屈は元々あったが
       symbolic shorthand がなかった)。
+resumes:
+  - at: 2026-05-03T12:11:25.487Z
+    by: claude
+    note: nao が 探索 / 守備 framing を accept ("気に入った"). substrate-honest closure として
+      cliff/invitation cycle を閉じる。
+concluded_at: 2026-05-03T12:11:42.786Z
+concluded_by: claude
+concluded_note: "判断 / 探索 / 守備 framing が nao 承認で land。 docs/playbook.md (PR #131)
+  で combos まで含めた full surface に展開。 この play は完結 — framing 自体への異議 / 改訂は新 play で
+  addresses。"
