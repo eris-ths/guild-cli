@@ -297,6 +297,44 @@ const VERBS: readonly VerbSchema[] = [
     }),
   },
   {
+    name: 'resolve',
+    category: 'write',
+    summary:
+      'mark a finding-entry resolved, optionally citing the commit that landed the ' +
+      'fix (resolved_by_commit becomes part of the substrate). Only kind=finding + ' +
+      'status=open entries transition; refuses re-resolve and refuses resolve after ' +
+      'conclude. Sister verb to dismiss; same CAS-via-replaceEntry path.',
+    input: {
+      type: 'object',
+      properties: {
+        review_id: {
+          type: 'string',
+          description: 'positional 1; review id (rev-YYYY-MM-DD-NNN)',
+        },
+        entry_id: {
+          type: 'string',
+          description: 'positional 2; entry id (e-NNN) within the review',
+        },
+        commit: strOpt(
+          'optional commit sha that landed the fix; carried in substrate as resolved_by_commit',
+        ),
+        by: strOpt('actor (defaults to GUILD_ACTOR)'),
+        format: formatField,
+      },
+      required: ['review_id', 'entry_id'],
+    },
+    output: writeEnvelopeBase({
+      review_id: str,
+      entry_id: str,
+      status: { type: 'string', enum: ['resolved'] },
+      resolved_by_commit: {
+        type: 'string',
+        description: 'present iff --commit was provided',
+      },
+      resolved_by: str,
+    }),
+  },
+  {
     name: 'conclude',
     category: 'write',
     summary:
