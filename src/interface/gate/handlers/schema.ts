@@ -257,6 +257,19 @@ const VERBS: readonly VerbSchema[] = [
         your_recent: { type: 'array' },
         inbox_unread: { type: 'array' },
         last_activity: str,
+        cross_passage: {
+          type: 'object',
+          description:
+            'Cross-passage orientation. Per-passage summary keyed by ' +
+            "passage name (currently 'agora' and 'devil'). Empty when no " +
+            'passage besides gate has any records under the content_root. ' +
+            'Each entry shape: { passage, open, suspended, last_id, last_state, last_at }. ' +
+            "Surfaced so a fresh instance booting on a content_root with " +
+            "active agora plays or devil reviews sees them at the orientation " +
+            "entry point — closes the substrate-side Zeigarnik continuity " +
+            'across session boundaries (records-outlive-writers requires ' +
+            'records also be findable on re-entry).',
+        },
         suggested_next: {
           type: 'object',
           description:
