@@ -9,8 +9,12 @@
   },
   "scripts": {
     "build": "tsc",
+    "prepare": "tsc",
     "test": "tsc && node tests/run.mjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "gate": "node bin/gate.mjs",
+    "agora": "node bin/agora.mjs",
+    "devil": "node bin/devil.mjs"
   },
   "dependencies": {
     "yaml": "^2.5.0"
