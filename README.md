@@ -39,6 +39,7 @@ Pick a depth. Every layer works on its own.
 | 30 sec | the paragraphs above | you want to know what this is |
 | 5 min | [`docs/concepts-for-newcomers.md`](./docs/concepts-for-newcomers.md) | you came from Jira / PR review / ADR and want the translation |
 | 10 min | [`AGENT.md`](./AGENT.md) | you're an AI agent about to run `gate` and want the verb map |
+| 15 min | [`docs/playbook.md`](./docs/playbook.md) | you know each passage; you want **combos** (gate + agora + devil), recipes, and the bug-killing flow |
 | 30 min | [`docs/verbs.md`](./docs/verbs.md) | you want per-verb examples and design notes |
 | 1 hour | [`examples/dogfood-session/`](./examples/dogfood-session/) | you're adopting this seriously and want to see real sessions |
 | working notes | [`docs/domain-fit/`](./docs/domain-fit/) | you're curious whether gate fits a non-standard domain |
