@@ -124,6 +124,19 @@ guild validate                          # check all member YAMLs
 
 Categories: `core | professional | assignee | trial | special | host`
 
+## The three passages — a one-line dispatch shorthand
+
+| passage | shape (一語)         | the verb you do                | when to reach |
+|---------|----------------------|--------------------------------|----------------|
+| `gate`  | **判断 / judgment**  | decide on a request            | needs a verdict (approve / deny / complete / fail / review) |
+| `agora` | **探索 / exploration** | stay with a thought          | something in motion that shouldn't be forced to a verdict yet |
+| `devil` | **守備 / defense**   | protect end-users              | could harm a third party if it lands without scrutiny |
+
+This is a dispatch tool, not a metaphor. Recognize the shape of
+the work, route to the matching passage. The substrate of each
+passage is shaped by what it holds (decisions / explorations /
+multi-perspective scrutiny), not by what it talks about.
+
 ## Agora (second passage — play / narrative)
 
 `agora` is the second passage under guild — alongside `gate`. Where
