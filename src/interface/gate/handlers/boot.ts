@@ -15,6 +15,12 @@ const BOOT_KNOWN_FLAGS: ReadonlySet<string> = new Set([
 import { collectStatus, StatusSummary } from './status.js';
 import { collectUtterances } from '../voices.js';
 import { Request } from '../../../domain/request/Request.js';
+import {
+  PassageOrientationProvider,
+  PassageOrientationSummary,
+} from '../../shared/PassageOrientation.js';
+import { agoraOrientation } from '../../../passages/agora/interface/orientation.js';
+import { devilOrientation } from '../../../passages/devil/interface/orientation.js';
 
 /**
  * Next-step hint embedded in boot. Mirrors the SuggestedNext shape
@@ -121,6 +127,25 @@ interface BootPayload {
       fix_hint: string | null;
     };
   };
+  /**
+   * Cross-passage orientation. Each registered passage that has any
+   * records under the content_root contributes a normalized summary
+   * (open count, suspended count, last-touched id/state/at). Empty
+   * passages omit their entry entirely. The map is empty when no
+   * passage besides gate has any records.
+   *
+   * Closes the substrate-side Zeigarnik continuity gap surfaced by
+   * the develop-branch dogfood (`cross-passage-orient` agora play):
+   * fresh instances that boot on a content_root with active agora
+   * plays or devil reviews previously saw nothing about them at the
+   * orientation entry point. The Zeigarnik primitive (agora's
+   * cliff/invitation) breaks if cliffs aren't surfaced where the
+   * future instance lands.
+   *
+   * Per principle 04 (records outlive writers), substrate must be
+   * findable on re-entry, not just present on disk.
+   */
+  cross_passage: Record<string, PassageOrientationSummary>;
   /**
    * Discoverability hint: what verbs are applicable right now?
    *
@@ -335,6 +360,8 @@ export async function bootCmd(c: C, args: ParsedArgs): Promise<number> {
     c.config.hostNames,
   );
 
+  const crossPassage = await collectCrossPassage(c.config);
+
   const payload: BootPayload = {
     actor,
     role,
@@ -350,6 +377,7 @@ export async function bootCmd(c: C, args: ParsedArgs): Promise<number> {
       resolved_content_root: c.config.contentRoot,
       content_root_health: contentRootHealth,
     },
+    cross_passage: crossPassage,
     suggested_next: suggestedNext,
     verbs_available_now: verbsAvailableNow,
   };
@@ -473,6 +501,45 @@ export function deriveBootSuggestedNext(
  * writeFormat.ts — same field, same semantics, exported on
  * BootSuggestedNext so consumers see one consistent shape.
  */
+/**
+ * Registry of passage orientation providers. Each passage that
+ * lives under `<content_root>/<name>/` contributes one provider;
+ * boot polls all of them at orientation time.
+ *
+ * Static array (rather than dynamic registry) because the package
+ * ships gate, agora, devil together — there's nothing to discover
+ * at runtime. The seam exists so adding a new passage is a one-
+ * line change here plus the passage's own provider, not a refactor
+ * of boot.ts. Failure of any single provider is contained: errors
+ * are logged to stderr and the rest of the registry continues.
+ */
+const PASSAGE_ORIENTATION_REGISTRY: ReadonlyArray<{
+  name: string;
+  provider: PassageOrientationProvider;
+}> = [
+  { name: 'agora', provider: agoraOrientation },
+  { name: 'devil', provider: devilOrientation },
+];
+
+async function collectCrossPassage(
+  config: C['config'],
+): Promise<Record<string, PassageOrientationSummary>> {
+  const out: Record<string, PassageOrientationSummary> = {};
+  for (const { name, provider } of PASSAGE_ORIENTATION_REGISTRY) {
+    try {
+      const summary = await provider(config);
+      if (summary !== null) out[name] = summary;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      process.stderr.write(
+        `notice: passage '${name}' orientation provider failed: ${msg} ` +
+          `(boot continues; cross_passage.${name} omitted)\n`,
+      );
+    }
+  }
+  return out;
+}
+
 function stampActorResolved(
   partial: Omit<BootSuggestedNext, 'actor_resolved'>,
   actor: string | null,
@@ -781,6 +848,23 @@ function renderBootText(p: BootPayload): string {
     }
   }
   if (p.last_activity) lines.push(`last activity: ${p.last_activity}`);
+
+  // Cross-passage summary: render only the passages with records.
+  // Empty cross_passage stays silent (voice budget — fresh roots
+  // shouldn't see "agora: 0/0/null" noise).
+  const crossEntries = Object.values(p.cross_passage);
+  if (crossEntries.length > 0) {
+    lines.push('');
+    for (const s of crossEntries) {
+      const suspendedNote =
+        s.suspended > 0 ? ` (${s.suspended} paused)` : '';
+      const lastNote =
+        s.last_id !== null
+          ? `; last ${s.last_id} [${s.last_state}]`
+          : '';
+      lines.push(`${s.passage}: ${s.open} open${suspendedNote}${lastNote}`);
+    }
+  }
 
   if (p.tail.length > 0) {
     lines.push('');
