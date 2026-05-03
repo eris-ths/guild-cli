@@ -110,6 +110,64 @@ const VERBS: readonly VerbSchema[] = [
     }),
   },
   {
+    name: 'entry',
+    category: 'write',
+    summary:
+      "append a hand-rolled review entry. Per-kind required flags: kind='finding' " +
+      "needs --severity AND --severity-rationale (Claude Security-style exploitability " +
+      "context, per #126 decision D). kind='gate' is reserved for `devil ingest`. " +
+      'Persona must be hand-rolled (red-team / author-defender / mirror); ingest-only ' +
+      'personas are rejected here.',
+    input: {
+      type: 'object',
+      properties: {
+        // positional <rev-id>
+        review_id: {
+          type: 'string',
+          description: 'positional; review id (rev-YYYY-MM-DD-NNN)',
+        },
+        persona: {
+          type: 'string',
+          description:
+            'persona name from the catalog (red-team | author-defender | mirror in v0)',
+        },
+        lense: {
+          type: 'string',
+          description:
+            'lense name from the catalog (one of the 11 v0 defaults — see issue #126 table)',
+        },
+        kind: {
+          type: 'string',
+          enum: ['finding', 'assumption', 'resistance', 'skip', 'synthesis'],
+          description: "kind=gate is reserved for `devil ingest`",
+        },
+        text: str,
+        severity: {
+          type: 'string',
+          enum: ['critical', 'high', 'medium', 'low', 'info'],
+          description: "required when kind='finding'",
+        },
+        'severity-rationale': strOpt(
+          "required when kind='finding'; prose explaining why this severity in this codebase",
+        ),
+        addresses: strOpt('optional cross-reference to an earlier entry id (e-NNN)'),
+        by: strOpt('actor (defaults to GUILD_ACTOR)'),
+        format: formatField,
+      },
+      required: ['review_id', 'persona', 'lense', 'kind', 'text'],
+    },
+    output: writeEnvelopeBase({
+      review_id: str,
+      entry_id: str,
+      persona: str,
+      lense: str,
+      kind: {
+        type: 'string',
+        enum: ['finding', 'assumption', 'resistance', 'skip', 'synthesis'],
+      },
+    }),
+  },
+  {
     name: 'schema',
     category: 'meta',
     summary:

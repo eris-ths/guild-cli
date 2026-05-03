@@ -20,8 +20,11 @@ import { GuildConfig } from '../../../infrastructure/config/GuildConfig.js';
 import { parseArgs } from '../../../interface/shared/parseArgs.js';
 import { DomainError } from '../../../domain/shared/DomainError.js';
 import { YamlDevilReviewRepository } from '../infrastructure/YamlDevilReviewRepository.js';
+import { BundledLenseCatalog } from '../infrastructure/BundledLenseCatalog.js';
+import { BundledPersonaCatalog } from '../infrastructure/BundledPersonaCatalog.js';
 import { schemaCmd } from './handlers/schema.js';
 import { openReview } from './handlers/open.js';
+import { entryOnReview } from './handlers/entry.js';
 
 const HELP = `devil-review — security-backstop review passage (v0 scaffold)
 
@@ -33,6 +36,20 @@ Usage:
                               Initial state: open. Allocates a fresh
                               rev-YYYY-MM-DD-NNN id per the runtime clock.
 
+  devil entry <rev-id> --persona <p> --lense <l> --kind <k>
+                       --text "<prose>"
+                       [--severity <c|h|m|l|info>]
+                       [--severity-rationale "<prose>"]
+                       [--addresses <entry-id>]
+                       [--by <m>] [--format json|text]
+                              Append a hand-rolled entry. kind is one of:
+                              finding (severity + severity-rationale required),
+                              assumption, resistance, skip, synthesis.
+                              kind=gate is reserved for 'devil ingest'.
+                              persona must be hand-rolled (red-team /
+                              author-defender / mirror); ingest-only
+                              personas are rejected here.
+
   devil schema [--verb <name>] [--format json|text]
                               Agent dispatch contract for this passage
                               (principle 10). draft-07 JSON Schema subset.
@@ -43,8 +60,6 @@ Usage:
   devil --version              Print version and exit.
 
 Verbs landing in subsequent commits per issue #126:
-  entry <rev-id>               Append an entry. Hand-rolled personas pick
-                              from red-team / author-defender / mirror.
   ingest <rev-id>              Append entries from /ultrareview, Claude
                               Security, or supply-chain-guard output.
   dismiss <entry-id>           Mark a finding dismissed with a reason
@@ -56,7 +71,7 @@ Verbs landing in subsequent commits per issue #126:
   list                         Enumerate reviews in the content_root.
   show <rev-id>                Detail view of one review.
 
-Passage status: v0 scaffold. 'open' and 'schema' are invokable in this commit.
+Passage status: v0 scaffold. 'open', 'entry', and 'schema' are invokable in this commit.
 Substrate: shares content_root and members/ with gate and agora. Reviews
 land at <content_root>/devil/reviews/<rev-id>.yaml.
 
@@ -83,6 +98,8 @@ export async function main(argv: readonly string[]): Promise<number> {
   const args = parseArgs(rest);
   const config = GuildConfig.load();
   const reviews = new YamlDevilReviewRepository(config);
+  const lenses = new BundledLenseCatalog();
+  const personas = new BundledPersonaCatalog();
 
   try {
     switch (cmd) {
@@ -90,10 +107,12 @@ export async function main(argv: readonly string[]): Promise<number> {
         return await schemaCmd(args);
       case 'open':
         return await openReview({ reviews, config }, args);
+      case 'entry':
+        return await entryOnReview({ reviews, lenses, personas, config }, args);
       default:
         process.stderr.write(
           `devil: unknown verb: ${cmd}\n` +
-            `(v0 scaffold — \`open\` and \`schema\` are invokable; other verbs land in subsequent commits per #126)\n`,
+            `(v0 scaffold — \`open\`, \`entry\`, and \`schema\` are invokable; other verbs land in subsequent commits per #126)\n`,
         );
         return 1;
     }
