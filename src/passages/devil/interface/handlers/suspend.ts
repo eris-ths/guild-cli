@@ -80,7 +80,7 @@ export async function suspendReview(
     '--invitation required (what the next opener of this thread should attempt)',
   );
 
-  const by = optionalOption(args, 'by') ?? process.env['GUILD_ACTOR'];
+  const by = optionalOption(args, 'by', 'GUILD_ACTOR');
   if (!by) {
     process.stderr.write(
       'error: --by required (or set GUILD_ACTOR). devil suspend attributes the pause.\n',

@@ -1,3 +1,4 @@
+import { resolveGuildActor } from '../../shared/resolveGuildActor.js';
 import {
   ParsedArgs,
   optionalOption,
@@ -41,7 +42,7 @@ export async function suggestCmd(c: C, args: ParsedArgs): Promise<number> {
     throw new Error(`--format must be 'json' or 'text', got: ${format}`);
   }
 
-  const envActor = process.env['GUILD_ACTOR'];
+  const envActor = resolveGuildActor();
   const actor = envActor && envActor.length > 0 ? envActor : null;
 
   // Role resolution mirrors bootCmd. Suggest must succeed without an

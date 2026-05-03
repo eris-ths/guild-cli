@@ -1,3 +1,4 @@
+import { resolveGuildActor } from '../../shared/resolveGuildActor.js';
 import { resolve as resolvePath } from 'node:path';
 import { buildContainer } from '../../shared/container.js';
 import { optionalOption, ParsedArgs } from '../../shared/parseArgs.js';
@@ -57,7 +58,7 @@ export async function readStdin(): Promise<string> {
  * emitting the user-facing delegation notice.
  */
 export function deriveInvokedBy(by: string): string | undefined {
-  const envActor = process.env['GUILD_ACTOR'];
+  const envActor = resolveGuildActor();
   if (!envActor || envActor.length === 0) return undefined;
   if (envActor === by) return undefined;
   return envActor;

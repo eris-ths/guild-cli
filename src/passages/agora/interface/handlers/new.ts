@@ -38,7 +38,7 @@ export async function newGame(deps: NewGameDeps, args: ParsedArgs): Promise<numb
   const kind = requireOption(args, 'kind', '--kind required (quest|sandbox)');
   const title = requireOption(args, 'title', '--title required');
   const description = optionalOption(args, 'description');
-  const by = optionalOption(args, 'by') ?? process.env['GUILD_ACTOR'];
+  const by = optionalOption(args, 'by', 'GUILD_ACTOR');
   if (!by) {
     process.stderr.write(
       'error: --by required (or set GUILD_ACTOR). agora new attributes the creation to an actor.\n',

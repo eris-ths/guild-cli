@@ -1,3 +1,4 @@
+import { resolveGuildActor } from '../../shared/resolveGuildActor.js';
 import {
   ParsedArgs,
   requireOption,
@@ -160,8 +161,8 @@ export async function reqList(
   const autoReviewFilter = optionalOption(args, 'auto-review');
   const explicitFor = optionalOption(args, 'for');
   const envActor =
-    explicitFor === undefined && process.env['GUILD_ACTOR']
-      ? process.env['GUILD_ACTOR']
+    explicitFor === undefined && resolveGuildActor()
+      ? resolveGuildActor()
       : undefined;
   const forFilter = explicitFor ?? envActor;
 
@@ -697,7 +698,7 @@ export async function reqFastTrack(c: C, args: ParsedArgs): Promise<number> {
   // `executor` may legitimately differ from `from`; when it does we
   // don't emit a second notice here — the env actor vs executor
   // mismatch is the same delegation already surfaced above.
-  const envActor = process.env['GUILD_ACTOR'];
+  const envActor = resolveGuildActor();
   const invokedByExec =
     envActor && envActor.length > 0 && envActor !== executor
       ? envActor

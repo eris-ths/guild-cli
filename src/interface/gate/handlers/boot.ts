@@ -1,3 +1,4 @@
+import { resolveGuildActor } from '../../shared/resolveGuildActor.js';
 import { resolve } from 'node:path';
 import {
   ParsedArgs,
@@ -187,7 +188,7 @@ export async function bootCmd(c: C, args: ParsedArgs): Promise<number> {
   const tailLimit = parseOptionalIntOption(args, 'tail') ?? 10;
   const personalLimit = parseOptionalIntOption(args, 'utterances') ?? 5;
 
-  const envActor = process.env['GUILD_ACTOR'];
+  const envActor = resolveGuildActor();
   const actor = envActor && envActor.length > 0 ? envActor : null;
 
   // Resolve role without rejecting when GUILD_ACTOR is unset — boot
