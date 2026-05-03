@@ -194,6 +194,10 @@ const VERBS: readonly VerbSchema[] = [
         by: strOpt('actor (defaults to GUILD_ACTOR)'),
         text: str,
         format: formatField,
+        game: strOpt(
+          'game slug (required when <play-id> matches plays in multiple games — e.g. ' +
+            'two games each have a YYYY-MM-DD-001)',
+        ),
       },
       required: ['text'],
     },
@@ -216,6 +220,7 @@ const VERBS: readonly VerbSchema[] = [
         invitation: str,
         by: strOpt('actor (defaults to GUILD_ACTOR)'),
         format: formatField,
+        game: strOpt('game slug (required for cross-game id collisions; see move)'),
       },
       required: ['cliff', 'invitation'],
     },
@@ -237,6 +242,7 @@ const VERBS: readonly VerbSchema[] = [
         note: strOpt('optional resume prose'),
         by: strOpt('actor (defaults to GUILD_ACTOR)'),
         format: formatField,
+        game: strOpt('game slug (required for cross-game id collisions; see move)'),
       },
     },
     output: writeEnvelopeBase({
@@ -260,6 +266,7 @@ const VERBS: readonly VerbSchema[] = [
         note: strOpt('optional closure prose'),
         by: strOpt('actor (defaults to GUILD_ACTOR)'),
         format: formatField,
+        game: strOpt('game slug (required for cross-game id collisions; see move)'),
       },
     },
     output: writeEnvelopeBase({
