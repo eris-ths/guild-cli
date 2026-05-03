@@ -43,7 +43,7 @@ export async function startPlay(deps: PlayDeps, args: ParsedArgs): Promise<numbe
   rejectUnknownFlags(args, PLAY_KNOWN_FLAGS, 'play');
 
   const slug = requireOption(args, 'slug', '--slug required (game to play)');
-  const by = optionalOption(args, 'by') ?? process.env['GUILD_ACTOR'];
+  const by = optionalOption(args, 'by', 'GUILD_ACTOR');
   if (!by) {
     process.stderr.write(
       'error: --by required (or set GUILD_ACTOR). agora play attributes the start to an actor.\n',

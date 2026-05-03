@@ -331,6 +331,18 @@ Request IDs: `YYYY-MM-DD-NNNN`. Issue IDs: `i-YYYY-MM-DD-NNNN`.
 `GUILD_ACTOR=<name>` — default for `--from` / `--by` / `--for`.
 Explicit flags always win. `--executor` and `--auto-review` are never env-filled.
 
+If `GUILD_ACTOR` is unset, the CLI falls back to a `.guild-actor`
+file: walks up from `cwd` (same ancestor pattern as
+`guild.config.yaml`), takes the first one found, trims whitespace,
+uses its content as the actor. Empty/whitespace-only files fall
+through. **Env wins** when both are present — env is the legacy
+contract; the file is the substrate-side fallback for environments
+where shell env doesn't propagate (e.g. AI agent loops where each
+subprocess is a fresh shell). Per
+[`lore/principles/11-ai-first-human-as-projection.md`](./lore/principles/11-ai-first-human-as-projection.md),
+the file is more AI-natural than env: substrate-resident, ancestor-
+walked, the same shape as `guild.config.yaml`.
+
 `GUILD_LOCALE=<en|ja>` — prose language for `gate resume`
 `restoration_prose`. Defaults to `en`. Also settable via `--locale`.
 

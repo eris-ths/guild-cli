@@ -106,7 +106,7 @@ export async function entryOnReview(
   );
   const text = requireOption(args, 'text', '--text required');
 
-  const by = optionalOption(args, 'by') ?? process.env['GUILD_ACTOR'];
+  const by = optionalOption(args, 'by', 'GUILD_ACTOR');
   if (!by) {
     process.stderr.write(
       'error: --by required (or set GUILD_ACTOR). devil entry attributes the entry author.\n',

@@ -23,6 +23,9 @@
  * value anyway, so the old misbehaviour was latent: true intent
  * dropped on the floor, positional swallowed.
  */
+
+import { resolveGuildActor } from './resolveGuildActor.js';
+
 export interface ParsedArgs {
   readonly options: Readonly<Record<string, string | boolean>>;
   readonly positional: readonly string[];
@@ -97,8 +100,8 @@ export function requireOption(
   const v = args.options[key];
   if (typeof v === 'string' && v) return v;
   if (envFallback) {
-    const envVal = process.env[envFallback];
-    if (envVal && envVal.length > 0) return envVal;
+    const fallback = resolveEnvOrActorFile(envFallback);
+    if (fallback !== undefined) return fallback;
   }
   // When the flag is present but landed as boolean, the user almost
   // certainly passed a value beginning with `--` (quoting another
@@ -122,8 +125,24 @@ export function optionalOption(
   const v = args.options[key];
   if (typeof v === 'string') return v;
   if (envFallback) {
-    const envVal = process.env[envFallback];
-    if (envVal && envVal.length > 0) return envVal;
+    const fallback = resolveEnvOrActorFile(envFallback);
+    if (fallback !== undefined) return fallback;
+  }
+  return undefined;
+}
+
+/**
+ * Read `envFallback` from process.env, falling through to the
+ * `.guild-actor` file if and only if the fallback name is `GUILD_ACTOR`.
+ * Other env-fallback names (none used today, but the parameter is open)
+ * stay env-only — the file fallback is specifically for actor identity.
+ * See `resolveGuildActor` for the file resolution rules.
+ */
+function resolveEnvOrActorFile(envFallback: string): string | undefined {
+  const envVal = process.env[envFallback];
+  if (envVal && envVal.length > 0) return envVal;
+  if (envFallback === 'GUILD_ACTOR') {
+    return resolveGuildActor();
   }
   return undefined;
 }
