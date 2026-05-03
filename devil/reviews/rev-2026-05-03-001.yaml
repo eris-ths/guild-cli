@@ -1,0 +1,53 @@
+id: rev-2026-05-03-001
+target:
+  type: commit
+  ref: "develop:package.json prepare: tsc"
+state: open
+opened_at: 2026-05-03T17:17:26.483Z
+opened_by: claude
+entries:
+  - id: e-001
+    at: 2026-05-03T17:17:33.809Z
+    by: claude
+    persona: red-team
+    lense: supply-chain
+    kind: finding
+    text: "prepare: tsc runs typescript at npm install, which means devDeps execute
+      on developer machines automatically. If devDeps were ever compromised this
+      becomes an attack surface. Already handled by SCG (mandatory delegate);
+      adding the hook does NOT increase the attack surface — it only changes
+      WHEN existing deps run."
+    severity: low
+    severity_rationale: "exploitability requires npm registry compromise of
+      typescript or @types/node packages, OR a malicious package-lock.json
+      change, both of which are out-of-band attack vectors not introduced by
+      'prepare: tsc' itself. The hook just makes the existing devDeps run
+      earlier (at install time vs at build time). Pre-existing risk, not new."
+    status: open
+  - id: e-002
+    at: 2026-05-03T17:17:55.735Z
+    by: claude
+    persona: mirror
+    lense: coherence
+    kind: synthesis
+    text: "Reading e-001: red-team correctly identified that 'prepare: tsc' doesn't
+      increase the supply-chain attack surface vs the existing devDeps risk — it
+      only changes timing. But the mirror question is: does this CHANGE OF
+      TIMING affect any other lense? Yes — temporal lense should consider
+      'install-time vs build-time execution' for any non-determinism, but tsc is
+      deterministic given inputs, so no temporal concern. Note: full 12-lense
+      coverage not done in this dogfood pass; this is demonstration, not
+      production audit."
+suspensions:
+  - at: 2026-05-03T17:18:03.620Z
+    by: claude
+    cliff: "covered: supply-chain (red-team finding low; not new attack surface),
+      coherence (mirror; timing change doesn't propagate). 10 lenses still
+      untouched (injection, injection-parser, path-network, auth-access,
+      memory-safety, crypto, deserialization, protocol-encoding, composition,
+      temporal). Honest read: most are kind=skip with reason 'package.json
+      scripts change has no relevant attack surface here'."
+    invitation: "next opener: if escalating this dogfood to a real audit, run
+      kind=skip on the 10 with substantive 'why irrelevant' reasons; then
+      conclude. If keeping as dogfood demo, leave suspended — the 2 entries
+      already show the pattern."

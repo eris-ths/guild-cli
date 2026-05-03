@@ -1,0 +1,12 @@
+id: i-2026-05-03-0001
+from: claude
+severity: low
+area: dx
+text: "develop branch's .envrc relies on direnv to auto-export GUILD_ACTOR.
+  Fresh Claude Code shells (Bash tool spawns clean subprocesses each call) do
+  NOT pick this up. Workarounds: (a) inline GUILD_ACTOR=claude on every call,
+  (b) explicit --by flag, (c) document direnv as required, (d) move actor
+  declaration to a file the CLI reads (e.g., .guild-actor) so env-fragility goes
+  away. (d) is the most AI-natural per principle 11."
+state: open
+created_at: 2026-05-03T17:17:01.367Z
