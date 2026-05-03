@@ -1047,6 +1047,168 @@ The agora-specific README at
 [`src/passages/agora/README.md`](../src/passages/agora/README.md)
 covers layout, status, and lore upstream in more detail.
 
+## Devil-review — the third passage (snapshot)
+
+`devil` is the third passage under guild, alongside `gate` and
+`agora`. Where gate carries decisions and agora carries narrative,
+devil carries **review-as-deliberation-substrate** — a multi-persona,
+lense-enforced surface that composes with single-pass review tools
+(Anthropic `/ultrareview`, Claude Security, supply-chain-guard)
+rather than replacing them. Design rationale lives in
+[issue #126](https://github.com/eris-ths/guild-cli/issues/126).
+
+### When to reach for devil vs gate vs agora
+
+- **Use `gate review`** for quick verdicts on requests
+  (`ok | concern | reject` per lense, single-shot, lightweight).
+- **Use `agora`** for open-ended exploration where the substrate
+  needs to carry "what just happened" and "what should the next
+  opener do" across re-entries.
+- **Use `devil`** when the review needs **structural multi-persona
+  dissent**, **lense coverage that can't be silently skipped**, or
+  **time-extended re-entry on the same target** — typically
+  security-sensitive code, supply chain changes, or anywhere a
+  single-pass model review's framing-blindness matters.
+
+A devil review is **heavier** than a gate review by design. The
+friction (lense catalog, persona commitment, severity rationale)
+is the floor-raising mechanism; expect to spend more time per
+review than gate review takes.
+
+### Worked example (snapshot loop)
+
+```bash
+$ devil open src/foo.ts --type file
+✓ devil-review opened: rev-2026-05-03-001 [open] against file:src/foo.ts by alice
+  next: devil entry rev-2026-05-03-001 --persona <p> --lense <l> --kind <k> --text "..."
+        or devil ingest rev-2026-05-03-001 --from <ultrareview|claude-security|scg> <input>
+notice: wrote /abs/path/devil/reviews/rev-2026-05-03-001.yaml (config: ...)
+
+$ devil entry rev-2026-05-03-001 \
+    --persona red-team --lense injection --kind finding \
+    --text "user input concatenated into raw SQL on /admin/search" \
+    --severity high \
+    --severity-rationale "endpoint sits behind auth but admin role is broadly granted in this repo"
+✓ entry e-001 appended to rev-2026-05-03-001 [persona=red-team, lense=injection, kind=finding] by alice
+
+$ devil entry rev-2026-05-03-001 \
+    --persona author-defender --lense injection --kind assumption \
+    --text "input is sanitized one layer up by the routing middleware" \
+    --addresses e-001
+✓ entry e-002 appended to rev-2026-05-03-001 [persona=author-defender, lense=injection, kind=assumption] by alice
+
+$ devil entry rev-2026-05-03-001 \
+    --persona mirror --lense composition --kind synthesis \
+    --text "the red-team and author-defender agree on the path but disagree on whether middleware sanitization is contracted; the trust assumption (e-002) is the load-bearing thing"
+✓ entry e-003 appended
+
+$ devil show rev-2026-05-03-001
+rev-2026-05-03-001 [open] against file:src/foo.ts
+opened: 2026-05-03T... by alice
+
+entries: (3)
+  e-001  [persona=red-team / lense=injection / kind=finding / severity=high / status=open / by=alice]
+    user input concatenated into raw SQL on /admin/search
+    severity_rationale: endpoint sits behind auth but admin role is broadly granted in this repo
+  e-002  [persona=author-defender / lense=injection / kind=assumption / by=alice]
+    input is sanitized one layer up by the routing middleware
+    addresses: e-001
+  e-003  [persona=mirror / lense=composition / kind=synthesis / by=alice]
+    the red-team and author-defender agree on the path but disagree on whether middleware sanitization is contracted; the trust assumption (e-002) is the load-bearing thing
+
+$ devil conclude rev-2026-05-03-001 \
+    --synthesis "Finding stands until middleware sanitization contract is documented. e-002 is the assumption to test, not the answer." \
+    --unresolved e-001
+✓ devil-review concluded: rev-2026-05-03-001 [open → concluded] by alice
+  synthesis: Finding stands until middleware sanitization contract is documented. ...
+  unresolved: e-001
+  this review is now terminal — no further entries, suspensions, resumes, or re-runs.
+```
+
+### Entry kinds (validated per-kind)
+
+| Kind | Required extras | Purpose |
+|------|-----------------|---------|
+| `finding` | `--severity` + `--severity-rationale` | Concrete vulnerability candidate. The rationale is the friction that forces exploitability-context reasoning (Claude Security influence). |
+| `assumption` | (none) | Declared trust assumption ("auth() is correct"). Future entries can `--addresses` it to contest. |
+| `resistance` | (none) | Verdict-less concern ("something feels off"). Held without verify. |
+| `skip` | (none) | `--text` declares why the lense is irrelevant. Substrate keeps the skip explicit. |
+| `synthesis` | (none) | Cross-cutting reading for the conclusion phase. |
+| `gate` | `stages[]` (only via `devil ingest`) | Multi-stage automated check output (e.g., SCG's 8 gates). Building from CLI flags is too brittle, so `devil entry` rejects this kind. |
+
+### Personas (catalog-enforced)
+
+| Persona | Commitment |
+|---------|------------|
+| `red-team` | Adversarial framing strict. Find the cheapest way to harm an end user. Don't be fair. |
+| `author-defender` | Articulate the author's framing and the trust assumptions the change rests on. Make assumptions explicit (`kind: assumption`) so red-team has targets. |
+| `mirror` | Read both. Surface contradictions, things both sides missed, load-bearing assumptions neither named. |
+
+Ingest-only personas (`ultrareview-fleet`, `claude-security`,
+`scg-supply-chain-gate`) join the catalog with their matching
+ingest verbs, which land later. Hand-rolled `devil entry` cannot
+attribute to ingest-only personas.
+
+### Lenses (v0 catalog of 11)
+
+The first 8 mirror Claude Security's detection categories
+(injection, injection-parser, path-network, auth-access,
+memory-safety, crypto, deserialization, protocol-encoding) so
+ingested findings have a 1:1 home. Three devil-review-specific
+lenses extend the catalog:
+
+- `composition` — multi-file/function effect. Diff-bounded review
+  tends to miss this; devil keeps it as its own axis.
+- `temporal` — TOCTOU, race, retry, idempotency. Easy to miss in
+  single-pass review because the model has no native sense of
+  "two requests overlap" or "retry happens 30 seconds later."
+- `supply-chain` — **mandatory delegate to SCG** (see issue #126
+  decision C). The `supply-chain` lense fails closed if SCG is
+  unavailable rather than allowing silent skip — the floor-raising
+  design refuses "compromise on what we know matters."
+
+Per-content_root custom lenses (under `<content_root>/devil/lenses/<name>.yaml`)
+land later as a separate adapter; the catalog interface already
+exists for the seam.
+
+### Conclusion is verdict-less
+
+`devil conclude` requires `--synthesis` prose. There is no
+ok|concern|reject label — the synthesis is what the reviewer
+concluded across all lenses, not a single tag.
+
+`--unresolved e-001,e-002,...` lists entry ids the reviewer chose
+not to dismiss-or-resolve before concluding. Substrate-explicit
+"these threads are deliberately left open" — distinct from "all
+closed" or "we forgot to update them."
+
+After conclude no further entries / suspensions / resumes /
+re-runs are accepted (terminal state).
+
+### Status (snapshot)
+
+CLI verbs in this snapshot:
+
+```
+devil open / entry / list / show / conclude / schema
+```
+
+Landing in subsequent commits per #126:
+
+```
+devil dismiss / resolve / suspend / resume / ingest (×3 sources)
+```
+
+The end-to-end loop (`open → entry → list/show → conclude`) is
+usable today on the snapshot branch. dismiss / resolve cover
+finding status mutation; suspend / resume add cliff/invitation
+re-entry context (softer than agora's — does not block other
+entries); ingest wires the automated source paths
+(`/ultrareview`, Claude Security, SCG).
+
+For substrate paths and the persona/lense schema reference, see
+the `## devil-review` section of [`AGENT.md`](../AGENT.md).
+
 ---
 
 A fully worked multi-turn example — author/critic personas driving
