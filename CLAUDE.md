@@ -39,21 +39,30 @@ gate / agora / devil for your development work** — not as a
 separate concern, as the working surface itself.
 
 ```bash
+# Once per checkout:
+npm install                         # `prepare` script auto-runs tsc → dist/
+# direnv users: GUILD_ACTOR auto-loads from .envrc on cd-in.
+# Without direnv: `source .envrc` (or `export GUILD_ACTOR=claude`).
+
 # Once per session:
-npm install && npm run build       # if dist/ is missing
-export GUILD_ACTOR=claude
-node bin/gate.mjs boot             # always your first verb
+npm run gate -- boot                # always your first verb
 
 # Then for any non-trivial work:
-node bin/gate.mjs request --from claude --action "..." --reason "..."
-node bin/agora.mjs new --slug <topic> --kind sandbox --title "..."
-node bin/devil.mjs open <pr-url> --type pr
+npm run gate -- request --action "..." --reason "..."
+npm run agora -- new --slug <topic> --kind sandbox --title "..."
+npm run devil -- open <pr-url> --type pr
 ```
 
-The CLIs are not on PATH by default (`bin` map only includes
-`guild` / `gate`); call `node bin/<passage>.mjs` directly.
-Aliasing in your shell is fine, but the substrate doesn't
-care — it sees verb invocations, not how they were spelled.
+The `--` after `npm run <name>` is required: it tells npm to
+forward the rest as arguments to the script. Forgetting it
+makes npm swallow your verb flags.
+
+**If you prefer plain verbs** (`gate boot` vs `npm run gate
+-- boot`): `npm link` once in this repo, then `gate` and
+`guild` resolve from PATH. agora and devil aren't in
+`package.json` `bin` (per release notes — opt-in passages),
+so they still need `npm run agora --` / `npm run devil --`
+or hand-aliased.
 
 **Dogfood expectation, not just convenience.** Per
 [playbook § "Tips for AI agents"](./docs/playbook.md#tips-for-ai-agents)
