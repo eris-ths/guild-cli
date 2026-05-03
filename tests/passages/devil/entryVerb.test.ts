@@ -279,6 +279,28 @@ test('entry: text-mode output includes next: hint', (t) => {
   assert.match(r.stdout, /devil conclude .* --synthesis/);
 });
 
+test('entry: refuses ingest-only personas (ultrareview-fleet, claude-security, scg-supply-chain-gate)', (t) => {
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  const reviewId = openReview(root);
+  for (const persona of ['ultrareview-fleet', 'claude-security', 'scg-supply-chain-gate']) {
+    const r = runDevil(
+      root,
+      [
+        'entry', reviewId,
+        '--persona', persona,
+        '--lense', 'composition',
+        '--kind', 'resistance',
+        '--text', 'attempt to attribute by hand',
+      ],
+      { GUILD_ACTOR: 'alice' },
+    );
+    assert.equal(r.status, 1, `${persona}: should be rejected`);
+    assert.match(r.stderr, /is ingest-only/);
+    assert.match(r.stderr, /devil ingest/);
+  }
+});
+
 test('entry: --addresses validates as entry id format', (t) => {
   const { root, cleanup } = bootstrap();
   t.after(cleanup);

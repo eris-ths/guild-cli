@@ -44,10 +44,10 @@ test('BundledLenseCatalog.names matches DEFAULT_LENSE_NAMES', () => {
   assert.deepEqual([...c.names()], [...DEFAULT_LENSE_NAMES]);
 });
 
-test('BundledPersonaCatalog.list returns the 3 hand-rolled defaults in canonical order', () => {
+test('BundledPersonaCatalog.list returns 6 personas (3 hand-rolled + 3 ingest-only) in canonical order', () => {
   const c = new BundledPersonaCatalog();
   const list = c.list();
-  assert.equal(list.length, 3);
+  assert.equal(list.length, 6);
   assert.deepEqual(
     list.map((p) => p.name),
     [...DEFAULT_PERSONA_NAMES],
@@ -59,12 +59,29 @@ test('BundledPersonaCatalog.find returns the persona or null', () => {
   const rt = c.find('red-team');
   assert.ok(rt);
   assert.equal(rt.name, 'red-team');
-  assert.equal(c.find('ultrareview-fleet'), null); // ingest-only personas not in v0 catalog
+  // Ingest-only personas ARE in the catalog (they need to be, so
+  // ingest verbs can attribute to them) — but `devil entry` refuses
+  // them via PersonaIsIngestOnly.
+  const fleet = c.find('ultrareview-fleet');
+  assert.ok(fleet);
+  assert.equal(fleet.ingest_only, true);
+  assert.equal(c.find('does-not-exist'), null);
 });
 
-test('every BundledPersonaCatalog default has ingest_only=false', () => {
+test('BundledPersonaCatalog: hand-rolled personas have ingest_only=false', () => {
   const c = new BundledPersonaCatalog();
-  for (const p of c.list()) {
-    assert.equal(p.ingest_only, false, `${p.name}: hand-rolled defaults are not ingest-only`);
+  for (const name of ['red-team', 'author-defender', 'mirror']) {
+    const p = c.find(name);
+    assert.ok(p);
+    assert.equal(p.ingest_only, false, `${name}: hand-rolled must NOT be ingest-only`);
+  }
+});
+
+test('BundledPersonaCatalog: ingest-only personas have ingest_only=true', () => {
+  const c = new BundledPersonaCatalog();
+  for (const name of ['ultrareview-fleet', 'claude-security', 'scg-supply-chain-gate']) {
+    const p = c.find(name);
+    assert.ok(p);
+    assert.equal(p.ingest_only, true, `${name}: ingest-only must have ingest_only=true`);
   }
 });

@@ -32,6 +32,7 @@ import { dismissEntry } from './handlers/dismiss.js';
 import { resolveEntry } from './handlers/resolve.js';
 import { suspendReview } from './handlers/suspend.js';
 import { resumeReview } from './handlers/resume.js';
+import { ingestSource } from './handlers/ingest.js';
 
 const HELP = `devil-review — security-backstop review passage (v0 scaffold)
 
@@ -106,6 +107,16 @@ Usage:
                               the paused-on context without a separate 'show'.
                               Refuses if no thread is currently paused.
 
+  devil ingest <rev-id> --from <ultrareview|claude-security|scg> <input-path>
+                        [--by <m>] [--format json|text]
+                              Append entries from an automated source's output.
+                              ultrareview / claude-security produce one
+                              kind=finding per bug; scg produces one kind=gate
+                              entry on the supply-chain lense with the 8 stages
+                              embedded. Each ingest logs to re_run_history so
+                              re-scans accumulate. Strict input shapes per
+                              source (see handlers/ingest.ts docstring).
+
   devil conclude <rev-id> --synthesis "<prose>"
                           [--unresolved <e-001,e-002,...>]
                           [--by <m>] [--format json|text]
@@ -128,11 +139,9 @@ Usage:
   devil --help                 This help.
   devil --version              Print version and exit.
 
-Verbs landing in subsequent commits per issue #126:
-  ingest <rev-id>              Append entries from /ultrareview, Claude
-                              Security, or supply-chain-guard output.
+All v1 verbs from issue #126 are now invokable in this snapshot.
 
-Passage status: v0 scaffold. 'open', 'entry', 'list', 'show', 'dismiss', 'resolve', 'suspend', 'resume', 'conclude', and 'schema' are invokable in this commit.
+Passage status: complete v1 surface. All 11 verbs from issue #126 are invokable.
 Substrate: shares content_root and members/ with gate and agora. Reviews
 land at <content_root>/devil/reviews/<rev-id>.yaml.
 
@@ -182,12 +191,14 @@ export async function main(argv: readonly string[]): Promise<number> {
         return await suspendReview({ reviews, config }, args);
       case 'resume':
         return await resumeReview({ reviews, config }, args);
+      case 'ingest':
+        return await ingestSource({ reviews, lenses, personas, config }, args);
       case 'conclude':
         return await concludeReview({ reviews, lenses, config }, args);
       default:
         process.stderr.write(
           `devil: unknown verb: ${cmd}\n` +
-            `(v0 scaffold — \`open\`, \`entry\`, \`list\`, \`show\`, \`dismiss\`, \`resolve\`, \`suspend\`, \`resume\`, \`conclude\`, and \`schema\` are invokable; the only remaining verb is \`ingest\` which lands in the next commit per #126)\n`,
+            `(v1 surface from #126: open / entry / list / show / dismiss / resolve / suspend / resume / ingest / conclude / schema)\n`,
         );
         return 1;
     }

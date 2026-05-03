@@ -63,7 +63,7 @@ test('devil --version prints version and exits 0', (t) => {
   assert.match(r.stdout, /devil-review .* snapshot/);
 });
 
-test('devil schema --format json emits the v0 contract (10 verbs)', (t) => {
+test('devil schema --format json emits the v1 contract (11 verbs, complete)', (t) => {
   const { root, cleanup } = tmpRoot();
   t.after(cleanup);
   const r = runDevil(root, ['schema', '--format', 'json']);
@@ -72,14 +72,12 @@ test('devil schema --format json emits the v0 contract (10 verbs)', (t) => {
   assert.equal(payload['$schema'], 'http://json-schema.org/draft-07/schema#');
   assert.equal(payload.passage, 'devil-review');
   assert.ok(Array.isArray(payload.verbs));
-  // Currently implemented: open + entry + list + show + dismiss +
-  // resolve + suspend + resume + conclude + schema. The only
-  // remaining verb is ingest (next commit).
+  // Complete v1 surface from issue #126: all 11 verbs invokable.
   const names = payload.verbs.map((v: { name: string }) => v.name).sort();
   assert.deepEqual(
     names,
     [
-      'conclude', 'dismiss', 'entry', 'list', 'open',
+      'conclude', 'dismiss', 'entry', 'ingest', 'list', 'open',
       'resolve', 'resume', 'schema', 'show', 'suspend',
     ],
   );
@@ -91,7 +89,7 @@ test('devil schema --format text emits a terse summary', (t) => {
   const r = runDevil(root, ['schema', '--format', 'text']);
   assert.equal(r.status, 0);
   assert.match(r.stdout, /devil-review/);
-  assert.match(r.stdout, /10 verb\(s\)/);
+  assert.match(r.stdout, /11 verb\(s\)/);
   assert.match(r.stdout, /open {2}\[write\]/);
   assert.match(r.stdout, /entry {2}\[write\]/);
   assert.match(r.stdout, /list {2}\[read\]/);
@@ -100,6 +98,7 @@ test('devil schema --format text emits a terse summary', (t) => {
   assert.match(r.stdout, /resolve {2}\[write\]/);
   assert.match(r.stdout, /suspend {2}\[write\]/);
   assert.match(r.stdout, /resume {2}\[write\]/);
+  assert.match(r.stdout, /ingest {2}\[write\]/);
   assert.match(r.stdout, /conclude {2}\[write\]/);
   assert.match(r.stdout, /schema {2}\[meta\]/);
 });
@@ -112,14 +111,13 @@ test('devil schema --verb <unknown> errors out', (t) => {
   assert.match(r.stderr, /no devil verb named "nope"/);
 });
 
-test('devil <unknown-verb> surfaces v0 scaffold error', (t) => {
+test('devil <unknown-verb> surfaces v1 surface error naming the catalog', (t) => {
   const { root, cleanup } = tmpRoot();
   t.after(cleanup);
-  const r = runDevil(root, ['ingest', 'something']);
+  const r = runDevil(root, ['nonsense']);
   assert.equal(r.status, 1);
-  assert.match(r.stderr, /unknown verb: ingest/);
-  assert.match(r.stderr, /v0 scaffold/);
-  assert.match(r.stderr, /#126/);
+  assert.match(r.stderr, /unknown verb: nonsense/);
+  assert.match(r.stderr, /v1 surface from #126/);
 });
 
 test('devil schema rejects unknown flag', (t) => {

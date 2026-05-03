@@ -395,6 +395,43 @@ const VERBS: readonly VerbSchema[] = [
     }),
   },
   {
+    name: 'ingest',
+    category: 'write',
+    summary:
+      'append entries from an automated source (--from ultrareview | claude-security | scg). ' +
+      'ultrareview / claude-security produce one kind=finding per bug; scg produces one ' +
+      'kind=gate entry on the supply-chain lense with embedded stages[]. Each ingest ' +
+      'invocation logs to re_run_history. Strict per-source v0 input shapes — see handler ' +
+      'docstring (handlers/ingest.ts) for the JSON schema each source expects.',
+    input: {
+      type: 'object',
+      properties: {
+        review_id: {
+          type: 'string',
+          description: 'positional 1; review id (rev-YYYY-MM-DD-NNN)',
+        },
+        input_path: {
+          type: 'string',
+          description: 'positional 2; path to a JSON file in the source-specific shape',
+        },
+        from: {
+          type: 'string',
+          enum: ['ultrareview', 'claude-security', 'scg'],
+        },
+        by: strOpt('actor (defaults to GUILD_ACTOR)'),
+        format: formatField,
+      },
+      required: ['review_id', 'input_path', 'from'],
+    },
+    output: writeEnvelopeBase({
+      review_id: str,
+      source: { type: 'string', enum: ['ultrareview', 'claude-security', 'scg'] },
+      ingested_count: { type: 'string', description: 'integer count of entries appended' },
+      ingested_entry_ids: { type: 'array', items: str },
+      re_run_index: { type: 'string', description: 'integer index in re_run_history' },
+    }),
+  },
+  {
     name: 'conclude',
     category: 'write',
     summary:
