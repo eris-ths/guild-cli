@@ -1047,7 +1047,7 @@ The agora-specific README at
 [`src/passages/agora/README.md`](../src/passages/agora/README.md)
 covers layout, status, and lore upstream in more detail.
 
-## Devil-review — the third passage (snapshot)
+## Devil-review — the third passage (alpha)
 
 `devil` is the third passage under guild, alongside `gate` and
 `agora`. Where gate carries decisions and agora carries narrative,
@@ -1075,7 +1075,7 @@ friction (lense catalog, persona commitment, severity rationale)
 is the floor-raising mechanism; expect to spend more time per
 review than gate review takes.
 
-### Worked example (snapshot loop)
+### Worked example (end-to-end loop)
 
 ```bash
 $ devil open src/foo.ts --type file
@@ -1145,9 +1145,10 @@ $ devil conclude rev-2026-05-03-001 \
 | `mirror` | Read both. Surface contradictions, things both sides missed, load-bearing assumptions neither named. |
 
 Ingest-only personas (`ultrareview-fleet`, `claude-security`,
-`scg-supply-chain-gate`) join the catalog with their matching
-ingest verbs, which land later. Hand-rolled `devil entry` cannot
-attribute to ingest-only personas.
+`scg-supply-chain-gate`) are in the catalog but cannot be used by
+hand — `devil entry` refuses them with `PersonaIsIngestOnly`. The
+matching `devil ingest --from <source>` verb is the only path that
+attributes entries to those personas.
 
 ### Lenses (v0 catalog of 11)
 
@@ -1185,26 +1186,22 @@ closed" or "we forgot to update them."
 After conclude no further entries / suspensions / resumes /
 re-runs are accepted (terminal state).
 
-### Status (snapshot)
+### Status (alpha)
 
-CLI verbs in this snapshot:
-
-```
-devil open / entry / list / show / conclude / schema
-```
-
-Landing in subsequent commits per #126:
+The complete v1 surface from #126 is landed:
 
 ```
-devil dismiss / resolve / suspend / resume / ingest (×3 sources)
+devil open / entry / list / show / dismiss / resolve / suspend
+       / resume / ingest / conclude / schema
 ```
 
-The end-to-end loop (`open → entry → list/show → conclude`) is
-usable today on the snapshot branch. dismiss / resolve cover
-finding status mutation; suspend / resume add cliff/invitation
-re-entry context (softer than agora's — does not block other
-entries); ingest wires the automated source paths
-(`/ultrareview`, Claude Security, SCG).
+dismiss / resolve cover finding status mutation; suspend / resume
+add cliff/invitation re-entry context (softer than agora's — do
+not block other entries); ingest wires the automated source paths
+(`/ultrareview`, Claude Security, SCG) using strict v0 input JSON
+shapes documented in the handler. Real-world adapters that
+translate actual upstream tool output into those shapes live
+outside the in-tree passage.
 
 For substrate paths and the persona/lense schema reference, see
 the `## devil-review` section of [`AGENT.md`](../AGENT.md).

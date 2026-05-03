@@ -9,51 +9,67 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 
 ### Added
 
-- **`devil` — third passage under guild (snapshot, security
-  backstop).** A multi-persona, lense-enforced review surface
-  that **composes with single-pass tools** (Anthropic
-  `/ultrareview`, Claude Security, supply-chain-guard) rather
-  than replacing them. Designed to **raise the security
-  knowledge floor** for code reviewed by authors who haven't
-  met OWASP top 10 — not to guarantee protection, but to keep
-  the dialogue honest when a finding is dismissed.
+- **`devil` — third passage under guild (alpha, security
+  backstop).** ([#127](https://github.com/eris-ths/guild-cli/pull/127))
+  A multi-persona, lense-enforced review surface that
+  **composes with single-pass tools** (Anthropic `/ultrareview`,
+  Claude Security, supply-chain-guard) rather than replacing
+  them. Designed to **raise the security knowledge floor** for
+  code reviewed by authors who haven't met OWASP top 10 — not
+  to guarantee protection, but to keep the dialogue honest when
+  a finding is dismissed.
 
-  Verbs (6 + schema in this snapshot; remaining 5 verbs land
-  before the merge to main):
+  Complete v1 surface from #126: 11 verbs.
 
-  - `devil open` — start a review session against a target
-    (`--type pr|file|function|commit`)
-  - `devil entry` — append a hand-rolled entry. Per-kind
-    validation: `kind=finding` requires `--severity` AND
-    `--severity-rationale` (the friction that forces
+  - `devil open <ref> --type <pr|file|function|commit>` —
+    start a review session against a target.
+  - `devil entry <rev-id>` — append a hand-rolled entry.
+    Per-kind validation: `kind=finding` requires `--severity`
+    AND `--severity-rationale` (the friction that forces
     exploitability-context reasoning, Claude Security style);
-    `kind=gate` is reserved for `devil ingest`
+    `kind=gate` is reserved for `devil ingest`.
   - `devil list` — enumerate reviews (filter by `--state` and
-    `--target-type`)
+    `--target-type`).
   - `devil show <rev-id>` — full detail (entries / suspensions
     / resumes / conclusion); JSON form is `review.toJSON()`,
-    same shape as the on-disk YAML
-  - `devil conclude <rev-id>` — terminal state transition.
-    `--synthesis` prose required (verdict-less close), optional
-    `--unresolved e-001,e-002,...` lists entry ids deliberately
-    left open
-  - `devil schema` — principle 10 dispatch contract (grows
-    commit-by-commit as verbs land)
-
-  Landing in subsequent commits before merge:
-  - `devil dismiss <entry-id>` / `devil resolve <entry-id>` —
-    finding status transitions
-  - `devil suspend` / `devil resume` — cliff/invitation cycle
-    borrowed from agora (softer semantics: does NOT block other
-    entries)
-  - `devil ingest --from <ultrareview|claude-security|scg>` —
-    automated source adapters
+    same shape as the on-disk YAML.
+  - `devil dismiss <rev-id> <entry-id> --reason <r>
+    [--note "..."]` — mark a finding-entry dismissed with a
+    structured reason (one of: `not-applicable | accepted-risk
+    | false-positive | out-of-scope | mitigated-elsewhere`).
+    Refuses re-dismiss and refuses dismiss-after-conclude.
+  - `devil resolve <rev-id> <entry-id> [--commit <sha>]` —
+    mark a finding-entry resolved, optionally citing the commit
+    that landed the fix (`resolved_by_commit` becomes part of
+    the substrate).
+  - `devil suspend <rev-id> --cliff "..." --invitation "..."` —
+    record a cliff/invitation pause on a thread of the review.
+    Softer than agora's suspend: does NOT block other entries;
+    just records re-entry context.
+  - `devil resume <rev-id> [--note "..."]` — pick up the most
+    recent un-paired suspension. Surfaces the closing
+    cliff/invitation in the response.
+  - `devil ingest <rev-id> --from <ultrareview|claude-security|scg> <input>` —
+    append entries from an automated source's output. Strict
+    v0 input JSON shapes per source; logs each invocation to
+    `re_run_history`. SCG ingest produces one `kind=gate`
+    entry on the `supply-chain` lense; ultrareview /
+    claude-security produce N `kind=finding` entries.
+  - `devil conclude <rev-id> --synthesis "<prose>"
+    [--unresolved e-001,e-002,...]` — terminal state
+    transition. Verdict-less close (no `ok|concern|reject`);
+    synthesis prose is required. Lense-coverage gate: every
+    lense in the catalog needs at least one entry (a
+    `kind: skip` entry counts when its text declares why) —
+    silent skipping defeats the floor-raising design.
+  - `devil schema [--verb <name>]` — principle 10 dispatch
+    contract for the passage.
 
   Substrate path: `<content_root>/devil/reviews/<rev-id>.yaml`
   (rev-id format: `rev-YYYY-MM-DD-NNN`, sequence per
   content_root per day).
 
-  v0 lense catalog (11): `injection`, `injection-parser`,
+  v1 lense catalog (11): `injection`, `injection-parser`,
   `path-network`, `auth-access`, `memory-safety`, `crypto`,
   `deserialization`, `protocol-encoding` (Claude Security's 8
   categories) plus `composition`, `temporal`, `supply-chain`
@@ -63,12 +79,14 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
   raising design refuses silent skip on supply chain per #126
   decision C).
 
-  v0 persona catalog (3 hand-rolled): `red-team` (adversarial
-  framing strict), `author-defender` (articulate the author's
-  framing + assumptions), `mirror` (read both, surface
-  contradictions and shared blind spots). Ingest-only personas
-  (`ultrareview-fleet`, `claude-security`, `scg-supply-chain-gate`)
-  join the catalog with their matching ingest verbs.
+  v1 persona catalog (6): three hand-rolled — `red-team`
+  (adversarial framing strict), `author-defender` (articulate
+  the author's framing + assumptions), `mirror` (read both,
+  surface contradictions and shared blind spots) — plus three
+  ingest-only personas attributable only via `devil ingest`:
+  `ultrareview-fleet`, `claude-security`, `scg-supply-chain-gate`.
+  `devil entry` refuses to attribute hand-rolled entries to
+  ingest-only personas (`PersonaIsIngestOnly`).
 
   Entry kinds: `finding` / `assumption` / `resistance` / `skip`
   / `synthesis` / `gate` (the last reserved for ingest paths).
@@ -76,7 +94,7 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
   the design intent — `assumption` makes trust-assumptions
   explicit so they can be contested (`--addresses`); `resistance`
   holds verdict-less concern across re-entry without forcing it
-  to ok|concern|reject.
+  to `ok|concern|reject`.
 
   Architecture in practice:
   - principle 11 (AI-first): every verb's JSON envelope is the
@@ -85,18 +103,15 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
     detector applied at the schema level (lessons from #121
     extended).
   - principle 10 (schema as contract): `devil schema`
-    advertises every implemented verb's input + output;
-    `VERBS` array grows commit-by-commit so the contract is
-    honest about what's actually invokable.
+    advertises every implemented verb's input + output.
   - principle 09 (orientation disclosure): every write verb
     emits the same `notice: wrote <abs> (config: <abs>)` line
     shape as `gate register` and `agora new`.
   - principle 04 (records outlive writers): all state mutations
     are append-only at the array level (entries / suspensions /
     resumes / re_run_history). Status mutation on findings
-    (dismiss/resolve, landing later) replaces the entry value
-    at the same id slot — append-only at the array level
-    preserved.
+    (dismiss/resolve) replaces the entry value at the same id
+    slot — append-only at the array level preserved.
 
   State machine (intentionally thinner than agora's):
 
@@ -107,11 +122,26 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
   No `suspended` state — suspend/resume cycles are append-only
   history and do **not** block other entries. Multiple
   reviewers can be working simultaneously; the cliff/invitation
-  records re-entry context only.
+  records re-entry context only. (Contrast agora's Play, where
+  suspend genuinely blocks moves.)
 
   Optimistic CAS via `DevilReviewVersionConflict` on every
   appending operation; `saveConclusion` uses state-CAS
-  (`open` → `concluded`).
+  (`open` → `concluded`); `replaceEntry` (used by dismiss /
+  resolve) carries CAS on entries.length AND the targeted id.
+  The CAS is *sequential* not atomic — it catches the
+  load-then-act-then-write race that AI agents naturally
+  produce when re-entering between sessions, but does NOT
+  prevent two simultaneous writer processes from both passing
+  the check (last-write-wins under true OS concurrency). Trust
+  assumption named in the repository docstring: "one CLI
+  process at a time per content_root."
+
+  Strict v0 ingest input JSON shapes (per source) are
+  documented in `src/passages/devil/interface/handlers/ingest.ts`.
+  Real-world adapter shims that translate actual upstream tool
+  output into those shapes are out of scope for the in-tree
+  passage and would land as separate utilities.
 
   Design rationale, three-source landscape comparison
   (`/ultrareview` vs Claude Security vs SCG), the seven shapes
@@ -126,13 +156,18 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
   of the adversarial-gate-sequence shape devil-review's own
   `kind: gate` entry was designed to ingest.
 
-  ~5,000 LOC, ~80 contract tests across 9 test files in the
-  initial snapshot; further verbs ship in subsequent commits.
+  Per-content_root custom lense override loader
+  (`<content_root>/devil/lenses/<name>.yaml`) is intentionally
+  out of scope for v1. The catalog interface (`LenseCatalog`)
+  is the seam; v1 ships the bundled defaults adapter only.
 
-  Branch: `snapshot/devil-review`. Lands on main when the
-  remaining verbs (dismiss / resolve / suspend / resume /
-  ingest) are wired and the dogfood loop has surfaced the
-  shape adjustments worth making before broader use.
+  ~5,500 LOC, ~140 contract tests across 14 test files. Built
+  iteratively on `snapshot/devil-review` (12 + 5 commits)
+  through three dogfood passes — self-review of
+  `YamlDevilReviewRepository.ts` surfaced the lense-coverage
+  gate gap (e-006) before merge, and the cumulative
+  skip-with-reason audit posture (e-014) was named as a
+  side-effect of the gate's design.
 
 ### Fixed
 - **agora `suggested_next.reason` no longer carries stale "(when

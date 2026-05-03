@@ -80,7 +80,7 @@ npm install
 npm run build
 node ./bin/gate.mjs --help     # request lifecycle / review / dialogue
 node ./bin/agora.mjs --help    # play / narrative (suspend/resume primitives)
-node ./bin/devil.mjs --help    # security-backstop review (snapshot)
+node ./bin/devil.mjs --help    # security-backstop review (alpha)
 node ./bin/guild.mjs --help    # member management
 ```
 
@@ -108,7 +108,7 @@ through it today, each a distinct shape of agent interaction:
   effect. The design rationale lives in
   [issue #117](https://github.com/eris-ths/guild-cli/issues/117).
 - **`devil`** (CLI) — the security-backstop review passage
-  (snapshot, landing under `bin/devil.mjs`). A **multi-persona,
+  (alpha, shipping under `bin/devil.mjs`). A **multi-persona,
   lense-enforced, time-extended review surface** that composes
   with single-pass tools (Anthropic `/ultrareview`, Claude
   Security, supply-chain-guard) rather than replacing them.
@@ -148,8 +148,7 @@ Full surface in [`AGENT.md`](./AGENT.md); per-verb examples in
 [`docs/verbs.md`](./docs/verbs.md). Agora's own README
 ([`src/passages/agora/README.md`](./src/passages/agora/README.md))
 covers its layout, status, and lore upstream. devil-review is
-documented inline in `AGENT.md` and `docs/verbs.md` until it
-graduates from snapshot.
+documented inline in `AGENT.md` and `docs/verbs.md`.
 
 ### Test
 

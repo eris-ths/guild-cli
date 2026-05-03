@@ -164,7 +164,7 @@ on suspend, surfaced in resume's success output) is the
 the substrate, not the agent's psychology. Per principle 11
 (AI-first, human as projection).
 
-## devil-review (third passage — security backstop, snapshot)
+## devil-review (third passage — security backstop, alpha)
 
 `devil` is the third passage under guild — alongside `gate` and
 `agora`. Where gate carries decisions and agora carries narrative,
@@ -197,14 +197,12 @@ devil entry <rev-id> --persona <p> --lense <l> --kind <k> --text "<prose>"
 devil list [--state <open|concluded>] [--target-type <pr|file|function|commit>]
 devil show <rev-id>
 devil conclude <rev-id> --synthesis "<prose>" [--unresolved e-001,e-002,...] [--by <m>]
+devil dismiss <rev-id> <entry-id> --reason <r> [--note "..."] [--by <m>]
+devil resolve <rev-id> <entry-id> [--commit <sha>] [--by <m>]
+devil suspend <rev-id> --cliff "..." --invitation "..." [--by <m>]
+devil resume  <rev-id>  [--note "..."] [--by <m>]
+devil ingest  <rev-id>  --from <ultrareview|claude-security|scg> <input-path> [--by <m>]
 devil schema [--verb <name>]                            # principle 10 contract
-
-# Landing in subsequent commits per #126:
-# devil dismiss <entry-id> --reason <r> [--note "..."]
-# devil resolve <entry-id> [--commit <sha>]
-# devil suspend <rev-id> --cliff "..." --invitation "..."
-# devil resume  <rev-id>  [--note "..."]
-# devil ingest  <rev-id>  --from <ultrareview|claude-security|scg> <input>
 ```
 
 devil records live under `<content_root>/devil/`:
@@ -262,9 +260,13 @@ Conclusion is verdict-less: `--synthesis` prose is required, and
 or-resolve before closing. Substrate-explicit "these threads stay
 open."
 
-Status: snapshot. CLI has six verbs (open / entry / list / show /
-conclude / schema). dismiss / resolve / suspend / resume / ingest
-land in subsequent commits before the merge to main.
+Status: alpha. v1 surface complete — all 11 verbs from #126 are
+invokable (open / entry / list / show / dismiss / resolve / suspend
+/ resume / ingest / conclude / schema). Real-world adapter shims
+that translate actual `/ultrareview` `bugs.json` / Claude Security
+findings / SCG verdict output into devil's strict v0 ingest JSON
+shapes are out of scope for the in-tree passage and would land as
+separate utilities (or in the source tools themselves).
 
 ## Diagnostic
 

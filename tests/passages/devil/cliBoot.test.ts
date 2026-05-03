@@ -1,6 +1,6 @@
 // devil-review — CLI scaffold tests.
 //
-// Pin the v0 scaffold contract: --help / --version work, schema
+// Pin the alpha CLI surface contract: --help / --version work, schema
 // verb runs (json + text formats), unknown verbs surface a "v0
 // scaffold" error message that names the issue (so a confused agent
 // can pull #126 for the design context).
@@ -43,7 +43,8 @@ test('devil with no args prints help and exits 0', (t) => {
   const r = runDevil(root, []);
   assert.equal(r.status, 0);
   assert.match(r.stdout, /devil-review .* security-backstop/);
-  assert.match(r.stdout, /v0 scaffold/);
+  assert.match(r.stdout, /alpha .* 11 verbs/);
+  assert.match(r.stdout, /v1 complete/);
 });
 
 test('devil --help prints help and exits 0', (t) => {
@@ -60,7 +61,7 @@ test('devil --version prints version and exits 0', (t) => {
   t.after(cleanup);
   const r = runDevil(root, ['--version']);
   assert.equal(r.status, 0);
-  assert.match(r.stdout, /devil-review .* snapshot/);
+  assert.match(r.stdout, /devil-review .* alpha \(v1 complete/);
 });
 
 test('devil schema --format json emits the v1 contract (11 verbs, complete)', (t) => {
