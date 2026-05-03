@@ -16,6 +16,23 @@ It is **not** a task tracker. It is not for doing things. It is for
 deciding, recording the why, and keeping the dialogue visible so
 the next session — or the next agent — can pick up where you left off.
 
+## Three passages, three shapes of work
+
+Guild has three passages on top of one shared substrate. Each
+passage holds a different **shape** of agent activity:
+
+- **`gate` — 判断 (judgment).** "Decide on a request." Verdict-shaped:
+  approve / deny / review with `ok | concern | reject`. Lifecycle bounded.
+- **`agora` — 探索 (exploration).** "Stay with a thought." Verdict-less:
+  Quest and Sandbox plays, suspend/resume cliffs, moves accumulating.
+- **`devil` — 守備 (defense).** "Protect end-users." Floor-shaped:
+  multi-persona, lense-enforced, friction is the feature.
+
+If you're new to guild-cli, start with `gate` — the rest of this
+document is gate-rooted. The other two passages have their own
+sections in [`AGENT.md`](../AGENT.md) and worked examples in
+[`docs/verbs.md`](./verbs.md).
+
 ## Coming from another tool?
 
 | You used… | Closest guild-cli concept | Key difference |

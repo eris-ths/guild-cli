@@ -1,31 +1,36 @@
-# agora — passage v0 (snapshot/agora)
+# agora — second passage (alpha, v1)
 
 Second passage under `guild`, after `gate`. Where gate is the
-**request-lifecycle / review / dialogue** surface, agora is the
-**play / narrative / cast** surface — Quest and Sandbox style games
-with suspend/resume as a first-class primitive.
+**判断** (judgment / decision-shaped) surface, agora is the
+**探索** (exploration-shaped) surface — Quest and Sandbox style
+games with suspend/resume as a first-class primitive.
 
-This is **the v0 skeleton** living on `snapshot/agora`. It exists
-to prove the container/passage architecture works in code, not to
-be feature-complete. Only `agora new` is implemented; `play`, `move`,
-`suspend`, `resume`, `list`, `show` will land iteratively as the
-prototype surfaces what shape they need.
+The shape: `agora` holds work that **shouldn't be forced to a
+verdict yet**. A play accumulates moves; a `suspend` records a
+cliff (what just happened) and an invitation (what the next
+opener should do); `resume` picks up the thread later, possibly
+in a different session, possibly by a different actor. Concluded
+plays close with prose, not with `ok|concern|reject`.
+
+If your work is decision-shaped, use `gate`. If it's
+defense-shaped (security review against a code change), use
+`devil`. If it's exploration-shaped, agora.
 
 ## Lore upstream
 
 - [`lore/principles/11-ai-first-human-as-projection.md`](../../../lore/principles/11-ai-first-human-as-projection.md)
   — the substrate is AI-natural; humans get a projection layer.
 - [`lore/principles/10-schema-as-contract.md`](../../../lore/principles/10-schema-as-contract.md)
-  — the schema agents read is the dispatch contract (TODO: add
-  `agora schema` verb when there's enough surface to advertise).
+  — the schema agents read is the dispatch contract; `agora schema`
+  advertises every implemented verb.
 - [`lore/principles/04-records-outlive-writers.md`](../../../lore/principles/04-records-outlive-writers.md)
   — the substrate persists across sessions; agora reuses gate's
   YAML file substrate.
 - [`lore/principles/09-orientation-disclosure.md`](../../../lore/principles/09-orientation-disclosure.md)
-  — `agora new`'s stderr `notice:` line follows the same shape as
+  — agora's stderr `notice:` line follows the same shape as
   `gate register`.
 
-## Design sandbox
+## Design issue
 
 [Issue #117](https://github.com/eris-ths/guild-cli/issues/117)
 captures the design conversation that shaped this passage: the
@@ -47,14 +52,11 @@ src/passages/agora/
     YamlPlayRepository.ts           # adapter (per-game subdirs)
   interface/
     index.ts                        # CLI dispatcher (entry point)
-    handlers/new.ts                 # `agora new` verb
-    handlers/play.ts                # `agora play` verb
+    handlers/                       # one handler per verb
   README.md                         # this file
 
 bin/agora.mjs                       # passage binary
-tests/passages/agora/
-  new.test.ts                       # `agora new` contract (8 tests)
-  play.test.ts                      # `agora play` contract (7 tests)
+tests/passages/agora/               # contract tests
 ```
 
 ## Substrate sharing with gate
@@ -72,36 +74,38 @@ agora-specific records live under `<content_root>/agora/`:
   members/                          # shared with gate (container-level)
   guild.config.yaml                 # shared
   agora/
-    games/<slug>.yaml               # NEW — game definitions
-    plays/<game>/<play-id>.yaml     # FUTURE — play sessions
-    casts/<persona>.yaml            # FUTURE — character ledgers
-    moves/<play-id>/<move-id>.yaml  # FUTURE — append-only moves
+    games/<slug>.yaml               # game definitions
+    plays/<game>/<play-id>.yaml     # play sessions (sequence per game per day)
 ```
 
-## Status
+## Verbs (v1, complete)
 
-- [x] `agora new` — create a Game definition
-- [x] `agora play` — start a play session against a Game
-- [x] `agora move` — append a move (with optimistic CAS)
-- [x] `agora suspend` — pause with cliff + invitation (the design pivot)
-- [x] `agora resume` — pick up; surfaces closing cliff/invitation
-- [x] `agora list` — enumerate games + plays (with --game / --state filters)
-- [x] `agora show <slug-or-play-id>` — detail view; for plays renders
-      full move + suspension/resume history paired by index
-- [ ] `agora conclude` — terminal state from playing or suspended
-- [ ] `agora schema` — agent-dispatch contract (principle 10)
+- `agora new` — create a Game definition (Quest or Sandbox)
+- `agora play` — start a play session against a Game
+- `agora move` — append a move (with optimistic CAS)
+- `agora suspend` — pause with cliff + invitation (the design pivot)
+- `agora resume` — pick up; surfaces closing cliff/invitation in
+  success output so the resumer reads paused-on context without a
+  separate query
+- `agora conclude` — terminal state from playing or suspended
+  (drift-away outcome valid)
+- `agora list` — enumerate games + plays (`--game` / `--state` filters)
+- `agora show <slug-or-play-id>` — detail view with full move +
+  suspension/resume history paired by index
+- `agora schema` — agent dispatch contract per principle 10
 
-The substrate-side Zeigarnik (issue #117) is in place: every suspend
-records `cliff` (what just happened) and `invitation` (what the next
-opener should do), both append-only. Resume surfaces them in its
-success output so the agent re-entering reads the paused-on context
-without a separate query. Multi-suspend/resume cycles are preserved
-as separate entries; the state-derivation invariant holds:
+The substrate-side Zeigarnik (issue #117) is in place: every
+suspend records `cliff` (what just happened) and `invitation`
+(what the next opener should do), both append-only. Multi-suspend/
+resume cycles are preserved as separate entries; the
+state-derivation invariant holds:
 
-  suspensions.length === resumes.length     → playing (or concluded)
-  suspensions.length === resumes.length + 1 → suspended
+```
+suspensions.length === resumes.length     → playing (or concluded)
+suspensions.length === resumes.length + 1 → suspended
+```
 
-## Play state machine (v0)
+## Play state machine (v1)
 
 ```
 playing ── suspend ──▶ suspended ── resume ──▶ playing
@@ -114,6 +118,10 @@ suspended play that's never picked back up is a valid outcome
 ("the conversation drifted away"). The cliff/invitation prose
 remains in the record either way.
 
-Each verb lands as a separate commit on this branch with its own
-test surface. Lore graduates (e.g., suspend/resume mechanics
-becoming a principle) when prototyping pulls them into focus.
+## Worked example
+
+A real agora session preserved as a content_root example lives at
+[`examples/three-passages-framing/`](../../../examples/three-passages-framing/) —
+single-actor Sandbox play recording the gate=判断 / agora=探索 /
+devil=守備 framing decision, with a suspend/resume cycle holding
+nao's response.

@@ -94,6 +94,16 @@ a longer real session is in [`examples/dogfood-session/`](./examples/dogfood-ses
 YAML substrate records outlive sessions on. Three passages run
 through it today, each a distinct shape of agent interaction:
 
+| Passage | Shape (一語) | What you do | When to reach for it |
+|---------|------------|-------------|----------------------|
+| `gate`  | **判断 / judgment** | decide on a request | something needs a verdict (approve, deny, complete, fail, review with ok\|concern\|reject) |
+| `agora` | **探索 / exploration** | stay with a thought | something is in motion that shouldn't be forced to a verdict yet (Quest / Sandbox plays, suspend / resume cliffs) |
+| `devil` | **守備 / defense** | protect end-users | something could harm a third party if landed without scrutiny (multi-persona, lense-enforced, friction-as-feature) |
+
+The framing is a dispatch tool, not a metaphor: gate-shaped work
+goes to `gate`, exploration-shaped to `agora`, defense-shaped to
+`devil`. AI agents can route their work by recognizing the shape.
+
 - **`gate`** (CLI) — the request-lifecycle / review / dialogue
   passage. Decisions and the deliberation around them: file a
   request, transition through approve / execute / complete,
