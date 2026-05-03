@@ -335,6 +335,66 @@ const VERBS: readonly VerbSchema[] = [
     }),
   },
   {
+    name: 'suspend',
+    category: 'write',
+    summary:
+      'record a cliff/invitation pause on a thread of the review. Softer than ' +
+      'agora suspend — does NOT block other entries; just records re-entry context. ' +
+      'Both --cliff and --invitation are required (empty suspension defeats the design).',
+    input: {
+      type: 'object',
+      properties: {
+        review_id: {
+          type: 'string',
+          description: 'positional; review id (rev-YYYY-MM-DD-NNN)',
+        },
+        cliff: str,
+        invitation: str,
+        by: strOpt('actor (defaults to GUILD_ACTOR)'),
+        format: formatField,
+      },
+      required: ['review_id', 'cliff', 'invitation'],
+    },
+    output: writeEnvelopeBase({
+      review_id: str,
+      state: { type: 'string', enum: ['open'] },
+      suspension_index: {
+        type: 'string',
+        description: 'integer index of the new entry in suspensions[]',
+      },
+    }),
+  },
+  {
+    name: 'resume',
+    category: 'write',
+    summary:
+      'pick up the most recent un-paired suspension on this review. Surfaces the ' +
+      'closing cliff/invitation in the response so the resuming actor reads the ' +
+      'paused-on context without a separate show. Refuses if no thread is paused.',
+    input: {
+      type: 'object',
+      properties: {
+        review_id: {
+          type: 'string',
+          description: 'positional; review id (rev-YYYY-MM-DD-NNN)',
+        },
+        note: strOpt('optional resume prose'),
+        by: strOpt('actor (defaults to GUILD_ACTOR)'),
+        format: formatField,
+      },
+      required: ['review_id'],
+    },
+    output: writeEnvelopeBase({
+      review_id: str,
+      state: { type: 'string', enum: ['open'] },
+      resumed_suspension: {
+        type: 'object',
+        description: 'the suspension entry that was just closed (cliff + invitation prose)',
+        properties: { at: str, by: str, cliff: str, invitation: str },
+      },
+    }),
+  },
+  {
     name: 'conclude',
     category: 'write',
     summary:

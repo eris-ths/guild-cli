@@ -63,7 +63,7 @@ test('devil --version prints version and exits 0', (t) => {
   assert.match(r.stdout, /devil-review .* snapshot/);
 });
 
-test('devil schema --format json emits the v0 contract (open + entry + list + show + dismiss + resolve + conclude + schema)', (t) => {
+test('devil schema --format json emits the v0 contract (10 verbs)', (t) => {
   const { root, cleanup } = tmpRoot();
   t.after(cleanup);
   const r = runDevil(root, ['schema', '--format', 'json']);
@@ -73,12 +73,15 @@ test('devil schema --format json emits the v0 contract (open + entry + list + sh
   assert.equal(payload.passage, 'devil-review');
   assert.ok(Array.isArray(payload.verbs));
   // Currently implemented: open + entry + list + show + dismiss +
-  // resolve + conclude + schema. Subsequent commits add ingest /
-  // suspend / resume.
+  // resolve + suspend + resume + conclude + schema. The only
+  // remaining verb is ingest (next commit).
   const names = payload.verbs.map((v: { name: string }) => v.name).sort();
   assert.deepEqual(
     names,
-    ['conclude', 'dismiss', 'entry', 'list', 'open', 'resolve', 'schema', 'show'],
+    [
+      'conclude', 'dismiss', 'entry', 'list', 'open',
+      'resolve', 'resume', 'schema', 'show', 'suspend',
+    ],
   );
 });
 
@@ -88,13 +91,15 @@ test('devil schema --format text emits a terse summary', (t) => {
   const r = runDevil(root, ['schema', '--format', 'text']);
   assert.equal(r.status, 0);
   assert.match(r.stdout, /devil-review/);
-  assert.match(r.stdout, /8 verb\(s\)/);
+  assert.match(r.stdout, /10 verb\(s\)/);
   assert.match(r.stdout, /open {2}\[write\]/);
   assert.match(r.stdout, /entry {2}\[write\]/);
   assert.match(r.stdout, /list {2}\[read\]/);
   assert.match(r.stdout, /show {2}\[read\]/);
   assert.match(r.stdout, /dismiss {2}\[write\]/);
   assert.match(r.stdout, /resolve {2}\[write\]/);
+  assert.match(r.stdout, /suspend {2}\[write\]/);
+  assert.match(r.stdout, /resume {2}\[write\]/);
   assert.match(r.stdout, /conclude {2}\[write\]/);
   assert.match(r.stdout, /schema {2}\[meta\]/);
 });

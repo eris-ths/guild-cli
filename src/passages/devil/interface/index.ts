@@ -30,6 +30,8 @@ import { showReview } from './handlers/show.js';
 import { concludeReview } from './handlers/conclude.js';
 import { dismissEntry } from './handlers/dismiss.js';
 import { resolveEntry } from './handlers/resolve.js';
+import { suspendReview } from './handlers/suspend.js';
+import { resumeReview } from './handlers/resume.js';
 
 const HELP = `devil-review — security-backstop review passage (v0 scaffold)
 
@@ -86,6 +88,24 @@ Usage:
                               shape as dismiss: only kind=finding + status=open
                               transition; refuses re-resolve and post-conclude.
 
+  devil suspend <rev-id> --cliff "<what just happened>"
+                         --invitation "<what the next opener should attempt>"
+                         [--by <m>] [--format json|text]
+                              Record a cliff/invitation pause on a thread of
+                              the review. Softer than agora's suspend — does
+                              NOT block other entries; it just records re-entry
+                              context for whoever picks up that thread later.
+                              Both --cliff and --invitation are required (an
+                              empty suspension defeats the design pivot).
+
+  devil resume <rev-id> [--note "<resume prose>"]
+                        [--by <m>] [--format json|text]
+                              Pick up the most recent un-paired suspension on
+                              this review. Surfaces the closing cliff/invitation
+                              in the success output so the resuming actor reads
+                              the paused-on context without a separate 'show'.
+                              Refuses if no thread is currently paused.
+
   devil conclude <rev-id> --synthesis "<prose>"
                           [--unresolved <e-001,e-002,...>]
                           [--by <m>] [--format json|text]
@@ -111,10 +131,8 @@ Usage:
 Verbs landing in subsequent commits per issue #126:
   ingest <rev-id>              Append entries from /ultrareview, Claude
                               Security, or supply-chain-guard output.
-  suspend / resume <rev-id>    Cliff/invitation-style pause and pick-up.
-                              Softer than agora — does not block other entries.
 
-Passage status: v0 scaffold. 'open', 'entry', 'list', 'show', 'dismiss', 'resolve', 'conclude', and 'schema' are invokable in this commit.
+Passage status: v0 scaffold. 'open', 'entry', 'list', 'show', 'dismiss', 'resolve', 'suspend', 'resume', 'conclude', and 'schema' are invokable in this commit.
 Substrate: shares content_root and members/ with gate and agora. Reviews
 land at <content_root>/devil/reviews/<rev-id>.yaml.
 
@@ -160,12 +178,16 @@ export async function main(argv: readonly string[]): Promise<number> {
         return await dismissEntry({ reviews, config }, args);
       case 'resolve':
         return await resolveEntry({ reviews, config }, args);
+      case 'suspend':
+        return await suspendReview({ reviews, config }, args);
+      case 'resume':
+        return await resumeReview({ reviews, config }, args);
       case 'conclude':
         return await concludeReview({ reviews, lenses, config }, args);
       default:
         process.stderr.write(
           `devil: unknown verb: ${cmd}\n` +
-            `(v0 scaffold — \`open\`, \`entry\`, \`list\`, \`show\`, \`dismiss\`, \`resolve\`, \`conclude\`, and \`schema\` are invokable; other verbs land in subsequent commits per #126)\n`,
+            `(v0 scaffold — \`open\`, \`entry\`, \`list\`, \`show\`, \`dismiss\`, \`resolve\`, \`suspend\`, \`resume\`, \`conclude\`, and \`schema\` are invokable; the only remaining verb is \`ingest\` which lands in the next commit per #126)\n`,
         );
         return 1;
     }
