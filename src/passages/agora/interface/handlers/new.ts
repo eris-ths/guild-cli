@@ -108,7 +108,7 @@ export async function newGame(deps: NewGameDeps, args: ParsedArgs): Promise<numb
   } else {
     process.stdout.write(
       `✓ created game: ${game.slug} [${game.kind}] — ${game.title}\n` +
-        `  next: agora list  (or agora play --slug ${game.slug} when play lands)\n`,
+        `  next: agora list  (or agora play --slug ${game.slug} to start a session)\n`,
     );
   }
   // Stderr notice mirrors gate register's path-disclosure line shape
