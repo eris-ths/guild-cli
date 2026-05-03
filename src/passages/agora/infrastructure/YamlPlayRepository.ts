@@ -29,6 +29,18 @@ import { parseYamlSafe } from '../../../infrastructure/persistence/parseYamlSafe
  * One subdirectory per game keeps plays scoped to their definition,
  * which (a) makes `agora list --game <slug>` cheap and (b) prevents
  * id collision pressure across games (each game has its own counter).
+ *
+ * Every mutating operation writes via writeTextSafeAtomic so concurrent
+ * READERS never see a torn file (atomic .tmp + rename). The "CAS" on
+ * the relevant array length (or `state` for conclude) is *sequential*
+ * not atomic: it catches the load-then-act-then-write race that AI
+ * agents naturally produce when re-entering between sessions, but
+ * does NOT prevent two simultaneous writer processes from both
+ * passing the check and both writing (last-write-wins under true
+ * OS-level concurrency). See the PlayRepository interface doc and
+ * devil-review's parallel softening (#129 e-001 / e-002) for the
+ * trust assumption ("one CLI process at a time per content_root")
+ * this rests on.
  */
 export class YamlPlayRepository implements PlayRepository {
   private readonly base: string;
@@ -272,9 +284,17 @@ export class YamlPlayRepository implements PlayRepository {
    * Shared append-with-CAS helper. Re-reads the on-disk file,
    * checks the named array's length matches `expectedCount`,
    * appends the entry, optionally flips the `state` field,
-   * atomic-writes back. Same shape protects every state-changing
-   * append — principle 11 (AI-natural): re-entering instances
-   * detect concurrent appenders rather than silently overwrite.
+   * atomic-writes back.
+   *
+   * Per principle 11 (AI-natural): re-entering instances catch
+   * sequential append races — the load-then-act-then-write window
+   * where instance A loaded count=N, instance B wrote count=N+1,
+   * instance A's CAS check sees N+1 != N and refuses rather than
+   * clobbering B. Under true OS-level concurrent writers (two
+   * agora processes hitting the same play in the same scheduler
+   * quantum) the read-modify-write sequence itself is not atomic,
+   * and last-write-wins semantics apply. See repository interface
+   * doc for the trust assumption this rests on.
    */
   private async appendArrayWithCAS(
     play: Play,

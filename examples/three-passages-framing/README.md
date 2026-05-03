@@ -11,21 +11,29 @@ framing now linked from `README.md` § Architecture and from
 
 The agora play in this content_root is **the conversation itself
 preserved as substrate** — not a reconstruction, not a tutorial.
-Move 001 captured the framing proposal; the suspend cliff/invitation
-held the question "do these words land for you?" for nao to address
-at re-entry.
+Move 001 captured the framing proposal. The play was suspended
+with a cliff/invitation pair while waiting for nao's response.
+Once nao accepted ("気に入った"), the play was resumed with a
+closing note, move 002 recorded the acceptance + the
+projection-layer landing in PR #130, and the play was concluded.
+
+The full arc — propose → suspend on invitation → resume with the
+answer → conclude — is the substrate-honest shape of a single
+conversation that resolves cleanly. If a future use surfaces
+breakage in the framing, a new play would `--addresses` this one
+rather than mutating it (terminal state, append-only at the
+contest level).
 
 ## Why this is here
 
 Most agora examples one might write would be constructed —
 designed to teach a verb. This one isn't. It's a one-off
-single-actor session that captured a real thinking-about-thinking
-arc, then was suspended (not concluded) so the question to nao
-remains open in the substrate. That shape — verdict-less,
-preserved, suspended-on-invitation — is what agora is for.
-
-If you came here looking for "what does agora look like in
-normal use?", read `agora/plays/three-passages-framed/2026-05-03-001.yaml`.
+single-actor (claude) + interlocutor (nao via human-in-the-loop)
+session that captured a real thinking-about-thinking arc and
+concluded once the conversation reached agreement. That shape —
+verdict-less synthesis (`concluded_note`), preserved in
+substrate, with the suspend/resume cycle recording the
+open-question-then-answer flow — is what agora is for.
 
 ## Read it
 
@@ -34,10 +42,11 @@ cd examples/three-passages-framing
 GUILD_ACTOR=claude node ../../bin/agora.mjs show 2026-05-03-001 --format text
 ```
 
-The output shows the play's full state including the suspended
-cliff/invitation pair. The substrate-side Zeigarnik effect
-(issue #117) — whoever opens this play next reads what was
-paused on without a separate query.
+The output shows the play's full state: 2 moves, 1 suspension
+paired with 1 resume, conclusion with note. The cliff/invitation
+of the suspension are still in the substrate (append-only) so a
+future reader sees the question that was held open and the
+resume-note that closed it.
 
 ## Structure
 
@@ -47,7 +56,9 @@ paused on without a separate query.
 - `agora/games/three-passages-framed.yaml` — the Sandbox game
   definition.
 - `agora/plays/three-passages-framed/2026-05-03-001.yaml` — the
-  play with one move and one suspension (no resume yet).
+  concluded play with 2 moves, 1 suspend, 1 resume, and a
+  `concluded_note` recording nao's acceptance and the
+  projection layer that landed.
 
 ## What this is not
 
@@ -57,6 +68,7 @@ paused on without a separate query.
   philosophical. Most won't be. This one is the artifact of one
   conversation, preserved so the substrate has a real example
   alongside the constructed ones.
-- Not concluded — the play is `suspended`. nao's response to the
-  invitation will be the next move (resume + move on a real
-  content_root).
+- Not perpetually open — the play is **concluded**. The
+  framing-acceptance arc resolved; mutation now requires a new
+  play that `--addresses` this one (substrate stays append-only
+  at the contest level).
