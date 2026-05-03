@@ -28,6 +28,7 @@ import { entryOnReview } from './handlers/entry.js';
 import { listReviews } from './handlers/list.js';
 import { showReview } from './handlers/show.js';
 import { concludeReview } from './handlers/conclude.js';
+import { dismissEntry } from './handlers/dismiss.js';
 
 const HELP = `devil-review — security-backstop review passage (v0 scaffold)
 
@@ -65,6 +66,17 @@ Usage:
                               form is review.toJSON() — same shape as
                               the YAML on disk.
 
+  devil dismiss <rev-id> <entry-id> --reason <r>
+                                    [--note "<prose>"]
+                                    [--by <m>] [--format json|text]
+                              Mark a finding-entry dismissed with a structured
+                              reason (one of: not-applicable | accepted-risk |
+                              false-positive | out-of-scope |
+                              mitigated-elsewhere). Only kind=finding entries
+                              with status=open are dismissable; the substrate
+                              keeps the dismissal trail honest by refusing
+                              re-dismiss and refusing to dismiss after conclude.
+
   devil conclude <rev-id> --synthesis "<prose>"
                           [--unresolved <e-001,e-002,...>]
                           [--by <m>] [--format json|text]
@@ -90,13 +102,11 @@ Usage:
 Verbs landing in subsequent commits per issue #126:
   ingest <rev-id>              Append entries from /ultrareview, Claude
                               Security, or supply-chain-guard output.
-  dismiss <entry-id>           Mark a finding dismissed with a reason
-                              (the substrate keeps the dismissal trail).
   resolve <entry-id>           Mark a finding resolved (optional commit ref).
   suspend / resume <rev-id>    Cliff/invitation-style pause and pick-up.
                               Softer than agora — does not block other entries.
 
-Passage status: v0 scaffold. 'open', 'entry', 'list', 'show', 'conclude', and 'schema' are invokable in this commit.
+Passage status: v0 scaffold. 'open', 'entry', 'list', 'show', 'dismiss', 'conclude', and 'schema' are invokable in this commit.
 Substrate: shares content_root and members/ with gate and agora. Reviews
 land at <content_root>/devil/reviews/<rev-id>.yaml.
 
@@ -138,12 +148,14 @@ export async function main(argv: readonly string[]): Promise<number> {
         return await listReviews({ reviews, config }, args);
       case 'show':
         return await showReview({ reviews, config }, args);
+      case 'dismiss':
+        return await dismissEntry({ reviews, config }, args);
       case 'conclude':
         return await concludeReview({ reviews, lenses, config }, args);
       default:
         process.stderr.write(
           `devil: unknown verb: ${cmd}\n` +
-            `(v0 scaffold — \`open\`, \`entry\`, \`list\`, \`show\`, \`conclude\`, and \`schema\` are invokable; other verbs land in subsequent commits per #126)\n`,
+            `(v0 scaffold — \`open\`, \`entry\`, \`list\`, \`show\`, \`dismiss\`, \`conclude\`, and \`schema\` are invokable; other verbs land in subsequent commits per #126)\n`,
         );
         return 1;
     }

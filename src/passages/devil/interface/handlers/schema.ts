@@ -244,6 +244,59 @@ const VERBS: readonly VerbSchema[] = [
     },
   },
   {
+    name: 'dismiss',
+    category: 'write',
+    summary:
+      "mark a finding-entry dismissed with a structured reason (one of: not-applicable | " +
+      'accepted-risk | false-positive | out-of-scope | mitigated-elsewhere). Only ' +
+      "kind=finding entries with status=open are dismissable; refuses re-dismiss and " +
+      'refuses dismiss after conclude. CAS via replaceEntry.',
+    input: {
+      type: 'object',
+      properties: {
+        review_id: {
+          type: 'string',
+          description: 'positional 1; review id (rev-YYYY-MM-DD-NNN)',
+        },
+        entry_id: {
+          type: 'string',
+          description: 'positional 2; entry id (e-NNN) within the review',
+        },
+        reason: {
+          type: 'string',
+          enum: [
+            'not-applicable',
+            'accepted-risk',
+            'false-positive',
+            'out-of-scope',
+            'mitigated-elsewhere',
+          ],
+        },
+        note: strOpt('optional dismissal prose'),
+        by: strOpt('actor (defaults to GUILD_ACTOR)'),
+        format: formatField,
+      },
+      required: ['review_id', 'entry_id', 'reason'],
+    },
+    output: writeEnvelopeBase({
+      review_id: str,
+      entry_id: str,
+      status: { type: 'string', enum: ['dismissed'] },
+      dismissal_reason: {
+        type: 'string',
+        enum: [
+          'not-applicable',
+          'accepted-risk',
+          'false-positive',
+          'out-of-scope',
+          'mitigated-elsewhere',
+        ],
+      },
+      dismissal_note: { type: 'string', description: 'present iff --note was provided' },
+      dismissed_by: str,
+    }),
+  },
+  {
     name: 'conclude',
     category: 'write',
     summary:
