@@ -14,10 +14,10 @@ import { BundledPersonaCatalog } from '../../../src/passages/devil/infrastructur
 import { DEFAULT_LENSE_NAMES } from '../../../src/passages/devil/domain/defaultLenses.js';
 import { DEFAULT_PERSONA_NAMES } from '../../../src/passages/devil/domain/defaultPersonas.js';
 
-test('BundledLenseCatalog.list returns the 11 defaults in canonical order', () => {
+test('BundledLenseCatalog.list returns the 12 defaults in canonical order', () => {
   const c = new BundledLenseCatalog();
   const list = c.list();
-  assert.equal(list.length, 11);
+  assert.equal(list.length, 12);
   assert.deepEqual(
     list.map((l) => l.name),
     [...DEFAULT_LENSE_NAMES],
