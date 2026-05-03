@@ -92,7 +92,7 @@ export async function concludeReview(
         .filter((s) => s.length > 0)
     : [];
 
-  const by = optionalOption(args, 'by') ?? process.env['GUILD_ACTOR'];
+  const by = optionalOption(args, 'by', 'GUILD_ACTOR');
   if (!by) {
     process.stderr.write(
       'error: --by required (or set GUILD_ACTOR). devil conclude attributes the close.\n',

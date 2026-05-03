@@ -1,3 +1,4 @@
+import { resolveGuildActor } from '../../shared/resolveGuildActor.js';
 import {
   ParsedArgs,
   optionalOption,
@@ -109,7 +110,7 @@ export async function resumeCmd(c: C, args: ParsedArgs): Promise<number> {
   if (format !== 'json' && format !== 'text') {
     throw new Error(`--format must be 'json' or 'text', got: ${format}`);
   }
-  const actor = process.env['GUILD_ACTOR'];
+  const actor = resolveGuildActor();
   if (!actor || actor.length === 0) {
     process.stderr.write(
       'gate resume requires GUILD_ACTOR (resume is inherently first-person).\n' +
