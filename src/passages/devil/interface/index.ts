@@ -25,6 +25,8 @@ import { BundledPersonaCatalog } from '../infrastructure/BundledPersonaCatalog.j
 import { schemaCmd } from './handlers/schema.js';
 import { openReview } from './handlers/open.js';
 import { entryOnReview } from './handlers/entry.js';
+import { listReviews } from './handlers/list.js';
+import { showReview } from './handlers/show.js';
 
 const HELP = `devil-review — security-backstop review passage (v0 scaffold)
 
@@ -50,6 +52,18 @@ Usage:
                               author-defender / mirror); ingest-only
                               personas are rejected here.
 
+  devil list [--state open|concluded] [--target-type pr|file|function|commit]
+             [--format json|text]
+                              Enumerate review sessions. Read-only,
+                              one-line-per-review summary; --state and
+                              --target-type narrow the result.
+
+  devil show <rev-id> [--format json|text]
+                              Detail view of one review (full entries +
+                              suspensions + resumes + conclusion). JSON
+                              form is review.toJSON() — same shape as
+                              the YAML on disk.
+
   devil schema [--verb <name>] [--format json|text]
                               Agent dispatch contract for this passage
                               (principle 10). draft-07 JSON Schema subset.
@@ -68,10 +82,8 @@ Verbs landing in subsequent commits per issue #126:
   suspend / resume <rev-id>    Cliff/invitation-style pause and pick-up.
                               Softer than agora — does not block other entries.
   conclude <rev-id>            Synthesis-prose close (verdict-less). Terminal.
-  list                         Enumerate reviews in the content_root.
-  show <rev-id>                Detail view of one review.
 
-Passage status: v0 scaffold. 'open', 'entry', and 'schema' are invokable in this commit.
+Passage status: v0 scaffold. 'open', 'entry', 'list', 'show', and 'schema' are invokable in this commit.
 Substrate: shares content_root and members/ with gate and agora. Reviews
 land at <content_root>/devil/reviews/<rev-id>.yaml.
 
@@ -109,10 +121,14 @@ export async function main(argv: readonly string[]): Promise<number> {
         return await openReview({ reviews, config }, args);
       case 'entry':
         return await entryOnReview({ reviews, lenses, personas, config }, args);
+      case 'list':
+        return await listReviews({ reviews, config }, args);
+      case 'show':
+        return await showReview({ reviews, config }, args);
       default:
         process.stderr.write(
           `devil: unknown verb: ${cmd}\n` +
-            `(v0 scaffold — \`open\`, \`entry\`, and \`schema\` are invokable; other verbs land in subsequent commits per #126)\n`,
+            `(v0 scaffold — \`open\`, \`entry\`, \`list\`, \`show\`, and \`schema\` are invokable; other verbs land in subsequent commits per #126)\n`,
         );
         return 1;
     }

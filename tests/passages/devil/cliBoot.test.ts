@@ -63,7 +63,7 @@ test('devil --version prints version and exits 0', (t) => {
   assert.match(r.stdout, /devil-review .* snapshot/);
 });
 
-test('devil schema --format json emits the v0 contract (open + entry + schema)', (t) => {
+test('devil schema --format json emits the v0 contract (open + entry + list + show + schema)', (t) => {
   const { root, cleanup } = tmpRoot();
   t.after(cleanup);
   const r = runDevil(root, ['schema', '--format', 'json']);
@@ -72,11 +72,11 @@ test('devil schema --format json emits the v0 contract (open + entry + schema)',
   assert.equal(payload['$schema'], 'http://json-schema.org/draft-07/schema#');
   assert.equal(payload.passage, 'devil-review');
   assert.ok(Array.isArray(payload.verbs));
-  // Currently implemented: open + entry + schema. Subsequent commits
-  // add ingest / dismiss / resolve / suspend / resume / conclude /
-  // list / show.
+  // Currently implemented: open + entry + list + show + schema.
+  // Subsequent commits add ingest / dismiss / resolve / suspend /
+  // resume / conclude.
   const names = payload.verbs.map((v: { name: string }) => v.name).sort();
-  assert.deepEqual(names, ['entry', 'open', 'schema']);
+  assert.deepEqual(names, ['entry', 'list', 'open', 'schema', 'show']);
 });
 
 test('devil schema --format text emits a terse summary', (t) => {
@@ -85,9 +85,11 @@ test('devil schema --format text emits a terse summary', (t) => {
   const r = runDevil(root, ['schema', '--format', 'text']);
   assert.equal(r.status, 0);
   assert.match(r.stdout, /devil-review/);
-  assert.match(r.stdout, /3 verb\(s\)/);
+  assert.match(r.stdout, /5 verb\(s\)/);
   assert.match(r.stdout, /open {2}\[write\]/);
   assert.match(r.stdout, /entry {2}\[write\]/);
+  assert.match(r.stdout, /list {2}\[read\]/);
+  assert.match(r.stdout, /show {2}\[read\]/);
   assert.match(r.stdout, /schema {2}\[meta\]/);
 });
 

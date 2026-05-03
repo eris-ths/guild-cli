@@ -168,6 +168,82 @@ const VERBS: readonly VerbSchema[] = [
     }),
   },
   {
+    name: 'list',
+    category: 'read',
+    summary:
+      'enumerate review sessions in the content_root. Filters: --state narrows by ' +
+      'open|concluded; --target-type narrows by pr|file|function|commit. Read-only.',
+    input: {
+      type: 'object',
+      properties: {
+        state: {
+          type: 'string',
+          enum: ['open', 'concluded'],
+        },
+        'target-type': {
+          type: 'string',
+          enum: ['pr', 'file', 'function', 'commit'],
+        },
+        format: formatField,
+      },
+    },
+    output: {
+      type: 'object',
+      properties: {
+        ok: { type: 'boolean' },
+        reviews: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              id: str,
+              target: {
+                type: 'object',
+                properties: {
+                  type: { type: 'string', enum: ['pr', 'file', 'function', 'commit'] },
+                  ref: str,
+                },
+                required: ['type', 'ref'],
+              },
+              state: { type: 'string', enum: ['open', 'concluded'] },
+              opened_at: str,
+              opened_by: str,
+              entry_count: { type: 'string', description: 'integer; YAML-numeric on text rendering' },
+              suspension_count: str,
+              resume_count: str,
+              re_run_count: str,
+              is_suspended: { type: 'string', description: 'boolean' },
+              has_conclusion: { type: 'string', description: 'boolean' },
+            },
+          },
+        },
+      },
+      required: ['ok', 'reviews'],
+    },
+  },
+  {
+    name: 'show',
+    category: 'read',
+    summary:
+      'detail view of one review (full entries + suspensions + resumes + conclusion). ' +
+      'JSON form is review.toJSON() — same shape as the YAML on disk.',
+    input: {
+      type: 'object',
+      properties: {
+        review_id: {
+          type: 'string',
+          description: 'positional; review id (rev-YYYY-MM-DD-NNN)',
+        },
+        format: formatField,
+      },
+      required: ['review_id'],
+    },
+    output: {
+      type: 'object',
+      description: 'Full DevilReview record (review.toJSON()).',
+    },
+  },
+  {
     name: 'schema',
     category: 'meta',
     summary:
