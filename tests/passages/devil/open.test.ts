@@ -76,7 +76,10 @@ test('devil open text-mode prints success line and next: hint', (t) => {
   assert.match(r.stdout, /✓ devil-review opened: rev-/);
   assert.match(r.stdout, /\[open\] against file:src\/foo\.ts by alice/);
   assert.match(r.stdout, /next: devil entry/);
-  assert.match(r.stderr, /notice: wrote .*\/devil\/reviews\/rev-/);
+  // Normalise path separators before regex match — Windows uses
+  // backslashes, POSIX uses forward slashes. Same pattern as
+  // tests/passages/agora/play.test.ts (PR #119 cross-platform fix).
+  assert.match(r.stderr.replace(/\\/g, '/'), /notice: wrote .*\/devil\/reviews\/rev-/);
 });
 
 test('devil open uses --by flag when both --by and GUILD_ACTOR are set', (t) => {
