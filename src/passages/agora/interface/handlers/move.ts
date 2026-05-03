@@ -11,11 +11,13 @@ import {
   rejectUnknownFlags,
 } from '../../../../interface/shared/parseArgs.js';
 import { GuildConfig } from '../../../../infrastructure/config/GuildConfig.js';
+import { resolvePlayForVerb } from './resolvePlay.js';
 
 const MOVE_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'by',
   'text',
   'format',
+  'game',
 ]);
 
 /**
@@ -61,7 +63,10 @@ export async function moveOnPlay(deps: MoveDeps, args: ParsedArgs): Promise<numb
     return 1;
   }
 
-  const play = await deps.plays.findById(playId);
+  const gameFilter = optionalOption(args, 'game');
+  const resolved = await resolvePlayForVerb(deps.plays, playId, gameFilter);
+  if (resolved === 'ambiguous') return 1;
+  const play = resolved;
   if (!play) {
     throw new PlayNotFound(playId);
   }
