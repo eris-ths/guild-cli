@@ -7,9 +7,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve, dirname } from 'node:path';
+import { join, resolve, dirname, delimiter } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -19,6 +19,32 @@ function bootstrap(): { root: string; cleanup: () => void } {
   const root = mkdtempSync(join(tmpdir(), 'devil-ingest-'));
   writeFileSync(join(root, 'guild.config.yaml'), 'content_root: .\nhost_names: [human]\n');
   return { root, cleanup: () => rmSync(root, { recursive: true, force: true }) };
+}
+
+/**
+ * Drop a fake `scg` executable inside `root/fake-bin/`, return the
+ * directory path so callers can prepend it to PATH for the spawned
+ * `devil ingest --from scg` test. Lets the SCG-availability check
+ * (e-001 fix in src/passages/devil/interface/handlers/ingest.ts)
+ * fire its `which scg` probe and find a passing binary without
+ * actually requiring SCG to be installed in CI.
+ *
+ * The fake binary just exits 0 — we never actually invoke it (the
+ * v0 ingest takes a pre-formatted JSON file, not SCG output).
+ * On Windows, the probe runs `where scg`; we drop a `.cmd` shim
+ * alongside the POSIX shell script so the same helper works there.
+ */
+function installFakeScg(root: string): string {
+  const fakeBin = join(root, 'fake-bin');
+  mkdirSync(fakeBin, { recursive: true });
+  if (process.platform === 'win32') {
+    writeFileSync(join(fakeBin, 'scg.cmd'), '@echo off\r\nexit /b 0\r\n');
+  } else {
+    const shimPath = join(fakeBin, 'scg');
+    writeFileSync(shimPath, '#!/bin/sh\nexit 0\n');
+    chmodSync(shimPath, 0o755);
+  }
+  return fakeBin;
 }
 
 function runDevil(
@@ -180,6 +206,7 @@ test('ingest scg: produces ONE kind=gate entry on supply-chain with embedded sta
   const { root, cleanup } = bootstrap();
   t.after(cleanup);
   const reviewId = openReview(root);
+  const fakeBin = installFakeScg(root); // SCG availability check (e-001)
   const inputPath = writeJson(root, 'scg.json', {
     source: 'scg',
     version: '1',
@@ -198,7 +225,10 @@ test('ingest scg: produces ONE kind=gate entry on supply-chain with embedded sta
   const r = runDevil(
     root,
     ['ingest', reviewId, '--from', 'scg', inputPath, '--format', 'json'],
-    { GUILD_ACTOR: 'alice' },
+    {
+      GUILD_ACTOR: 'alice',
+      PATH: `${fakeBin}${delimiter}${process.env['PATH'] ?? ''}`,
+    },
   );
   assert.equal(r.status, 0, `stderr: ${r.stderr}`);
   const payload = JSON.parse(r.stdout);
@@ -220,6 +250,7 @@ test('ingest scg with empty stages array fails', (t) => {
   const { root, cleanup } = bootstrap();
   t.after(cleanup);
   const reviewId = openReview(root);
+  const fakeBin = installFakeScg(root);
   const inputPath = writeJson(root, 'scg.json', {
     source: 'scg',
     version: '1',
@@ -229,7 +260,10 @@ test('ingest scg with empty stages array fails', (t) => {
   const r = runDevil(
     root,
     ['ingest', reviewId, '--from', 'scg', inputPath],
-    { GUILD_ACTOR: 'alice' },
+    {
+      GUILD_ACTOR: 'alice',
+      PATH: `${fakeBin}${delimiter}${process.env['PATH'] ?? ''}`,
+    },
   );
   assert.equal(r.status, 1);
   assert.match(r.stderr, /'stages' must be a non-empty array/);
@@ -432,4 +466,69 @@ test('ingest refuses after conclude (terminal-state)', (t) => {
   );
   assert.equal(r.status, 1);
   assert.match(r.stderr, /already concluded — terminal state/);
+});
+
+// ---- SCG mandatory-delegate runtime check (e-001 fix) ----
+
+test('ingest --from scg refuses if scg is not on PATH (e-001 mandatory-delegate enforcement)', (t) => {
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  const reviewId = openReview(root);
+  // Deliberately do NOT install fake scg — and override PATH to a
+  // tmpdir that contains nothing executable, so the spawned devil's
+  // `which scg` probe returns non-zero. This pins the e-001 fix:
+  // the supply-chain lense's "mandatory delegate" claim is now
+  // runtime-enforced, not just documented.
+  const emptyBin = join(root, 'empty-bin');
+  const inputPath = writeJson(root, 'scg.json', {
+    source: 'scg',
+    version: '1',
+    verdict: 'CLEAR',
+    stages: [
+      { name: 'L1-audit', verdict: 'pass', reasoning: 'no advisories' },
+    ],
+  });
+  // Use only emptyBin in PATH; even Node's binary resolution still
+  // works because we pass process.execPath as the binary directly.
+  const r = runDevil(
+    root,
+    ['ingest', reviewId, '--from', 'scg', inputPath],
+    {
+      GUILD_ACTOR: 'alice',
+      PATH: emptyBin, // scg WILL NOT be found via `which`
+    },
+  );
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /requires the supply-chain-guard 'scg' command on PATH/);
+  assert.match(r.stderr, /mandatory delegate per #126 decision C/);
+  assert.match(r.stderr, /e-001/);
+});
+
+test('ingest --from ultrareview is unaffected by missing scg (only scg requires the binary)', (t) => {
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  const reviewId = openReview(root);
+  const emptyBin = join(root, 'empty-bin');
+  const inputPath = writeJson(root, 'bugs.json', {
+    source: 'ultrareview',
+    version: '1',
+    bugs: [
+      {
+        lense: 'composition',
+        title: 't',
+        details: 'd',
+        severity: 'low',
+        rationale: 'r',
+      },
+    ],
+  });
+  const r = runDevil(
+    root,
+    ['ingest', reviewId, '--from', 'ultrareview', inputPath, '--format', 'json'],
+    {
+      GUILD_ACTOR: 'alice',
+      PATH: emptyBin, // scg not on PATH, but --from ultrareview doesn't need it
+    },
+  );
+  assert.equal(r.status, 0, `stderr: ${r.stderr}`);
 });

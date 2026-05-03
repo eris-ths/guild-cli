@@ -7,6 +7,38 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 
 ## [Unreleased]
 
+### Fixed
+
+- **devil-review `--from scg` ingest: SCG now runtime-enforced as a
+  mandatory delegate.** ([#126](https://github.com/eris-ths/guild-cli/issues/126)
+  decision C; e-001 from devil-on-devil dogfood)
+  Previously, the supply-chain lense's "mandatory delegate to SCG"
+  claim in design docs was not actually enforced at runtime —
+  `devil ingest --from scg` accepted any well-formed JSON matching
+  the strict v0 shape, with no check that the input came from a
+  real SCG run. A reviewer could fabricate a `verdict: CLEAR` JSON
+  and satisfy the supply-chain lense gate without SCG ever
+  running, defeating the floor-raising design intent.
+
+  Post-fix, `--from scg` probes for the `scg` command on `PATH`
+  via `which scg` (POSIX) or `where scg` (Windows) before
+  proceeding. If scg is not found, the verb refuses with a
+  structured error pointing at the install link
+  ([eris-ths/supply-chain-guard](https://github.com/eris-ths/supply-chain-guard))
+  and naming the design decision (#126 C) and the dogfood finding
+  (e-001) for substrate-as-audit-trail.
+
+  ultrareview / claude-security ingest paths are unchanged; only
+  the scg path adds the binary check (it's the only source with a
+  named delegate in the lense schema).
+
+  Tests: a new test pins the refusal under an empty PATH
+  environment, plus a paired test pins that `--from ultrareview`
+  is unaffected. Existing scg-ingest tests now install a fake
+  `scg` shim in a tmpdir and prepend it to PATH for the spawned
+  devil process — testing the substrate without requiring SCG to
+  be installed in CI.
+
 ### Added
 
 - **`coherence` lense added to devil-review's bundled catalog (12th
