@@ -64,8 +64,9 @@ const ENTRY_KNOWN_FLAGS: ReadonlySet<string> = new Set([
  * --persona must exist in the catalog AND not be ingest_only
  * (only `devil ingest` may attribute to ingest-only personas).
  *
- * --lense must exist in the catalog. Custom lenses (per-content_root
- * YAML overrides) land later; v0 catalog is the 11 bundled defaults.
+ * --lense must exist in the catalog. Per-content_root custom-lense
+ * override loader is intentionally out of scope for v1; the v1
+ * catalog ships the 11 bundled defaults via BundledLenseCatalog.
  *
  * State-machine boundary: only `open` reviews accept entries.
  * Concluded reviews surface DevilReviewAlreadyConcluded.

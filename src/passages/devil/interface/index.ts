@@ -6,11 +6,10 @@
 // (Anthropic /ultrareview, Claude Security, supply-chain-guard)
 // rather than replacing them. Design lives in issue #126.
 //
-// This is the v0 scaffold. Only `devil schema` and `devil --help`
-// are wired. open / entry / ingest / dismiss / resolve / suspend /
-// resume / conclude / list / show land in subsequent commits, agora
-// pattern. The schema verb's VERBS array grows as each verb lands,
-// keeping the agent contract honest about what's actually invokable.
+// v1 surface (PR #127) lands all 11 verbs from the design issue:
+// schema / open / entry / list / show / dismiss / resolve / suspend
+// / resume / conclude / ingest. The schema verb's VERBS array
+// reflects every implemented verb, keeping the agent contract honest.
 //
 // AI-first per principle 11: the substrate is machine-parseable
 // JSON / snake_case YAML / explicit-flag CLI. Any future
@@ -34,7 +33,7 @@ import { suspendReview } from './handlers/suspend.js';
 import { resumeReview } from './handlers/resume.js';
 import { ingestSource } from './handlers/ingest.js';
 
-const HELP = `devil-review — security-backstop review passage (v0 scaffold)
+const HELP = `devil-review — security-backstop review passage (alpha, 11 verbs)
 
 Usage:
   devil open <target-ref> --type <pr|file|function|commit>
@@ -133,15 +132,12 @@ Usage:
   devil schema [--verb <name>] [--format json|text]
                               Agent dispatch contract for this passage
                               (principle 10). draft-07 JSON Schema subset.
-                              Lists every implemented verb; grows as
-                              subsequent commits add verbs per #126.
+                              Lists every implemented verb.
 
   devil --help                 This help.
   devil --version              Print version and exit.
 
-All v1 verbs from issue #126 are now invokable in this snapshot.
-
-Passage status: complete v1 surface. All 11 verbs from issue #126 are invokable.
+Passage status: alpha (v1 complete). All 11 verbs from issue #126 are invokable.
 Substrate: shares content_root and members/ with gate and agora. Reviews
 land at <content_root>/devil/reviews/<rev-id>.yaml.
 
@@ -160,7 +156,7 @@ export async function main(argv: readonly string[]): Promise<number> {
     return 0;
   }
   if (argv[0] === '--version') {
-    process.stdout.write('devil-review (under guild-cli) — snapshot/devil-review\n');
+    process.stdout.write('devil-review (under guild-cli) — alpha (v1 complete, #126)\n');
     return 0;
   }
 
