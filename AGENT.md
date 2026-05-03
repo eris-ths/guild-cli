@@ -4,7 +4,9 @@
 > Brand-new to the concepts?
 > [`docs/concepts-for-newcomers.md`](./docs/concepts-for-newcomers.md)
 > is a 30-second map. Design rationale lives in
-> [`README.md`](./README.md).
+> [`README.md`](./README.md). For **how to combine gate / agora /
+> devil for real work** (combos, recipes, bug-killing flow), see
+> [`docs/playbook.md`](./docs/playbook.md).
 
 File-based coordination for AI agents. No daemon, no DB, no network.
 State lives in YAML files under a `content_root`. Git gives you history.
