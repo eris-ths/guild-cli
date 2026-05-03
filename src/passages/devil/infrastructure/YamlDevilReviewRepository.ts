@@ -33,10 +33,16 @@ import { parseYamlSafe } from '../../../infrastructure/persistence/parseYamlSafe
  * surfaces (per-target-repo? per-author?), it can be added without
  * breaking the path shape — one rev-id maps to one file.
  *
- * Every mutating operation writes via writeTextSafeAtomic so readers
- * never see a torn file. Optimistic CAS on the relevant array length
- * (or `state` for conclude) protects against silent overwrite when
- * concurrent appenders hit the same review.
+ * Every mutating operation writes via writeTextSafeAtomic so concurrent
+ * READERS never see a torn file (atomic .tmp + rename). The "CAS" on
+ * the relevant array length (or `state` for conclude) is *sequential*
+ * not atomic: it catches the load-then-act-then-write race that AI
+ * agents naturally produce when re-entering between sessions, but
+ * does NOT prevent two simultaneous writer processes from both
+ * passing the check and both writing (last-write-wins under true
+ * OS-level concurrency). See the DevilReviewRepository interface
+ * doc and #126 dogfood e-001 + e-004 for the trust assumption
+ * ("one CLI process at a time per content_root") this rests on.
  */
 const REVIEWS_DIR = 'reviews';
 const REVIEW_FILE_PATTERN = /^rev-\d{4}-\d{2}-\d{2}-\d{3,4}\.yaml$/;
@@ -58,6 +64,13 @@ export class YamlDevilReviewRepository implements DevilReviewRepository {
   async findById(id: string): Promise<DevilReview | null> {
     parseReviewId(id);
     const rel = join(REVIEWS_DIR, `${id}.yaml`);
+    // existsSafe is *advisory* (not a gate): it skips a load attempt
+    // for the obvious "no file" case. A concurrent unlink between
+    // existsSafe and loadFromRel surfaces as a hydrate failure inside
+    // loadFromRel (returning null), which is acceptable. Per #126
+    // dogfood e-002. The TOCTOU window only matters under concurrent
+    // FS mutation, which the trust assumption in the interface
+    // docstring rules out for v0.
     if (!existsSafe(this.base, rel)) return null;
     return this.loadFromRel(rel);
   }
@@ -336,8 +349,15 @@ export class YamlDevilReviewRepository implements DevilReviewRepository {
    * named array's length matches `expectedCount`, refuses if state
    * is `concluded` (terminal), appends the entry, atomic-writes back.
    *
-   * Per principle 11 (AI-natural): re-entering instances detect
-   * concurrent appenders rather than silently overwrite.
+   * Per principle 11 (AI-natural): re-entering instances catch
+   * sequential append races — the load-then-act-then-write window
+   * where instance A loaded count=N, instance B wrote count=N+1,
+   * instance A's CAS check sees N+1 != N and refuses rather than
+   * clobbering B. Under true OS-level concurrent writers (two
+   * devil processes hitting the same review in the same scheduler
+   * quantum) the read-modify-write sequence itself is not atomic,
+   * and last-write-wins semantics apply. See repository interface
+   * doc for the trust assumption this rests on.
    */
   private async appendArrayWithCAS(
     review: DevilReview,

@@ -16,11 +16,22 @@ import { Entry } from '../domain/Entry.js';
  * reference a target (PR / file / commit / function) that is
  * orthogonal to game definitions.
  *
- * Every mutating operation is optimistic-CAS (per principle 11):
- * concurrent appenders and re-runners surface a structured conflict
- * instead of silently overwriting. A re-entering instance reads the
- * substrate, sees a version mismatch, and re-loads — never loses
- * state to a race.
+ * Every mutating operation uses *sequential* optimistic CAS — the
+ * caller passes the array length they loaded; the implementation
+ * re-reads the file and refuses if the on-disk count has changed.
+ * This catches the load-then-act-then-write race that AI agents
+ * naturally produce when re-entering between sessions: instance A
+ * loads, instance B writes, instance A writes — A's CAS check
+ * surfaces B's write before clobbering it.
+ *
+ * The CAS is **not** a true file-locked atomic compare-and-swap.
+ * Two processes that load + check + write within the same OS
+ * scheduler quantum can both pass the check and both write —
+ * last-write-wins. The trust assumption (per #126 dogfood e-001 +
+ * e-004) is that the typical guild-cli invocation is **one CLI
+ * process at a time per content_root**. Under that assumption the
+ * CAS holds; under true concurrent OS-level write traffic the
+ * substrate would need file locking (out of v0 scope).
  */
 export interface DevilReviewRepository {
   /** Find a review by id; null if absent. */
