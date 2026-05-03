@@ -1,3 +1,4 @@
+import { resolveGuildActor } from '../../shared/resolveGuildActor.js';
 import {
   ParsedArgs,
   optionalOption,
@@ -81,7 +82,7 @@ export async function reqVoices(c: C, args: ParsedArgs): Promise<number> {
   // verdicts vs outcomes. Hidden when viewing your own voice (the
   // voter shouldn't game their own score); shown otherwise. See the
   // `computeVoiceCalibration` header in voices.ts for semantics.
-  const envActor = process.env['GUILD_ACTOR'];
+  const envActor = resolveGuildActor();
   const isSelfView =
     envActor !== undefined &&
     envActor.length > 0 &&
@@ -212,7 +213,7 @@ const WHOAMI_KNOWN_FLAGS: ReadonlySet<string> = new Set(['limit']);
 
 export async function reqWhoami(c: C, args: ParsedArgs): Promise<number> {
   rejectUnknownFlags(args, WHOAMI_KNOWN_FLAGS, 'whoami');
-  const actor = process.env['GUILD_ACTOR'];
+  const actor = resolveGuildActor();
   if (!actor || actor.length === 0) {
     process.stderr.write(
       'GUILD_ACTOR is not set.\n' +

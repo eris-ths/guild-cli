@@ -52,7 +52,7 @@ export async function resumePlay(deps: ResumeDeps, args: ParsedArgs): Promise<nu
     return 1;
   }
   const note = optionalOption(args, 'note');
-  const by = optionalOption(args, 'by') ?? process.env['GUILD_ACTOR'];
+  const by = optionalOption(args, 'by', 'GUILD_ACTOR');
   if (!by) {
     process.stderr.write(
       'error: --by required (or set GUILD_ACTOR). agora resume attributes the resume to an actor.\n',

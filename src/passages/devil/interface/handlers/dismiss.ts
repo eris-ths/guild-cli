@@ -80,7 +80,7 @@ export async function dismissEntry(
   const reason: DismissalReason = parseDismissalReason(reasonRaw);
   const note = optionalOption(args, 'note');
 
-  const by = optionalOption(args, 'by') ?? process.env['GUILD_ACTOR'];
+  const by = optionalOption(args, 'by', 'GUILD_ACTOR');
   if (!by) {
     process.stderr.write(
       'error: --by required (or set GUILD_ACTOR). devil dismiss attributes the dismissal.\n',
