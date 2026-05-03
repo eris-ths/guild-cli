@@ -164,6 +164,108 @@ on suspend, surfaced in resume's success output) is the
 the substrate, not the agent's psychology. Per principle 11
 (AI-first, human as projection).
 
+## devil-review (third passage — security backstop, snapshot)
+
+`devil` is the third passage under guild — alongside `gate` and
+`agora`. Where gate carries decisions and agora carries narrative,
+devil carries **review-as-deliberation-substrate**: a multi-persona,
+lense-enforced surface that composes with single-pass tools
+(Anthropic `/ultrareview`, Claude Security, supply-chain-guard)
+rather than replacing them. Design rationale lives in
+[issue #126](https://github.com/eris-ths/guild-cli/issues/126).
+
+Goal: raise the security knowledge floor for code reviewed by
+authors who haven't met OWASP top 10 — not to guarantee protection,
+but to keep the dialogue honest when a finding is dismissed.
+
+```
+open ──── conclude ────▶ concluded (terminal)
+```
+
+Softer than agora's state machine: suspend / resume cycles are
+append-only history that *does not block* other entries. Multiple
+reviewers can be working simultaneously; the cliff/invitation just
+records re-entry context.
+
+```bash
+devil open <target-ref> --type <pr|file|function|commit> [--by <m>]
+devil entry <rev-id> --persona <p> --lense <l> --kind <k> --text "<prose>"
+                     [--severity <c|h|m|l|info>]
+                     [--severity-rationale "<prose>"]   # required when kind=finding
+                     [--addresses <e-NNN>]
+                     [--by <m>]
+devil list [--state <open|concluded>] [--target-type <pr|file|function|commit>]
+devil show <rev-id>
+devil conclude <rev-id> --synthesis "<prose>" [--unresolved e-001,e-002,...] [--by <m>]
+devil schema [--verb <name>]                            # principle 10 contract
+
+# Landing in subsequent commits per #126:
+# devil dismiss <entry-id> --reason <r> [--note "..."]
+# devil resolve <entry-id> [--commit <sha>]
+# devil suspend <rev-id> --cliff "..." --invitation "..."
+# devil resume  <rev-id>  [--note "..."]
+# devil ingest  <rev-id>  --from <ultrareview|claude-security|scg> <input>
+```
+
+devil records live under `<content_root>/devil/`:
+
+```
+<content_root>/devil/
+  reviews/<rev-id>.yaml         # one file per review session
+                                # rev-id format: rev-YYYY-MM-DD-NNN
+                                # (sequence per content_root per day)
+```
+
+Entry kinds (validated per-kind at the domain boundary):
+
+- `finding` — concrete vulnerability candidate. `severity` AND
+  `severity_rationale` required. `severity_rationale` is the
+  friction that forces **exploitability-context reasoning**
+  (Claude Security style — same category may be different
+  severity in different repos). `status` defaults to `open`;
+  the future `dismiss` / `resolve` verbs transition it.
+- `assumption` — declared trust assumption ("auth() is
+  correct"). Later entries can `--addresses` it to contest.
+- `resistance` — verdict-less concern ("something feels off").
+  Held without verify; suspend/resume can carry it across
+  sessions.
+- `skip` — `--text` declares why the lense is irrelevant. The
+  substrate keeps the skip explicit (silent skipping defeats
+  the floor-raising design).
+- `synthesis` — cross-cutting reading for the conclusion phase.
+- `gate` — multi-stage automated check output (e.g., SCG's
+  8 gates). **Reserved for `devil ingest`** — building
+  `stages[]` from CLI flags is too brittle.
+
+Personas (catalog-enforced; ingest-only personas land with their
+verbs):
+
+- `red-team` — adversarial framing strict
+- `author-defender` — articulate the author's framing + assumptions
+- `mirror` — read both, surface contradictions and shared blind spots
+
+Lenses (v0 catalog of 11; per-content_root override loader lands
+later):
+
+- `injection` / `injection-parser` / `path-network` / `auth-access`
+  / `memory-safety` / `crypto` / `deserialization`
+  / `protocol-encoding` — Claude Security's 8 categories
+- `composition` — multi-file/function effect; diff review tends to
+  miss
+- `temporal` — TOCTOU / race / retry / idempotency
+- `supply-chain` — **mandatory delegate to SCG** (hard-error if SCG
+  is unavailable; per #126 decision C, the floor-raising design
+  refuses silent skip on supply chain)
+
+Conclusion is verdict-less: `--synthesis` prose is required, and
+`--unresolved` lists entry ids the reviewer chose not to dismiss-
+or-resolve before closing. Substrate-explicit "these threads stay
+open."
+
+Status: snapshot. CLI has six verbs (open / entry / list / show /
+conclude / schema). dismiss / resolve / suspend / resume / ingest
+land in subsequent commits before the merge to main.
+
 ## Diagnostic
 
 ```bash

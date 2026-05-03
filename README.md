@@ -79,6 +79,8 @@ Requires Node.js 20 or 22.
 npm install
 npm run build
 node ./bin/gate.mjs --help     # request lifecycle / review / dialogue
+node ./bin/agora.mjs --help    # play / narrative (suspend/resume primitives)
+node ./bin/devil.mjs --help    # security-backstop review (snapshot)
 node ./bin/guild.mjs --help    # member management
 ```
 
@@ -86,10 +88,10 @@ A worked example content_root with config, members, and a multi-actor
 session lives in [`examples/quick-start/`](./examples/quick-start/);
 a longer real session is in [`examples/dogfood-session/`](./examples/dogfood-session/).
 
-### Architecture: container with two passages
+### Architecture: container with three passages
 
 `guild` is the **container** — content_root, members, config, the
-YAML substrate records outlive sessions on. Two passages run
+YAML substrate records outlive sessions on. Three passages run
 through it today, each a distinct shape of agent interaction:
 
 - **`gate`** (CLI) — the request-lifecycle / review / dialogue
@@ -105,6 +107,23 @@ through it today, each a distinct shape of agent interaction:
   instance reads those and acts on the substrate-side Zeigarnik
   effect. The design rationale lives in
   [issue #117](https://github.com/eris-ths/guild-cli/issues/117).
+- **`devil`** (CLI) — the security-backstop review passage
+  (snapshot, landing under `bin/devil.mjs`). A **multi-persona,
+  lense-enforced, time-extended review surface** that composes
+  with single-pass tools (Anthropic `/ultrareview`, Claude
+  Security, supply-chain-guard) rather than replacing them.
+  Reviewers commit to a `persona` (red-team / author-defender /
+  mirror), touch a per-content_root `lense` catalog, and
+  conclude with synthesis prose rather than a verdict. Designed
+  to **raise the security knowledge floor** for code reviewed
+  by authors who haven't met OWASP top 10 — not to guarantee
+  protection, but to keep the deliberation honest when a finding
+  is dismissed. The design rationale lives in
+  [issue #126](https://github.com/eris-ths/guild-cli/issues/126).
+  See also the sister project
+  [eris-ths/supply-chain-guard](https://github.com/eris-ths/supply-chain-guard)
+  whose Devil Gate framework devil-review's `supply-chain` lense
+  delegates to.
 
 Plus a thin operator helper:
 
@@ -112,20 +131,25 @@ Plus a thin operator helper:
   members, validate the roster, create members from outside any
   session. Small, stable, script-friendly.
 
-All three CLIs share the same content_root substrate.
+All four CLIs share the same content_root substrate.
 `gate register` and `guild new` write the same
 `members/<name>.yaml` files — two views of the same act (one from
 inside a passage, one from outside the container). agora-specific
-records live under `<content_root>/agora/` (games, plays, casts).
+records live under `<content_root>/agora/` (games, plays, casts);
+devil-review records under `<content_root>/devil/` (reviews,
+custom lenses).
 
 The architecture is shaped to accept additional passages —
 different shapes of agent interaction on the same substrate land
-alongside `gate` and `agora` without absorbing into either.
+alongside `gate`, `agora`, and `devil` without absorbing into any
+one of them.
 
 Full surface in [`AGENT.md`](./AGENT.md); per-verb examples in
 [`docs/verbs.md`](./docs/verbs.md). Agora's own README
 ([`src/passages/agora/README.md`](./src/passages/agora/README.md))
-covers its layout, status, and lore upstream.
+covers its layout, status, and lore upstream. devil-review is
+documented inline in `AGENT.md` and `docs/verbs.md` until it
+graduates from snapshot.
 
 ### Test
 
