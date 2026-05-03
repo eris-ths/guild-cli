@@ -7,6 +7,24 @@ import { Play, PlayMove, ResumeEntry, SuspensionEntry } from '../domain/Play.js'
  * The game subdirectory keeps plays scoped to their definition —
  * a Quest game's plays don't mingle with a Sandbox game's plays in
  * the same flat directory.
+ *
+ * Every mutating operation uses *sequential* optimistic CAS — the
+ * caller passes the array length they loaded; the implementation
+ * re-reads the file and refuses if the on-disk count has changed.
+ * This catches the load-then-act-then-write race that AI agents
+ * naturally produce when re-entering between sessions: instance A
+ * loads, instance B writes, instance A's CAS check surfaces B's
+ * write before clobbering it.
+ *
+ * The CAS is **not** a true file-locked atomic compare-and-swap.
+ * Two processes that load + check + write within the same OS
+ * scheduler quantum can both pass the check and both write —
+ * last-write-wins. The trust assumption (named explicitly in
+ * sister-passage devil-review's docstring after dogfood e-001)
+ * is that the typical guild-cli invocation is **one CLI process
+ * at a time per content_root**. Under that assumption the CAS
+ * holds; under true concurrent OS-level write traffic the
+ * substrate would need file locking (out of v0 scope).
  */
 export interface PlayRepository {
   /**
