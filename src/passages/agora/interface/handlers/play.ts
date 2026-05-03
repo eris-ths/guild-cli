@@ -105,8 +105,8 @@ export async function startPlay(deps: PlayDeps, args: ParsedArgs): Promise<numbe
   } else {
     process.stdout.write(
       `✓ play started: ${play.id} [${play.state}] on game=${play.game}\n` +
-        `  next: agora move ${play.id} --by ${by} "<text>"  (when move lands)\n` +
-        `        or agora suspend ${play.id} --cliff "..." --invitation "..."  (when suspend lands)\n`,
+        `  next: agora move ${play.id} --by ${by} "<text>"\n` +
+        `        or agora suspend ${play.id} --cliff "..." --invitation "..."  (leave a cliff)\n`,
     );
   }
   const configSegment =

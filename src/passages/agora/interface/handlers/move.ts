@@ -111,7 +111,7 @@ export async function moveOnPlay(deps: MoveDeps, args: ParsedArgs): Promise<numb
     process.stdout.write(
       `✓ move ${move.id} appended to ${play.id} on game=${play.game} by ${by}\n` +
         `  next: agora move ${play.id} --by ${by} "<text>"  (continue)\n` +
-        `        or agora suspend ${play.id} --cliff "..." --invitation "..."  (when suspend lands)\n`,
+        `        or agora suspend ${play.id} --cliff "..." --invitation "..."  (leave a cliff)\n`,
     );
   }
   return 0;

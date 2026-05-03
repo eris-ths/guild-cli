@@ -76,7 +76,11 @@ function runAgora(
 const STALE_PHRASES: ReadonlyArray<{ phrase: RegExp; description: string }> = [
   { phrase: /\(when implemented\)/, description: '"(when implemented)" — verb is now implemented' },
   { phrase: /lands? in subsequent commits?/i, description: '"lands in subsequent commits" — those commits are merged' },
-  { phrase: /\(when [a-z\s]+ lands?\)/, description: '"(when X lands)" parenthetical — X has landed' },
+  // Matches "when X lands" anywhere — not just `(when X lands)` —
+  // because the drift can sit inside a longer parenthetical
+  // (`(or agora play --slug X when play lands)`) where "(when"
+  // never appears as a literal opener.
+  { phrase: /\bwhen [a-z][a-z\s]* lands?\b/i, description: '"when X lands" prose — X has landed' },
   { phrase: /will be implemented/i, description: '"will be implemented" — verb already exists' },
 ];
 
@@ -89,6 +93,23 @@ function assertNoStaleReason(payload: { suggested_next?: { reason?: unknown } | 
       reason,
       phrase,
       `suggested_next.reason contains stale phrase: ${description}\n  reason was: ${reason}`,
+    );
+  }
+}
+
+// Text-mode (`next:` hint) shares the same drift vocabulary as the
+// JSON `suggested_next.reason`, but lives in a separate code path
+// in each handler. The original #121 fix targeted the JSON side
+// only; surfaced during a dogfood play that "(when play lands)"
+// was still on screen after play had landed. Per principle 11
+// (AI-first, human as projection), substrate (JSON) and projection
+// (text) can diverge silently — pin both.
+function assertNoStaleText(stdout: string): void {
+  for (const { phrase, description } of STALE_PHRASES) {
+    assert.doesNotMatch(
+      stdout,
+      phrase,
+      `text-mode stdout contains stale phrase: ${description}\n  stdout was: ${stdout}`,
     );
   }
 }
@@ -173,6 +194,90 @@ test('agora suspend / resume: suggested_next.reason has no stale prose', (t) => 
   );
   assert.equal(res.status, 0);
   assertNoStaleReason(JSON.parse(res.stdout));
+});
+
+// ---- (#121, follow-up) text-mode `next:` hint drift detector ----
+
+test('agora new (text): `next:` hint has no stale "(when X lands)" prose', (t) => {
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  const r = runAgora(
+    root,
+    ['new', '--slug', 'g', '--kind', 'sandbox', '--title', 'g'],
+    { GUILD_ACTOR: 'alice' },
+  );
+  assert.equal(r.status, 0);
+  assertNoStaleText(r.stdout);
+});
+
+test('agora play (text): `next:` hint has no stale prose', (t) => {
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  runAgora(
+    root,
+    ['new', '--slug', 'g', '--kind', 'sandbox', '--title', 'g'],
+    { GUILD_ACTOR: 'alice' },
+  );
+  const r = runAgora(
+    root,
+    ['play', '--slug', 'g'],
+    { GUILD_ACTOR: 'alice' },
+  );
+  assert.equal(r.status, 0);
+  assertNoStaleText(r.stdout);
+});
+
+test('agora move (text): `next:` hint has no stale prose', (t) => {
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  runAgora(
+    root,
+    ['new', '--slug', 'g', '--kind', 'sandbox', '--title', 'g'],
+    { GUILD_ACTOR: 'alice' },
+  );
+  const playId = JSON.parse(
+    runAgora(root, ['play', '--slug', 'g', '--format', 'json'], {
+      GUILD_ACTOR: 'alice',
+    }).stdout,
+  ).play_id;
+  const r = runAgora(
+    root,
+    ['move', playId, '--text', 't'],
+    { GUILD_ACTOR: 'alice' },
+  );
+  assert.equal(r.status, 0);
+  assertNoStaleText(r.stdout);
+});
+
+test('agora suspend / resume (text): `next:` hint has no stale prose', (t) => {
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  runAgora(
+    root,
+    ['new', '--slug', 'g', '--kind', 'sandbox', '--title', 'g'],
+    { GUILD_ACTOR: 'alice' },
+  );
+  const playId = JSON.parse(
+    runAgora(root, ['play', '--slug', 'g', '--format', 'json'], {
+      GUILD_ACTOR: 'alice',
+    }).stdout,
+  ).play_id;
+
+  const susp = runAgora(
+    root,
+    ['suspend', playId, '--cliff', 'c', '--invitation', 'i'],
+    { GUILD_ACTOR: 'alice' },
+  );
+  assert.equal(susp.status, 0);
+  assertNoStaleText(susp.stdout);
+
+  const res = runAgora(
+    root,
+    ['resume', playId],
+    { GUILD_ACTOR: 'alice' },
+  );
+  assert.equal(res.status, 0);
+  assertNoStaleText(res.stdout);
 });
 
 // ---- (#122) suggested_next.args.by absence ----
