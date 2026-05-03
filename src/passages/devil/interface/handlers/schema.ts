@@ -244,6 +244,57 @@ const VERBS: readonly VerbSchema[] = [
     },
   },
   {
+    name: 'conclude',
+    category: 'write',
+    summary:
+      'terminal state transition (open → concluded). Synthesis prose is required ' +
+      '(verdict-less close per issue #126); --unresolved names entry ids deliberately ' +
+      'left open. suggested_next is null on success (terminal verb).',
+    input: {
+      type: 'object',
+      properties: {
+        review_id: {
+          type: 'string',
+          description: 'positional; review id (rev-YYYY-MM-DD-NNN)',
+        },
+        synthesis: str,
+        unresolved: strOpt(
+          'comma-separated entry ids deliberately left open (e.g. "e-001,e-003")',
+        ),
+        by: strOpt('actor (defaults to GUILD_ACTOR)'),
+        format: formatField,
+      },
+      required: ['review_id', 'synthesis'],
+    },
+    output: {
+      type: 'object',
+      properties: {
+        ok: { type: 'boolean' },
+        review_id: str,
+        state: { type: 'string', enum: ['concluded'] },
+        from_state: { type: 'string', enum: ['open'] },
+        conclusion: {
+          type: 'object',
+          properties: {
+            at: str,
+            by: str,
+            synthesis: str,
+            unresolved: { type: 'array', items: str },
+          },
+          required: ['at', 'by', 'synthesis', 'unresolved'],
+        },
+        where_written: str,
+        config_file: { type: 'string', description: 'absolute path or null' },
+        suggested_next: {
+          type: 'object',
+          description:
+            'null on success — terminal verb has no advisory next step.',
+        },
+      },
+      required: ['ok', 'review_id', 'state', 'conclusion'],
+    },
+  },
+  {
     name: 'schema',
     category: 'meta',
     summary:

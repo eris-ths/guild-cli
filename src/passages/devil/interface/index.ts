@@ -27,6 +27,7 @@ import { openReview } from './handlers/open.js';
 import { entryOnReview } from './handlers/entry.js';
 import { listReviews } from './handlers/list.js';
 import { showReview } from './handlers/show.js';
+import { concludeReview } from './handlers/conclude.js';
 
 const HELP = `devil-review — security-backstop review passage (v0 scaffold)
 
@@ -64,6 +65,16 @@ Usage:
                               form is review.toJSON() — same shape as
                               the YAML on disk.
 
+  devil conclude <rev-id> --synthesis "<prose>"
+                          [--unresolved <e-001,e-002,...>]
+                          [--by <m>] [--format json|text]
+                              Terminal state transition (open → concluded).
+                              Verdict-less by design — synthesis prose is
+                              required; unresolved is the explicit list of
+                              entry ids deliberately left open. After
+                              conclude no further entries / suspensions /
+                              resumes / re-runs are accepted.
+
   devil schema [--verb <name>] [--format json|text]
                               Agent dispatch contract for this passage
                               (principle 10). draft-07 JSON Schema subset.
@@ -81,9 +92,8 @@ Verbs landing in subsequent commits per issue #126:
   resolve <entry-id>           Mark a finding resolved (optional commit ref).
   suspend / resume <rev-id>    Cliff/invitation-style pause and pick-up.
                               Softer than agora — does not block other entries.
-  conclude <rev-id>            Synthesis-prose close (verdict-less). Terminal.
 
-Passage status: v0 scaffold. 'open', 'entry', 'list', 'show', and 'schema' are invokable in this commit.
+Passage status: v0 scaffold. 'open', 'entry', 'list', 'show', 'conclude', and 'schema' are invokable in this commit.
 Substrate: shares content_root and members/ with gate and agora. Reviews
 land at <content_root>/devil/reviews/<rev-id>.yaml.
 
@@ -125,10 +135,12 @@ export async function main(argv: readonly string[]): Promise<number> {
         return await listReviews({ reviews, config }, args);
       case 'show':
         return await showReview({ reviews, config }, args);
+      case 'conclude':
+        return await concludeReview({ reviews, config }, args);
       default:
         process.stderr.write(
           `devil: unknown verb: ${cmd}\n` +
-            `(v0 scaffold — \`open\`, \`entry\`, \`list\`, \`show\`, and \`schema\` are invokable; other verbs land in subsequent commits per #126)\n`,
+            `(v0 scaffold — \`open\`, \`entry\`, \`list\`, \`show\`, \`conclude\`, and \`schema\` are invokable; other verbs land in subsequent commits per #126)\n`,
         );
         return 1;
     }
