@@ -27,6 +27,48 @@ span all three passages — splitting per-passage fragments the
 combo. Claude Code auto-loads this file from cwd ancestors no
 matter which passage subtree you're working in.
 
+## You are dogfooding (develop branch only)
+
+If this branch is `develop`, the **repo root itself is a
+configured content_root**: `guild.config.yaml` declares
+`content_root: .` and `members/` carries pre-registered
+actors (`claude` for general use, `claude-review` and
+`claude-security` for skill-attribution per the recipes
+below). The **expectation on this branch is that you use
+gate / agora / devil for your development work** — not as a
+separate concern, as the working surface itself.
+
+```bash
+# Once per session:
+npm install && npm run build       # if dist/ is missing
+export GUILD_ACTOR=claude
+node bin/gate.mjs boot             # always your first verb
+
+# Then for any non-trivial work:
+node bin/gate.mjs request --from claude --action "..." --reason "..."
+node bin/agora.mjs new --slug <topic> --kind sandbox --title "..."
+node bin/devil.mjs open <pr-url> --type pr
+```
+
+The CLIs are not on PATH by default (`bin` map only includes
+`guild` / `gate`); call `node bin/<passage>.mjs` directly.
+Aliasing in your shell is fine, but the substrate doesn't
+care — it sees verb invocations, not how they were spelled.
+
+**Dogfood expectation, not just convenience.** Per
+[playbook § "Tips for AI agents"](./docs/playbook.md#tips-for-ai-agents)
+T1, `gate boot` is the first verb of every session. Skip it
+and you'll act on stale context. T2: recognize the shape
+before dispatching. T8: when in doubt, dogfood — and on
+develop, "in doubt" is the default. The substrate is here so
+your work has provenance and survives session boundaries.
+
+Runtime state directories (`agora/` `devil/` `requests/`
+`inbox/` `issues/`) are *not* gitignored on this branch —
+they're substrate. Whether to commit them is a judgment call:
+ephemeral exploration → don't commit; substrate-of-record
+(decisions, dogfood examples) → commit.
+
 ## Skill × passage map
 
 | Skill | Lands in | One-line recipe |
