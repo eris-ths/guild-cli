@@ -19,23 +19,30 @@
 import { GuildConfig } from '../../../infrastructure/config/GuildConfig.js';
 import { parseArgs } from '../../../interface/shared/parseArgs.js';
 import { DomainError } from '../../../domain/shared/DomainError.js';
+import { YamlDevilReviewRepository } from '../infrastructure/YamlDevilReviewRepository.js';
 import { schemaCmd } from './handlers/schema.js';
+import { openReview } from './handlers/open.js';
 
 const HELP = `devil-review — security-backstop review passage (v0 scaffold)
 
 Usage:
+  devil open <target-ref> --type <pr|file|function|commit>
+                          [--by <m>] [--format json|text]
+                              Open a review session against a target.
+                              Lands at <content_root>/devil/reviews/<rev-id>.yaml.
+                              Initial state: open. Allocates a fresh
+                              rev-YYYY-MM-DD-NNN id per the runtime clock.
+
   devil schema [--verb <name>] [--format json|text]
                               Agent dispatch contract for this passage
                               (principle 10). draft-07 JSON Schema subset.
-                              v0 lists only the schema verb itself; other
-                              verbs join the contract as they land per #126.
+                              Lists every implemented verb; grows as
+                              subsequent commits add verbs per #126.
 
   devil --help                 This help.
   devil --version              Print version and exit.
 
 Verbs landing in subsequent commits per issue #126:
-  open <target>                Open a review session against a target
-                              (--type pr|file|function|commit).
   entry <rev-id>               Append an entry. Hand-rolled personas pick
                               from red-team / author-defender / mirror.
   ingest <rev-id>              Append entries from /ultrareview, Claude
@@ -49,7 +56,7 @@ Verbs landing in subsequent commits per issue #126:
   list                         Enumerate reviews in the content_root.
   show <rev-id>                Detail view of one review.
 
-Passage status: v0 scaffold. Only 'schema' is invokable in this commit.
+Passage status: v0 scaffold. 'open' and 'schema' are invokable in this commit.
 Substrate: shares content_root and members/ with gate and agora. Reviews
 land at <content_root>/devil/reviews/<rev-id>.yaml.
 
@@ -74,20 +81,19 @@ export async function main(argv: readonly string[]): Promise<number> {
 
   const [cmd, ...rest] = argv;
   const args = parseArgs(rest);
-  // GuildConfig load is currently unused (only schema is wired); the
-  // load call exists so the config-not-found behavior is identical
-  // to gate / agora at the dispatcher level. When verbs that touch
-  // the substrate land, they will use this config object directly.
-  GuildConfig.load();
+  const config = GuildConfig.load();
+  const reviews = new YamlDevilReviewRepository(config);
 
   try {
     switch (cmd) {
       case 'schema':
         return await schemaCmd(args);
+      case 'open':
+        return await openReview({ reviews, config }, args);
       default:
         process.stderr.write(
           `devil: unknown verb: ${cmd}\n` +
-            `(v0 scaffold — only \`schema\` is invokable; other verbs land in subsequent commits per #126)\n`,
+            `(v0 scaffold — \`open\` and \`schema\` are invokable; other verbs land in subsequent commits per #126)\n`,
         );
         return 1;
     }

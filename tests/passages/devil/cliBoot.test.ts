@@ -63,7 +63,7 @@ test('devil --version prints version and exits 0', (t) => {
   assert.match(r.stdout, /devil-review .* snapshot/);
 });
 
-test('devil schema --format json emits the v0 contract', (t) => {
+test('devil schema --format json emits the v0 contract (open + schema)', (t) => {
   const { root, cleanup } = tmpRoot();
   t.after(cleanup);
   const r = runDevil(root, ['schema', '--format', 'json']);
@@ -72,10 +72,11 @@ test('devil schema --format json emits the v0 contract', (t) => {
   assert.equal(payload['$schema'], 'http://json-schema.org/draft-07/schema#');
   assert.equal(payload.passage, 'devil-review');
   assert.ok(Array.isArray(payload.verbs));
-  // v0: only schema. Subsequent commits add open / entry / ingest / etc.
-  assert.equal(payload.verbs.length, 1);
-  assert.equal(payload.verbs[0].name, 'schema');
-  assert.equal(payload.verbs[0].category, 'meta');
+  // Currently implemented: open + schema. Subsequent commits add
+  // entry / ingest / dismiss / resolve / suspend / resume /
+  // conclude / list / show.
+  const names = payload.verbs.map((v: { name: string }) => v.name).sort();
+  assert.deepEqual(names, ['open', 'schema']);
 });
 
 test('devil schema --format text emits a terse summary', (t) => {
@@ -84,7 +85,8 @@ test('devil schema --format text emits a terse summary', (t) => {
   const r = runDevil(root, ['schema', '--format', 'text']);
   assert.equal(r.status, 0);
   assert.match(r.stdout, /devil-review/);
-  assert.match(r.stdout, /1 verb\(s\)/);
+  assert.match(r.stdout, /2 verb\(s\)/);
+  assert.match(r.stdout, /open {2}\[write\]/);
   assert.match(r.stdout, /schema {2}\[meta\]/);
 });
 
@@ -99,9 +101,9 @@ test('devil schema --verb <unknown> errors out', (t) => {
 test('devil <unknown-verb> surfaces v0 scaffold error', (t) => {
   const { root, cleanup } = tmpRoot();
   t.after(cleanup);
-  const r = runDevil(root, ['open', 'something']);
+  const r = runDevil(root, ['entry', 'something']);
   assert.equal(r.status, 1);
-  assert.match(r.stderr, /unknown verb: open/);
+  assert.match(r.stderr, /unknown verb: entry/);
   assert.match(r.stderr, /v0 scaffold/);
   assert.match(r.stderr, /#126/);
 });

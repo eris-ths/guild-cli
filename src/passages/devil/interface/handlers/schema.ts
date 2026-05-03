@@ -40,6 +40,10 @@ interface VerbSchema {
 }
 
 const str: JsonSchema = { type: 'string' };
+const strOpt = (description: string): JsonSchema => ({
+  type: 'string',
+  description,
+});
 const formatField: JsonSchema = {
   type: 'string',
   enum: ['json', 'text'],
@@ -47,9 +51,64 @@ const formatField: JsonSchema = {
     'output format (default: text for create-style verbs, json for schema)',
 };
 
-// v0 starts with just the schema verb. Each verb commit will add to
-// this array, so the schema output grows as the passage matures.
+const writeEnvelopeBase = (extra: Record<string, JsonSchema>): JsonSchema => ({
+  type: 'object',
+  properties: {
+    ok: { type: 'boolean' },
+    where_written: str,
+    config_file: { type: 'string', description: 'absolute path or null' },
+    suggested_next: {
+      type: 'object',
+      description:
+        'Advisory hint — never directive. Never carries args.by, by design (issue #122 alternation-neutral policy).',
+    },
+    ...extra,
+  },
+  required: ['ok', 'where_written', 'suggested_next'],
+});
+
+// v0 grows by one verb per commit; the schema is honest about what's
+// actually invokable. Each verb commit adds an entry here so the
+// agent contract reflects the implementation.
 const VERBS: readonly VerbSchema[] = [
+  {
+    name: 'open',
+    category: 'write',
+    summary:
+      'open a review session against a target (PR / file / function / commit). ' +
+      'Lands at <content_root>/devil/reviews/<rev-id>.yaml with state="open". ' +
+      'Allocates a fresh rev-YYYY-MM-DD-NNN id per the runtime clock.',
+    input: {
+      type: 'object',
+      properties: {
+        // positional <target-ref>
+        target_ref: {
+          type: 'string',
+          description:
+            'positional; the target reference (PR URL, file path, function symbol, or commit sha)',
+        },
+        type: {
+          type: 'string',
+          enum: ['pr', 'file', 'function', 'commit'],
+        },
+        by: strOpt('actor (defaults to GUILD_ACTOR)'),
+        format: formatField,
+      },
+      required: ['target_ref', 'type'],
+    },
+    output: writeEnvelopeBase({
+      review_id: str,
+      target: {
+        type: 'object',
+        properties: {
+          type: { type: 'string', enum: ['pr', 'file', 'function', 'commit'] },
+          ref: str,
+        },
+        required: ['type', 'ref'],
+      },
+      state: { type: 'string', enum: ['open'] },
+    }),
+  },
   {
     name: 'schema',
     category: 'meta',
@@ -65,8 +124,7 @@ const VERBS: readonly VerbSchema[] = [
     output: {
       type: 'object',
       description:
-        'Catalogue of devil-review verbs with input/output shapes. v0 contains only the schema verb itself; ' +
-        'open / entry / ingest / dismiss / resolve / suspend / resume / conclude / list / show land in subsequent commits per issue #126.',
+        'Catalogue of every implemented verb with input/output shapes. Grows commit-by-commit per issue #126 PR sequence.',
     },
   },
 ];
