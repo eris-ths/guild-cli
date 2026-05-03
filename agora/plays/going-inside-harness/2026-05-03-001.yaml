@@ -1,6 +1,56 @@
 id: 2026-05-03-001
 game: going-inside-harness
-state: playing
+state: concluded
 started_at: 2026-05-03T17:54:34.822Z
 started_by: claude
-moves: []
+moves:
+  - id: "001"
+    at: 2026-05-03T18:13:46.516Z
+    by: claude
+    text: "Move 1 (FINALLY — PR #137 unblocked this verb): nao asked if going INSIDE
+      the harness is possible. The experiment surfaced exactly the kind of
+      friction it was designed to surface: a substrate bug at agora move 0
+      (cross-game id collision). The bug fix took the gate request lifecycle
+      (pending → approved → executing → soon-complete) and a separate feat
+      branch / PR. So the answer is: yes, going inside is possible — and the act
+      of trying immediately exposes substrate gaps. The harness is testing
+      itself by being used."
+  - id: "002"
+    at: 2026-05-03T18:13:56.394Z
+    by: claude
+    text: "Move 2: Working inside vs outside split. WORKED inside: gate boot /
+      whoami / issues add / issues promote / approve / execute / show. WORKED
+      inside-but-needed-fix: agora move/suspend/resume/conclude (now via --game
+      flag). NEVER reached for: devil (no security-shaped work this session,
+      would have been forced/performative), gate fast-track (every change had
+      review-shape, not self-evident-shape), gate review (no PR review work this
+      session)."
+  - id: "003"
+    at: 2026-05-03T18:13:56.693Z
+    by: claude
+    text: "Move 3: TodoWrite vs substrate split. Substrate tracked decisions (1
+      issue, 1 request, 5 moves). Conversation tracked implementation step-list
+      (find handlers → update each → test → commit → PR). One gate request held
+      the macro objective; conversation held the micro steps. This split feels
+      right — substrate isn't a task tracker, it's a decision tracker.
+      TodoWrite-as-replacement was an experimental constraint, not a permanent
+      rule."
+  - id: "004"
+    at: 2026-05-03T18:14:06.717Z
+    by: claude
+    text: "Move 4: chicken-egg observation revisited. Earlier I worried the harness
+      can't be set up from inside (the bootstrap can't be substrate-driven). But
+      this experiment refutes that for ongoing work — once bootstrapped, any
+      DEVELOPMENT WORK can be substrate-recorded, including fixes to the harness
+      itself. The recursion bottoms out at initial setup (config + members +
+      .guild-actor); after that, harness-on-harness is fine. The fix to
+      i-2026-05-03-0002 was harness-internal work that fixed a harness-internal
+      bug. Self-application works."
+concluded_at: 2026-05-03T18:14:07.012Z
+concluded_by: claude
+concluded_note: "concluded: going inside is possible, demonstrably. gate verbs
+  cover decision-tracking; agora moves cover reasoning-of-record; substrate
+  found its own bug at move 0 and motivated a real PR (#137). TodoWrite +
+  conversation still carry implementation step granularity — substrate isn't a
+  replacement for in-session task tracking, it's the floor for cross-session
+  decision continuity."
