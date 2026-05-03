@@ -48,7 +48,7 @@ export async function moveOnPlay(deps: MoveDeps, args: ParsedArgs): Promise<numb
     return 1;
   }
   const text = requireOption(args, 'text', '--text required');
-  const by = optionalOption(args, 'by') ?? process.env['GUILD_ACTOR'];
+  const by = optionalOption(args, 'by', 'GUILD_ACTOR');
   if (!by) {
     process.stderr.write(
       'error: --by required (or set GUILD_ACTOR). agora move attributes the move to an actor.\n',

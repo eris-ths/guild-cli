@@ -1,3 +1,4 @@
+import { resolveGuildActor } from '../../shared/resolveGuildActor.js';
 import {
   ParsedArgs,
   requireOption,
@@ -233,7 +234,7 @@ async function msgInboxMarkRead(c: C, args: ParsedArgs): Promise<number> {
   // both so the audit trail records "who read for whom". Fall back to
   // the inbox owner when GUILD_ACTOR is unset — same-actor self-reader
   // is the common case, and stamping `read_by: <owner>` is correct.
-  const envActor = process.env['GUILD_ACTOR'];
+  const envActor = resolveGuildActor();
   const by = envActor && envActor.length > 0 ? envActor : forName;
   const result = await c.messageUC.markRead(forName, by, index);
   if (by !== forName) {

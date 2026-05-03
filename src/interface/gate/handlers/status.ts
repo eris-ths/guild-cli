@@ -1,3 +1,4 @@
+import { resolveGuildActor } from '../../shared/resolveGuildActor.js';
 import {
   ParsedArgs,
   optionalOption,
@@ -153,7 +154,7 @@ function renderStatusText(s: StatusSummary): string {
 
 export async function statusCmd(c: C, args: ParsedArgs): Promise<number> {
   rejectUnknownFlags(args, STATUS_KNOWN_FLAGS, 'status');
-  const actor = optionalOption(args, 'for') ?? process.env['GUILD_ACTOR'] ?? null;
+  const actor = optionalOption(args, 'for') ?? resolveGuildActor() ?? null;
   const format = optionalOption(args, 'format') ?? 'json';
 
   const all = await c.requestUC.listAll();

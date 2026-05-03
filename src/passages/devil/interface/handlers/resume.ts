@@ -67,7 +67,7 @@ export async function resumeReview(
 
   const note = optionalOption(args, 'note');
 
-  const by = optionalOption(args, 'by') ?? process.env['GUILD_ACTOR'];
+  const by = optionalOption(args, 'by', 'GUILD_ACTOR');
   if (!by) {
     process.stderr.write(
       'error: --by required (or set GUILD_ACTOR). devil resume attributes the re-entry.\n',
