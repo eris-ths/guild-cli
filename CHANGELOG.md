@@ -7,6 +7,133 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 
 ## [Unreleased]
 
+### Added
+
+- **`devil` — third passage under guild (snapshot, security
+  backstop).** A multi-persona, lense-enforced review surface
+  that **composes with single-pass tools** (Anthropic
+  `/ultrareview`, Claude Security, supply-chain-guard) rather
+  than replacing them. Designed to **raise the security
+  knowledge floor** for code reviewed by authors who haven't
+  met OWASP top 10 — not to guarantee protection, but to keep
+  the dialogue honest when a finding is dismissed.
+
+  Verbs (6 + schema in this snapshot; remaining 5 verbs land
+  before the merge to main):
+
+  - `devil open` — start a review session against a target
+    (`--type pr|file|function|commit`)
+  - `devil entry` — append a hand-rolled entry. Per-kind
+    validation: `kind=finding` requires `--severity` AND
+    `--severity-rationale` (the friction that forces
+    exploitability-context reasoning, Claude Security style);
+    `kind=gate` is reserved for `devil ingest`
+  - `devil list` — enumerate reviews (filter by `--state` and
+    `--target-type`)
+  - `devil show <rev-id>` — full detail (entries / suspensions
+    / resumes / conclusion); JSON form is `review.toJSON()`,
+    same shape as the on-disk YAML
+  - `devil conclude <rev-id>` — terminal state transition.
+    `--synthesis` prose required (verdict-less close), optional
+    `--unresolved e-001,e-002,...` lists entry ids deliberately
+    left open
+  - `devil schema` — principle 10 dispatch contract (grows
+    commit-by-commit as verbs land)
+
+  Landing in subsequent commits before merge:
+  - `devil dismiss <entry-id>` / `devil resolve <entry-id>` —
+    finding status transitions
+  - `devil suspend` / `devil resume` — cliff/invitation cycle
+    borrowed from agora (softer semantics: does NOT block other
+    entries)
+  - `devil ingest --from <ultrareview|claude-security|scg>` —
+    automated source adapters
+
+  Substrate path: `<content_root>/devil/reviews/<rev-id>.yaml`
+  (rev-id format: `rev-YYYY-MM-DD-NNN`, sequence per
+  content_root per day).
+
+  v0 lense catalog (11): `injection`, `injection-parser`,
+  `path-network`, `auth-access`, `memory-safety`, `crypto`,
+  `deserialization`, `protocol-encoding` (Claude Security's 8
+  categories) plus `composition`, `temporal`, `supply-chain`
+  (devil-specific). The `supply-chain` lense delegates to
+  [supply-chain-guard](https://github.com/eris-ths/supply-chain-guard)
+  (mandatory; hard-error if SCG is unavailable — the floor-
+  raising design refuses silent skip on supply chain per #126
+  decision C).
+
+  v0 persona catalog (3 hand-rolled): `red-team` (adversarial
+  framing strict), `author-defender` (articulate the author's
+  framing + assumptions), `mirror` (read both, surface
+  contradictions and shared blind spots). Ingest-only personas
+  (`ultrareview-fleet`, `claude-security`, `scg-supply-chain-gate`)
+  join the catalog with their matching ingest verbs.
+
+  Entry kinds: `finding` / `assumption` / `resistance` / `skip`
+  / `synthesis` / `gate` (the last reserved for ingest paths).
+  `assumption` and `resistance` are the load-bearing kinds for
+  the design intent — `assumption` makes trust-assumptions
+  explicit so they can be contested (`--addresses`); `resistance`
+  holds verdict-less concern across re-entry without forcing it
+  to ok|concern|reject.
+
+  Architecture in practice:
+  - principle 11 (AI-first): every verb's JSON envelope is the
+    agent contract (snake_case, `where_written`, `config_file`,
+    `suggested_next`); text mode is a projection. Stale-prose
+    detector applied at the schema level (lessons from #121
+    extended).
+  - principle 10 (schema as contract): `devil schema`
+    advertises every implemented verb's input + output;
+    `VERBS` array grows commit-by-commit so the contract is
+    honest about what's actually invokable.
+  - principle 09 (orientation disclosure): every write verb
+    emits the same `notice: wrote <abs> (config: <abs>)` line
+    shape as `gate register` and `agora new`.
+  - principle 04 (records outlive writers): all state mutations
+    are append-only at the array level (entries / suspensions /
+    resumes / re_run_history). Status mutation on findings
+    (dismiss/resolve, landing later) replaces the entry value
+    at the same id slot — append-only at the array level
+    preserved.
+
+  State machine (intentionally thinner than agora's):
+
+  ```
+  open ──── conclude ────▶ concluded   (terminal)
+  ```
+
+  No `suspended` state — suspend/resume cycles are append-only
+  history and do **not** block other entries. Multiple
+  reviewers can be working simultaneously; the cliff/invitation
+  records re-entry context only.
+
+  Optimistic CAS via `DevilReviewVersionConflict` on every
+  appending operation; `saveConclusion` uses state-CAS
+  (`open` → `concluded`).
+
+  Design rationale, three-source landscape comparison
+  (`/ultrareview` vs Claude Security vs SCG), the seven shapes
+  single-pass review structurally misses, and decisions A–E
+  (naming / lense catalog / SCG mandatory / severity_rationale
+  required / gate entry kind) live in
+  [issue #126](https://github.com/eris-ths/guild-cli/issues/126).
+
+  Sister project (devil-review's `supply-chain` lense's
+  delegate target): [eris-ths/supply-chain-guard](https://github.com/eris-ths/supply-chain-guard)
+  — its 8-stage Devil Gate framework is a reference implementation
+  of the adversarial-gate-sequence shape devil-review's own
+  `kind: gate` entry was designed to ingest.
+
+  ~5,000 LOC, ~80 contract tests across 9 test files in the
+  initial snapshot; further verbs ship in subsequent commits.
+
+  Branch: `snapshot/devil-review`. Lands on main when the
+  remaining verbs (dismiss / resolve / suspend / resume /
+  ingest) are wired and the dogfood loop has surfaced the
+  shape adjustments worth making before broader use.
+
 ### Fixed
 - **agora `suggested_next.reason` no longer carries stale "(when
   implemented)" / "(... lands in subsequent commits)" prose.**

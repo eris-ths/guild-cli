@@ -26,6 +26,7 @@ the next session — or the next agent — can pick up where you left off.
 | **Slack / Discord DM** | `gate message --from A --to B` | Push-based messaging with an `inbox`, same channel as the decision log — you can DM about a specific `request` and the reference persists. |
 | **ADR** (architecture decision record) | `request` + `reason` + `review`s | Same spirit, but *alive*: reviews and messages keep accruing after the decision is made. |
 | **Standup / retro notes** | `gate tail` / `gate voices <actor>` | Replay the content_root's dialogue, filtered by actor or lense, instead of scrolling chat history. |
+| **GitHub `/ultrareview` / Anthropic Claude Security** (single-pass model security review) | `devil open <ref> --type <pr\|file\|...>` + `devil entry / ingest` | Devil-review is a **persistent, multi-persona substrate** that one-shot tools' findings flow into. It does not replace the scanner — it holds the deliberation around findings (red-team / author-defender / mirror personas, lense-by-lense), and keeps the dismissal trail honest. See [issue #126](https://github.com/eris-ths/guild-cli/issues/126). |
 
 ## Quick vocabulary
 
