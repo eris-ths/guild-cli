@@ -1,6 +1,6 @@
 {
   "name": "guild-cli",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Guild CLI — DDD/TS member & request management with Two-Persona Devil Review",
   "type": "module",
   "bin": {

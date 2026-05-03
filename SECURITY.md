@@ -3,9 +3,88 @@
 ## Threat model
 
 `guild-cli` is a local file-based CLI for managing small-team artifacts
-(members, requests, reviews, issues). It is **not** designed for
-multi-tenant or network exposure. The trust boundary is "anyone with
-write access to `content_root`".
+(members, requests, reviews, issues, agora plays, devil-review reviews).
+It is **not** designed for multi-tenant or network exposure. The trust
+boundary is "anyone with write access to `content_root`".
+
+## Security-backstop passage: `devil-review`
+
+Since v0.4.0, `guild-cli` ships **`devil-review`** — a third passage
+explicitly designed as a **security-knowledge-floor substrate** for
+code reviewed by authors who haven't met OWASP top 10. It is not a
+replacement for this Security Model document or for upstream tools
+like Anthropic `/ultrareview`, Claude Security, or
+[supply-chain-guard](https://github.com/eris-ths/supply-chain-guard).
+It composes with them: the upstream tools' findings flow in via
+`devil ingest --from <source>`; multi-persona deliberation happens
+on top of the substrate.
+
+**What `devil-review` enforces** (relevant to this threat model):
+
+- **Catalog-enforced lense coverage at conclude.** A reviewer cannot
+  conclude a `devil-review` session without leaving at least one
+  entry per lense in the v1 catalog (12 lenses, including the
+  Claude-Security-aligned 8: `injection / injection-parser /
+  path-network / auth-access / memory-safety / crypto /
+  deserialization / protocol-encoding`, plus `composition /
+  temporal / supply-chain / coherence`). A `kind: skip` entry
+  with declared reason satisfies coverage; silent skipping is
+  refused. The friction is the floor.
+- **`supply-chain` lense mandatory delegate to SCG.** When
+  `devil ingest --from scg` is invoked, the verb runtime-checks
+  for `scg` on `PATH` (POSIX `which scg` / Windows `where scg`)
+  and refuses if absent. Documented intent is now runtime-enforced
+  (PR #129 e-001 fix).
+- **Severity rationale required on findings.** `kind: finding`
+  entries require both `--severity` AND `--severity-rationale`.
+  The rationale forces exploitability-context reasoning: same
+  category may carry different severity in different repos
+  (Claude Security influence; the rationale is what makes that
+  decision auditable).
+- **Append-only audit trail for dismissals.** `devil dismiss`
+  requires a structured reason from a fixed enum (`not-applicable
+  | accepted-risk | false-positive | out-of-scope |
+  mitigated-elsewhere`). The substrate keeps the dismissal trail;
+  re-dismissing a dismissed entry is refused. Future audit can
+  grep `devil/reviews/*.yaml` for "what did we say about this
+  category", not just "what passed".
+
+**What `devil-review` does NOT enforce** (read this carefully):
+
+- It does NOT prevent insecure code from being merged. A reviewer
+  who skips every lense with `irrelevant because n/a` and concludes
+  with empty synthesis can pass the gate. The substrate captures
+  the dismissal so a future audit can see the decision was made;
+  it doesn't prevent the decision.
+- It is NOT a code scanner. Its `ingest` verbs depend on upstream
+  tools producing the strict v0 input JSON shape. Real-world
+  adapter shims that translate `/ultrareview` `bugs.json` /
+  Claude Security findings export / SCG verdict output into
+  devil's shape are **out of scope for the in-tree passage** and
+  would land as separate utilities (or in the source tools
+  themselves).
+- It is shape-mismatched for **general bug-fix review**. See
+  `docs/playbook.md` § "When NOT to use devil" — routine bugs
+  (off-by-one, null checks, UI fixes) don't fit the
+  security-shaped lense catalog and would degrade the substrate
+  with cargo-cult skip-with-reason entries. Use `gate review`
+  with the configurable lense list (default
+  `devil / layer / cognitive / user`) for general code review.
+
+**Trust assumption (named explicitly per PR #129 e-001 / e-002 fix
+and propagated to agora in PR #132):** `devil-review`'s optimistic
+CAS is **sequential**, not atomic. The same trust assumption applies
+across all passages — *one CLI process at a time per content_root*.
+Under that assumption, CAS catches the load-then-act-then-write race
+that AI agents naturally produce when re-entering between sessions.
+Under true OS-level concurrent writers (two processes hitting the
+same record in the same scheduler quantum), last-write-wins
+semantics apply. File locking is out of v0 scope.
+
+For full details: `src/passages/devil/README.md`,
+[issue #126](https://github.com/eris-ths/guild-cli/issues/126)
+(design rationale), and `docs/playbook.md` (combos with `gate` /
+`agora`).
 
 ## Invariants enforced in code
 
