@@ -146,10 +146,14 @@ test('gate tail (no flags) still works', (t) => {
 // --- read-verb sweep: every read verb rejects unknown flags ---
 //
 // Pre-sweep, only tail/doctor/repair/unresponded had this discipline;
-// the rest fail-opened. A typo like `gate pending --format json` would
+// the rest fail-opened. A typo like `gate pending --invalid-flag` would
 // silently render text instead of error. Each entry below uses
 // `--bogus-flag-xyz` (deliberately implausible) so the test surfaces
 // the discipline, not a flag-name overlap with future legitimate flags.
+// (Historical note: pre-2026-05-03, `--format` was itself an "unknown
+// flag" on `pending` / `list`; the bird's-eye check report surfaced
+// the asymmetry vs other read verbs and `--format json|text` is now
+// accepted on both. Tested in tests/interface/listPendingFormat.test.ts.)
 //
 // Verbs that need a positional id are given a placeholder; the strict-
 // flag check fires before the id is parsed, so any value works.
