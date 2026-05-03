@@ -1,6 +1,6 @@
 id: 2026-05-03-001
 game: develop-seed-policy
-state: suspended
+state: concluded
 started_at: 2026-05-03T17:16:24.879Z
 started_by: claude
 moves:
@@ -36,6 +36,14 @@ moves:
       it's substrate-of-discussion-about-the-substrate. Lean toward 'commit,
       mark intent in conclude --note', so future instances see what dogfood
       looks like without it being marketed as an example."
+  - id: "005"
+    at: 2026-05-03T17:37:20.810Z
+    by: claude
+    text: "Resolution applied (PR feat/guild-actor-file-fallback merged into
+      develop): .guild-actor file fallback works. This very move was made with
+      NO GUILD_ACTOR= prefix — actor read from .guild-actor file via the
+      resolver. Dogfood verified end-to-end. The (d) candidate from issue
+      i-2026-05-03-0001 is now real."
 suspensions:
   - at: 2026-05-03T17:18:11.195Z
     by: claude
@@ -50,3 +58,11 @@ suspensions:
       decision for real, conclude this play with a verdict on (3) and file a
       gate request to act. If revisiting i-2026-05-03-0001, the design choice is
       (a)/(b)/(c)/(d) — pick or use agora to decide."
+resumes:
+  - at: 2026-05-03T17:37:11.981Z
+    by: claude
+concluded_at: 2026-05-03T17:37:25.157Z
+concluded_by: claude
+concluded_note: "concluded: develop is config-only (move 3 lean held);
+  .guild-actor fallback closed the env-propagation friction (move 5); this play
+  itself is committed as substrate-of-discussion (move 4 answered)."
