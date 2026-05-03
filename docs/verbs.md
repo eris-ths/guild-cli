@@ -1150,12 +1150,12 @@ hand — `devil entry` refuses them with `PersonaIsIngestOnly`. The
 matching `devil ingest --from <source>` verb is the only path that
 attributes entries to those personas.
 
-### Lenses (v0 catalog of 11)
+### Lenses (v1 catalog of 12)
 
 The first 8 mirror Claude Security's detection categories
 (injection, injection-parser, path-network, auth-access,
 memory-safety, crypto, deserialization, protocol-encoding) so
-ingested findings have a 1:1 home. Three devil-review-specific
+ingested findings have a 1:1 home. Four devil-review-specific
 lenses extend the catalog:
 
 - `composition` — multi-file/function effect. Diff-bounded review
@@ -1167,6 +1167,13 @@ lenses extend the catalog:
   decision C). The `supply-chain` lense fails closed if SCG is
   unavailable rather than allowing silent skip — the floor-raising
   design refuses "compromise on what we know matters."
+- `coherence` — bird's-eye / cross-lense / cross-target. Catches
+  drift between docs and code, naming inconsistencies, contradictions
+  between findings under different lenses, and architectural-posture
+  observations that lense-by-lense audit cannot reach. Surfaced as
+  a methodology gap during devil-on-devil dogfood (mirror's e-014
+  synthesis); promoted to a first-class lense so the audit posture
+  itself is auditable.
 
 Per-content_root custom lenses (under `<content_root>/devil/lenses/<name>.yaml`)
 land later as a separate adapter; the catalog interface already

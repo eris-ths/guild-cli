@@ -267,7 +267,7 @@ test('dismiss refuses after conclude (terminal-state refusal)', (t) => {
   const ALL_LENSES = [
     'injection', 'injection-parser', 'path-network', 'auth-access',
     'memory-safety', 'crypto', 'deserialization', 'protocol-encoding',
-    'supply-chain', 'composition', 'temporal',
+    'supply-chain', 'composition', 'temporal', 'coherence',
   ];
   for (const lense of ALL_LENSES) {
     if (lense === 'injection') continue; // already covered by addFinding

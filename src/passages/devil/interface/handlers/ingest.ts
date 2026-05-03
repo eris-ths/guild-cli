@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import {
   DevilReviewAlreadyConcluded,
   DevilReviewNotFound,
@@ -114,6 +115,24 @@ const VALID_SOURCES: ReadonlySet<IngestSource> = new Set([
   'scg',
 ]);
 
+/**
+ * Probe whether a command is available on PATH. Used by the SCG
+ * mandatory-delegate check (#126 decision C, fixes e-001 from the
+ * post-merge devil-on-devil dogfood). The check ensures that the
+ * "supply-chain lense delegates to SCG" claim in the design doc
+ * is enforced at runtime, not just documented — without it, a
+ * reviewer can fabricate a CLEAR verdict JSON and satisfy the
+ * lense gate without SCG ever running.
+ *
+ * Cross-platform: `which` on POSIX, `where` on Windows. Both
+ * return exit-code 0 iff the command is on PATH.
+ */
+function isCommandAvailable(cmd: string): boolean {
+  const probe = process.platform === 'win32' ? 'where' : 'which';
+  const r = spawnSync(probe, [cmd], { stdio: 'ignore' });
+  return r.status === 0;
+}
+
 const SOURCE_TO_PERSONA: Record<IngestSource, string> = {
   ultrareview: 'ultrareview-fleet',
   'claude-security': 'claude-security',
@@ -156,6 +175,23 @@ export async function ingestSource(
     return 1;
   }
   const source = sourceRaw as IngestSource;
+
+  // Mandatory-delegate runtime check (#126 decision C, fixes e-001).
+  // The supply-chain lense's "mandatory delegate to SCG" was
+  // documented but not enforced — reviewers could fabricate a CLEAR
+  // verdict JSON and satisfy the lense gate without SCG running.
+  // We now refuse `--from scg` if scg is not on PATH; production
+  // ingest pipelines are expected to run SCG and pipe its output,
+  // so the binary's presence is the operator-wired contract.
+  if (source === 'scg' && !isCommandAvailable('scg')) {
+    process.stderr.write(
+      `error: --from scg requires the supply-chain-guard 'scg' command on PATH ` +
+        `(mandatory delegate per #126 decision C; fixes e-001 from devil-on-devil dogfood).\n` +
+        `  install: https://github.com/eris-ths/supply-chain-guard\n` +
+        `  if scg is installed but not on PATH, add its install dir to PATH and re-run.\n`,
+    );
+    return 1;
+  }
 
   const by = optionalOption(args, 'by') ?? process.env['GUILD_ACTOR'];
   if (!by) {

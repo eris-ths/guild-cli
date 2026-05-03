@@ -242,8 +242,8 @@ verbs):
 - `author-defender` — articulate the author's framing + assumptions
 - `mirror` — read both, surface contradictions and shared blind spots
 
-Lenses (v0 catalog of 11; per-content_root override loader lands
-later):
+Lenses (v1 catalog of 12; per-content_root override loader is
+out-of-scope for v1 with the catalog interface as the seam):
 
 - `injection` / `injection-parser` / `path-network` / `auth-access`
   / `memory-safety` / `crypto` / `deserialization`
@@ -254,6 +254,11 @@ later):
 - `supply-chain` — **mandatory delegate to SCG** (hard-error if SCG
   is unavailable; per #126 decision C, the floor-raising design
   refuses silent skip on supply chain)
+- `coherence` — bird's-eye / cross-lense / cross-target. Doc/code
+  drift, naming inconsistency, contradictions between findings
+  under different lenses, architectural-posture observations.
+  Promoted from a methodology gap (mirror's dogfood e-014) to a
+  first-class lense so the audit posture itself is auditable.
 
 Conclusion is verdict-less: `--synthesis` prose is required, and
 `--unresolved` lists entry ids the reviewer chose not to dismiss-

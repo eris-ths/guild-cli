@@ -67,6 +67,7 @@ const ALL_LENSES = [
   'supply-chain',
   'composition',
   'temporal',
+  'coherence',
 ];
 
 function fillAllLensesWithSkips(root: string, reviewId: string): void {

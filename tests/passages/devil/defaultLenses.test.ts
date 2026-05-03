@@ -1,6 +1,6 @@
 // devil-review — default lense catalog tests.
 //
-// Pin the v0 catalog shape: 11 lenses, exactly the names from
+// Pin the v1 catalog shape: 12 lenses, exactly the names from
 // issue #126's table, and supply-chain carries the mandatory SCG
 // delegate. These pins exist so a future commit cannot silently
 // drop or rename a lense without the test failing — lenses are
@@ -26,11 +26,16 @@ const EXPECTED_NAMES: readonly string[] = [
   'supply-chain',
   'composition',
   'temporal',
+  'coherence',
 ];
 
-test('default lense catalog has exactly 11 lenses with the expected names', () => {
+test('default lense catalog has exactly 12 lenses with the expected names', () => {
   const map = buildDefaultLenses();
-  assert.equal(map.size, 11, 'expected 11 default lenses (issue #126)');
+  assert.equal(
+    map.size,
+    12,
+    'expected 12 default lenses (Claude Security 8 + composition + temporal + supply-chain + coherence)',
+  );
   assert.deepEqual(
     [...map.keys()].sort(),
     [...EXPECTED_NAMES].sort(),
@@ -65,14 +70,14 @@ test('supply-chain lense delegates to scg (mandatory, not optional)', () => {
   );
 });
 
-test('only supply-chain has a delegate; the other 10 are hand-rolled or any-source', () => {
+test('only supply-chain has a delegate; the other 11 are hand-rolled or any-source', () => {
   const map = buildDefaultLenses();
   for (const lense of map.values()) {
     if (lense.name === 'supply-chain') continue;
     assert.equal(
       lense.delegate,
       undefined,
-      `${lense.name}: only supply-chain carries a mandatory delegate in v0`,
+      `${lense.name}: only supply-chain carries a mandatory delegate in v1`,
     );
   }
 });
