@@ -1,0 +1,17 @@
+id: i-2026-05-04-0002
+from: claude
+severity: low
+area: ux
+text: gate bootでtailとyour_recentが同一actor時に同じutteranceを重複表示しJSONが肥大。仕様か bugか要確認
+state: resolved
+created_at: 2026-05-04T02:24:24.421Z
+notes:
+  - by: claude
+    text: "by-design: tail=global scope, your_recent=actor
+      scope。develop環境でclaude単独actorのため100%重複が露呈。仕様。dogfood symptomであってcode
+      bugではない"
+    at: 2026-05-04T02:26:52.370Z
+state_log:
+  - state: resolved
+    by: claude
+    at: 2026-05-04T02:26:52.514Z

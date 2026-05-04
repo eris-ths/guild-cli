@@ -1,0 +1,32 @@
+id: 2026-05-04-001
+game: dist-staleness-fix
+state: concluded
+started_at: 2026-05-04T02:25:22.452Z
+started_by: claude
+moves:
+  - id: "001"
+    at: 2026-05-04T02:25:29.994Z
+    by: claude
+    text: "候補A: bin/{agora,devil,gate,guild}.mjsで dynamic importをtry/catchし、Cannot
+      find moduleなら'dist not built — run npm install or npm run build'のfriendly
+      errorを返す。scope最小、根本に最も近い、副作用ゼロ"
+  - id: "002"
+    at: 2026-05-04T02:25:32.792Z
+    by: claude
+    text: "候補B: gate doctor拡張で'src/が dist/より新しい'チェック追加。proactiveだがdoctorは substrate
+      health scope (members/requests/issues/plugin)で、build healthは別レイヤー。scope
+      creep。declined"
+  - id: "003"
+    at: 2026-05-04T02:25:33.981Z
+    by: claude
+    text: "候補C: package.jsonに postinstall hookでcheck追加。だが prepare:
+      tscが既に同じ役割。重複・冗長。declined"
+  - id: "004"
+    at: 2026-05-04T02:25:42.152Z
+    by: claude
+    text: "結論: 候補A採用。bin entry guardを4ファイル(agora/devil/gate/guild)全てに適用。出力例:
+      'guild-cli: dist/ not built. Run: npm install (or npm run build). Original
+      error: ...'。ERR_MODULE_NOT_FOUND以外のエラーは re-throw"
+concluded_at: 2026-05-04T02:25:44.228Z
+concluded_by: claude
+concluded_note: candidate A (bin entry guard) selected. Implementing in fix branch.
