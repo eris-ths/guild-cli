@@ -99,8 +99,9 @@ node ./bin/gate.mjs boot                 # identity + status + tail + inbox in o
 | `guild` | stable     | `npm link` then `guild ...`, or `node ./bin/guild.mjs ...` |
 | `agora` | alpha (opt-in) | `node ./bin/agora.mjs ...` or `npm run agora -- ...` |
 | `devil` | alpha (opt-in) | `node ./bin/devil.mjs ...` or `npm run devil -- ...` |
+| `ctx`   | alpha (opt-in, phase 1) | `node ./bin/ctx.mjs ...` — only `record` ships in phase 1 |
 
-`agora` and `devil` are deliberately **not** listed in
+`agora`, `devil`, and `ctx` are deliberately **not** listed in
 `package.json#bin` while they remain alpha — opt-in is the stability
 boundary, not an oversight. Add them yourself once you commit to the
 shape they hold.

@@ -1,0 +1,82 @@
+// ctx — passage entry point.
+//
+// ctx is the fourth passage under guild (after gate / agora / devil),
+// reserved for accumulated facts: observations the substrate has
+// witnessed across sessions. Verdict-less, attribution-required,
+// append-only. See lore/principles/12 for the boundary with adjacent
+// modules.
+//
+// Phase 1 ships only `ctx record`. The remaining six verbs (fork /
+// supersede / show / list / chain / status) land iteratively in
+// phase 2 as use surfaces what shape they need.
+//
+// AI-first per principle 11: the substrate is machine-parseable JSON /
+// snake_case YAML / explicit-flag CLI; any future human-facing UI is
+// a projection, not a substrate change.
+
+import { GuildConfig } from '../../../infrastructure/config/GuildConfig.js';
+import { parseArgs } from '../../../interface/shared/parseArgs.js';
+import { DomainError } from '../../../domain/shared/DomainError.js';
+import { YamlCtxRepository } from '../infrastructure/YamlCtxRepository.js';
+import { CtxUseCases } from '../application/CtxUseCases.js';
+import { recordCtx } from './handlers/record.js';
+
+const HELP = `ctx — fact accumulation passage (phase 1: record only)
+
+Usage:
+  ctx record --fact "<prose>" [--tag tech:foo,status:bar]
+                              [--by <m>] [--format json|text]
+                              Append a fact to the substrate. Lands at
+                              <content_root>/ctx/<id>.yaml. Id is
+                              auto-allocated as ctx-YYYY-MM-DD-NNN.
+
+  ctx --help                   This help.
+  ctx --version                Print version and exit.
+
+Phase 1 status: minimum surface — only \`record\` is implemented.
+Phase 2 (separate session): fork / supersede / show / list / chain / status.
+
+Substrate: shares content_root and members/ with gate; ctx-specific
+data goes under <content_root>/ctx/.
+
+Lore upstream:
+  lore/principles/12-substrate-pure-module-in-projection-ecosystem.md
+  lore/principles/11-ai-first-human-as-projection.md
+  lore/principles/04-records-outlive-writers.md
+`;
+
+export async function main(argv: readonly string[]): Promise<number> {
+  if (argv.length === 0 || argv[0] === '--help' || argv[0] === '-h') {
+    process.stdout.write(HELP);
+    return 0;
+  }
+  if (argv[0] === '--version') {
+    process.stdout.write('ctx (under guild-cli) — phase 1 / record only\n');
+    return 0;
+  }
+
+  const [cmd, ...rest] = argv;
+  const args = parseArgs(rest);
+  const config = GuildConfig.load();
+  const repo = new YamlCtxRepository(config);
+  const uc = new CtxUseCases(repo);
+
+  try {
+    switch (cmd) {
+      case 'record':
+        return await recordCtx({ uc, config }, args);
+      default:
+        process.stderr.write(`ctx: unknown verb: ${cmd}\n${HELP}`);
+        return 1;
+    }
+  } catch (e) {
+    const msg =
+      e instanceof DomainError
+        ? `DomainError: ${e.message}${e.field ? ` (${e.field})` : ''}`
+        : e instanceof Error
+          ? e.message
+          : String(e);
+    process.stderr.write(`error: ${msg}\n`);
+    return 1;
+  }
+}
