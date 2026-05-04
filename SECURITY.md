@@ -151,21 +151,29 @@ For full details: `src/passages/devil/README.md`,
 
 ## Known hardening items (not yet addressed)
 
-- **Error messages may leak absolute paths.** Errors from `safeFs`
-  include the resolved target. Acceptable for a local CLI; reconsider
-  before any network exposure.
-- **Prototype pollution from hostile YAML.** Modern `yaml` lib returns
-  plain objects and handles `__proto__` safely, but the hydration layer
-  does not independently guard against prototype keys.
-- **Concurrent writes.** There is no lock file. Two simultaneous
-  writes on the same record have a last-writer-wins race unless
-  optimistic-lock detection catches the second write's stale read —
-  `RequestVersionConflict`, `InboxVersionConflict`, and
-  `IssueVersionConflict` each cover their own record class. This
-  catches **most** concurrent mutations but is not a full
-  serialization barrier (the CAS window between re-read and
-  atomic-rename is non-zero). Serialize at the caller for critical
-  operations on any record.
+Each item below is tracked as a GitHub issue for visibility in the
+backlog; status here is the current load-bearing summary, status on
+the issue is the active discussion.
+
+- **Error messages may leak absolute paths**
+  ([#153](https://github.com/eris-ths/guild-cli/issues/153)).
+  Errors from `safeFs` include the resolved target. Acceptable for
+  a local CLI; reconsider before any network exposure.
+- **Prototype pollution from hostile YAML**
+  ([#154](https://github.com/eris-ths/guild-cli/issues/154)).
+  Modern `yaml` lib returns plain objects and handles `__proto__`
+  safely, but the hydration layer does not independently guard
+  against prototype keys.
+- **Concurrent writes**
+  ([#155](https://github.com/eris-ths/guild-cli/issues/155)).
+  There is no lock file. Two simultaneous writes on the same record
+  have a last-writer-wins race unless optimistic-lock detection
+  catches the second write's stale read — `RequestVersionConflict`,
+  `InboxVersionConflict`, and `IssueVersionConflict` each cover their
+  own record class. This catches **most** concurrent mutations but is
+  not a full serialization barrier (the CAS window between re-read
+  and atomic-rename is non-zero). Serialize at the caller for
+  critical operations on any record.
 
 ## Reporting
 
