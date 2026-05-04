@@ -1,5 +1,6 @@
 import { buildContainer } from '../shared/container.js';
-import { parseArgs, optionalOption } from '../shared/parseArgs.js';
+import { parseArgs, optionalOption, HelpRequested } from '../shared/parseArgs.js';
+import { renderVerbHelp } from '../shared/verbHelp.js';
 import { DomainError } from '../../domain/shared/DomainError.js';
 import { REQUEST_STATES } from '../../domain/request/RequestState.js';
 import { getPackageVersion, isVersionFlag } from '../shared/version.js';
@@ -389,6 +390,10 @@ export async function main(argv: readonly string[]): Promise<number> {
       }
     }
   } catch (e) {
+    if (e instanceof HelpRequested) {
+      renderVerbHelp('gate', e);
+      return 0;
+    }
     // The `error:` prefix gives the CLI-universal "this failed" cue;
     // prepending "DomainError:" on top leaked an internal class name
     // into user-facing output without adding information. Keep the

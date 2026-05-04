@@ -148,6 +148,28 @@ function resolveEnvOrActorFile(envFallback: string): string | undefined {
 }
 
 /**
+ * Thrown by `rejectUnknownFlags` when the caller passes `--help` against
+ * a verb. Carries the verb name and known flag set so the binary's
+ * top-level catch can render verb-scoped help and return exit 0 (rather
+ * than the exit-1 path any unknown-flag error takes).
+ *
+ * Why a typed signal instead of stdout/exit inside rejectUnknownFlags:
+ * the helper is pure validation; coupling it to process.stdout / exit
+ * would make it untestable and would mean every caller imports the
+ * same side effect. A throw lets each binary decide what "help"
+ * renders to (different CLIs may want different prefixes).
+ */
+export class HelpRequested extends Error {
+  constructor(
+    public readonly verb: string,
+    public readonly knownFlags: readonly string[],
+  ) {
+    super(`help requested for verb: ${verb}`);
+    this.name = 'HelpRequested';
+  }
+}
+
+/**
  * Reject any --flag not in the verb's known set.
  *
  * The parser itself is intentionally permissive (a user may alias in
@@ -161,21 +183,30 @@ function resolveEnvOrActorFile(envFallback: string): string | undefined {
  * flags throw a usage error naming what was used and what is valid.
  * This is the strict variant each verb opts into — opting-in is how
  * existing verbs migrate without risk.
+ *
+ * `--help` is treated as universal: every verb honours it regardless
+ * of whether `help` appears in the verb's known set. The check throws
+ * `HelpRequested` so the binary's main() catch can render verb help
+ * with exit 0.
  */
 export function rejectUnknownFlags(
   args: ParsedArgs,
   known: ReadonlySet<string>,
   verb: string,
 ): void {
+  if (args.options['help'] === true) {
+    throw new HelpRequested(verb, [...known].sort());
+  }
   const unknown: string[] = [];
   for (const key of Object.keys(args.options)) {
+    if (key === 'help') continue;
     if (!known.has(key)) unknown.push(key);
   }
   if (unknown.length === 0) return;
   const knownList = [...known].sort().map((k) => `--${k}`).join(', ');
   const badList = unknown.sort().map((k) => `--${k}`).join(', ');
   throw new Error(
-    `gate ${verb}: unknown flag${unknown.length === 1 ? '' : 's'}: ${badList}\n` +
+    `${verb}: unknown flag${unknown.length === 1 ? '' : 's'}: ${badList}\n` +
       `  valid flags for '${verb}': ${knownList}`,
   );
 }

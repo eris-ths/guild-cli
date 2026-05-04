@@ -16,7 +16,8 @@
 // facing UI is a projection, not a substrate change.
 
 import { GuildConfig } from '../../../infrastructure/config/GuildConfig.js';
-import { parseArgs } from '../../../interface/shared/parseArgs.js';
+import { parseArgs, HelpRequested } from '../../../interface/shared/parseArgs.js';
+import { renderVerbHelp } from '../../../interface/shared/verbHelp.js';
 import { DomainError } from '../../../domain/shared/DomainError.js';
 import { YamlGameRepository } from '../infrastructure/YamlGameRepository.js';
 import { YamlPlayRepository } from '../infrastructure/YamlPlayRepository.js';
@@ -142,6 +143,10 @@ export async function main(argv: readonly string[]): Promise<number> {
         return 1;
     }
   } catch (e) {
+    if (e instanceof HelpRequested) {
+      renderVerbHelp('agora', e);
+      return 0;
+    }
     const msg =
       e instanceof DomainError
         ? `DomainError: ${e.message}${e.field ? ` (${e.field})` : ''}`
