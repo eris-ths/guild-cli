@@ -74,20 +74,47 @@ no DB, no network. The `content_root` you work in is the whole world.
 
 ### Install
 
-Requires Node.js 20 or 22.
+Requires Node.js 20 or 22. The `prepare` script auto-builds `dist/`
+on `npm install`, so a separate build step is not needed (run
+`npm run build` only after editing source).
 
 ```bash
-npm install
-npm run build
-node ./bin/gate.mjs --help     # request lifecycle / review / dialogue
-node ./bin/agora.mjs --help    # play / narrative (suspend/resume primitives)
-node ./bin/devil.mjs --help    # security-backstop review (alpha)
-node ./bin/guild.mjs --help    # member management
+npm install                              # auto-builds via prepare: tsc
+
+# Once per content_root: register yourself as an actor.
+node ./bin/gate.mjs register --name <you>
+
+# Once per shell: set the default actor used by every verb.
+export GUILD_ACTOR=<you>
+
+# Every session: orient with one command.
+node ./bin/gate.mjs boot                 # identity + status + tail + inbox in one JSON
 ```
 
-A worked example content_root with config, members, and a multi-actor
-session lives in [`examples/quick-start/`](./examples/quick-start/);
-a longer real session is in [`examples/dogfood-session/`](./examples/dogfood-session/).
+#### Entry points
+
+| CLI | Status | How to invoke |
+|-----|--------|----------------|
+| `gate`  | stable     | `npm link` then `gate ...`, or `node ./bin/gate.mjs ...` |
+| `guild` | stable     | `npm link` then `guild ...`, or `node ./bin/guild.mjs ...` |
+| `agora` | alpha (opt-in) | `node ./bin/agora.mjs ...` or `npm run agora -- ...` |
+| `devil` | alpha (opt-in) | `node ./bin/devil.mjs ...` or `npm run devil -- ...` |
+
+`agora` and `devil` are deliberately **not** listed in
+`package.json#bin` while they remain alpha — opt-in is the stability
+boundary, not an oversight. Add them yourself once you commit to the
+shape they hold.
+
+#### Worked examples
+
+Each directory below is a self-contained `content_root` you can `cd`
+into and run verbs against:
+
+- [`examples/quick-start/`](./examples/quick-start/) — minimal config + members
+- [`examples/dogfood-session/`](./examples/dogfood-session/) — longer multi-actor real session
+- [`examples/agent-first-session/`](./examples/agent-first-session/) — JSON-envelope agent-driven flow
+- [`examples/agent-voices/`](./examples/agent-voices/) — multi-persona voice rendering
+- [`examples/three-passages-framing/`](./examples/three-passages-framing/) — gate + agora + devil composition
 
 ### Architecture: container with three passages
 
@@ -168,7 +195,12 @@ npm test
 ```
 
 CI runs the same suite on Node 20 and 22 via
-[`.github/workflows/ci.yml`](./.github/workflows/ci.yml).
+[`.github/workflows/ci.yml`](./.github/workflows/ci.yml). **CI is the
+source of truth.** A handful of tests can fail in local runs on
+macOS due to `/var/folders` ↔ `/private/var/folders` symlink
+resolution and a separate JSON-parsing edge case in the schema
+snapshot — these do not occur in CI. See
+[`CONTRIBUTING.md`](./CONTRIBUTING.md) for the env-sensitivity notes.
 
 ### License
 

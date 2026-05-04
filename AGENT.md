@@ -19,6 +19,17 @@ useful when something breaks or you want to extend the system.
 
 ## Session start
 
+> **Prerequisites.** `npm install` once in the repo root — the
+> `prepare: tsc` script auto-builds `dist/` so a separate
+> `npm run build` is not needed. `export GUILD_ACTOR=<you>` so
+> every verb defaults to your identity; without it `whoami` /
+> `resume` need explicit `--by` / `--for` and `your_recent` is
+> `null`. `gate` and `guild` are exposed as `bin` entries (use
+> `npm link` for plain `gate`/`guild` on PATH); `agora` and
+> `devil` are alpha and intentionally not in `package.json#bin`
+> — invoke as `node ./bin/agora.mjs ...` or `npm run agora -- ...`
+> (same for `devil`).
+
 ```bash
 # First time in this content_root? Register yourself:
 gate register --name <you>              # category defaults to "professional"
