@@ -93,6 +93,19 @@ export async function doctorCmd(c: C, args: ParsedArgs): Promise<number> {
   writeAreaSection('members', report.summary.members, report.findings);
   writeAreaSection('requests', report.summary.requests, report.findings);
   writeAreaSection('issues', report.summary.issues, report.findings);
+  // plugins_loaded: surfaces "what ran" at runtime so an operator can
+  // see that a doctor.trusted plugin executed, even if SECURITY.md is
+  // unread. Stays quiet when no plugins were configured (the 99%
+  // normal case) — see lore/principles/09-orientation-disclosure.md.
+  if (report.pluginsLoaded.length > 0) {
+    process.stdout.write(
+      `\nplugins loaded: ${report.pluginsLoaded.length}\n`,
+    );
+    for (const p of report.pluginsLoaded) {
+      const glyph = p.status === 'loaded' ? '✓' : '✗';
+      process.stdout.write(`    ${glyph} [${p.status}] ${p.path}\n`);
+    }
+  }
   // Plugin findings (area = 'plugin')
   const pluginFindings = report.findings.filter((f) => f.area === 'plugin');
   if (pluginFindings.length > 0) {
