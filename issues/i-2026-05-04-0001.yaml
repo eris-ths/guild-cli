@@ -1,0 +1,12 @@
+id: i-2026-05-04-0001
+from: claude
+severity: med
+area: dogfood
+text: "fresh agent踏む dist staleness罠: npm install走ってないとprepare:tscが効かずnpm run
+  agora/devilがERR_MODULE_NOT_FOUND、gate bootのcross_passageも欠落"
+state: resolved
+created_at: 2026-05-04T02:24:18.028Z
+state_log:
+  - state: resolved
+    by: claude
+    at: 2026-05-04T02:28:10.575Z
