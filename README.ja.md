@@ -151,4 +151,4 @@ verb を叩けます:
 - [`examples/dogfood-session/`](./examples/dogfood-session/) — 多 actor の長い実セッション（このツール自身が自分を拡張した完全な記録）
 - [`examples/agent-first-session/`](./examples/agent-first-session/) — JSON envelope を中心とした agent-driven flow
 - [`examples/agent-voices/`](./examples/agent-voices/) — multi-persona の voice 表現
-- [`examples/three-passages-framing/`](./examples/three-passages-framing/) — gate + agora + devil の合成例
+- [`examples/three-passages-framing/`](./examples/three-passages-framing/) — gate / agora / devil の framing arc を substrate snapshot として保存 (3-passage 当時の凍結、`ctx` は後から open set に合流)
