@@ -383,7 +383,10 @@ function hydrate(
           rc.invokedBy = ro['invoked_by'] as string;
         // Hydrate with config lenses so custom lenses in saved data are accepted
         if (allowedLenses) rc.allowedLenses = allowedLenses;
-        reviews.push(Review.create(rc));
+        // restore (not create) — tolerant of empty comment for historical
+        // records that predate the strict-comment domain invariant. Fresh
+        // writes go through Review.create and are always non-empty.
+        reviews.push(Review.restore(rc));
       }
     }
     const statusLogRaw = Array.isArray(obj['status_log'])

@@ -359,6 +359,64 @@ test('Review.create omits invoked_by when it equals by', () => {
   assert.equal('invoked_by' in j, false);
 });
 
+// ── Review.create vs Review.restore: comment strictness split ──
+//
+// Pre-2026-05 the domain tolerated empty comments and only the CLI
+// handler enforced "comment required". That left RequestUseCases.review
+// (the application API) and any future programmatic caller able to
+// land empty-comment reviews. The split tightens fresh-write paths
+// (Review.create) while keeping hydration (Review.restore) tolerant of
+// historical records whose `comment` field is empty or missing.
+
+test('Review.create rejects empty comment', () => {
+  assert.throws(
+    () =>
+      Review.create({
+        by: 'alice',
+        lense: 'devil',
+        verdict: 'ok',
+        comment: '',
+      }),
+    DomainError,
+  );
+});
+
+test('Review.create rejects whitespace-only comment', () => {
+  assert.throws(
+    () =>
+      Review.create({
+        by: 'alice',
+        lense: 'devil',
+        verdict: 'ok',
+        comment: '   \n\t  ',
+      }),
+    DomainError,
+  );
+});
+
+test('Review.restore tolerates empty comment (hydration path)', () => {
+  const review = Review.restore({
+    by: 'alice',
+    lense: 'devil',
+    verdict: 'ok',
+    comment: '',
+    at: '2026-05-04T00:00:00.000Z',
+  });
+  assert.equal(review.comment, '');
+  assert.equal(review.by.value, 'alice');
+});
+
+test('Review.restore preserves a non-empty comment unchanged', () => {
+  const review = Review.restore({
+    by: 'alice',
+    lense: 'devil',
+    verdict: 'ok',
+    comment: 'historical prose',
+    at: '2026-05-04T00:00:00.000Z',
+  });
+  assert.equal(review.comment, 'historical prose');
+});
+
 test('Request restore preserves invoked_by round-trip', () => {
   const r = Request.restore({
     id: RequestId.generate(d, 1),
