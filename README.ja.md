@@ -40,10 +40,12 @@ node ./bin/gate.mjs boot                 # identity / status / tail / inbox を 
 ```
 
 `gate` と `guild` は安定しており、`npm link` で PATH 化できます。
-`agora` と `devil` は alpha のため意図的に `package.json#bin` から
+`agora` / `devil` / `ctx` は alpha のため意図的に `package.json#bin` から
 外しており、`node ./bin/agora.mjs ...` または `npm run agora -- ...`
-で起動してください（`devil` も同様）。これは見落としではなく安定境界
-として opt-in にしてあります。
+で起動してください（`devil`, `ctx` も同様）。これは見落としではなく
+安定境界として opt-in にしてあります。`ctx` は phase 1 で `record`
+verb のみ実装されています — 残り 6 verb (fork / supersede / show /
+list / chain / status) は別セッションで段階的に追加されます。
 
 ## あなたができること
 
