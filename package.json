@@ -7,9 +7,24 @@
     "guild": "./bin/guild.mjs",
     "gate": "./bin/gate.mjs"
   },
+  "files": [
+    "bin",
+    "dist/src",
+    "docs",
+    "examples",
+    "lore",
+    "AGENT.md",
+    "CHANGELOG.md",
+    "CONTRIBUTING.md",
+    "LICENSE",
+    "README.md",
+    "README.ja.md",
+    "SECURITY.md"
+  ],
   "scripts": {
     "build": "tsc",
     "prepare": "tsc",
+    "prepack": "npm run build",
     "test": "tsc && node tests/run.mjs",
     "typecheck": "tsc --noEmit",
     "gate": "node bin/gate.mjs",
