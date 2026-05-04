@@ -36,7 +36,7 @@ node ./bin/gate.mjs register --name <you>
 export GUILD_ACTOR=<you>
 
 # セッションごとに 1 度: 1 コマンドで全コンテキスト取得
-node ./bin/gate.mjs boot                 # identity / status / tail / inbox を 1 JSON で
+node ./bin/gate.mjs boot                 # identity / status / tail / inbox / cross_passage を 1 JSON で
 ```
 
 `gate` と `guild` は安定しており、`npm link` で PATH 化できます。
@@ -60,8 +60,9 @@ list / chain / status) は別セッションで段階的に追加されます。
 - 小さな自己完結タスクなら `gate fast-track` で create→complete
   を一発で通し、記録だけ残して規律を緩める
 - `gate boot` でセッション開始時に全コンテキストを一発取得 —
-  identity / queues / tail / your_recent / 未読 inbox を1つの
-  JSON で。より軽い counts-only が欲しい時は `gate status`。
+  identity / queues / tail / your_recent / 未読 inbox / cross_passage
+  (agora・devil の open / suspended / 直近 activity) を 1 つの JSON
+  で。より軽い counts-only が欲しい時は `gate status`。
 - `gate resume` で前セッション終端から再開 — open loops と
   「次の一手」を restoration prompt として返す（`--locale ja` で
   日本語 prose、`GUILD_ACTOR` 必須）
@@ -112,7 +113,7 @@ passage 群は AI エージェントが 「この作業はどの shape か」 �
   を残し、 次の instance がそれを読んで再入する — substrate-side
   Zeigarnik 効果。 設計の経緯は
   [issue #117](https://github.com/eris-ths/guild-cli/issues/117)。
-- **`devil`** (`bin/devil.mjs`、 snapshot) — security-backstop の
+- **`devil`** (`bin/devil.mjs`、 alpha) — security-backstop の
   review passage。 **multi-persona (red-team / author-defender /
   mirror) + lense 強制 (Claude Security の 8 category + devil 固有
   4 つ = 計 12 lense; composition / temporal / supply-chain /
