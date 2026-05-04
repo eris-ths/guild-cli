@@ -20,6 +20,7 @@ import {
   DiagnosticArea,
   DiagnosticFinding,
   DiagnosticReport,
+  PluginLoadInfo,
   classifyMessage,
 } from '../../domain/diagnostic/DiagnosticReport.js';
 
@@ -113,7 +114,10 @@ export class DiagnosticUseCases {
     }
     const issueMalformed = findings.length - beforeIssues;
 
-    // Run doctor plugins (if any)
+    // Run doctor plugins (if any). Track each path's outcome so the
+    // doctor report can surface "what ran" at runtime — operators
+    // shouldn't have to read SECURITY.md to know a plugin executed.
+    const pluginsLoaded: PluginLoadInfo[] = [];
     if (this.pluginPaths.length > 0 && this.pluginContext) {
       for (const pluginPath of this.pluginPaths) {
         try {
@@ -122,6 +126,18 @@ export class DiagnosticUseCases {
           if (typeof fn === 'function') {
             const pluginFindings = await fn(this.pluginContext);
             findings.push(...pluginFindings);
+            pluginsLoaded.push({ path: pluginPath, status: 'loaded' });
+          } else {
+            // default export wasn't callable — surface as both a
+            // finding (with the diagnostic detail) and a plugins_loaded
+            // entry (so the path is visible in the runtime list).
+            findings.push({
+              area: 'plugin',
+              source: pluginPath,
+              kind: 'unknown',
+              message: `plugin error: default export is not a function`,
+            });
+            pluginsLoaded.push({ path: pluginPath, status: 'error' });
           }
         } catch (e) {
           // Plugin errors become findings, never crash doctor
@@ -131,6 +147,7 @@ export class DiagnosticUseCases {
             kind: 'unknown',
             message: `plugin error: ${e instanceof Error ? e.message : String(e)}`,
           });
+          pluginsLoaded.push({ path: pluginPath, status: 'error' });
         }
       }
     }
@@ -142,6 +159,7 @@ export class DiagnosticUseCases {
         issues: { total: issues.length, malformed: issueMalformed },
       },
       findings,
+      pluginsLoaded,
     );
   }
 }
