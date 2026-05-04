@@ -88,7 +88,7 @@ node ./bin/gate.mjs register --name <you>
 export GUILD_ACTOR=<you>
 
 # Every session: orient with one command.
-node ./bin/gate.mjs boot                 # identity + status + tail + inbox in one JSON
+node ./bin/gate.mjs boot                 # identity + status + tail + inbox + cross_passage in one JSON
 ```
 
 #### Entry points
@@ -117,21 +117,26 @@ into and run verbs against:
 - [`examples/agent-voices/`](./examples/agent-voices/) — multi-persona voice rendering
 - [`examples/three-passages-framing/`](./examples/three-passages-framing/) — gate + agora + devil composition
 
-### Architecture: container with three passages
+### Architecture: container with passages
 
 `guild` is the **container** — content_root, members, config, the
-YAML substrate records outlive sessions on. Three passages run
-through it today, each a distinct shape of agent interaction:
+YAML substrate records outlive sessions on. Passages run through it,
+each a distinct shape of agent interaction:
 
 | Passage | Shape (一語) | What you do | When to reach for it |
 |---------|------------|-------------|----------------------|
 | `gate`  | **判断 / judgment** | decide on a request | something needs a verdict (approve, deny, complete, fail, review with ok\|concern\|reject) |
 | `agora` | **探索 / exploration** | stay with a thought | something is in motion that shouldn't be forced to a verdict yet (Quest / Sandbox plays, suspend / resume cliffs) |
 | `devil` | **守備 / defense** | protect end-users | something could harm a third party if landed without scrutiny (multi-persona, lense-enforced, friction-as-feature) |
+| `ctx`   | **事実 / fact accumulation** | record an observation | something has been observed across sessions and would be lost without an attributed, append-only record (no verdict needed) |
 
 The framing is a dispatch tool, not a metaphor: gate-shaped work
 goes to `gate`, exploration-shaped to `agora`, defense-shaped to
-`devil`. AI agents can route their work by recognizing the shape.
+`devil`, fact-shaped to `ctx`. AI agents can route their work by
+recognizing the shape. The set is open — see
+[`lore/principles/12-substrate-pure-module-in-projection-ecosystem.md`](./lore/principles/12-substrate-pure-module-in-projection-ecosystem.md)
+for how additional passages compose with these without absorbing
+into any one of them.
 
 - **`gate`** (CLI) — the request-lifecycle / review / dialogue
   passage. Decisions and the deliberation around them: file a
@@ -163,6 +168,18 @@ goes to `gate`, exploration-shaped to `agora`, defense-shaped to
   [eris-ths/supply-chain-guard](https://github.com/eris-ths/supply-chain-guard)
   whose Devil Gate framework devil-review's `supply-chain` lense
   delegates to.
+- **`ctx`** (CLI) — the fact-accumulation passage (alpha
+  phase 1, shipping under `bin/ctx.mjs`). Verdict-less,
+  attribution-required, append-only. Where `gate` records
+  *judgments* and `agora` records *thoughts in motion*, `ctx`
+  records *what has been observed* — facts the substrate has
+  witnessed across sessions, attributed to an actor, tagged
+  with `prefix:value` labels (e.g. `tech:typescript`,
+  `status:active`) for semantic query later. Phase 1 ships
+  only `ctx record`; `fork` / `supersede` / `show` / `list` /
+  `chain` / `status` arrive in phase 2. Useful when an
+  observation should outlive the session that produced it
+  without forcing a decision or a deliberation.
 
 Plus a thin operator helper:
 
@@ -170,18 +187,22 @@ Plus a thin operator helper:
   members, validate the roster, create members from outside any
   session. Small, stable, script-friendly.
 
-All four CLIs share the same content_root substrate.
+All five CLIs share the same content_root substrate.
 `gate register` and `guild new` write the same
 `members/<name>.yaml` files — two views of the same act (one from
 inside a passage, one from outside the container). agora-specific
 records live under `<content_root>/agora/` (games, plays, casts);
 devil-review records under `<content_root>/devil/` (reviews,
-custom lenses).
+custom lenses); ctx records under `<content_root>/ctx/` (one
+flat YAML per observation in phase 1).
 
 The architecture is shaped to accept additional passages —
 different shapes of agent interaction on the same substrate land
-alongside `gate`, `agora`, and `devil` without absorbing into any
-one of them.
+alongside `gate`, `agora`, `devil`, and `ctx` without absorbing
+into any one of them. Principle 12 names the boundary so future
+passages stay substrate-pure rather than re-implementing card
+abstractions, GUI projection, or persona logic that adjacent
+ecosystem modules already cover.
 
 Full surface in [`AGENT.md`](./AGENT.md); per-verb examples in
 [`docs/verbs.md`](./docs/verbs.md). Agora's own README

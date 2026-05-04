@@ -36,7 +36,7 @@ node ./bin/gate.mjs register --name <you>
 export GUILD_ACTOR=<you>
 
 # セッションごとに 1 度: 1 コマンドで全コンテキスト取得
-node ./bin/gate.mjs boot                 # identity / status / tail / inbox を 1 JSON で
+node ./bin/gate.mjs boot                 # identity / status / tail / inbox / cross_passage を 1 JSON で
 ```
 
 `gate` と `guild` は安定しており、`npm link` で PATH 化できます。
@@ -60,8 +60,9 @@ list / chain / status) は別セッションで段階的に追加されます。
 - 小さな自己完結タスクなら `gate fast-track` で create→complete
   を一発で通し、記録だけ残して規律を緩める
 - `gate boot` でセッション開始時に全コンテキストを一発取得 —
-  identity / queues / tail / your_recent / 未読 inbox を1つの
-  JSON で。より軽い counts-only が欲しい時は `gate status`。
+  identity / queues / tail / your_recent / 未読 inbox / cross_passage
+  (agora・devil の open / suspended / 直近 activity) を 1 つの JSON
+  で。より軽い counts-only が欲しい時は `gate status`。
 - `gate resume` で前セッション終端から再開 — open loops と
   「次の一手」を restoration prompt として返す（`--locale ja` で
   日本語 prose、`GUILD_ACTOR` 必須）
@@ -88,18 +89,22 @@ list / chain / status) は別セッションで段階的に追加されます。
 
 ## guild の他の passage
 
-`gate` は guild という container の中の一つ目の passage です。
-同じ content_root を共有する別の passage が二つあります。 三 passage は
-それぞれ違う **shape の作業** を hold します:
+`gate` は guild という container の中の最初の passage です。
+同じ content_root を共有する passage が複数あり、それぞれ違う
+**shape の作業** を hold します:
 
 | passage | shape (一語) | 何をする | いつ手を伸ばすか |
 |---------|--------------|----------|-------------------|
 | `gate`  | **判断**     | request に verdict を出す | approve / deny / complete / fail / review が必要な時 |
 | `agora` | **探索**     | 結論前の思考に留まる      | Quest / Sandbox、 cliff/invitation で時間を跨ぐ思考 |
 | `devil` | **守備**     | end-user を守る           | 多角的 scrutiny が必要な変更 (security-prone change) |
+| `ctx`   | **事実**     | 観察を記録する             | session を跨いで失われない形で attribution 付きで残したい観察 (verdict 不要) |
 
-三つは AI エージェントが 「この作業はどの shape か」 で dispatch
-できる単純な分類になっています。 詳しく:
+passage 群は AI エージェントが 「この作業はどの shape か」 で dispatch
+できる単純な分類になっています。 集合は open — 詳しくは
+[`lore/principles/12-substrate-pure-module-in-projection-ecosystem.md`](./lore/principles/12-substrate-pure-module-in-projection-ecosystem.md)
+が、追加 passage がどう既存と合成しつつ吸収されないかを名指ししています。
+個別:
 
 - **`agora`** (`bin/agora.mjs`、 alpha) — play / narrative の
   passage。 Quest と Sandbox の game-kind、 **suspend / resume を
@@ -108,7 +113,7 @@ list / chain / status) は別セッションで段階的に追加されます。
   を残し、 次の instance がそれを読んで再入する — substrate-side
   Zeigarnik 効果。 設計の経緯は
   [issue #117](https://github.com/eris-ths/guild-cli/issues/117)。
-- **`devil`** (`bin/devil.mjs`、 snapshot) — security-backstop の
+- **`devil`** (`bin/devil.mjs`、 alpha) — security-backstop の
   review passage。 **multi-persona (red-team / author-defender /
   mirror) + lense 強制 (Claude Security の 8 category + devil 固有
   4 つ = 計 12 lense; composition / temporal / supply-chain /
@@ -121,10 +126,21 @@ list / chain / status) は別セッションで段階的に追加されます。
   dismiss された時にその理由が substrate に残る形で deliberation
   を honest に保つ。 設計は
   [issue #126](https://github.com/eris-ths/guild-cli/issues/126)。
+- **`ctx`** (`bin/ctx.mjs`、 alpha phase 1) — fact accumulation の
+  passage。 verdict なし、 attribution 必須、 append-only。 `gate`
+  が *判断* を、 `agora` が *動いている思考* を残すのに対し、 `ctx`
+  は *観察された事実* を残します — session を跨いで substrate が
+  目撃した出来事を、 actor 付き、 `prefix:value` 形式のタグ
+  (例: `tech:typescript`、 `status:active`) 付きで記録し、後から
+  semantic に query できる形で保持します。 phase 1 は `ctx record`
+  のみ。 `fork` / `supersede` / `show` / `list` / `chain` / `status`
+  は phase 2。 観察を session 終端で消したくないが、 判断や熟議に
+  押し上げる必要もない時に手を伸ばす passage です。
 
-3 つの passage は同じ `members/<name>.yaml` substrate を共有し、
-agora / devil 固有の records はそれぞれ `<content_root>/agora/` /
-`<content_root>/devil/` に置かれます。
+passage 群は同じ `members/<name>.yaml` substrate を共有し、
+passage 固有の records はそれぞれ `<content_root>/agora/` /
+`<content_root>/devil/` /
+`<content_root>/ctx/` に置かれます。
 
 ## 実例
 
