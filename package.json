@@ -13,8 +13,10 @@
     "test": "tsc && node tests/run.mjs",
     "typecheck": "tsc --noEmit",
     "gate": "node bin/gate.mjs",
+    "guild": "node bin/guild.mjs",
     "agora": "node bin/agora.mjs",
-    "devil": "node bin/devil.mjs"
+    "devil": "node bin/devil.mjs",
+    "ctx": "node bin/ctx.mjs"
   },
   "dependencies": {
     "yaml": "^2.5.0"
