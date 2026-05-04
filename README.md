@@ -115,7 +115,7 @@ into and run verbs against:
 - [`examples/dogfood-session/`](./examples/dogfood-session/) — longer multi-actor real session
 - [`examples/agent-first-session/`](./examples/agent-first-session/) — JSON-envelope agent-driven flow
 - [`examples/agent-voices/`](./examples/agent-voices/) — multi-persona voice rendering
-- [`examples/three-passages-framing/`](./examples/three-passages-framing/) — gate + agora + devil composition
+- [`examples/three-passages-framing/`](./examples/three-passages-framing/) — the gate / agora / devil framing arc preserved as a substrate snapshot (frozen at the 3-passage moment; `ctx` joined the open set later)
 
 ### Architecture: container with passages
 
