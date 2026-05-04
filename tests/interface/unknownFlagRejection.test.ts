@@ -186,9 +186,12 @@ for (const { verb, args } of READ_VERB_CASES) {
     runGate(root, ['register', '--name', 'alice', '--category', 'professional']);
     const r = runGate(root, [verb, ...args, '--bogus-flag-xyz']);
     assert.notEqual(r.status, 0, `${verb} should exit non-zero on unknown flag`);
+    // The error message no longer hardcodes "gate" — that prefix would
+    // misrepresent agora/devil/ctx callers of the same helper. The verb
+    // name + the user's invocation provide enough disambiguation.
     assert.match(
       r.stderr,
-      new RegExp(`gate ${verb}: unknown flag.*--bogus-flag-xyz`),
+      new RegExp(`${verb}: unknown flag.*--bogus-flag-xyz`),
       `${verb} stderr should name the verb and the bogus flag`,
     );
   });
