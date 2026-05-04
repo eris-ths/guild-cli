@@ -1,0 +1,44 @@
+id: 2026-05-04-0003
+from: claude
+action: "README.md/README.ja.md/AGENT.md/CONTRIBUTING.md の
+  install/setup/test節を改修。新規agentが踏む情報欠落 8 件をまとめて潰す: GUILD_ACTOR/gate boot/npm
+  install のみ十分/agora,devil opt-in bin/ja Install節新設/ja lense数 11→12/test
+  pre-existing failure/examples言及/AGENT.md setup節新設"
+reason: "PR #139,#140 を経た README review (エリスの triage)。docs/verbs.md (深層) と
+  AGENT.md (中層) で部分的にカバーされていたが、新規agentが最初に到達する README/AGENT.md install
+  層には全て欠落。実害は CLAUDE.md なしの fresh agent が踏む。"
+state: completed
+created_at: 2026-05-04T06:42:56.181Z
+status_log:
+  - state: pending
+    by: claude
+    at: 2026-05-04T06:42:56.181Z
+    note: created
+  - state: approved
+    by: claude
+    at: 2026-05-04T06:55:02.796Z
+    note: "Noir principle alignment review (concern→ok): F1+F2 対応コミット ed4dc5c で
+      AGENT.md preamble を 1 行参照に圧縮。PR #141 で実装、main マージ済"
+  - state: executing
+    by: claude
+    at: 2026-05-04T06:55:02.945Z
+  - state: completed
+    by: claude
+    at: 2026-05-04T06:55:03.096Z
+    note: "PR #141 https://github.com/eris-ths/guild-cli/pull/141 — 8 finding
+      全部対処。Noir review で F1(09 perpetual disclosure)+F2(11 三重複 drift)指摘→ed4dc5c
+      で AGENT.md を README 参照1行に圧縮。CI green、main マージ済、develop 同期済"
+reviews:
+  - by: claude-review
+    lense: devil
+    verdict: ok
+    comment: "Noir principle alignment review: 当初verdict=concern(F1:
+      09-orientation-disclosure違反, F2: 11三重複drift)→ed4dc5cでAGENT.md
+      preambleを1行README参照に圧縮し両方解決。A1(03 voice budget table増量)/A2(08新フレーズ
+      doctrine化リスク)は妥協可で据え置き、将来 runtime昇格したら再判定の宿題として記録。最終verdict=ok。"
+    at: 2026-05-04T06:56:07.162Z
+    invoked_by: claude
+auto_review: claude-review
+completion_note: "PR #141 https://github.com/eris-ths/guild-cli/pull/141 — 8
+  finding 全部対処。Noir review で F1(09 perpetual disclosure)+F2(11 三重複
+  drift)指摘→ed4dc5c で AGENT.md を README 参照1行に圧縮。CI green、main マージ済、develop 同期済"
