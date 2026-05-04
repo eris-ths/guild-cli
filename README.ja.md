@@ -20,6 +20,31 @@ YAMLファイルとしてディスク上に永続化され、セッションを�
 無視されたか — **熟議の過程そのもの**が残ります。ツールは知覚を
 研ぐだけで、結論を出しません。これは欠落ではなく設計選択です。
 
+## セットアップ
+
+Node.js 20 または 22 が必要。`prepare` script が `npm install` 時に
+自動で `dist/` を build するので、別途 build は不要です（ソースを
+編集した後だけ `npm run build`）。
+
+```bash
+npm install                              # prepare: tsc が dist/ を生成
+
+# content_root ごとに 1 度: 自分を actor として登録
+node ./bin/gate.mjs register --name <you>
+
+# シェルごとに 1 度: 全 verb の default actor を環境変数で固定
+export GUILD_ACTOR=<you>
+
+# セッションごとに 1 度: 1 コマンドで全コンテキスト取得
+node ./bin/gate.mjs boot                 # identity / status / tail / inbox を 1 JSON で
+```
+
+`gate` と `guild` は安定しており、`npm link` で PATH 化できます。
+`agora` と `devil` は alpha のため意図的に `package.json#bin` から
+外しており、`node ./bin/agora.mjs ...` または `npm run agora -- ...`
+で起動してください（`devil` も同様）。これは見落としではなく安定境界
+として opt-in にしてあります。
+
 ## あなたができること
 
 - `guild new` で自分や仲間をメンバー登録する
@@ -83,8 +108,9 @@ YAMLファイルとしてディスク上に永続化され、セッションを�
   [issue #117](https://github.com/eris-ths/guild-cli/issues/117)。
 - **`devil`** (`bin/devil.mjs`、 snapshot) — security-backstop の
   review passage。 **multi-persona (red-team / author-defender /
-  mirror) + lense 強制 (Claude Security の 8 category + 3 つの
-  devil 固有) + 時間延長**された review surface。 single-pass
+  mirror) + lense 強制 (Claude Security の 8 category + devil 固有
+  4 つ = 計 12 lense; composition / temporal / supply-chain /
+  coherence) + 時間延長**された review surface。 single-pass
   tool (Anthropic `/ultrareview`、 Claude Security、
   supply-chain-guard) を **置き換えるのではなく compose** する後段
   backstop として設計されています。 目的は OWASP top 10 を一度も
@@ -100,6 +126,11 @@ agora / devil 固有の records はそれぞれ `<content_root>/agora/` /
 
 ## 実例
 
-実動する典型例は [`examples/dogfood-session/`](./examples/dogfood-session/)
-にあります — このツール自身がこのツールを使って自分を拡張した
-セッションの完全な記録です。
+各ディレクトリは自己完結した `content_root` で、`cd` してそのまま
+verb を叩けます:
+
+- [`examples/quick-start/`](./examples/quick-start/) — 最小の config + members
+- [`examples/dogfood-session/`](./examples/dogfood-session/) — 多 actor の長い実セッション（このツール自身が自分を拡張した完全な記録）
+- [`examples/agent-first-session/`](./examples/agent-first-session/) — JSON envelope を中心とした agent-driven flow
+- [`examples/agent-voices/`](./examples/agent-voices/) — multi-persona の voice 表現
+- [`examples/three-passages-framing/`](./examples/three-passages-framing/) — gate + agora + devil の合成例
