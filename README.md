@@ -106,6 +106,14 @@ node ./bin/gate.mjs boot                 # identity + status + tail + inbox + cr
 boundary, not an oversight. Add them yourself once you commit to the
 shape they hold.
 
+**New to guild?** Start with `gate`. `guild` is the admin-side helper —
+register members, validate the roster, usually run once and forgotten.
+Reach for `agora` / `devil` / `ctx` only when the **shape of work**
+matches: thought-in-motion you want to suspend across sessions
+(`agora`), a security-prone change that needs multi-persona scrutiny
+(`devil`), or an observation that should outlive the session without
+forcing a verdict (`ctx`).
+
 #### Worked examples
 
 Each directory below is a self-contained `content_root` you can `cd`
