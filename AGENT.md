@@ -129,18 +129,20 @@ guild validate                          # check all member YAMLs
 
 Categories: `core | professional | assignee | trial | special | host`
 
-## The three passages — a one-line dispatch shorthand
+## The four passages — a one-line dispatch shorthand
 
 | passage | shape (一語)         | the verb you do                | when to reach |
 |---------|----------------------|--------------------------------|----------------|
 | `gate`  | **判断 / judgment**  | decide on a request            | needs a verdict (approve / deny / complete / fail / review) |
 | `agora` | **探索 / exploration** | stay with a thought          | something in motion that shouldn't be forced to a verdict yet |
 | `devil` | **守備 / defense**   | protect end-users              | could harm a third party if it lands without scrutiny |
+| `ctx`   | **事実 / fact**      | record an observation          | observed across sessions; would be lost without an attributed, append-only record |
 
 This is a dispatch tool, not a metaphor. Recognize the shape of
 the work, route to the matching passage. The substrate of each
 passage is shaped by what it holds (decisions / explorations /
-multi-perspective scrutiny), not by what it talks about.
+multi-perspective scrutiny / observations), not by what it talks
+about.
 
 ## Agora (second passage — play / narrative)
 
@@ -290,6 +292,58 @@ that translate actual `/ultrareview` `bugs.json` / Claude Security
 findings / SCG verdict output into devil's strict v0 ingest JSON
 shapes are out of scope for the in-tree passage and would land as
 separate utilities (or in the source tools themselves).
+
+## ctx (fourth passage — fact accumulation, alpha phase 1)
+
+`ctx` is the fourth passage under guild — alongside `gate`, `agora`,
+and `devil`. Where gate carries decisions, agora carries narrative,
+and devil carries multi-persona scrutiny, ctx carries
+**observations that should outlive the session that produced them**
+without being forced into a verdict, a play, or a review.
+
+Verdict-less, attribution-required, append-only. Per principle 12
+(substrate-pure module in projection ecosystem), ctx is the
+substrate primitive for facts; surrounding ecosystem modules
+(persona-side `*_resume.md`, code comments, ADR docs) hold related
+prose at different layers without absorbing into one another.
+
+Phase 1 ships only `ctx record`. The remaining six verbs (`fork` /
+`supersede` / `show` / `list` / `chain` / `status`) and schema
+extensions (`evidence` / `supersedes` / `sub_of` / `chain_after` /
+`branch_ref`) land in phase 2.
+
+```bash
+ctx record --fact "<prose>" [--tag prefix:value,prefix:value]
+                            [--by <m>] [--format json|text]
+```
+
+ctx records live under `<content_root>/ctx/`:
+
+```
+<content_root>/ctx/
+  ctx-YYYY-MM-DD-NNN.yaml      # one flat YAML per observation
+                                # id sequence per content_root per day
+                                # immutable on save (re-readers see what was written)
+```
+
+Tags follow `prefix:value` shape (e.g. `tech:typescript`,
+`status:active`, `topic:ctx-design`). Both halves are validated at
+the boundary; the prefix is what makes tags semantically queryable
+later — filter by `tech:*`, `status:*`, etc. Phase 1 leaves prefix
+choice free-form; phase 2 will introduce strictness levels (0/1/2 =
+loose / middle / strict) for prefix catalogs.
+
+When to reach for ctx vs the other passages: ctx is the residence
+for prose that doesn't want closure. If the observation is heading
+toward a verdict, file it via `gate request`. If it's
+thought-in-motion across sessions, use `agora play`. If it's a
+finding that needs adversarial scrutiny, use `devil entry`. ctx is
+for what remains: pinned observation, no closure required.
+
+Status: alpha phase 1. Read-side is currently grep on
+`<content_root>/ctx/*.yaml` — `ctx list` / `ctx chain` arrive in
+phase 2 and that's the design test (junk-drawer risk vs principled
+substrate).
 
 ## Diagnostic
 

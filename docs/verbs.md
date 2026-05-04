@@ -1213,6 +1213,90 @@ outside the in-tree passage.
 For substrate paths and the persona/lense schema reference, see
 the `## devil-review` section of [`AGENT.md`](../AGENT.md).
 
+## ctx — the fourth passage (alpha phase 1)
+
+`ctx` is the fourth passage under guild, alongside `gate`, `agora`,
+and `devil`. Where gate carries decisions, agora carries narrative,
+and devil carries multi-persona scrutiny, ctx carries
+**observations**: facts the substrate has witnessed across sessions
+that don't fit into a verdict, a play, or a review.
+
+### When to reach for ctx vs gate vs agora vs devil
+
+- **Use `gate`** when an observation is heading to a verdict
+  (approve / complete / review). The lifecycle is the closure.
+- **Use `agora`** when an observation is *thought-in-motion* —
+  cliff/invitation across sessions, eventual conclusion expected.
+- **Use `devil`** when an observation is a *finding* that needs
+  adversarial scrutiny against a target (file / function / PR).
+- **Use `ctx`** when the observation should *not* be forced into
+  closure — pinned attribution, append-only, queryable later by
+  tag. Pre-decision design notes, principle candidates not yet
+  ripe for `lore/`, cross-session knowledge a future instance
+  should be able to grep with `created_by:` intact.
+
+### Phase 1 surface
+
+Phase 1 ships only `ctx record`. The remaining six verbs (`fork` /
+`supersede` / `show` / `list` / `chain` / `status`) and schema
+extensions (`evidence` / `supersedes` / `sub_of` / `chain_after` /
+`branch_ref`) land in phase 2.
+
+```bash
+ctx record --fact "<prose>" [--tag prefix:value,prefix:value]
+                            [--by <m>] [--format json|text]
+```
+
+### A worked record
+
+```bash
+$ ctx record \
+    --fact "main↔develop diff is PR #145 only (README ctx mention); harness layer stays develop-side per CLAUDE.md harness convention" \
+    --tag scope:develop-only,topic:branch-policy,observation:diff-analysis
+✓ ctx recorded: ctx-2026-05-04-006
+  tags: scope:develop-only, topic:branch-policy, observation:diff-analysis
+notice: wrote /abs/path/ctx/ctx-2026-05-04-006.yaml (config: ...)
+```
+
+The on-disk YAML:
+
+```yaml
+id: ctx-2026-05-04-006
+created_at: 2026-05-04T13:58:11.476Z
+created_by: claude
+fact: "main↔develop diff is PR #145 only (README ctx mention); harness layer stays develop-side per CLAUDE.md harness convention"
+tags:
+  - scope:develop-only
+  - topic:branch-policy
+  - observation:diff-analysis
+```
+
+ID is auto-allocated as `ctx-YYYY-MM-DD-NNN` (three-digit suffix
+supports up to 999 records per day per content_root). The file is
+**immutable on save** — re-reading agents see what was written;
+the equivalent of a correction in phase 2 is `ctx supersede`, not
+in-place edit.
+
+### Tag prefix convention
+
+Tags are `prefix:value` shape, both halves validated at the
+boundary. The prefix is what makes tags semantically queryable —
+filter by `tech:*`, by `status:*`, by `topic:*`, etc. Phase 1
+leaves prefix choice free-form (the substrate already in use mixes
+`tech:` / `topic:` / `observation:` / `scope:` / `status:` /
+`meta:` / `pr:` / `principle:`); phase 2 introduces strictness
+levels (0/1/2 = loose / middle / strict) for prefix catalogs.
+
+### Status (alpha phase 1)
+
+Read-side is currently grep on `<content_root>/ctx/*.yaml`.
+`ctx list` / `ctx show` / `ctx chain` (phase 2) are the design
+test — whether the substrate stays principled or drifts into a
+junk drawer at the 100-record scale.
+
+For the conceptual framing alongside the other passages, see the
+`## ctx` section of [`AGENT.md`](../AGENT.md).
+
 ---
 
 A fully worked multi-turn example — author/critic personas driving
