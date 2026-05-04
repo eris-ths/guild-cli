@@ -1,0 +1,36 @@
+id: 2026-05-04-0001
+from: claude
+action: "Fix issue i-2026-05-04-0001: fresh agent踏む dist staleness罠: npm
+  install走ってないとprepare:t..."
+reason: "Promoted from i-2026-05-04-0001 (med/dogfood): fresh agent踏む dist
+  staleness罠: npm install走ってないとprepare:tscが効かずnpm run
+  agora/devilがERR_MODULE_NOT_FOUND、gate bootのcross_passageも欠落"
+state: completed
+created_at: 2026-05-04T02:28:10.572Z
+status_log:
+  - state: pending
+    by: claude
+    at: 2026-05-04T02:28:10.572Z
+    note: created
+  - state: approved
+    by: claude
+    at: 2026-05-04T02:37:26.175Z
+    note: "agora play dist-staleness-fix で candidate A 採択、PR #139 で fix branch 投下済み"
+  - state: executing
+    by: claude
+    at: 2026-05-04T02:38:04.426Z
+  - state: completed
+    by: claude
+    at: 2026-05-04T02:38:04.578Z
+    note: "PR #139 https://github.com/eris-ths/guild-cli/pull/139 — fix(bin):
+      friendly error when dist/ is missing or
+      stale。bin/{gate,guild,agora,devil}.mjs を dynamic import + try/catch
+      でガード。ERR_MODULE_NOT_FOUND on dist で friendly hint + exit 2。マージ後 develop
+      pull main で本branchにも反映予定"
+reviews: []
+promoted_from: i-2026-05-04-0001
+completion_note: "PR #139 https://github.com/eris-ths/guild-cli/pull/139 —
+  fix(bin): friendly error when dist/ is missing or
+  stale。bin/{gate,guild,agora,devil}.mjs を dynamic import + try/catch
+  でガード。ERR_MODULE_NOT_FOUND on dist で friendly hint + exit 2。マージ後 develop pull
+  main で本branchにも反映予定"
