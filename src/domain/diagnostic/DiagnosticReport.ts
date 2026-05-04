@@ -40,10 +40,31 @@ export interface DiagnosticSummary {
   readonly issues: DiagnosticAreaSummary;
 }
 
+/**
+ * Per-plugin load result. Surfaced in `gate doctor` output (text +
+ * JSON) so an operator can see at a glance which plugins ran in the
+ * current invocation. SECURITY.md notes that doctor plugins execute
+ * with full Node capabilities once `doctor.trusted: true`; relying on
+ * SECURITY.md disclosure alone is fragile (operators don't always
+ * read it). Runtime visibility closes that gap.
+ *
+ * `loaded` — import succeeded and the default export was a function.
+ *            (Findings the plugin produced are merged into `findings`
+ *            with area='plugin'; this entry only confirms it ran.)
+ * `error`  — import threw, or the default export wasn't callable.
+ *            The corresponding `findings` entry carries the error
+ *            message; this entry mirrors the path for visibility.
+ */
+export interface PluginLoadInfo {
+  readonly path: string;
+  readonly status: 'loaded' | 'error';
+}
+
 export class DiagnosticReport {
   constructor(
     readonly summary: DiagnosticSummary,
     readonly findings: readonly DiagnosticFinding[],
+    readonly pluginsLoaded: readonly PluginLoadInfo[] = [],
   ) {}
 
   get isClean(): boolean {
@@ -54,6 +75,7 @@ export class DiagnosticReport {
     return {
       summary: this.summary,
       findings: this.findings.map((f) => ({ ...f })),
+      plugins_loaded: this.pluginsLoaded.map((p) => ({ ...p })),
     };
   }
 }

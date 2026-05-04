@@ -258,3 +258,100 @@ test('DiagnosticReport.toJSON: stable shape for future repair consumer', async (
   assert.equal(typeof json.findings[0]?.source, 'string');
   assert.match(json.findings[0]!.source, /\.yaml$/);
 });
+
+// ── plugins_loaded — runtime visibility into doctor plugin execution ──
+//
+// SECURITY.md notes that doctor plugins run with full Node capabilities
+// once `doctor.trusted: true`. Relying on operators to read SECURITY.md
+// is fragile; surfacing what ran at runtime is the defensive UX layer
+// that makes plugin execution observable. These tests pin that contract.
+
+test('plugins_loaded: empty when no plugin paths configured', async () => {
+  const uc = new DiagnosticUseCases(
+    makeFactory(new FakeMemberRepo([]), new FakeRequestRepo([]), new FakeIssueRepo([])),
+  );
+  const report = await uc.run();
+  assert.deepEqual(report.pluginsLoaded, []);
+  const json = report.toJSON() as { plugins_loaded: unknown[] };
+  assert.deepEqual(json.plugins_loaded, []);
+});
+
+test('plugins_loaded: status=loaded when plugin imports + runs cleanly', async () => {
+  const { mkdtempSync, writeFileSync, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const dir = mkdtempSync(join(tmpdir(), 'guild-plugin-'));
+  const pluginPath = join(dir, 'plugin.mjs');
+  writeFileSync(
+    pluginPath,
+    'export default async function plugin(_ctx) { return []; }\n',
+  );
+  try {
+    const uc = new DiagnosticUseCases(
+      makeFactory(new FakeMemberRepo([]), new FakeRequestRepo([]), new FakeIssueRepo([])),
+      [pluginPath],
+      { root: dir, contentRoot: dir },
+    );
+    const report = await uc.run();
+    assert.equal(report.pluginsLoaded.length, 1);
+    assert.equal(report.pluginsLoaded[0]?.path, pluginPath);
+    assert.equal(report.pluginsLoaded[0]?.status, 'loaded');
+    assert.equal(
+      report.findings.filter((f) => f.area === 'plugin').length,
+      0,
+      'a clean plugin produces no findings',
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('plugins_loaded: status=error when plugin throws on import', async () => {
+  const { mkdtempSync, writeFileSync, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const dir = mkdtempSync(join(tmpdir(), 'guild-plugin-'));
+  const pluginPath = join(dir, 'broken.mjs');
+  writeFileSync(pluginPath, 'throw new Error("import time boom");\n');
+  try {
+    const uc = new DiagnosticUseCases(
+      makeFactory(new FakeMemberRepo([]), new FakeRequestRepo([]), new FakeIssueRepo([])),
+      [pluginPath],
+      { root: dir, contentRoot: dir },
+    );
+    const report = await uc.run();
+    assert.equal(report.pluginsLoaded.length, 1);
+    assert.equal(report.pluginsLoaded[0]?.status, 'error');
+    // The error also surfaces as a plugin finding (existing behaviour);
+    // plugins_loaded mirrors the path so the runtime list is complete.
+    const pluginFindings = report.findings.filter((f) => f.area === 'plugin');
+    assert.equal(pluginFindings.length, 1);
+    assert.match(pluginFindings[0]!.message, /import time boom/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('plugins_loaded: status=error when default export is not callable', async () => {
+  const { mkdtempSync, writeFileSync, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const dir = mkdtempSync(join(tmpdir(), 'guild-plugin-'));
+  const pluginPath = join(dir, 'not-a-function.mjs');
+  writeFileSync(pluginPath, 'export default { not: "a function" };\n');
+  try {
+    const uc = new DiagnosticUseCases(
+      makeFactory(new FakeMemberRepo([]), new FakeRequestRepo([]), new FakeIssueRepo([])),
+      [pluginPath],
+      { root: dir, contentRoot: dir },
+    );
+    const report = await uc.run();
+    assert.equal(report.pluginsLoaded.length, 1);
+    assert.equal(report.pluginsLoaded[0]?.status, 'error');
+    const pluginFindings = report.findings.filter((f) => f.area === 'plugin');
+    assert.equal(pluginFindings.length, 1);
+    assert.match(pluginFindings[0]!.message, /not a function/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
