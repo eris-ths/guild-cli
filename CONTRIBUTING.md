@@ -88,6 +88,17 @@ exists to make those questions visible at the point of decision.
 - **Tests run on Node 20 and 22** — the CI matrix exercises both;
   changes that depend on Node 22-only features will fail Node 20
   jobs.
+- **Local `npm test` may show env-sensitive failures that CI does
+  not.** Two patterns to expect on macOS:
+  (a) test fixtures created via `mkdtemp` resolve through the
+  `/var/folders` ↔ `/private/var/folders` symlink, which trips
+  exact-path regex assertions in a few `agora`/handler tests;
+  (b) one schema-snapshot test JSON-parses output that contains
+  unescaped characters in certain locales. Neither reproduces in
+  the Linux CI runner. **Treat CI as the source of truth**; the
+  failures above are not regressions you introduced. If you fix
+  them, please rebase the assertions to be platform-agnostic
+  rather than masking the local failure.
 - **Lore changes follow the same write-once-then-revise discipline
   as records** — principles in `lore/principles/` are appended,
   not edited in place. Significant revisions to an existing
