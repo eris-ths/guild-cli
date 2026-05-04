@@ -19,6 +19,9 @@ useful when something breaks or you want to extend the system.
 
 ## Session start
 
+> Prerequisites (install / `GUILD_ACTOR` / `agora`-`devil` opt-in
+> convention) are documented once in [`README.md`](./README.md#install).
+
 ```bash
 # First time in this content_root? Register yourself:
 gate register --name <you>              # category defaults to "professional"
