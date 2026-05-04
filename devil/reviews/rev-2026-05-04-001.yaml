@@ -1,0 +1,186 @@
+id: rev-2026-05-04-001
+target:
+  type: pr
+  ref: https://github.com/eris-ths/guild-cli/pull/140
+state: concluded
+opened_at: 2026-05-04T06:59:13.557Z
+opened_by: eris
+entries:
+  - id: e-001
+    at: 2026-05-04T07:03:48.546Z
+    by: eris
+    persona: author-defender
+    lense: coherence
+    kind: assumption
+    text: "PR #140 の意図と範囲: bin/{gate,guild,agora,devil}.mjs 4 ファイルの dist load
+      failure を友好化する thin shim。中身は (1) static import → dynamic import への切替、(2)
+      try/catch で ERR_MODULE_NOT_FOUND を捕捉、(3) err.url が dist/ 配下なら friendly
+      hint + exit 2、(4) entry URL と failedUrl が異なれば transitive miss 行を追加、(5) その他
+      error は素通し re-throw。新規依存ゼロ、IO は stderr 書き込みと exit のみ。攻撃面は理論上 (a) Node 側で
+      resolve された failedUrl 文字列の stderr 出力、(b) dynamic import 1 箇所 (固定
+      ENTRY_URL)、の 2 点に限定される。"
+  - id: e-002
+    at: 2026-05-04T07:04:06.660Z
+    by: eris
+    persona: red-team
+    lense: injection
+    kind: finding
+    text: "stderr に `(transitive miss: ${failedUrl})` で failedUrl を補間出力する。failedUrl
+      は Node の ESM loader が resolve しようとした URL 文字列。**外部入力ではない**が、もし攻撃者が dist/
+      配下に terminal-control character を含むファイル名 (例: `\\x1b]0;evil\\x07.js`) を
+      planted できれば、そのまま端末に書き出される。実害は端末タイトル書換え程度で軽微、かつ前提条件 (dist/ 書き込み権) があれば
+      import 自体で code-exec 取れるので relative blast radius は negligible。"
+    severity: info
+    severity_rationale: exploitability requires control over the resolved import
+      URL, which is fixed (ENTRY_URL is built from import.meta.url + a literal
+      relative path) and not influenced by argv/env. terminal-control sequences
+      in the path would only appear if a malicious dist/ tree had been planted
+      on disk — at which point the attacker already has code-exec via the import
+      itself, dwarfing any stderr injection.
+    status: open
+  - id: e-003
+    at: 2026-05-04T07:04:16.799Z
+    by: eris
+    persona: red-team
+    lense: deserialization
+    kind: assumption
+    text: "dynamic `await import(ENTRY_URL)` は ECMAScript module 評価 = code execution
+      であり広義の deserialization。だが ENTRY_URL は `new URL('../dist/src/.../index.js',
+      import.meta.url)` で **コンパイル時固定**、argv/env/stdin に影響されない。攻撃面は dist/ tree
+      の書き込み制御に reduce され、それは pre-existing な devDeps 信頼境界 (prepare: tsc 経由の
+      typescript 実行) と同じ floor。新たな攻撃面追加なし。assumption: ENTRY_URL の文字列が将来
+      user-input 由来になることはない。"
+  - id: e-004
+    at: 2026-05-04T07:04:18.877Z
+    by: eris
+    persona: red-team
+    lense: composition
+    kind: assumption
+    text: "4 ファイルに同じ guard 13 行を写経。Noir review #1 (substrate: req 2026-05-04-0002)
+      で議論済、共通 helper は dist 経由になり同じ failure を踏む circular trap として inline
+      維持を選択。coupling notes も各 entry に明記済。composition lense 観点では、4 ファイル間の drift
+      リスクは inline コメントで mitigation 済み、5 ファイル目で再考の閾値も明記。security-relevant
+      な合成抜けはない。"
+  - id: e-005
+    at: 2026-05-04T07:04:35.484Z
+    by: eris
+    persona: red-team
+    lense: injection-parser
+    kind: skip
+    text: no parser involved (no JSON/YAML/HTML parse on user input). stderr writes
+      use literal strings + ${failedUrl} interpolation only.
+  - id: e-006
+    at: 2026-05-04T07:04:35.625Z
+    by: eris
+    persona: red-team
+    lense: path-network
+    kind: skip
+    text: no filesystem path constructed from input, no network IO. ENTRY_URL is
+      compile-time fixed via new URL(literal, import.meta.url).
+  - id: e-007
+    at: 2026-05-04T07:04:35.757Z
+    by: eris
+    persona: red-team
+    lense: auth-access
+    kind: skip
+    text: no credentials, tokens, sessions, identity, or authorization checks. shim
+      is pre-business-logic.
+  - id: e-008
+    at: 2026-05-04T07:04:35.902Z
+    by: eris
+    persona: red-team
+    lense: memory-safety
+    kind: skip
+    text: JS runtime; no manual memory mgmt, no buffer ops, no FFI, no native
+      bindings.
+  - id: e-009
+    at: 2026-05-04T07:04:36.047Z
+    by: eris
+    persona: red-team
+    lense: crypto
+    kind: skip
+    text: no cryptographic primitives, no key material, no random number
+      requirements.
+  - id: e-010
+    at: 2026-05-04T07:04:36.192Z
+    by: eris
+    persona: red-team
+    lense: protocol-encoding
+    kind: skip
+    text: no protocol parsing/encoding (no HTTP, no binary protocols, no base64).
+      only stdout/stderr writes of plain text.
+  - id: e-011
+    at: 2026-05-04T07:04:36.340Z
+    by: eris
+    persona: red-team
+    lense: temporal
+    kind: skip
+    text: "single-process, single-shot guard. no shared state, no retry, no
+      idempotency contract. one theoretical race (npm install -> prepare: tsc
+      still running while bin invoked) is out-of-scope: it manifests as the
+      exact failure this guard friendlifies, so the guard mitigates rather than
+      introduces it."
+  - id: e-012
+    at: 2026-05-04T07:04:55.658Z
+    by: eris
+    persona: red-team
+    lense: supply-chain
+    kind: skip
+    text: "supply-chain lense は #126 decision C で SCG mandatory delegate
+      と定められており、本来は SCG hard-error が筋。だが (a) PR #140 は新規 dependency を追加していない
+      (dynamic import への切替のみ、import 対象は既存の dist/ 配下に限定)、(b) 実機で `which scg` が
+      not found のため delegate 不可。ここでは hand-rolled skip で記録: 本 PR の supply-chain
+      delta は zero (devDeps 不変、dist 構築 pipeline 不変)、新たな攻撃面は導入していない。SCG が PATH
+      に入った将来の rev で再 audit 推奨。"
+  - id: e-013
+    at: 2026-05-04T07:04:56.781Z
+    by: eris
+    persona: red-team
+    lense: coherence
+    kind: skip
+    text: coherence lense は cross-lense / cross-doc 観点。red-team としては各 lense
+      個別評価で十分、cross-cutting な読み合わせは mirror persona の責務に委譲する。e-002〜e-011 で 12
+      lense 個別 pass 完了の事実だけ記録。
+  - id: e-014
+    at: 2026-05-04T07:05:20.834Z
+    by: eris
+    persona: mirror
+    lense: coherence
+    kind: synthesis
+    text: "cross-reading e-001 (author-defender) と e-002〜e-011 (red-team 12-lense
+      pass) の整合性。author の articulation は「攻撃面は (a) failedUrl 補間, (b) dynamic
+      import 1 箇所」と限定し、red-team はそれぞれ injection (severity=info, blast radius
+      negligible) と deserialization (assumption: ENTRY_URL 固定) として個別検証した。両者一致。残り
+      9 lense は kind=skip だが、各 skip の --text は実質的な「なぜ irrelevant か」を含み、silent
+      skipping (floor-raising 設計が拒否する形) は回避できている。**観察される非自明な点**: 本 PR
+      は新規攻撃面を導入していないだけでなく、**既存の cryptic ESM error stack を named な exit 2 + hint
+      に置き換えることで「失敗の legibility」を上げている** (principle 03 に整合)。security 観点では neutral
+      だが、運用 incident response 時間短縮という間接効果あり。**未調査領域**: SCG が PATH にあれば
+      supply-chain lense を改めて回す価値あり。今回は SCG 不在のため hand-rolled skip。"
+  - id: e-015
+    at: 2026-05-04T07:05:28.789Z
+    by: eris
+    persona: mirror
+    lense: temporal
+    kind: resistance
+    text: "残置 resistance: 「prepare: tsc 並行実行 race」は本 PR で skip 扱いだが、将来 npm workspace
+      化や monorepo 移行があった場合に **本 guard が race 条件下で正常に発火するか**は未検証。dist
+      が一部書き出され途中の中間状態 (transitive miss が断続的に発生する状態) で boot が走る場合、guard の hint
+      は正しく出るが「stale build」と「並行 build 中」の区別はつかない。今は theoretical だが、workspace 化したら
+      revisit 必要。"
+conclusion:
+  at: 2026-05-04T07:06:04.156Z
+  by: eris
+  synthesis: "PR #140 の 12 lense full pass 完了 (3 persona / 15 entries)。全体 verdict:
+    **accept**。security-relevant な新規攻撃面の追加なし。injection (e-002) は severity=info で
+    blast radius negligible (前提となる dist/ 書込み権があれば import 自体で code-exec
+    取れるため、stderr injection は relative に意味を持たない)、acceptance とする。deserialization
+    (e-003) は ENTRY_URL コンパイル時固定の assumption に依存、将来 user-input 由来になれば re-audit
+    必要。composition (e-004) は inline 重複が circular-trap 回避の意図的選択で、coupling notes
+    により drift 緩和済。supply-chain (e-012) は SCG 不在のため hand-rolled skip、SCG 整備後に再
+    audit。**間接効果**: cryptic ESM error stack を named exit 2 + hint に置換することで
+    failure legibility が上がり、incident response 時間短縮 (principle 03
+    整合)。**unresolved**: e-015 (workspace 化時の prepare:tsc 並行実行 race の guard
+    挙動)、theoretical だが今後 monorepo 移行時に必ず revisit。"
+  unresolved:
+    - e-015
