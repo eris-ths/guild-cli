@@ -16,6 +16,7 @@ import { MemberRepository } from '../ports/MemberRepository.js';
 import { RequestRepository } from '../ports/RequestRepository.js';
 import { IssueRepository } from '../ports/IssueRepository.js';
 import { OnMalformed } from '../ports/OnMalformed.js';
+import { pathToFileURL } from 'node:url';
 import {
   DiagnosticArea,
   DiagnosticFinding,
@@ -117,11 +118,17 @@ export class DiagnosticUseCases {
     // Run doctor plugins (if any). Track each path's outcome so the
     // doctor report can surface "what ran" at runtime — operators
     // shouldn't have to read SECURITY.md to know a plugin executed.
+    //
+    // Convert filesystem paths to file:// URLs before dynamic import.
+    // Linux/Mac tolerate `await import('/abs/path.mjs')`, but Node's
+    // ESM loader on Windows rejects bare absolute paths (treats `C:`
+    // as an unknown scheme). pathToFileURL handles both platforms;
+    // the cost on Linux is one extra wrap per plugin per doctor run.
     const pluginsLoaded: PluginLoadInfo[] = [];
     if (this.pluginPaths.length > 0 && this.pluginContext) {
       for (const pluginPath of this.pluginPaths) {
         try {
-          const mod = await import(pluginPath);
+          const mod = await import(pathToFileURL(pluginPath).href);
           const fn: DoctorPluginFn = mod.default ?? mod;
           if (typeof fn === 'function') {
             const pluginFindings = await fn(this.pluginContext);
