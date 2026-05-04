@@ -94,3 +94,77 @@ jobs:
 
       - name: Test
         run: npm test
+
+  # Verify the npm publish artifact stays clean: required files present,
+  # develop-only / source-only paths absent. `package.json#files` is the
+  # public allow-list; this job pins the contract so a future PR that
+  # accidentally drops `bin/` or adds back `substrate/` fails CI.
+  # See PR #150 for the original `files` field landing.
+  package-artifact:
+    name: package artifact (dry-run)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Verify pack contents
+        run: |
+          npm pack --dry-run --json > pack.json
+          node -e '
+            const pack = JSON.parse(require("fs").readFileSync("pack.json", "utf8"));
+            const files = pack[0].files.map(f => f.path);
+            const REQUIRED = [
+              "bin/gate.mjs",
+              "bin/guild.mjs",
+              "bin/agora.mjs",
+              "bin/devil.mjs",
+              "bin/ctx.mjs",
+              "dist/src/interface/gate/index.js",
+              "package.json",
+              "README.md",
+              "README.ja.md",
+              "LICENSE",
+              "AGENT.md",
+              "SECURITY.md",
+            ];
+            const missing = REQUIRED.filter(r => !files.includes(r));
+            if (missing.length > 0) {
+              console.error("missing from pack:", missing);
+              process.exit(1);
+            }
+            const FORBIDDEN_PREFIXES = [
+              "substrate/",
+              "src/",
+              "tests/",
+              "dist/tests/",
+            ];
+            const FORBIDDEN_FILES = [
+              ".guild-actor",
+              ".envrc",
+              "CLAUDE.md",
+              "tsconfig.json",
+              "package-lock.json",
+            ];
+            const leaked = files.filter(f =>
+              FORBIDDEN_PREFIXES.some(p => f.startsWith(p)) ||
+              FORBIDDEN_FILES.includes(f)
+            );
+            if (leaked.length > 0) {
+              console.error("leaked into pack:", leaked);
+              process.exit(1);
+            }
+            console.log("pack contents verified:", files.length, "files");
+          '
