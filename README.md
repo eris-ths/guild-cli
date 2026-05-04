@@ -88,7 +88,7 @@ node ./bin/gate.mjs register --name <you>
 export GUILD_ACTOR=<you>
 
 # Every session: orient with one command.
-node ./bin/gate.mjs boot                 # identity + status + tail + inbox in one JSON
+node ./bin/gate.mjs boot                 # identity + status + tail + inbox + cross_passage in one JSON
 ```
 
 #### Entry points
