@@ -47,6 +47,13 @@ node ./bin/gate.mjs boot                 # identity / status / tail / inbox / cr
 verb のみ実装されています — 残り 6 verb (fork / supersede / show /
 list / chain / status) は別セッションで段階的に追加されます。
 
+**初めて触る場合**: まず `gate` から。 `guild` は admin 寄りの helper
+(member 登録、 roster 検証) で大抵 1 度走らせて忘れる。 `agora` /
+`devil` / `ctx` は **作業の形** がそれに合った時だけ手を伸ばす passage:
+session を跨いで保留したい動いている思考 (`agora`)、 multi-persona
+scrutiny が要る security-prone な変更 (`devil`)、 verdict 不要だが
+session 終端で消したくない観察 (`ctx`)。
+
 ## あなたができること
 
 - `guild new` で自分や仲間をメンバー登録する
