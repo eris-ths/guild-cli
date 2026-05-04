@@ -38,8 +38,8 @@ Pick a depth. Every layer works on its own.
 |-------|------|------------------|
 | 30 sec | the paragraphs above | you want to know what this is |
 | 5 min | [`docs/concepts-for-newcomers.md`](./docs/concepts-for-newcomers.md) | you came from Jira / PR review / ADR and want the translation |
-| 10 min | [`AGENT.md`](./AGENT.md) | you're an AI agent about to run `gate` and want the verb map |
-| 15 min | [`docs/playbook.md`](./docs/playbook.md) | you know each passage; you want **combos** (gate + agora + devil), recipes, and the bug-killing flow |
+| 10 min | [`AGENT.md`](./AGENT.md) | you're an AI agent and want the full verb map across all four passages |
+| 15 min | [`docs/playbook.md`](./docs/playbook.md) | you know each passage; you want **combos** (gate + agora + devil flows; ctx-inclusive patterns arrive in phase 2), recipes, and the bug-killing flow |
 | 30 min | [`docs/verbs.md`](./docs/verbs.md) | you want per-verb examples and design notes |
 | 1 hour | [`examples/dogfood-session/`](./examples/dogfood-session/) | you're adopting this seriously and want to see real sessions |
 | working notes | [`docs/domain-fit/`](./docs/domain-fit/) | you're curious whether gate fits a non-standard domain |
@@ -103,8 +103,10 @@ node ./bin/gate.mjs boot                 # identity + status + tail + inbox + cr
 
 `agora`, `devil`, and `ctx` are deliberately **not** listed in
 `package.json#bin` while they remain alpha — opt-in is the stability
-boundary, not an oversight. Add them yourself once you commit to the
-shape they hold.
+boundary, not an oversight. Beyond `node ./bin/<cli>.mjs` and
+`npm run <cli> --` shown above, you can shell-alias the script
+(`alias agora='node ./bin/agora.mjs'`) once you commit to a passage's
+shape; the substrate is the same either way.
 
 **New to guild?** Start with `gate`. `guild` is the admin-side helper —
 register members, validate the roster, usually run once and forgotten.
@@ -213,10 +215,12 @@ abstractions, GUI projection, or persona logic that adjacent
 ecosystem modules already cover.
 
 Full surface in [`AGENT.md`](./AGENT.md); per-verb examples in
-[`docs/verbs.md`](./docs/verbs.md). Agora's own README
-([`src/passages/agora/README.md`](./src/passages/agora/README.md))
-covers its layout, status, and lore upstream. devil-review is
-documented inline in `AGENT.md` and `docs/verbs.md`.
+[`docs/verbs.md`](./docs/verbs.md). Both cover all four passages.
+agora and devil each have a passage-local README
+([`src/passages/agora/README.md`](./src/passages/agora/README.md),
+[`src/passages/devil/README.md`](./src/passages/devil/README.md))
+for layout-specific notes; ctx (phase 1) lives entirely in the
+inline AGENT.md / docs/verbs.md sections.
 
 ### Test
 
@@ -224,9 +228,10 @@ documented inline in `AGENT.md` and `docs/verbs.md`.
 npm test
 ```
 
-CI runs the same suite on Node 20 and 22 via
-[`.github/workflows/ci.yml`](./.github/workflows/ci.yml). **CI is the
-source of truth.** A handful of tests can fail in local runs on
+CI runs the same suite on Linux and Windows × Node 20 and 22, plus
+an `npm pack --dry-run` artifact gate, via
+[`.github/workflows/ci.yml`](./.github/workflows/ci.yml). **CI is
+the source of truth.** A handful of tests can fail in local runs on
 macOS due to `/var/folders` ↔ `/private/var/folders` symlink
 resolution and a separate JSON-parsing edge case in the schema
 snapshot — these do not occur in CI. See
