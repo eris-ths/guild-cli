@@ -66,7 +66,7 @@ against this layer.
 ### CLI surface
 - The verbs and flags documented in `README.md` and `gate --help` / `guild --help`.
 - Exit codes (`0` = success, non-zero = error).
-- The YAML shapes written under `<content_root>/members/`, `requests/*/`, `issues/`, `inbox/`.
+- The YAML shapes written under `<content_root>/members/`, `requests/*/`, `issues/`, `inbox/`, `agora/`, `devil/`, `ctx/`. The full per-record contract — required vs optional fields, hydrate tolerance, version expressions, backward-compat rules — lives in [`docs/storage-format.md`](storage-format.md). When this section conflicts with that file, treat the storage-format doc as upstream.
 
 Output **text** formatting is **not** part of the stable surface — if you
 need a machine-readable output, use `--format json` where available.
@@ -130,6 +130,11 @@ readable by newer versions within the same major line (0.x or 1.x).
 - New optional fields MAY be added. Readers ignore unknown fields.
 - Existing fields MUST NOT be renamed or repurposed within a major line.
 - Removing a field is a breaking change (minor bump in 0.x, major in 1.x).
+
+The per-record schemas, hydrate tolerance contracts, and the full
+backward-compat rule table live in
+[`docs/storage-format.md`](storage-format.md). PRs touching on-disk
+shape are reviewed against that document.
 
 ## Deprecation policy
 
