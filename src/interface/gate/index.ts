@@ -183,6 +183,9 @@ Status:
                        Returns identity + status + tail + your recent
                        utterances + inbox unread as one JSON payload.
                        GUILD_ACTOR optional (global view if unset).
+                       Defaults: --tail 5 --utterances 5 (lean for
+                       hot-path session start; pass higher N for deeper
+                       history).
   gate suggest [--format json|text]
                        Tight-loop sibling of boot: returns ONLY the
                        suggested_next triple (verb/args/reason) or
