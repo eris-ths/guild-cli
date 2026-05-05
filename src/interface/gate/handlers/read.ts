@@ -4,6 +4,7 @@ import {
   optionalOption,
   rejectUnknownFlags,
 } from '../../shared/parseArgs.js';
+import { notFoundMessage } from '../../shared/notFoundHint.js';
 import { parseLense } from '../../../domain/shared/Lense.js';
 import { parseVerdict } from '../../../domain/shared/Verdict.js';
 import { DomainError } from '../../../domain/shared/DomainError.js';
@@ -306,7 +307,7 @@ export async function reqChain(c: C, args: ParsedArgs): Promise<number> {
   if (isIssueId) {
     const root = issueById.get(rootId);
     if (!root) {
-      process.stderr.write(`not found: ${rootId}\n`);
+      process.stderr.write(notFoundMessage('issue', rootId));
       return 1;
     }
     const j = root.toJSON();
@@ -317,7 +318,7 @@ export async function reqChain(c: C, args: ParsedArgs): Promise<number> {
   } else {
     const root = requestById.get(rootId);
     if (!root) {
-      process.stderr.write(`not found: ${rootId}\n`);
+      process.stderr.write(notFoundMessage('request', rootId));
       return 1;
     }
     const j = root.toJSON() as unknown as RequestJSON;
