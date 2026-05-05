@@ -210,7 +210,14 @@ export async function bootCmd(c: C, args: ParsedArgs): Promise<number> {
   if (format !== 'json' && format !== 'text') {
     throw new Error(`--format must be 'json' or 'text', got: ${format}`);
   }
-  const tailLimit = parseOptionalIntOption(args, 'tail') ?? 10;
+  // Default tail=5 (was 10) to keep `gate boot` lean — agents call
+  // boot at every session start, so the orientation payload is on the
+  // hot path. 5 covers "what just happened" without flooding the JSON
+  // (each utterance entry is ~6-8 lines pretty-printed). Callers that
+  // want deeper history pass `--tail <N>` explicitly. Per principle 13:
+  // bootstrap-shape verbs tolerate noise less than they look (high
+  // frequency × full context = death by a thousand cuts).
+  const tailLimit = parseOptionalIntOption(args, 'tail') ?? 5;
   const personalLimit = parseOptionalIntOption(args, 'utterances') ?? 5;
 
   const envActor = resolveGuildActor();
