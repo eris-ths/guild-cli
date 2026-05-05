@@ -392,6 +392,10 @@ paths:
 
 Request IDs: `YYYY-MM-DD-NNNN`. Issue IDs: `i-YYYY-MM-DD-NNNN`.
 
+The agora / devil / ctx subtrees layer on top — see
+[`docs/storage-format.md`](docs/storage-format.md) for the full
+per-record YAML schema, hydrate tolerance, and backward-compat rules.
+
 ## Environment
 
 `GUILD_ACTOR=<name>` — default for `--from` / `--by` / `--for`.
