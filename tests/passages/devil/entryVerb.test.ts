@@ -258,7 +258,12 @@ test('entry: sequential entry ids increment (e-001, e-002, e-003)', (t) => {
   assert.deepEqual(ids, ['e-001', 'e-002', 'e-003']);
 });
 
-test('entry: text-mode output includes next: hint', (t) => {
+test('entry: text-mode output is quiet — no next: hint (flow-shape per principle 13)', (t) => {
+  // Per lore/principles/13-affordance-density-by-verb-shape.md:
+  // `devil entry` is flow-shape (the call repeats N times within a
+  // review); the next-hint after entry N+1 would be verbatim
+  // identical to the hint after entry 1, so it is suppressed in
+  // text mode. JSON `suggested_next` remains for orchestrators.
   const { root, cleanup } = bootstrap();
   t.after(cleanup);
   const reviewId = openReview(root);
@@ -275,8 +280,8 @@ test('entry: text-mode output includes next: hint', (t) => {
   );
   assert.equal(r.status, 0, `stderr: ${r.stderr}`);
   assert.match(r.stdout, /✓ entry e-001 appended to/);
-  assert.match(r.stdout, /next: devil entry/);
-  assert.match(r.stdout, /devil conclude .* --synthesis/);
+  assert.equal(/next: devil entry/.test(r.stdout), false, 'no flow-repeat hint');
+  assert.equal(/devil conclude .* --synthesis/.test(r.stdout), false, 'no flow-repeat hint');
 });
 
 test('entry: refuses ingest-only personas (ultrareview-fleet, claude-security, scg-supply-chain-gate)', (t) => {

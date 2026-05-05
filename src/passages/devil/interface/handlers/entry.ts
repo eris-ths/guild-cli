@@ -225,11 +225,17 @@ export async function entryOnReview(
       ) + '\n',
     );
   } else {
+    // Per lore/principles/13-affordance-density-by-verb-shape.md:
+    // `devil entry` is a flow-shape verb (the same call shape
+    // repeats N times within a review). The next-hint after entry
+    // N+1 would be verbatim identical to the hint after entry 1,
+    // so it is noise on the second call onward. JSON
+    // `suggested_next` remains for orchestrators (the substrate
+    // carries the affordance unconditionally; only the text
+    // projection is conditional).
     process.stdout.write(
       `✓ entry ${entry.id} appended to ${review.id} ` +
-        `[persona=${persona.name}, lense=${lense.name}, kind=${entry.kind}] by ${by}\n` +
-        `  next: devil entry ${review.id} --persona <p> --lense <l> --kind <k> --text "..."  (continue)\n` +
-        `        or devil conclude ${review.id} --synthesis "..."  (close with synthesis)\n`,
+        `[persona=${persona.name}, lense=${lense.name}, kind=${entry.kind}] by ${by}\n`,
     );
   }
   return 0;
