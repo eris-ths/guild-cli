@@ -147,12 +147,12 @@ export async function main(argv: readonly string[]): Promise<number> {
       renderVerbHelp('agora', e);
       return 0;
     }
-    const msg =
-      e instanceof DomainError
-        ? `DomainError: ${e.message}${e.field ? ` (${e.field})` : ''}`
-        : e instanceof Error
-          ? e.message
-          : String(e);
+    // Mirror gate's catch shape: `error:` prefix carries the failure
+    // signal; the `DomainError:` prefix and `(field)` trailing tag
+    // were debug noise, not touch-feel signal (P3 dogfood C/A
+    // cleanup). DomainError still flows out as a typed object for
+    // any downstream JSON envelope.
+    const msg = e instanceof Error ? e.message : String(e);
     process.stderr.write(`error: ${msg}\n`);
     return 1;
   }
