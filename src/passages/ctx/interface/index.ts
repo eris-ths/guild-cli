@@ -18,6 +18,7 @@ import { GuildConfig } from '../../../infrastructure/config/GuildConfig.js';
 import { parseArgs, HelpRequested } from '../../../interface/shared/parseArgs.js';
 import { renderVerbHelp } from '../../../interface/shared/verbHelp.js';
 import { sanitizeError } from '../../../interface/shared/sanitizeError.js';
+import { nearestCommand } from '../../../interface/shared/nearestCommand.js';
 import { DomainError } from '../../../domain/shared/DomainError.js';
 import { YamlCtxRepository } from '../infrastructure/YamlCtxRepository.js';
 import { CtxUseCases } from '../application/CtxUseCases.js';
@@ -47,6 +48,12 @@ Lore upstream:
   lore/principles/04-records-outlive-writers.md
 `;
 
+// Mirror of the switch below for did-you-mean suggestions. Phase 1
+// has only `record`; phase 2 will add fork / supersede / show /
+// list / chain / status. A new verb forgotten here loses its typo
+// hint, doesn't crash anything.
+const CTX_COMMANDS = ['record'] as const;
+
 export async function main(argv: readonly string[]): Promise<number> {
   if (argv.length === 0 || argv[0] === '--help' || argv[0] === '-h') {
     process.stdout.write(HELP);
@@ -67,9 +74,19 @@ export async function main(argv: readonly string[]): Promise<number> {
     switch (cmd) {
       case 'record':
         return await recordCtx({ uc, config }, args);
-      default:
-        process.stderr.write(`ctx: unknown verb: ${cmd}\n${HELP}`);
+      default: {
+        // Phase 2 will add fork / supersede / show / list / chain /
+        // status; the catalog grows as those land. For now, `record`
+        // is the only valid verb — typos like `recor` should still
+        // get suggested rather than dumping the full HELP.
+        const hint = nearestCommand(cmd, CTX_COMMANDS);
+        const suggest = hint ? `\n  did you mean: ctx ${hint}?` : '';
+        process.stderr.write(
+          `ctx: unknown verb: ${cmd}${suggest}\n` +
+            `  see 'ctx --help' for the full verb catalog (phase 1: record only).\n`,
+        );
         return 1;
+      }
     }
   } catch (e) {
     if (e instanceof HelpRequested) {
