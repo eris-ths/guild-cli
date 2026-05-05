@@ -18,6 +18,7 @@
 import { GuildConfig } from '../../../infrastructure/config/GuildConfig.js';
 import { parseArgs, HelpRequested } from '../../../interface/shared/parseArgs.js';
 import { renderVerbHelp } from '../../../interface/shared/verbHelp.js';
+import { sanitizeError } from '../../../interface/shared/sanitizeError.js';
 import { DomainError } from '../../../domain/shared/DomainError.js';
 import { YamlGameRepository } from '../infrastructure/YamlGameRepository.js';
 import { YamlPlayRepository } from '../infrastructure/YamlPlayRepository.js';
@@ -152,7 +153,9 @@ export async function main(argv: readonly string[]): Promise<number> {
     // were debug noise, not touch-feel signal (P3 dogfood C/A
     // cleanup). DomainError still flows out as a typed object for
     // any downstream JSON envelope.
-    const msg = e instanceof Error ? e.message : String(e);
+    const rawMsg = e instanceof Error ? e.message : String(e);
+    // Strip absolute contentRoot prefix (issue #153).
+    const msg = sanitizeError(rawMsg, config.contentRoot);
     process.stderr.write(`error: ${msg}\n`);
     return 1;
   }

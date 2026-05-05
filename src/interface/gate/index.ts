@@ -4,6 +4,7 @@ import { renderVerbHelp } from '../shared/verbHelp.js';
 import { DomainError } from '../../domain/shared/DomainError.js';
 import { REQUEST_STATES } from '../../domain/request/RequestState.js';
 import { getPackageVersion, isVersionFlag } from '../shared/version.js';
+import { sanitizeError } from '../shared/sanitizeError.js';
 import {
   reqCreate,
   reqList,
@@ -403,7 +404,10 @@ export async function main(argv: readonly string[]): Promise<number> {
     // noise, and for user-typed flags the message already names the
     // field in prose. JSON envelope retains `error.field` for
     // programmatic consumers (P3 dogfood C/A cleanup).
-    const msg = e instanceof Error ? e.message : String(e);
+    const rawMsg = e instanceof Error ? e.message : String(e);
+    // Strip absolute contentRoot prefix from any safeFs-style paths
+    // before they reach stderr (issue #153, Direction 1).
+    const msg = sanitizeError(rawMsg, c.config.contentRoot);
     // When the caller asked for JSON output, mirror the error on
     // stderr as a JSON envelope so a tool layer doesn't have to run
     // two parsers (one on stdout JSON, one on stderr text). The
@@ -415,7 +419,9 @@ export async function main(argv: readonly string[]): Promise<number> {
         ok: false,
         error: {
           message:
-            e instanceof DomainError ? e.message : msg,
+            e instanceof DomainError
+              ? sanitizeError(e.message, c.config.contentRoot)
+              : msg,
         },
       };
       const errObj = payload['error'] as Record<string, unknown>;
