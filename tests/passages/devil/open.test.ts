@@ -118,7 +118,7 @@ test('devil open missing --type fails', (t) => {
   t.after(cleanup);
   const r = runDevil(root, ['open', 'src/foo.ts'], { GUILD_ACTOR: 'alice' });
   assert.equal(r.status, 1);
-  assert.match(r.stderr, /--type required/);
+  assert.match(r.stderr, /Missing --type/);
 });
 
 test('devil open with invalid --type fails with target type list', (t) => {

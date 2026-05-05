@@ -106,7 +106,7 @@ test('suspend: missing --cliff fails', (t) => {
     { GUILD_ACTOR: 'alice' },
   );
   assert.equal(r.status, 1);
-  assert.match(r.stderr, /--cliff required/);
+  assert.match(r.stderr, /Missing --cliff/);
 });
 
 test('suspend: missing --invitation fails', (t) => {
@@ -119,7 +119,7 @@ test('suspend: missing --invitation fails', (t) => {
     { GUILD_ACTOR: 'alice' },
   );
   assert.equal(r.status, 1);
-  assert.match(r.stderr, /--invitation required/);
+  assert.match(r.stderr, /Missing --invitation/);
 });
 
 test('suspend: refuses missing review (DevilReviewNotFound)', (t) => {

@@ -59,8 +59,12 @@ export async function main(argv: readonly string[]): Promise<number> {
         return 0;
       }
       case 'new': {
-        const name = requireOption(args, 'name', 'guild new --name <n> --category <c>');
-        const category = requireOption(args, 'category', 'see --help');
+        const name = requireOption(args, 'name', '<n>');
+        const category = requireOption(
+          args,
+          'category',
+          '<core|professional|assignee|trial|special|host>',
+        );
         const displayName = optionalOption(args, 'display-name');
         const input: Parameters<typeof c.memberUC.create>[0] = { name, category };
         if (displayName !== undefined) input.displayName = displayName;

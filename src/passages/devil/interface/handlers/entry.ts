@@ -97,14 +97,14 @@ export async function entryOnReview(
   }
   parseReviewId(reviewId); // domain-level format check
 
-  const personaName = requireOption(args, 'persona', '--persona required');
-  const lenseName = requireOption(args, 'lense', '--lense required');
+  const personaName = requireOption(args, 'persona', '<red-team|author-defender|mirror>');
+  const lenseName = requireOption(args, 'lense', '<l>');
   const kindRaw = requireOption(
     args,
     'kind',
-    '--kind required (finding|assumption|resistance|skip|synthesis)',
+    '<finding|assumption|resistance|skip|synthesis>',
   );
-  const text = requireOption(args, 'text', '--text required');
+  const text = requireOption(args, 'text', '"..."');
 
   const by = optionalOption(args, 'by', 'GUILD_ACTOR');
   if (!by) {

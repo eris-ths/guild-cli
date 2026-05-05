@@ -94,7 +94,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
 export function requireOption(
   args: ParsedArgs,
   key: string,
-  usage: string,
+  shape?: string,
   envFallback?: string,
 ): string {
   const v = args.options[key];
@@ -103,18 +103,28 @@ export function requireOption(
     const fallback = resolveEnvOrActorFile(envFallback);
     if (fallback !== undefined) return fallback;
   }
+  // Construct a one-line error that names the flag, its value shape,
+  // and (when applicable) the env var that would have satisfied the
+  // call. The shape is the per-callsite value placeholder (`<m>`,
+  // `<low|med|high>`, `"..."`); when omitted the error stays bare,
+  // which is what tests of the helper itself want. The env hint is
+  // generated from `envFallback` so callsites don't have to repeat
+  // "or set GUILD_ACTOR" — propagating that mention from one place
+  // is the touch-feel reason this branch exists.
+  const shapePart = shape ? ` ${shape}` : '';
+  const envPart = envFallback ? ` (or set ${envFallback})` : '';
   // When the flag is present but landed as boolean, the user almost
   // certainly passed a value beginning with `--` (quoting another
   // flag name in a literal). The default parser refuses to consume
   // such tokens, so point at the two escape valves explicitly.
   if (v === true) {
     throw new Error(
-      `Missing --${key} value. ${usage}\n` +
+      `Missing --${key} value${envPart}.\n` +
         `  (If your value begins with "--", use --${key}=<value> ` +
         `or place "-- <value>" after the other flags.)`,
     );
   }
-  throw new Error(`Missing --${key}. ${usage}`);
+  throw new Error(`Missing --${key}${shapePart}${envPart}.`);
 }
 
 export function optionalOption(

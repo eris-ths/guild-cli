@@ -121,7 +121,7 @@ test('agora suspend: requires both --cliff and --invitation', (t) => {
     { GUILD_ACTOR: 'alice' },
   );
   assert.notEqual(r1.status, 0);
-  assert.match(r1.stderr, /--invitation required/);
+  assert.match(r1.stderr, /Missing --invitation/);
 
   // missing --cliff
   const r2 = runAgora(
@@ -130,7 +130,7 @@ test('agora suspend: requires both --cliff and --invitation', (t) => {
     { GUILD_ACTOR: 'alice' },
   );
   assert.notEqual(r2.status, 0);
-  assert.match(r2.stderr, /--cliff required/);
+  assert.match(r2.stderr, /Missing --cliff/);
 });
 
 test('agora suspend: refuses to suspend an already-suspended play', (t) => {

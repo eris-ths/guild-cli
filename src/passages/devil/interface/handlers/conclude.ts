@@ -79,11 +79,7 @@ export async function concludeReview(
   }
   parseReviewId(reviewId);
 
-  const synthesis = requireOption(
-    args,
-    'synthesis',
-    '--synthesis required (verdict-less prose; what the review concluded across all lenses)',
-  );
+  const synthesis = requireOption(args, 'synthesis', '"<prose>"');
   const unresolvedRaw = optionalOption(args, 'unresolved');
   const unresolved: string[] = unresolvedRaw
     ? unresolvedRaw

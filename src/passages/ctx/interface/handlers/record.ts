@@ -51,7 +51,7 @@ export async function recordCtx(
 ): Promise<number> {
   rejectUnknownFlags(args, RECORD_KNOWN_FLAGS, 'record');
 
-  const fact = requireOption(args, 'fact', '--fact required (the observation prose)');
+  const fact = requireOption(args, 'fact', '"..."');
   const tags = parseTagList(optionalOption(args, 'tag'));
   const by = optionalOption(args, 'by') ?? resolveGuildActor();
   if (!by) {

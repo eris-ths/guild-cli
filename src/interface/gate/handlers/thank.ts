@@ -45,8 +45,8 @@ export async function reqThank(c: C, args: ParsedArgs): Promise<number> {
       'Usage: gate thank <to> --for <id> [--reason <s>] [--dry-run]',
     );
   }
-  const id = requireOption(args, 'for', '--for <request-id> required');
-  const by = requireOption(args, 'by', '--by required', 'GUILD_ACTOR');
+  const id = requireOption(args, 'for', '<request-id>');
+  const by = requireOption(args, 'by', '<m>', 'GUILD_ACTOR');
   let reason = optionalOption(args, 'reason');
   if (reason === '-') reason = (await readStdin()).trim();
   const invokedBy = resolveInvokedBy(by, 'thank', id);

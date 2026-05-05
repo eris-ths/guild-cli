@@ -49,7 +49,7 @@ const REGISTER_KNOWN_FLAGS: ReadonlySet<string> = new Set([
  */
 export async function reqRegister(c: C, args: ParsedArgs): Promise<number> {
   rejectUnknownFlags(args, REGISTER_KNOWN_FLAGS, 'register');
-  const name = requireOption(args, 'name', '--name required');
+  const name = requireOption(args, 'name', '<you>');
   const category = optionalOption(args, 'category') ?? 'professional';
   const displayName = optionalOption(args, 'display-name');
   const dryRun = args.options['dry-run'] === true || args.options['dry-run'] === '';

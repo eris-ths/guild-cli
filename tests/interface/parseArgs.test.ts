@@ -8,12 +8,49 @@ import {
 
 test('requireOption returns explicit value when present', () => {
   const args = parseArgs(['--from', 'kiri']);
-  assert.equal(requireOption(args, 'from', 'usage'), 'kiri');
+  assert.equal(requireOption(args, 'from', '<m>'), 'kiri');
 });
 
 test('requireOption throws when key missing and no env fallback', () => {
   const args = parseArgs([]);
-  assert.throws(() => requireOption(args, 'from', 'usage'), /Missing --from/);
+  assert.throws(() => requireOption(args, 'from', '<m>'), /Missing --from <m>\./);
+});
+
+test('requireOption: missing flag with env fallback names the env var', () => {
+  // Touch-feel improvement: when a callsite supplies an env fallback
+  // (e.g. GUILD_ACTOR for --by), forgetting the flag should hint that
+  // exporting the env would also satisfy the call. Without this hint,
+  // a fresh agent has to read the env-fallback section of AGENT.md to
+  // discover the alternative.
+  const args = parseArgs([]);
+  const prev = process.env['GUILD_ACTOR'];
+  delete process.env['GUILD_ACTOR'];
+  try {
+    assert.throws(
+      () => requireOption(args, 'by', '<m>', 'GUILD_ACTOR'),
+      (e: unknown) => {
+        assert.ok(e instanceof Error);
+        assert.match(e.message, /Missing --by <m> \(or set GUILD_ACTOR\)\./);
+        return true;
+      },
+    );
+  } finally {
+    if (prev !== undefined) process.env['GUILD_ACTOR'] = prev;
+  }
+});
+
+test('requireOption: missing flag without shape stays bare', () => {
+  // The shape arg is optional; tests of the helper itself pass nothing
+  // and want a terse "Missing --x." with no extra placeholder noise.
+  const args = parseArgs([]);
+  assert.throws(
+    () => requireOption(args, 'from'),
+    (e: unknown) => {
+      assert.ok(e instanceof Error);
+      assert.match(e.message, /^Missing --from\.$/);
+      return true;
+    },
+  );
 });
 
 test('requireOption falls back to env var when option missing', () => {
@@ -22,7 +59,7 @@ test('requireOption falls back to env var when option missing', () => {
   process.env['GUILD_ACTOR'] = 'noir';
   try {
     assert.equal(
-      requireOption(args, 'from', 'usage', 'GUILD_ACTOR'),
+      requireOption(args, 'from', '<m>', 'GUILD_ACTOR'),
       'noir',
     );
   } finally {
@@ -37,7 +74,7 @@ test('requireOption: explicit value wins over env fallback', () => {
   process.env['GUILD_ACTOR'] = 'noir';
   try {
     assert.equal(
-      requireOption(args, 'from', 'usage', 'GUILD_ACTOR'),
+      requireOption(args, 'from', '<m>', 'GUILD_ACTOR'),
       'kiri',
     );
   } finally {
@@ -52,7 +89,7 @@ test('requireOption: empty env var is treated as unset', () => {
   process.env['GUILD_ACTOR'] = '';
   try {
     assert.throws(
-      () => requireOption(args, 'from', 'usage', 'GUILD_ACTOR'),
+      () => requireOption(args, 'from', '<m>', 'GUILD_ACTOR'),
       /Missing --from/,
     );
   } finally {
@@ -133,7 +170,7 @@ test('parseArgs: bare --key followed by --value still lands as boolean (ambiguou
 test('requireOption: boolean-landing emits a hint pointing at the escape valves', () => {
   const args = parseArgs(['--reason', '--another-flag']);
   assert.throws(
-    () => requireOption(args, 'reason', 'usage'),
+    () => requireOption(args, 'reason', '"..."'),
     (e: unknown) => {
       assert.ok(e instanceof Error);
       assert.match(e.message, /Missing --reason value/);
@@ -144,14 +181,36 @@ test('requireOption: boolean-landing emits a hint pointing at the escape valves'
   );
 });
 
+test('requireOption: boolean-landing also names the env fallback when present', () => {
+  // Same propagation as the missing-flag branch — if env would have
+  // satisfied the call, mention it. Boolean-landing typically means
+  // "you passed --by --another-flag-by-mistake", and at that point
+  // the user might also benefit from knowing GUILD_ACTOR exists.
+  const args = parseArgs(['--by', '--bogus']);
+  const prev = process.env['GUILD_ACTOR'];
+  delete process.env['GUILD_ACTOR'];
+  try {
+    assert.throws(
+      () => requireOption(args, 'by', '<m>', 'GUILD_ACTOR'),
+      (e: unknown) => {
+        assert.ok(e instanceof Error);
+        assert.match(e.message, /Missing --by value \(or set GUILD_ACTOR\)\./);
+        return true;
+      },
+    );
+  } finally {
+    if (prev !== undefined) process.env['GUILD_ACTOR'] = prev;
+  }
+});
+
 test('requireOption: plain missing flag does NOT emit the -- hint (stays terse)', () => {
   const args = parseArgs([]);
   try {
-    requireOption(args, 'reason', 'usage');
+    requireOption(args, 'reason', '"..."');
     assert.fail('expected throw');
   } catch (e) {
     assert.ok(e instanceof Error);
-    assert.match(e.message, /Missing --reason\./);
+    assert.match(e.message, /Missing --reason "\.\.\."\./);
     assert.equal(/begin/.test(e.message), false);
   }
 });
