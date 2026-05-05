@@ -220,6 +220,83 @@ test('agora list: JSON envelope is snake_case (principle 11)', (t) => {
   }
 });
 
+test('agora list: --state suspended sorts by most-recent suspension (newest cliff first)', (t) => {
+  // The contract: among suspended plays, the one suspended *most recently*
+  // shows up first. This differs from the substrate id-desc default — an old
+  // play suspended just now should outrank a newer play suspended last week.
+  // We synthesize three suspended plays in the same game, then suspend in
+  // reverse-creation order to make id-desc and suspension-time-desc disagree.
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  runAgora(
+    root,
+    ['new', '--slug', 'g', '--kind', 'quest', '--title', 'g'],
+    { GUILD_ACTOR: 'alice' },
+  );
+  // Three plays — same game so they share a date prefix and ids run -001, -002, -003.
+  runAgora(root, ['play', '--slug', 'g'], { GUILD_ACTOR: 'alice' });
+  runAgora(root, ['play', '--slug', 'g'], { GUILD_ACTOR: 'alice' });
+  runAgora(root, ['play', '--slug', 'g'], { GUILD_ACTOR: 'alice' });
+
+  const today = new Date().toISOString().slice(0, 10);
+  const ids = [`${today}-001`, `${today}-002`, `${today}-003`];
+
+  // Suspend in reverse-creation order so suspension `at` decreases as id
+  // increases — the substrate id-desc (003,002,001) and our wanted
+  // suspension-time-desc (001,002,003) point opposite ways.
+  for (const id of ids) {
+    runAgora(
+      root,
+      ['suspend', id, '--cliff', `cliff-${id}`, '--invitation', 'i'],
+      { GUILD_ACTOR: 'alice' },
+    );
+  }
+
+  const r = runAgora(
+    root,
+    ['list', '--state', 'suspended', '--format', 'json'],
+    { GUILD_ACTOR: 'alice' },
+  );
+  assert.equal(r.status, 0);
+  const payload = JSON.parse(r.stdout);
+  assert.equal(payload.plays.length, 3);
+  // Most-recently suspended (last in our loop) must be on top.
+  assert.deepEqual(
+    payload.plays.map((p: { id: string }) => p.id),
+    [ids[2], ids[1], ids[0]],
+    'suspended list should be ordered by most-recent suspension first',
+  );
+});
+
+test('agora list: --state playing keeps substrate id-desc sort (no re-sort)', (t) => {
+  // Pin the negative: only `--state suspended` triggers the alt sort. Any
+  // other state (or no state) gets the substrate's id-desc contract intact.
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  runAgora(
+    root,
+    ['new', '--slug', 'g', '--kind', 'quest', '--title', 'g'],
+    { GUILD_ACTOR: 'alice' },
+  );
+  runAgora(root, ['play', '--slug', 'g'], { GUILD_ACTOR: 'alice' });
+  runAgora(root, ['play', '--slug', 'g'], { GUILD_ACTOR: 'alice' });
+  runAgora(root, ['play', '--slug', 'g'], { GUILD_ACTOR: 'alice' });
+
+  const r = runAgora(
+    root,
+    ['list', '--state', 'playing', '--format', 'json'],
+    { GUILD_ACTOR: 'alice' },
+  );
+  assert.equal(r.status, 0);
+  const payload = JSON.parse(r.stdout);
+  const today = new Date().toISOString().slice(0, 10);
+  assert.deepEqual(
+    payload.plays.map((p: { id: string }) => p.id),
+    [`${today}-003`, `${today}-002`, `${today}-001`],
+    'playing list should preserve substrate id-desc',
+  );
+});
+
 test('agora list: rejects unknown flag (principle 10 input contract)', (t) => {
   const { root, cleanup } = bootstrap();
   t.after(cleanup);
