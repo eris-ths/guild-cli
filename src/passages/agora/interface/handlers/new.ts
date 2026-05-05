@@ -95,10 +95,13 @@ export async function newGame(deps: NewGameDeps, args: ParsedArgs): Promise<numb
           where_written,
           config_file: deps.config.configFile,
           suggested_next: {
-            verb: 'list',
-            args: {},
+            verb: 'play',
+            args: { slug: game.slug },
             reason:
-              'New game definition saved. `agora list` shows every game and play in the content root; `agora play --slug <slug>` starts a session against this definition.',
+              'New game definition saved. `agora play --slug ' +
+              `${game.slug}\` starts a session against this ` +
+              'definition; `agora list` shows every game and play if ' +
+              'you want to confirm before playing.',
           },
         },
         null,
@@ -108,7 +111,7 @@ export async function newGame(deps: NewGameDeps, args: ParsedArgs): Promise<numb
   } else {
     process.stdout.write(
       `✓ created game: ${game.slug} [${game.kind}] — ${game.title}\n` +
-        `  next: agora list  (or agora play --slug ${game.slug} to start a session)\n`,
+        `  next: agora play --slug ${game.slug}  (or agora list to see all games)\n`,
     );
   }
   // Stderr notice mirrors gate register's path-disclosure line shape
