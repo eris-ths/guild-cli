@@ -19,6 +19,7 @@ import { parseArgs, HelpRequested } from '../../../interface/shared/parseArgs.js
 import { renderVerbHelp } from '../../../interface/shared/verbHelp.js';
 import { sanitizeError } from '../../../interface/shared/sanitizeError.js';
 import { nearestCommand } from '../../../interface/shared/nearestCommand.js';
+import { getPackageVersion, isVersionFlag } from '../../../interface/shared/version.js';
 import { DomainError } from '../../../domain/shared/DomainError.js';
 import { YamlCtxRepository } from '../infrastructure/YamlCtxRepository.js';
 import { CtxUseCases } from '../application/CtxUseCases.js';
@@ -59,8 +60,10 @@ export async function main(argv: readonly string[]): Promise<number> {
     process.stdout.write(HELP);
     return 0;
   }
-  if (argv[0] === '--version') {
-    process.stdout.write('ctx (under guild-cli) — phase 1 / record only\n');
+  if (isVersionFlag(argv)) {
+    process.stdout.write(
+      `ctx (under guild-cli ${getPackageVersion()}) — alpha phase 1 (record only)\n`,
+    );
     return 0;
   }
 

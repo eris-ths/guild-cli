@@ -21,6 +21,7 @@ import { parseArgs, HelpRequested } from '../../../interface/shared/parseArgs.js
 import { renderVerbHelp } from '../../../interface/shared/verbHelp.js';
 import { sanitizeError } from '../../../interface/shared/sanitizeError.js';
 import { nearestCommand } from '../../../interface/shared/nearestCommand.js';
+import { getPackageVersion, isVersionFlag } from '../../../interface/shared/version.js';
 import { DomainError } from '../../../domain/shared/DomainError.js';
 import { YamlGameRepository } from '../infrastructure/YamlGameRepository.js';
 import { YamlPlayRepository } from '../infrastructure/YamlPlayRepository.js';
@@ -117,11 +118,14 @@ export async function main(argv: readonly string[]): Promise<number> {
     process.stdout.write(HELP);
     return 0;
   }
-  if (argv[0] === '--version') {
+  if (isVersionFlag(argv)) {
     // Single-binary version reuse — agora ships under guild-cli's
-    // package.json. No separate version surface; the alpha label is
-    // carried by HELP and per-passage README.
-    process.stdout.write('agora (under guild-cli) — alpha\n');
+    // package.json, so the version number is shared. The status
+    // phrase ("alpha, 9 verbs") is per-passage and rides alongside
+    // so a reader sees both lineage and surface maturity in one line.
+    process.stdout.write(
+      `agora (under guild-cli ${getPackageVersion()}) — alpha, 9 verbs\n`,
+    );
     return 0;
   }
 

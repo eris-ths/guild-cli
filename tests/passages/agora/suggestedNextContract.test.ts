@@ -359,9 +359,12 @@ test('agora suspend / resume: suggested_next.args does NOT carry by', (t) => {
   assert.equal(res.suggested_next.args.by, undefined);
 });
 
-test('agora new: suggested_next.args is empty (no policy, no recommendations)', (t) => {
-  // For new, there's no play_id yet to recommend. args is just {}.
-  // Pin to confirm we don't accidentally start adding args here either.
+test('agora new: suggested_next pins the just-created slug for the next play', (t) => {
+  // Post-dogfood update: `agora new` now suggests `agora play --slug
+  // <just-created>` as the next call (text and JSON agree). The args
+  // carry the slug so an orchestrator can dispatch the next call
+  // without parsing the success message. play_id and other downstream
+  // identifiers still don't exist yet — only the slug is in scope.
   const { root, cleanup } = bootstrap();
   t.after(cleanup);
   const r = runAgora(
@@ -370,5 +373,6 @@ test('agora new: suggested_next.args is empty (no policy, no recommendations)', 
     { GUILD_ACTOR: 'alice' },
   );
   const payload = JSON.parse(r.stdout);
-  assert.deepEqual(payload.suggested_next.args, {});
+  assert.equal(payload.suggested_next.verb, 'play');
+  assert.deepEqual(payload.suggested_next.args, { slug: 'g' });
 });
