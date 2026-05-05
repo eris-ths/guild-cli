@@ -18,6 +18,7 @@
 import { GuildConfig } from '../../../infrastructure/config/GuildConfig.js';
 import { parseArgs, HelpRequested } from '../../../interface/shared/parseArgs.js';
 import { renderVerbHelp } from '../../../interface/shared/verbHelp.js';
+import { sanitizeError } from '../../../interface/shared/sanitizeError.js';
 import { DomainError } from '../../../domain/shared/DomainError.js';
 import { YamlDevilReviewRepository } from '../infrastructure/YamlDevilReviewRepository.js';
 import { BundledLenseCatalog } from '../infrastructure/BundledLenseCatalog.js';
@@ -208,7 +209,9 @@ export async function main(argv: readonly string[]): Promise<number> {
     // signal; the `DomainError:` prefix and `(field)` trailing tag
     // were debug noise, not touch-feel signal (P3 dogfood C/A
     // cleanup).
-    const msg = e instanceof Error ? e.message : String(e);
+    const rawMsg = e instanceof Error ? e.message : String(e);
+    // Strip absolute contentRoot prefix (issue #153).
+    const msg = sanitizeError(rawMsg, config.contentRoot);
     process.stderr.write(`error: ${msg}\n`);
     return 1;
   }
