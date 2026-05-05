@@ -216,6 +216,51 @@ test('entry: unknown lense surfaces LenseNotFound', (t) => {
   assert.match(r.stderr, /Lense not found in catalog: made-up/);
 });
 
+test('entry: unknown lense includes catalog + did-you-mean for typos', (t) => {
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  const reviewId = openReview(root);
+  // One-edit typo: "injecton" → "injection". The hint should fire.
+  const r = runDevil(
+    root,
+    [
+      'entry', reviewId,
+      '--persona', 'red-team',
+      '--lense', 'injecton',
+      '--kind', 'resistance',
+      '--text', 'x',
+    ],
+    { GUILD_ACTOR: 'alice' },
+  );
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /Lense not found in catalog: injecton/);
+  assert.match(r.stderr, /did you mean: --lense injection\?/);
+  // Catalog list — pin a few canonical names so a future catalog
+  // shape change has to update this test explicitly.
+  assert.match(r.stderr, /available lenses:.*injection.*supply-chain/);
+});
+
+test('entry: unknown persona includes catalog + did-you-mean for typos', (t) => {
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  const reviewId = openReview(root);
+  const r = runDevil(
+    root,
+    [
+      'entry', reviewId,
+      '--persona', 'redteam',
+      '--lense', 'injection',
+      '--kind', 'resistance',
+      '--text', 'x',
+    ],
+    { GUILD_ACTOR: 'alice' },
+  );
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /Persona not found in catalog: redteam/);
+  assert.match(r.stderr, /did you mean: --persona red-team\?/);
+  assert.match(r.stderr, /available personas:.*red-team.*mirror/);
+});
+
 test('entry: review not found returns DevilReviewNotFound', (t) => {
   const { root, cleanup } = bootstrap();
   t.after(cleanup);
