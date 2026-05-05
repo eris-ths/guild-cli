@@ -16,9 +16,9 @@ It is **not** a task tracker. It is not for doing things. It is for
 deciding, recording the why, and keeping the dialogue visible so
 the next session — or the next agent — can pick up where you left off.
 
-## Three passages, three shapes of work
+## Four passages, four shapes of work
 
-Guild has three passages on top of one shared substrate. Each
+Guild has four passages on top of one shared substrate. Each
 passage holds a different **shape** of agent activity:
 
 - **`gate` — 判断 (judgment).** "Decide on a request." Verdict-shaped:
@@ -27,9 +27,13 @@ passage holds a different **shape** of agent activity:
   Quest and Sandbox plays, suspend/resume cliffs, moves accumulating.
 - **`devil` — 守備 (defense).** "Protect end-users." Floor-shaped:
   multi-persona, lense-enforced, friction is the feature.
+- **`ctx` — 事実 (fact).** "Pin an observation." Verdict-less,
+  thread-less, target-less append. Phase 1 ships only `record`;
+  more verbs (fork / supersede / show / list / chain / status)
+  arrive in phase 2 as the use surface fills in.
 
 If you're new to guild-cli, start with `gate` — the rest of this
-document is gate-rooted. The other two passages have their own
+document is gate-rooted. The other three passages have their own
 sections in [`AGENT.md`](../AGENT.md) and worked examples in
 [`docs/verbs.md`](./verbs.md).
 
