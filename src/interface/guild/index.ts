@@ -1,5 +1,12 @@
 import { buildContainer } from '../shared/container.js';
-import { parseArgs, requireOption, optionalOption } from '../shared/parseArgs.js';
+import {
+  parseArgs,
+  requireOption,
+  optionalOption,
+  rejectUnknownFlags,
+  HelpRequested,
+} from '../shared/parseArgs.js';
+import { renderVerbHelp } from '../shared/verbHelp.js';
 import { DomainError } from '../../domain/shared/DomainError.js';
 import { getPackageVersion, isVersionFlag } from '../shared/version.js';
 
@@ -30,6 +37,7 @@ export async function main(argv: readonly string[]): Promise<number> {
   try {
     switch (cmd) {
       case 'list': {
+        rejectUnknownFlags(args, new Set(), 'list');
         const members = await c.memberUC.list();
         const memberNames = new Set(members.map((m) => m.name.value));
         for (const m of members) {
@@ -48,6 +56,7 @@ export async function main(argv: readonly string[]): Promise<number> {
         return 0;
       }
       case 'show': {
+        rejectUnknownFlags(args, new Set(), 'show');
         const name = args.positional[0];
         if (!name) throw new Error('Usage: guild show <name>');
         const m = await c.memberUC.show(name);
@@ -59,6 +68,11 @@ export async function main(argv: readonly string[]): Promise<number> {
         return 0;
       }
       case 'new': {
+        rejectUnknownFlags(
+          args,
+          new Set(['name', 'category', 'display-name']),
+          'new',
+        );
         const name = requireOption(args, 'name', '<n>');
         const category = requireOption(
           args,
@@ -73,6 +87,7 @@ export async function main(argv: readonly string[]): Promise<number> {
         return 0;
       }
       case 'validate': {
+        rejectUnknownFlags(args, new Set(), 'validate');
         const members = await c.memberUC.list();
         const hostCount = c.config.hostNames.length;
         const hostSuffix =
@@ -87,6 +102,10 @@ export async function main(argv: readonly string[]): Promise<number> {
         return 1;
     }
   } catch (e) {
+    if (e instanceof HelpRequested) {
+      renderVerbHelp('guild', e);
+      return 0;
+    }
     const msg = e instanceof DomainError
       ? `DomainError: ${e.message}${e.field ? ` (${e.field})` : ''}`
       : e instanceof Error

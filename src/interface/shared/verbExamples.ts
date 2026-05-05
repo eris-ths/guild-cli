@@ -85,4 +85,10 @@ export const VERB_EXAMPLES: Record<string, Record<string, string>> = {
   ctx: {
     record: 'record --fact "<prose>" --tag prefix:value,prefix:value',
   },
+  guild: {
+    list: 'list',
+    show: 'show <name>',
+    new: 'new --name <n> --category professional',
+    validate: 'validate',
+  },
 };
