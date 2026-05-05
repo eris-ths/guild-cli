@@ -33,9 +33,11 @@ import { resumePlay } from './handlers/resume.js';
 import { concludePlay } from './handlers/conclude.js';
 import { listAgora } from './handlers/list.js';
 import { showAgora } from './handlers/show.js';
+import { lastPlay } from './handlers/last.js';
+import { cliffOf } from './handlers/cliff.js';
 import { schemaCmd } from './handlers/schema.js';
 
-const HELP = `agora — play / narrative passage (alpha, 9 verbs)
+const HELP = `agora — play / narrative passage (alpha, 11 verbs)
 
 Usage:
   agora new --slug <s> --kind <quest|sandbox> --title "<t>" [--by <m>]
@@ -91,11 +93,27 @@ Usage:
                               --game disambiguates cross-game id collisions
                               for plays.
 
+  agora last [--by <m>] [--state playing|suspended|concluded]
+             [--include-concluded] [--format json|text]
+                              "Which play am I in?" — return the actor's
+                              most recent play. Defaults to open
+                              (playing|suspended); concluded excluded
+                              unless --include-concluded or --state given.
+
+  agora cliff <play-id> [--game <slug>] [--format json|text]
+                              Peek the closing cliff/invitation without
+                              transitioning state. "What was I about to
+                              do here?" without committing to resume.
+                              Surfaces whether the cliff is active
+                              (next resume closes it) or historical
+                              (already resumed since).
+
   agora --help                 This help.
   agora --version              Print version and exit.
 
-Passage status: alpha. Full v1 surface (new / play / move / suspend /
-resume / conclude / list / show / schema) per design issue #117.
+Passage status: alpha. Core v1 surface (new / play / move / suspend /
+resume / conclude / list / show / schema) per design issue #117. Sugar
+verbs (last / cliff) layer on top — pure read affordances.
 Substrate: shares content_root and members/ with gate; agora-specific data
 goes under <content_root>/agora/.
 
@@ -110,7 +128,7 @@ Lore upstream:
 // forgotten here loses its typo hint, doesn't crash anything.
 const AGORA_COMMANDS = [
   'new', 'play', 'move', 'suspend', 'resume', 'conclude',
-  'list', 'show', 'schema',
+  'list', 'show', 'last', 'cliff', 'schema',
 ] as const;
 
 export async function main(argv: readonly string[]): Promise<number> {
@@ -124,7 +142,7 @@ export async function main(argv: readonly string[]): Promise<number> {
     // phrase ("alpha, 9 verbs") is per-passage and rides alongside
     // so a reader sees both lineage and surface maturity in one line.
     process.stdout.write(
-      `agora (under guild-cli ${getPackageVersion()}) — alpha, 9 verbs\n`,
+      `agora (under guild-cli ${getPackageVersion()}) — alpha, 11 verbs\n`,
     );
     return 0;
   }
@@ -153,6 +171,10 @@ export async function main(argv: readonly string[]): Promise<number> {
         return await listAgora({ games, plays, config }, args);
       case 'show':
         return await showAgora({ games, plays, config }, args);
+      case 'last':
+        return await lastPlay({ plays, config }, args);
+      case 'cliff':
+        return await cliffOf({ plays, config }, args);
       case 'schema':
         return await schemaCmd(args);
       default: {
