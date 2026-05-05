@@ -224,9 +224,15 @@ test('agora new: collision error sanitizes the absolute path (#153 follow-up)', 
   );
   assert.notEqual(second.status, 0);
   assert.match(second.stderr, /already exists/);
+  // sanitizeError replaces only the host-specific contentRoot prefix;
+  // the suffix is whatever path.join produced, so build the expected
+  // string with join() too to keep the assertion cross-platform
+  // (Windows backslash vs POSIX forward slash). Mirrors the
+  // escapeRegex(join(...)) pattern the notice-line tests already use.
+  const expectedAt = `At: ${join('<content_root>', 'agora', 'games', 'leak.yaml')}`;
   assert.match(
     second.stderr,
-    /At: <content_root>\/agora\/games\/leak\.yaml/,
+    new RegExp(escapeRegex(expectedAt)),
     'collision error should report the relative <content_root> form',
   );
   assert.equal(
