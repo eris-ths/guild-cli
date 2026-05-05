@@ -203,6 +203,39 @@ test('agora new: slug collision fails closed (no overwrite)', (t) => {
   assert.equal(after, original);
 });
 
+test('agora new: collision error sanitizes the absolute path (#153 follow-up)', (t) => {
+  // The collision branch returns 1 from the handler instead of throwing,
+  // bypassing main()'s catch where #153's sanitizer normally runs. Pin
+  // that the `At:` line collapses contentRoot to `<content_root>` so
+  // home-directory and checkout-location info doesn't leak through this
+  // alternate egress path. Mirrors the contract sanitizeError holds for
+  // every other error-path emission across the four CLIs.
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  runAgora(
+    root,
+    ['new', '--slug', 'leak', '--kind', 'sandbox', '--title', 'first'],
+    { GUILD_ACTOR: 'alice' },
+  );
+  const second = runAgora(
+    root,
+    ['new', '--slug', 'leak', '--kind', 'sandbox', '--title', 'second'],
+    { GUILD_ACTOR: 'alice' },
+  );
+  assert.notEqual(second.status, 0);
+  assert.match(second.stderr, /already exists/);
+  assert.match(
+    second.stderr,
+    /At: <content_root>\/agora\/games\/leak\.yaml/,
+    'collision error should report the relative <content_root> form',
+  );
+  assert.equal(
+    second.stderr.includes(root),
+    false,
+    `collision error must not leak the absolute root path (${root})`,
+  );
+});
+
 test('agora new: invalid slug rejected at domain boundary', (t) => {
   // Uppercase, leading digit, special chars — same class of typo
   // gate's member registration would reject. The boundary fails
