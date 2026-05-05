@@ -4,6 +4,7 @@ import {
   optionalOption,
   rejectUnknownFlags,
 } from '../../shared/parseArgs.js';
+import { notFoundMessage } from '../../shared/notFoundHint.js';
 import {
   C,
   readStdin,
@@ -226,7 +227,7 @@ async function issuesPromote(c: C, args: ParsedArgs): Promise<number> {
 
   const issue = await c.issueUC.find(id);
   if (!issue) {
-    process.stderr.write(`issue not found: ${id}\n`);
+    process.stderr.write(notFoundMessage('issue', id));
     return 1;
   }
   const j = issue.toJSON();
