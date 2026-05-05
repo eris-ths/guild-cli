@@ -33,7 +33,7 @@ import { resumePlay } from './handlers/resume.js';
 import { concludePlay } from './handlers/conclude.js';
 import { listAgora } from './handlers/list.js';
 import { showAgora } from './handlers/show.js';
-import { lastPlay } from './handlers/last.js';
+import { lastPlay, LAST_BOOLEAN_FLAGS } from './handlers/last.js';
 import { cliffOf } from './handlers/cliff.js';
 import { schemaCmd } from './handlers/schema.js';
 
@@ -148,7 +148,15 @@ export async function main(argv: readonly string[]): Promise<number> {
   }
 
   const [cmd, ...rest] = argv;
-  const args = parseArgs(rest);
+  // Per-verb boolean-flag registry (issue #158): each entry maps a
+  // verb name to the set of its boolean flags, so parseArgs treats
+  // them as boolean instead of speculatively consuming the next
+  // token. Verbs without boolean flags don't need an entry.
+  const VERB_BOOLEAN_FLAGS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
+    ['last', LAST_BOOLEAN_FLAGS],
+  ]);
+  const verbBooleans = cmd ? VERB_BOOLEAN_FLAGS.get(cmd) : undefined;
+  const args = parseArgs(rest, verbBooleans ? { booleanFlags: verbBooleans } : {});
   const config = GuildConfig.load();
   const games = new YamlGameRepository(config);
   const plays = new YamlPlayRepository(config);

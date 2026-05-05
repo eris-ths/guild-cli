@@ -32,13 +32,20 @@ export interface ParsedArgs {
 }
 
 /**
- * Flags that are definitionally boolean — they never take a value.
- * Listed here so the parser doesn't speculatively consume the next
- * token as their "value" (see docblock above).
+ * Cross-cutting boolean flags — flags shared by multiple verbs whose
+ * boolean shape is well-known across the codebase. Listed here so the
+ * parser doesn't speculatively consume the next token as their "value".
  *
- * Adding to this list is the right move when a new `--flag` is
- * documented as boolean-only; forgetting to add it just preserves
- * the old `--dry-run=true` escape-valve behaviour, not a crash.
+ * **For new boolean flags, prefer the per-verb registration pattern**
+ * (`parseArgs(argv, { booleanFlags })` — see below). This global set
+ * exists for legacy cross-cutting flags shared across many verbs;
+ * adding to it works but couples the parser to a per-verb concern,
+ * and forgetting to add silently miscoerces (issue #158).
+ *
+ * The per-verb pattern moves the declaration next to the verb that
+ * owns the flag — `<VERB>_KNOWN_FLAGS` for unknown-flag rejection
+ * already lives in each handler; `<VERB>_BOOLEAN_FLAGS` is its
+ * sibling for the same scope.
  */
 export const KNOWN_BOOLEAN_FLAGS: ReadonlySet<string> = new Set([
   'apply',             // gate repair --apply
@@ -49,10 +56,35 @@ export const KNOWN_BOOLEAN_FLAGS: ReadonlySet<string> = new Set([
   'with-calibration',  // gate voices --with-calibration (opt-in richer JSON)
 ]);
 
-export function parseArgs(argv: readonly string[]): ParsedArgs {
+export interface ParseArgsOptions {
+  /**
+   * Verb-specific boolean flags. Unioned with `KNOWN_BOOLEAN_FLAGS`
+   * for the duration of this `parseArgs` call. Use this to register
+   * flags that belong to one verb rather than touching the global
+   * cross-cutting set.
+   *
+   * Pattern (issue #158): each binary's dispatch layer extracts the
+   * verb name from `argv[0]`, looks up the verb's boolean set in a
+   * local registry, and threads it into `parseArgs`. The handler
+   * file declares both `<VERB>_KNOWN_FLAGS` (for `rejectUnknownFlags`)
+   * and `<VERB>_BOOLEAN_FLAGS` (for this parameter); the binary
+   * imports both.
+   */
+  readonly booleanFlags?: ReadonlySet<string>;
+}
+
+export function parseArgs(
+  argv: readonly string[],
+  opts: ParseArgsOptions = {},
+): ParsedArgs {
   const options: Record<string, string | boolean> = {};
   const positional: string[] = [];
   let sawDoubleDash = false;
+  // Compose the active boolean set from the global cross-cutting set
+  // plus the verb-local set if provided. Hot-path optimization:
+  // skip the union when no verb-local set was passed (the common
+  // case for short read verbs).
+  const verbBooleans = opts.booleanFlags;
   for (let i = 0; i < argv.length; i++) {
     const token = argv[i] as string;
     // Once we've seen `--`, every remaining token is positional — even
@@ -73,8 +105,11 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       } else {
         const key = token.slice(2);
         const next = argv[i + 1];
+        const isBoolean =
+          KNOWN_BOOLEAN_FLAGS.has(key) ||
+          (verbBooleans !== undefined && verbBooleans.has(key));
         if (
-          !KNOWN_BOOLEAN_FLAGS.has(key) &&
+          !isBoolean &&
           next !== undefined &&
           !next.startsWith('--')
         ) {
