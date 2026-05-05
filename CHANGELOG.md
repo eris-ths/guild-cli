@@ -179,6 +179,119 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
   `error.field` still surfaces in `--format json` so orchestrators
   retain the structured info.
 
+### Wave 7 — 4-passage convergence + agora sugar verbs
+
+> Picks up where the touch-feel campaign closed. With `gate` /
+> `agora` / `devil` / `ctx` all in active use, the cross-passage
+> orientation surface (`gate boot`) finally caught up with the
+> 4-passage reality, and agora grew two read-only sugar verbs to
+> answer the daily-use questions ("which play am I in?", "what was
+> I about to do?") that the v1 core didn't directly address.
+
+- **`agora last` and `agora cliff` sugar verbs.**
+  ([#179](https://github.com/eris-ths/guild-cli/pull/179))
+  Two read-only verbs on top of the v1 core. `agora last` returns
+  the actor's most recent open play (no `agora list` + copy
+  required); `agora cliff <id>` peeks the closing
+  cliff/invitation of a suspended play without resuming. Both
+  preserve agora's JSON envelope contract.
+
+- **`gate boot` cross_passage now surfaces ctx (4th passage).**
+  ([#184](https://github.com/eris-ths/guild-cli/pull/184))
+  ctx records existed on the substrate but `boot` only reported
+  agora and devil activity. Added `ctxOrientation` provider; ctx
+  in phase 1 is record-only (no transitions), so `open` is the
+  count and `last_state` is `'recorded'`.
+
+- **`agora list --state suspended` sorts by most-recent suspension.**
+  ([#182](https://github.com/eris-ths/guild-cli/pull/182))
+  Among suspended plays, the one suspended most recently shows up
+  first — id-desc (creation date) was the wrong axis when the
+  question is "what's been hibernating, and for how long?". Other
+  states preserve the id-desc default. Re-sort happens in the
+  handler; substrate contract unchanged.
+
+- **`devil entry` lense/persona miss includes catalog + did-you-mean.**
+  ([#185](https://github.com/eris-ths/guild-cli/pull/185))
+  Typing `devil entry --lense bogus` now lists the 12 lenses + a
+  Levenshtein "did you mean: --lense X?" hint on near-matches.
+  Same for `--persona` (6 personas). Hint on stderr — JSON
+  consumers reading stdout unaffected.
+
+- **`gate boot` default `--tail` lowered 10 → 5 (principle 13).**
+  ([#181](https://github.com/eris-ths/guild-cli/pull/181))
+  `boot` is the hot-path bootstrap verb; default tail of 10
+  produced ~250-line JSON. Override via `--tail <N>` unchanged.
+  Codifies principle 13 "affordance density follows verb shape"
+  added in [#180](https://github.com/eris-ths/guild-cli/pull/180).
+
+- **Doc sweep: 4-passage architecture reflected across README/AGENT/etc.**
+  ([#178](https://github.com/eris-ths/guild-cli/pull/178))
+  Audit of cross-passage references caught 4 docs still framed
+  around 3 passages. Updated to the current shape (gate / agora /
+  devil / ctx).
+
+### v1-prep — touch-feel follow-ups, hardening, contracts
+
+> A focused pass to defendable v1 surface: a touch-feel friction
+> that surfaced during a fresh-eyes review of the latest agora
+> shape, three v1-prep items from the external deep-dive review
+> (#153 sibling cluster), and one CI-signal-reliability bug.
+
+- **`agora last` next-hint includes `--game <slug>`; `list --state
+  suspended` text shows suspension timestamps.**
+  ([#186](https://github.com/eris-ths/guild-cli/pull/186))
+  Surfaced by a 2026-05-05 main-merge dogfood pass. Bare play-ids
+  collide across games, so `agora last`'s `next:` hint produced a
+  call that errored on the very next line. Hint is now
+  `--game`-qualified, state-aware (playing → move/suspend, suspended
+  → resume/cliff, concluded → no hint). `list --state suspended`
+  surfaces the `at` timestamp so the post-#182 sort axis is visible.
+
+- **Devil-review consistency follow-up: `--game` qualifier across
+  play / suspend / resume next-hints.**
+  ([#188](https://github.com/eris-ths/guild-cli/pull/188))
+  Devil review on #186 caught that the `--game` fix landed only in
+  `agora last` while the same hint shape lived unqualified in three
+  other verbs. Same logic applies — extended consistently. Also
+  documents `concluded`-state intent in `last.ts` and the
+  serial-execution dependency of `withCleanCwd` (from #187).
+
+- **Test isolation: `.guild-actor` file leak in develop-cut PRs.**
+  ([#187](https://github.com/eris-ths/guild-cli/pull/187),
+  closes [#183](https://github.com/eris-ths/guild-cli/issues/183))
+  Three env-unset tests in `parseArgs.test.ts` silently failed in
+  CI when the PR branch was cut from `develop` — that branch tracks
+  `.guild-actor` at repo root for dogfood ergonomics, and PR
+  branches inherit it; `resolveGuildActor()` reads both env AND
+  file, so deleting `GUILD_ACTOR` alone didn't isolate the call.
+  Wrapped affected tests in a `withCleanCwd()` helper. Regression
+  test pins both the leak observability and the fix.
+
+- **`docs/storage-format.md` — explicit on-disk YAML contract.**
+  ([#189](https://github.com/eris-ths/guild-cli/pull/189),
+  closes [#157](https://github.com/eris-ths/guild-cli/issues/157))
+  POLICY.md declared the YAML shapes "stable surface" but never
+  described them. New doc covers all 7 `Yaml*Repository` adapters:
+  layout, fields, hydrate tolerance, versioning expressions,
+  backward-compat rules table. Cross-linked from POLICY.md /
+  AGENT.md / README.md. Out of scope: format changes themselves
+  (separate concern, requires minor bump).
+
+### Security
+
+- **Defense-in-depth prototype-pollution guard in `parseYamlSafe`.**
+  ([#190](https://github.com/eris-ths/guild-cli/pull/190),
+  closes [#154](https://github.com/eris-ths/guild-cli/issues/154))
+  Hydrate layer was leaning on `yaml`-lib's promise that `__proto__`
+  lands as a literal key. Added independent guard at the
+  `parseYamlSafe` chokepoint: walks the parsed tree, drops
+  `__proto__` / `constructor` / `prototype` literal keys at every
+  nesting level, rebuilds plain objects via `Object.create(null)`.
+  No `Yaml*Repository.ts` changes needed — bracket-index reads work
+  transparently. SECURITY.md known-hardening item now marked
+  mitigated, sibling shape to #153.
+
 ### Tracked follow-ups
 
 - **[#168](https://github.com/eris-ths/guild-cli/issues/168)** —
