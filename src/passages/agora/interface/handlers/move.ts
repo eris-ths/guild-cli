@@ -49,7 +49,7 @@ export async function moveOnPlay(deps: MoveDeps, args: ParsedArgs): Promise<numb
     );
     return 1;
   }
-  const text = requireOption(args, 'text', '--text required');
+  const text = requireOption(args, 'text', '"..."');
   const by = optionalOption(args, 'by', 'GUILD_ACTOR');
   if (!by) {
     process.stderr.write(

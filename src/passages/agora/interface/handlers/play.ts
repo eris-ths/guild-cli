@@ -42,7 +42,7 @@ export interface PlayDeps {
 export async function startPlay(deps: PlayDeps, args: ParsedArgs): Promise<number> {
   rejectUnknownFlags(args, PLAY_KNOWN_FLAGS, 'play');
 
-  const slug = requireOption(args, 'slug', '--slug required (game to play)');
+  const slug = requireOption(args, 'slug', '<game-slug>');
   const by = optionalOption(args, 'by', 'GUILD_ACTOR');
   if (!by) {
     process.stderr.write(

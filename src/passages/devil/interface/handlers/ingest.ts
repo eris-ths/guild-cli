@@ -166,7 +166,7 @@ export async function ingestSource(
   const sourceRaw = requireOption(
     args,
     'from',
-    '--from required (one of: ultrareview | claude-security | scg)',
+    '<ultrareview|claude-security|scg>',
   );
   if (!VALID_SOURCES.has(sourceRaw as IngestSource)) {
     process.stderr.write(
