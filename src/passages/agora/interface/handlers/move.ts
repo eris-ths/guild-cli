@@ -113,10 +113,18 @@ export async function moveOnPlay(deps: MoveDeps, args: ParsedArgs): Promise<numb
       ) + '\n',
     );
   } else {
+    // Text-mode: success line only. The `next:` hint that used to
+    // print here was redundant (agora play / resume already named
+    // move + suspend as the branches) and broke immersion when a
+    // user wrote three or four moves in a row — the same hint
+    // re-asserting itself on every flow-shaped verb. Per the
+    // post-#174 dogfood reviewer observation: "move 003 で書いたら、
+    // その応答にもまさにそのhintが出てきて、再帰的に証明された."
+    // suggested_next stays in the JSON envelope above for
+    // orchestrators; humans in flow get the success line and
+    // nothing else.
     process.stdout.write(
-      `✓ move ${move.id} appended to ${play.id} on game=${play.game} by ${by}\n` +
-        `  next: agora move ${play.id} --by ${by} "<text>"  (continue)\n` +
-        `        or agora suspend ${play.id} --cliff "..." --invitation "..."  (leave a cliff)\n`,
+      `✓ move ${move.id} appended to ${play.id} on game=${play.game} by ${by}\n`,
     );
   }
   return 0;
