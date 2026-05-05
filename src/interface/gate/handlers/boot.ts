@@ -20,6 +20,7 @@ import {
   PassageOrientationSummary,
 } from '../../shared/PassageOrientation.js';
 import { agoraOrientation } from '../../../passages/agora/interface/orientation.js';
+import { ctxOrientation } from '../../../passages/ctx/interface/orientation.js';
 import { devilOrientation } from '../../../passages/devil/interface/orientation.js';
 
 /**
@@ -526,6 +527,7 @@ const PASSAGE_ORIENTATION_REGISTRY: ReadonlyArray<{
 }> = [
   { name: 'agora', provider: agoraOrientation },
   { name: 'devil', provider: devilOrientation },
+  { name: 'ctx', provider: ctxOrientation },
 ];
 
 async function collectCrossPassage(
