@@ -19,6 +19,7 @@ import { GuildConfig } from '../../../infrastructure/config/GuildConfig.js';
 import { parseArgs, HelpRequested } from '../../../interface/shared/parseArgs.js';
 import { renderVerbHelp } from '../../../interface/shared/verbHelp.js';
 import { sanitizeError } from '../../../interface/shared/sanitizeError.js';
+import { nearestCommand } from '../../../interface/shared/nearestCommand.js';
 import { DomainError } from '../../../domain/shared/DomainError.js';
 import { YamlDevilReviewRepository } from '../infrastructure/YamlDevilReviewRepository.js';
 import { BundledLenseCatalog } from '../infrastructure/BundledLenseCatalog.js';
@@ -152,6 +153,14 @@ Design issue: https://github.com/eris-ths/guild-cli/issues/126
 Sister project: https://github.com/eris-ths/supply-chain-guard
 `;
 
+// Mirror of the switch below for did-you-mean suggestions. A verb
+// forgotten here loses its typo hint, doesn't crash anything.
+const DEVIL_COMMANDS = [
+  'open', 'entry', 'list', 'show', 'dismiss', 'resolve',
+  'suspend', 'resume', 'ingest', 'conclude', 'schema',
+] as const;
+
+
 export async function main(argv: readonly string[]): Promise<number> {
   if (argv.length === 0 || argv[0] === '--help' || argv[0] === '-h') {
     process.stdout.write(HELP);
@@ -193,12 +202,16 @@ export async function main(argv: readonly string[]): Promise<number> {
         return await ingestSource({ reviews, lenses, personas, config }, args);
       case 'conclude':
         return await concludeReview({ reviews, lenses, config }, args);
-      default:
+      default: {
+        const hint = nearestCommand(cmd, DEVIL_COMMANDS);
+        const suggest = hint ? `\n  did you mean: devil ${hint}?` : '';
         process.stderr.write(
-          `devil: unknown verb: ${cmd}\n` +
-            `(v1 surface from #126: open / entry / list / show / dismiss / resolve / suspend / resume / ingest / conclude / schema)\n`,
+          `devil: unknown verb: ${cmd}${suggest}\n` +
+            `  v1 surface (#126): open / entry / list / show / dismiss / resolve / ` +
+            `suspend / resume / ingest / conclude / schema.\n`,
         );
         return 1;
+      }
     }
   } catch (e) {
     if (e instanceof HelpRequested) {
