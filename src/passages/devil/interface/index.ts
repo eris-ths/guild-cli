@@ -20,6 +20,7 @@ import { parseArgs, HelpRequested } from '../../../interface/shared/parseArgs.js
 import { renderVerbHelp } from '../../../interface/shared/verbHelp.js';
 import { sanitizeError } from '../../../interface/shared/sanitizeError.js';
 import { nearestCommand } from '../../../interface/shared/nearestCommand.js';
+import { getPackageVersion, isVersionFlag } from '../../../interface/shared/version.js';
 import { DomainError } from '../../../domain/shared/DomainError.js';
 import { YamlDevilReviewRepository } from '../infrastructure/YamlDevilReviewRepository.js';
 import { BundledLenseCatalog } from '../infrastructure/BundledLenseCatalog.js';
@@ -166,8 +167,10 @@ export async function main(argv: readonly string[]): Promise<number> {
     process.stdout.write(HELP);
     return 0;
   }
-  if (argv[0] === '--version') {
-    process.stdout.write('devil-review (under guild-cli) — alpha (v1 complete, #126)\n');
+  if (isVersionFlag(argv)) {
+    process.stdout.write(
+      `devil-review (under guild-cli ${getPackageVersion()}) — alpha (v1 complete, #126)\n`,
+    );
     return 0;
   }
 
