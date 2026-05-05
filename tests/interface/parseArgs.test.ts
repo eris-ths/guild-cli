@@ -246,6 +246,64 @@ test('parseArgs: bare --key followed by --value still lands as boolean (ambiguou
   assert.equal(args.options['reason'], true);
 });
 
+// ── Per-verb boolean-flag registration (issue #158) ──
+//
+// Prior to #158, every boolean flag had to live in the global
+// KNOWN_BOOLEAN_FLAGS set in parseArgs.ts. New verbs that forgot to
+// register would have their boolean flags silently consume the next
+// token. The per-verb pattern: `parseArgs(argv, { booleanFlags })`
+// extends the active boolean set for one call.
+
+test('parseArgs: booleanFlags option treats verb-local flags as boolean', () => {
+  // Without registration, `--my-bool somevalue` reads "somevalue" as
+  // the flag value (the slow-burning footgun the issue calls out).
+  const without = parseArgs(['--my-bool', 'somevalue']);
+  assert.equal(without.options['my-bool'], 'somevalue', 'precondition: leak observable');
+  assert.deepEqual(without.positional, []);
+
+  // With registration, the same argv treats --my-bool as boolean and
+  // "somevalue" as the next positional, which is the intent for any
+  // verb that documents --my-bool as a boolean.
+  const withReg = parseArgs(['--my-bool', 'somevalue'], {
+    booleanFlags: new Set(['my-bool']),
+  });
+  assert.equal(withReg.options['my-bool'], true);
+  assert.deepEqual(withReg.positional, ['somevalue']);
+});
+
+test('parseArgs: booleanFlags is unioned with the global KNOWN_BOOLEAN_FLAGS', () => {
+  // Verb-local registration MUST NOT shadow or replace the global
+  // set — `dry-run` (global) and a verb-local flag both work in the
+  // same call.
+  const args = parseArgs(['--dry-run', 'literal-value', '--my-bool', 'positional'], {
+    booleanFlags: new Set(['my-bool']),
+  });
+  assert.equal(args.options['dry-run'], true);
+  assert.equal(args.options['my-bool'], true);
+  // Both eaten tokens flow through to positional in argv order.
+  assert.deepEqual(args.positional, ['literal-value', 'positional']);
+});
+
+test('parseArgs: empty booleanFlags is equivalent to omitting the option', () => {
+  // Hot-path: passing `{ booleanFlags: new Set() }` should not
+  // change behaviour vs `parseArgs(argv)`. Pin the equivalence so
+  // a future internal refactor doesn't introduce a divergence.
+  const a = parseArgs(['--foo', 'bar', '--dry-run']);
+  const b = parseArgs(['--foo', 'bar', '--dry-run'], { booleanFlags: new Set() });
+  assert.deepEqual(a, b);
+});
+
+test('parseArgs: --key=value form ignores booleanFlags (explicit value wins)', () => {
+  // The = form is unambiguous: the user gave a literal value. Even
+  // for a verb-local boolean flag, --my-bool=false should produce
+  // the string "false", not coerce to true. This matches how the
+  // parser handles `--dry-run=false` for the global set.
+  const args = parseArgs(['--my-bool=false'], {
+    booleanFlags: new Set(['my-bool']),
+  });
+  assert.equal(args.options['my-bool'], 'false');
+});
+
 test('requireOption: boolean-landing emits a hint pointing at the escape valves', () => {
   const args = parseArgs(['--reason', '--another-flag']);
   assert.throws(

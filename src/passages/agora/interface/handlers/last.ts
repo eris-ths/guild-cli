@@ -16,6 +16,16 @@ const LAST_KNOWN_FLAGS: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * Boolean-typed flags for `agora last`. Exported so the binary's
+ * dispatch layer can register them with `parseArgs`, preventing the
+ * default consume-next behaviour from silently eating a positional
+ * (issue #158). Sibling to `LAST_KNOWN_FLAGS` and a strict subset.
+ */
+export const LAST_BOOLEAN_FLAGS: ReadonlySet<string> = new Set([
+  'include-concluded',
+]);
+
+/**
  * agora last — return the actor's most recent play.
  *
  * Usage:
