@@ -5,6 +5,7 @@ import {
   optionalOption,
   rejectUnknownFlags,
 } from '../../shared/parseArgs.js';
+import { notFoundMessage } from '../../shared/notFoundHint.js';
 
 // Known flags per write-verb. Silent-ignore of unknown flags (e.g.
 // `--executr noir` instead of `--executor noir`) would let a typo
@@ -98,14 +99,9 @@ import { emitWriteResponse, parseFormat } from './writeFormat.js';
 
 export async function reqCreate(c: C, args: ParsedArgs): Promise<number> {
   rejectUnknownFlags(args, REQUEST_CREATE_KNOWN_FLAGS, 'request');
-  const from = requireOption(
-    args,
-    'from',
-    'gate request --from <m> ...',
-    'GUILD_ACTOR',
-  );
-  const action = requireOption(args, 'action', '--action required');
-  let reason = requireOption(args, 'reason', '--reason required');
+  const from = requireOption(args, 'from', '<m>', 'GUILD_ACTOR');
+  const action = requireOption(args, 'action', '"..."');
+  let reason = requireOption(args, 'reason', '"..."');
   // `--reason -` reads from stdin — parity with `gate review --comment -`.
   // Trim because heredoc / echo append a trailing newline that clutters
   // the rendered status_log note.
@@ -277,7 +273,7 @@ export async function reqShow(c: C, args: ParsedArgs): Promise<number> {
   }
   const r = await c.requestUC.show(id);
   if (!r) {
-    process.stderr.write(`not found: ${id}\n`);
+    process.stderr.write(notFoundMessage('request', id));
     return 1;
   }
   const fields = optionalOption(args, 'fields');
@@ -496,7 +492,7 @@ export async function reqApprove(c: C, args: ParsedArgs): Promise<number> {
   rejectUnknownFlags(args, APPROVE_KNOWN_FLAGS, 'approve');
   const id = args.positional[0];
   if (!id) throw new Error('Usage: gate approve <id> --by <m> [--dry-run]');
-  const by = requireOption(args, 'by', '--by required', 'GUILD_ACTOR');
+  const by = requireOption(args, 'by', '<m>', 'GUILD_ACTOR');
   const note = optionalOption(args, 'note');
   const invokedBy = resolveInvokedBy(by, 'approve', id);
   if (isDryRun(args)) {
@@ -533,7 +529,7 @@ export async function reqDeny(c: C, args: ParsedArgs): Promise<number> {
         dashedValueHint(args, ['reason', 'note']),
     );
   }
-  const by = requireOption(args, 'by', '--by required', 'GUILD_ACTOR');
+  const by = requireOption(args, 'by', '<m>', 'GUILD_ACTOR');
   const invokedBy = resolveInvokedBy(by, 'deny', id);
   if (isDryRun(args)) {
     const prior = await c.requestUC.show(id);
@@ -552,7 +548,7 @@ export async function reqExecute(c: C, args: ParsedArgs): Promise<number> {
   rejectUnknownFlags(args, EXECUTE_KNOWN_FLAGS, 'execute');
   const id = args.positional[0];
   if (!id) throw new Error('Usage: gate execute <id> --by <m> [--dry-run]');
-  const by = requireOption(args, 'by', '--by required', 'GUILD_ACTOR');
+  const by = requireOption(args, 'by', '<m>', 'GUILD_ACTOR');
   const note = optionalOption(args, 'note');
   const invokedBy = resolveInvokedBy(by, 'execute', id);
   if (isDryRun(args)) {
@@ -564,6 +560,20 @@ export async function reqExecute(c: C, args: ParsedArgs): Promise<number> {
     return 0;
   }
   const r = await c.requestUC.execute(id, by, note, invokedBy);
+  // `--executor` is informational, not access control: the substrate
+  // records both the assignment and the actual actor, but does not
+  // refuse a mismatched execute. Surface a notice so a fresh agent
+  // who reads `--executor bob` doesn't silently interpret it as a
+  // gate. See issue #168 for the design rationale ("anyone may
+  // execute; the audit trail captures who did"). Mirrors the shape
+  // of the self-approve notice on `gate approve`.
+  const assignedExecutor = r.executor?.value;
+  if (assignedExecutor !== undefined && assignedExecutor !== by) {
+    process.stderr.write(
+      `notice: ${by} executed request ${id} (assigned to ` +
+        `${assignedExecutor}); --executor records intent, not access.\n`,
+    );
+  }
   emitWriteResponse(parseFormat(args), r, `✓ executing: ${id}`, c.config);
   return 0;
 }
@@ -572,7 +582,7 @@ export async function reqComplete(c: C, args: ParsedArgs): Promise<number> {
   rejectUnknownFlags(args, COMPLETE_KNOWN_FLAGS, 'complete');
   const id = args.positional[0];
   if (!id) throw new Error('Usage: gate complete <id> --by <m> [--dry-run]');
-  const by = requireOption(args, 'by', '--by required', 'GUILD_ACTOR');
+  const by = requireOption(args, 'by', '<m>', 'GUILD_ACTOR');
   const note = optionalOption(args, 'note');
   const invokedBy = resolveInvokedBy(by, 'complete', id);
   if (isDryRun(args)) {
@@ -607,7 +617,7 @@ export async function reqFail(c: C, args: ParsedArgs): Promise<number> {
         dashedValueHint(args, ['reason', 'note']),
     );
   }
-  const by = requireOption(args, 'by', '--by required', 'GUILD_ACTOR');
+  const by = requireOption(args, 'by', '<m>', 'GUILD_ACTOR');
   const invokedBy = resolveInvokedBy(by, 'fail', id);
   if (isDryRun(args)) {
     const prior = await c.requestUC.show(id);
@@ -671,9 +681,9 @@ async function resolveReason(args: ParsedArgs, _verb: string): Promise<string> {
 
 export async function reqFastTrack(c: C, args: ParsedArgs): Promise<number> {
   rejectUnknownFlags(args, FAST_TRACK_KNOWN_FLAGS, 'fast-track');
-  const from = requireOption(args, 'from', '--from required', 'GUILD_ACTOR');
-  const action = requireOption(args, 'action', '--action required');
-  let reason = requireOption(args, 'reason', '--reason required');
+  const from = requireOption(args, 'from', '<m>', 'GUILD_ACTOR');
+  const action = requireOption(args, 'action', '"..."');
+  let reason = requireOption(args, 'reason', '"..."');
   if (reason === '-') reason = (await readStdin()).trim();
   const executor = optionalOption(args, 'executor') ?? from;
   const autoReview = optionalOption(args, 'auto-review');

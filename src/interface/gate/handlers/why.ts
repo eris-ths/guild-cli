@@ -3,6 +3,7 @@ import {
   optionalOption,
   rejectUnknownFlags,
 } from '../../shared/parseArgs.js';
+import { notFoundMessage } from '../../shared/notFoundHint.js';
 import { C } from './internal.js';
 import { Request } from '../../../domain/request/Request.js';
 
@@ -60,7 +61,7 @@ export async function whyCmd(c: C, args: ParsedArgs): Promise<number> {
   }
   const r = await c.requestUC.show(id);
   if (!r) {
-    process.stderr.write(`not found: ${id}\n`);
+    process.stderr.write(notFoundMessage('request', id));
     return 1;
   }
   const payload = buildWhy(r);

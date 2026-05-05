@@ -121,7 +121,7 @@ test('dismiss without --reason fails', (t) => {
     { GUILD_ACTOR: 'alice' },
   );
   assert.equal(r.status, 1);
-  assert.match(r.stderr, /--reason required/);
+  assert.match(r.stderr, /Missing --reason/);
 });
 
 test('dismiss with invalid --reason fails with enum list', (t) => {

@@ -34,9 +34,9 @@ export interface NewGameDeps {
 export async function newGame(deps: NewGameDeps, args: ParsedArgs): Promise<number> {
   rejectUnknownFlags(args, NEW_KNOWN_FLAGS, 'new');
 
-  const slug = requireOption(args, 'slug', '--slug required');
-  const kind = requireOption(args, 'kind', '--kind required (quest|sandbox)');
-  const title = requireOption(args, 'title', '--title required');
+  const slug = requireOption(args, 'slug', '<slug>');
+  const kind = requireOption(args, 'kind', '<quest|sandbox>');
+  const title = requireOption(args, 'title', '"..."');
   const description = optionalOption(args, 'description');
   const by = optionalOption(args, 'by', 'GUILD_ACTOR');
   if (!by) {

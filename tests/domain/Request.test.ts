@@ -115,6 +115,59 @@ test('canTransition rules', () => {
   assert.throws(() => assertTransition('completed', 'failed'), DomainError);
 });
 
+test('assertTransition: illegal move surfaces the valid next states', () => {
+  // Touch-feel improvement: the user typed `complete` on a pending
+  // request and got "illegal" but no signal toward the right verb.
+  // The message now lists the valid next states from the current
+  // state — verb hints (`gate approve`) belong in the interface
+  // layer; here we only cover the domain vocabulary the transition
+  // map already carries.
+  assert.throws(
+    () => assertTransition('pending', 'completed'),
+    (e: unknown) => {
+      assert.ok(e instanceof DomainError);
+      assert.match(e.message, /Illegal state transition: pending → completed\./);
+      assert.match(
+        e.message,
+        /valid next states from pending: approved, denied\./,
+      );
+      return true;
+    },
+  );
+});
+
+test('assertTransition: terminal states say so explicitly', () => {
+  // From completed/failed/denied there is no legal next move. Saying
+  // "valid next states from completed: " (empty) would be confusing;
+  // name the dead-end branch in plain English instead.
+  assert.throws(
+    () => assertTransition('completed', 'executing'),
+    (e: unknown) => {
+      assert.ok(e instanceof DomainError);
+      assert.match(
+        e.message,
+        /completed is terminal — no further transitions are allowed\./,
+      );
+      return true;
+    },
+  );
+});
+
+test('assertTransition: same-state idempotency message stays unchanged', () => {
+  // The `Request is already X` branch is the common idempotency error
+  // (approving an already-approved request). It already reads in plain
+  // English; pin that the next-states enrichment didn't accidentally
+  // bleed into it.
+  assert.throws(
+    () => assertTransition('approved', 'approved'),
+    (e: unknown) => {
+      assert.ok(e instanceof DomainError);
+      assert.match(e.message, /^Request is already approved\.$/);
+      return true;
+    },
+  );
+});
+
 test('Request rejects invalid executor name', () => {
   assert.throws(
     () =>

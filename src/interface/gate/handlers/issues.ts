@@ -4,6 +4,7 @@ import {
   optionalOption,
   rejectUnknownFlags,
 } from '../../shared/parseArgs.js';
+import { notFoundMessage } from '../../shared/notFoundHint.js';
 import {
   C,
   readStdin,
@@ -63,9 +64,9 @@ export async function issuesCmd(c: C, args: ParsedArgs): Promise<number> {
   }
   if (sub === 'add') {
     rejectUnknownFlags(args, ISSUES_ADD_KNOWN_FLAGS, 'issues add');
-    const from = requireOption(args, 'from', '--from required', 'GUILD_ACTOR');
-    const severity = requireOption(args, 'severity', '--severity required');
-    const area = requireOption(args, 'area', '--area required');
+    const from = requireOption(args, 'from', '<m>', 'GUILD_ACTOR');
+    const severity = requireOption(args, 'severity', '<low|med|high>');
+    const area = requireOption(args, 'area', '<area>');
     // Text resolution mirrors `gate issues note`:
     //   --text <s>       inline short text
     //   --text -         STDIN until EOF
@@ -200,7 +201,7 @@ export async function issuesCmd(c: C, args: ParsedArgs): Promise<number> {
     rejectUnknownFlags(args, ISSUES_TRANSITION_KNOWN_FLAGS, `issues ${sub}`);
     const id = args.positional[1];
     if (!id) throw new Error(`Usage: gate issues ${sub} <id> --by <m>`);
-    const by = requireOption(args, 'by', '--by required', 'GUILD_ACTOR');
+    const by = requireOption(args, 'by', '<m>', 'GUILD_ACTOR');
     const invokedBy = resolveInvokedBy(by, `issues ${sub}`, id);
     const issue = await c.issueUC.setState(id, nextState, by, invokedBy);
     process.stdout.write(`✓ issue ${issue.id.value}: → ${nextState} by ${by}\n`);
@@ -218,7 +219,7 @@ async function issuesPromote(c: C, args: ParsedArgs): Promise<number> {
         '[--auto-review <m>] [--action <a>] [--reason <r>]',
     );
   }
-  const from = requireOption(args, 'from', '--from required', 'GUILD_ACTOR');
+  const from = requireOption(args, 'from', '<m>', 'GUILD_ACTOR');
   const executor = optionalOption(args, 'executor');
   const autoReview = optionalOption(args, 'auto-review');
   const actionOverride = optionalOption(args, 'action');
@@ -226,7 +227,7 @@ async function issuesPromote(c: C, args: ParsedArgs): Promise<number> {
 
   const issue = await c.issueUC.find(id);
   if (!issue) {
-    process.stderr.write(`issue not found: ${id}\n`);
+    process.stderr.write(notFoundMessage('issue', id));
     return 1;
   }
   const j = issue.toJSON();
@@ -303,7 +304,7 @@ async function issuesNote(c: C, args: ParsedArgs): Promise<number> {
       'Usage: gate issues note <id> --by <m> [--text <s> | --text - | <text>]',
     );
   }
-  const by = requireOption(args, 'by', '--by required', 'GUILD_ACTOR');
+  const by = requireOption(args, 'by', '<m>', 'GUILD_ACTOR');
   // Text resolution mirrors `gate review --comment`:
   //   --text <s>       inline short note
   //   --text -         STDIN until EOF

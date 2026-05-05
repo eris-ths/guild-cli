@@ -32,9 +32,9 @@ export async function reqReview(c: C, args: ParsedArgs): Promise<number> {
         '[--comment <s> | --comment - | <comment>]',
     );
   }
-  const by = requireOption(args, 'by', '--by required', 'GUILD_ACTOR');
-  const lense = requireOption(args, 'lense', '--lense required');
-  const verdict = requireOption(args, 'verdict', '--verdict required');
+  const by = requireOption(args, 'by', '<m>', 'GUILD_ACTOR');
+  const lense = requireOption(args, 'lense', '<l>');
+  const verdict = requireOption(args, 'verdict', '<ok|concern|reject>');
 
   // Comment resolution order:
   //   1. --comment <s>    option value (inline short comment)

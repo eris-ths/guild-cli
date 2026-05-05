@@ -69,16 +69,8 @@ export async function suspendReview(
   }
   parseReviewId(reviewId);
 
-  const cliff = requireOption(
-    args,
-    'cliff',
-    '--cliff required (what just happened — the unfinished thread)',
-  );
-  const invitation = requireOption(
-    args,
-    'invitation',
-    '--invitation required (what the next opener of this thread should attempt)',
-  );
+  const cliff = requireOption(args, 'cliff', '"<what just happened>"');
+  const invitation = requireOption(args, 'invitation', '"<next opener\'s move>"');
 
   const by = optionalOption(args, 'by', 'GUILD_ACTOR');
   if (!by) {

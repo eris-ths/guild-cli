@@ -28,6 +28,7 @@ const GATE = resolve(here, '../../../bin/gate.mjs');
 const AGORA = resolve(here, '../../../bin/agora.mjs');
 const DEVIL = resolve(here, '../../../bin/devil.mjs');
 const CTX = resolve(here, '../../../bin/ctx.mjs');
+const GUILD = resolve(here, '../../../bin/guild.mjs');
 
 function bootstrap(): { root: string; cleanup: () => void } {
   const root = mkdtempSync(join(tmpdir(), 'guild-verb-help-'));
@@ -180,6 +181,7 @@ test('VERB_EXAMPLES: every documented verb is mapped to a runnable example', () 
       'suspend', 'resume', 'ingest', 'schema',
     ],
     ctx: ['record'],
+    guild: ['list', 'show', 'new', 'validate'],
   };
   for (const [cli, verbs] of Object.entries(expected)) {
     const map = VERB_EXAMPLES[cli];
@@ -312,6 +314,36 @@ test('ctx record --help: exits 0 and uses the ctx prefix', (t) => {
   assert.match(r.stdout, /--fact/);
   assert.match(r.stdout, /--tag/);
   assert.match(r.stdout, /e\.g\. ctx record --fact/);
+});
+
+test('guild <verb> --help: exits 0 across list / show / new / validate', (t) => {
+  // #148 rolled out the universal --help mechanism for gate / agora / devil /
+  // ctx but the operator-helper `guild` was out of scope. This pins the
+  // follow-up: all four guild verbs honour --help with the same shape.
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  for (const verb of ['list', 'show', 'new', 'validate']) {
+    const r = run(GUILD, root, [verb, '--help']);
+    assert.equal(r.status, 0, `guild ${verb} --help should exit 0`);
+    assert.match(r.stdout, new RegExp(`guild ${verb}:`));
+    assert.match(r.stdout, /see `guild --help`/);
+    assert.match(r.stdout, new RegExp(`e\\.g\\. guild ${verb}`));
+  }
+});
+
+test('guild new --bogus: error message uses verb-only prefix (no "guild" hardcode)', (t) => {
+  // Mirrors the cross-CLI sanity below — the verb name + invocation are
+  // enough; the CLI prefix in the error is misleading.
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  const r = run(GUILD, root, ['new', '--bogus-flag-xyz']);
+  assert.notEqual(r.status, 0);
+  assert.match(r.stderr, /new: unknown flag.*--bogus-flag-xyz/);
+  assert.equal(
+    /guild new: unknown flag/.test(r.stderr),
+    false,
+    'guild errors should not say "guild" in the unknown-flag prefix',
+  );
 });
 
 test('non-help unknown flag still errors with verb-only prefix (no "gate" hardcode)', (t) => {
