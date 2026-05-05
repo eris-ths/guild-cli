@@ -118,7 +118,13 @@ test('devil <unknown-verb> surfaces v1 surface error naming the catalog', (t) =>
   const r = runDevil(root, ['nonsense']);
   assert.equal(r.status, 1);
   assert.match(r.stderr, /unknown verb: nonsense/);
-  assert.match(r.stderr, /v1 surface from #126/);
+  // The catalog hint is preserved across the did-you-mean refactor;
+  // exact prose is `v1 surface (#126): open / entry / ...`. Pin only
+  // the parts a fresh agent reading the error would actually scan
+  // (the issue ref + a couple of verbs from the catalog).
+  assert.match(r.stderr, /v1 surface .*#126/);
+  assert.match(r.stderr, /open/);
+  assert.match(r.stderr, /conclude/);
 });
 
 test('devil schema rejects unknown flag', (t) => {
