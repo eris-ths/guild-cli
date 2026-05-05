@@ -145,8 +145,14 @@ export async function listAgora(deps: ListDeps, args: ParsedArgs): Promise<numbe
           : p.state === 'concluded'
             ? `[${p.state} ✓]`
             : `[${p.state}]`;
+      // For --state suspended, surface the suspension timestamp so the
+      // caller can see the sort axis (#182 sorts by most-recent suspension,
+      // but without the timestamp on screen the ordering is opaque).
+      const suspendedAt =
+        stateFilter === 'suspended' ? p.suspensions.at(-1)?.at : undefined;
+      const trailer = suspendedAt ? ` (suspended ${suspendedAt})` : '';
       process.stdout.write(
-        `  ${p.id}  ${tag.padEnd(15)} game=${p.game.padEnd(20)} moves=${moves} by ${p.started_by}\n`,
+        `  ${p.id}  ${tag.padEnd(15)} game=${p.game.padEnd(20)} moves=${moves} by ${p.started_by}${trailer}\n`,
       );
     }
   }
