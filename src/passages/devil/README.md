@@ -19,7 +19,8 @@ how the substrate raises the floor.
 
 If your work is decision-shaped, use `gate`. If it's
 exploration-shaped (open-ended thinking), use `agora`. If it's
-defense-shaped, devil.
+a verdict-less, thread-less observation worth pinning for
+future-you, use `ctx`. If it's defense-shaped, devil.
 
 ## Lore upstream
 

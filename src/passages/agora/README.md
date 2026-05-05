@@ -14,7 +14,9 @@ plays close with prose, not with `ok|concern|reject`.
 
 If your work is decision-shaped, use `gate`. If it's
 defense-shaped (security review against a code change), use
-`devil`. If it's exploration-shaped, agora.
+`devil`. If it's a verdict-less, thread-less observation that
+future-you should remember, use `ctx`. If it's
+exploration-shaped, agora.
 
 ## Lore upstream
 

@@ -103,6 +103,67 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
   shown when `--state` is omitted now mentions `| all` and includes
   a `gate list --state all` example line.
 
+- **`guild` verbs honour `--help` like every other CLI.**
+  ([#166](https://github.com/eris-ths/guild-cli/pull/166))
+  PR #148 rolled out the universal `HelpRequested` /
+  `rejectUnknownFlags` / `renderVerbHelp` mechanism across gate /
+  agora / devil / ctx, but the operator-helper `guild` was out of
+  scope. The 4 `guild` verbs (`list` / `show` / `new` / `validate`)
+  now honour `--help` with the same shape and `guild new --bogus`
+  no longer hardcodes `guild` in the unknown-flag error prefix.
+
+- **`agora` / `ctx` / `devil` get the same did-you-mean as `gate`.**
+  ([#173](https://github.com/eris-ths/guild-cli/pull/173))
+  Typo'd verbs across the three passages now surface the closest
+  matches inline rather than dumping the full HELP. Same Levenshtein
+  shape gate already used. Also drops the `agora — v0 skeleton`
+  label from agora's HELP block (alpha v1 has shipped).
+
+- **`--version` reports a parseable version across all 5 CLIs.**
+  ([#174](https://github.com/eris-ths/guild-cli/pull/174))
+  Pre-fix, `gate --version` and `guild --version` printed
+  `guild-cli <X.Y.Z>` while `agora` / `ctx` / `devil --version`
+  printed status strings without a version number — a shell that
+  did `agora --version | grep <version>` was silently broken. Each
+  passage now prints `<cli> (under guild-cli <X.Y.Z>) — <status>`
+  so the version is grep-able and the status remains visible.
+  Also: `agora new` `suggested_next` points at `play` (the natural
+  next step) instead of `list`.
+
+- **`agora new` defaults `--kind sandbox` and `--title` to the slug;**
+  **`agora move`'s next-hint stops repeating on every move.**
+  ([#177](https://github.com/eris-ths/guild-cli/pull/177))
+  `agora new --slug <s>` now works without `--kind` or `--title`,
+  matching the most common opening shape (Sandbox plays without
+  ceremony). And the `next: agora move ... | agora suspend ...`
+  block that previously printed after every successful move was
+  noise once a play got going — `move` is now a quiet `✓` line.
+
+### Security
+
+- **Sanitize absolute paths in CLI error messages.**
+  ([#172](https://github.com/eris-ths/guild-cli/pull/172),
+  closes [#153](https://github.com/eris-ths/guild-cli/issues/153))
+  Errors from `safeFs` and friends carried the full resolved path
+  (e.g. `/Users/alice/work/proj/substrate/requests/pending/foo.yaml`),
+  incidentally leaking home-directory and checkout-location info
+  into logs / screenshots / bug reports. Each CLI's main() catch
+  now collapses the configured `contentRoot` prefix to the literal
+  `<content_root>` token via `sanitizeError` (new pure function in
+  `src/interface/shared/sanitizeError.ts`). The structural tail is
+  preserved so debugging is not impaired. Paths outside contentRoot
+  (`/etc`, `/tmp`, user-input absolute paths) are intentionally not
+  sanitized — the threat model is single-user, trusted-environment.
+
+- **Close `agora new` collision-error sanitizer hole.**
+  ([#175](https://github.com/eris-ths/guild-cli/pull/175))
+  Follow-up to #172. The `GameSlugCollision` branch returned 1
+  directly from the handler instead of throwing, bypassing main()'s
+  catch where `sanitizeError` runs — so its `At: <path>` line still
+  leaked the absolute substrate path. Apply `sanitizeError` at the
+  handler level so this alternate egress matches the contract every
+  other error-path emission already holds.
+
 ### Changed
 
 - **DomainError trailing `(field)` tag and `DomainError:` prefix

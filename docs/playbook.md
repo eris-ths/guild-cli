@@ -1,8 +1,8 @@
 # guild playbook — patterns, combos, recipes
 
-Practical guide for using `gate` / `agora` / `devil` together. Each
-section is a recipe — *when* to reach for *what*, with concrete
-verb sequences.
+Practical guide for using `gate` / `agora` / `devil` / `ctx`
+together. Each section is a recipe — *when* to reach for *what*,
+with concrete verb sequences.
 
 > **Audience.** Primarily AI agents who will be doing the work.
 > Per [`lore/principles/11-ai-first-human-as-projection.md`](../lore/principles/11-ai-first-human-as-projection.md),
@@ -10,9 +10,9 @@ verb sequences.
 > Recipes are command sequences; the rationale lives alongside
 > for cross-context memory.
 
-If you don't yet know what the three passages *are*, start with
+If you don't yet know what the passages *are*, start with
 [`../README.md`](../README.md) § "Architecture: container with
-three passages". This doc assumes you know each passage's shape;
+passages". This doc assumes you know each passage's shape;
 it covers *combos* and *workflow*.
 
 ## Dispatch in one breath
@@ -22,10 +22,12 @@ it covers *combos* and *workflow*.
 | `gate`  | **判断 / judgment**     | decide on a request    | needs a verdict (approve / deny / complete / fail / review) |
 | `agora` | **探索 / exploration**  | stay with a thought    | open question; can't / shouldn't conclude yet |
 | `devil` | **守備 / defense**      | protect end-users      | could harm a third party if it lands without scrutiny |
+| `ctx`   | **事実 / fact**         | record an observation  | something happened that future-you should remember (no verdict, no scrutiny — just a fact) |
 
 **Heuristic when uncertain:** *"Could a verdict close this?"*
 Yes → gate. No, but I want to keep going → agora. No, and
-something downstream could break badly → devil.
+something downstream could break badly → devil. No, and there's
+nothing to *do* — only something to *remember* — → ctx.
 
 ---
 
@@ -236,6 +238,57 @@ by this actor, at this time." Re-dismissing a dismissed entry
 is refused — substrate stays append-only at the contest level
 (file a new entry that `--addresses` the disputed one if you
 disagree).
+
+---
+
+## ctx-only patterns
+
+> **Phase 1 status.** ctx ships only `record` today; the remaining
+> six verbs (`fork` / `supersede` / `show` / `list` / `chain` /
+> `status`) land iteratively in phase 2. So the patterns here are
+> intentionally narrow — more recipes appear as the verb surface
+> fills in. Substrate written today is forward-compatible with the
+> phase-2 verbs (id shape, tag prefix discipline).
+
+### X1: pin a fact future-you needs
+
+```bash
+ctx record --fact "<one prose paragraph>" \
+  --tag prefix:value,prefix:value
+```
+
+**Shape**: an observation worth remembering across sessions but
+without a verdict (gate-shape) or open thread (agora-shape) or
+defense scope (devil-shape). Examples: "noir's review of #154
+called direction 1 minimal", "git lock collision observed during
+worktree concurrent commit", "main has been quiet for 3 iters of
+the watch loop".
+
+The `--tag` shape is `prefix:value` (lowercase, kebab-case).
+Shared tag prefixes — `topic:`, `scope:`, `iter:`, `observation:`
+— make later filtering tractable when phase-2 `ctx list` and
+`ctx chain` arrive. Plan tags as if they will be queried.
+
+Distinct from a `gate request` because there is no action
+implied. Distinct from an `agora move` because there is no
+ongoing thread. Distinct from a `devil entry` because there is
+no target under review. ctx is the verdict-less, thread-less,
+target-less append.
+
+### X2: cross-passage breadcrumb
+
+ctx is also the right place to leave a substrate breadcrumb when
+the action lives in another passage. Example: during a long
+`agora` play, you notice a fact that *could* matter to a future
+gate decision but isn't part of this thread. Drop a `ctx record`
+mentioning the play id and tag it `cross-passage:agora` — the
+fact accumulates outside the play's scope, queryable later when
+phase-2 `ctx list` lands.
+
+This pattern keeps the agora play focused on its own thread
+without losing the side-observation, and avoids inflating the
+play's `moves[]` with material the next opener doesn't need to
+re-read.
 
 ---
 
