@@ -5,6 +5,7 @@ import {
   optionalOption,
   rejectUnknownFlags,
 } from '../../shared/parseArgs.js';
+import { notFoundMessage } from '../../shared/notFoundHint.js';
 
 // Known flags per write-verb. Silent-ignore of unknown flags (e.g.
 // `--executr noir` instead of `--executor noir`) would let a typo
@@ -272,7 +273,7 @@ export async function reqShow(c: C, args: ParsedArgs): Promise<number> {
   }
   const r = await c.requestUC.show(id);
   if (!r) {
-    process.stderr.write(`not found: ${id}\n`);
+    process.stderr.write(notFoundMessage('request', id));
     return 1;
   }
   const fields = optionalOption(args, 'fields');

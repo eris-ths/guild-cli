@@ -7,6 +7,7 @@ import {
   HelpRequested,
 } from '../shared/parseArgs.js';
 import { renderVerbHelp } from '../shared/verbHelp.js';
+import { notFoundMessage } from '../shared/notFoundHint.js';
 import { DomainError } from '../../domain/shared/DomainError.js';
 import { getPackageVersion, isVersionFlag } from '../shared/version.js';
 
@@ -61,7 +62,7 @@ export async function main(argv: readonly string[]): Promise<number> {
         if (!name) throw new Error('Usage: guild show <name>');
         const m = await c.memberUC.show(name);
         if (!m) {
-          process.stderr.write(`not found: ${name}\n`);
+          process.stderr.write(notFoundMessage('member', name));
           return 1;
         }
         process.stdout.write(JSON.stringify(m.toJSON(), null, 2) + '\n');

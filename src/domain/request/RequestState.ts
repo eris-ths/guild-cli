@@ -39,8 +39,21 @@ export function assertTransition(from: RequestState, to: RequestState): void {
   if (from === to) {
     throw new DomainError(`Request is already ${from}.`, 'state');
   }
+  // For every other illegal transition, surface the valid next states
+  // alongside the rejection. The transition map already encodes the
+  // answer; without showing it, the user is told their move was wrong
+  // but not what to do next — the "fresh agent typed `complete` on a
+  // pending request and stopped" failure mode in dogfood (P3).
+  // State names live in the domain vocabulary; verb hints (e.g. "try
+  // gate approve") belong in the interface layer and stay out of
+  // here on principle.
+  const validNext = TRANSITIONS[from];
+  const nextHint =
+    validNext.length > 0
+      ? `valid next states from ${from}: ${validNext.join(', ')}.`
+      : `${from} is terminal — no further transitions are allowed.`;
   throw new DomainError(
-    `Illegal state transition: ${from} → ${to}`,
+    `Illegal state transition: ${from} → ${to}.\n  ${nextHint}`,
     'state',
   );
 }
