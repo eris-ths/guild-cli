@@ -127,7 +127,7 @@ export async function suspendPlay(
       `✓ play suspended: ${play.id} [playing → suspended] by ${by}\n` +
         `  cliff:      ${cliff}\n` +
         `  invitation: ${invitation}\n` +
-        `  next: agora resume ${play.id} --by <m>  (when re-entering)\n`,
+        `  next: agora resume ${play.id} --game ${play.game} --by <m>  (when re-entering)\n`,
     );
   }
   return 0;

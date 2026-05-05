@@ -310,6 +310,28 @@ test('agora resume: JSON envelope surfaces resumed_suspension struct', (t) => {
   assert.equal(payload.suggested_next.verb, 'move');
 });
 
+test('agora suspend / resume: text next-hint includes --game so the id is usable as-is', (t) => {
+  // Same touch-feel contract as agora last + agora play (PR #186):
+  // play ids are per-game sequences. The success-line next-hint must
+  // already include --game or the user's first follow-up call errors
+  // with "Disambiguate with --game".
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  const playId = seedPlayingPlay(root);
+
+  const susp = runAgora(
+    root,
+    ['suspend', playId, '--cliff', 'c', '--invitation', 'i'],
+    { GUILD_ACTOR: 'alice' },
+  );
+  assert.equal(susp.status, 0);
+  assert.match(susp.stdout, /next: agora resume .+ --game pivot-game --by/);
+
+  const resumed = runAgora(root, ['resume', playId], { GUILD_ACTOR: 'alice' });
+  assert.equal(resumed.status, 0);
+  assert.match(resumed.stdout, /next: agora move .+ --game pivot-game --by alice/);
+});
+
 test('agora suspend: nonexistent play fails closed', (t) => {
   const { root, cleanup } = bootstrap();
   t.after(cleanup);

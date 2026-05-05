@@ -166,6 +166,11 @@ export async function lastPlay(deps: LastDeps, args: ParsedArgs): Promise<number
   // every downstream verb (move/suspend/cliff/resume) errors with a
   // "Disambiguate with --game" message. last is an orientation verb
   // — its job isn't done until the next call works.
+  //
+  // `concluded` is intentionally absent: terminal state, no further
+  // moves/suspensions/resumes are valid (mirrors conclude.ts which
+  // sets `suggested_next: null`). Surfacing a hint here would invite
+  // a call that always errors.
   if (last.state === 'playing') {
     process.stdout.write(
       `  next: agora move ${last.id} --game ${last.game} --text "..."\n` +
