@@ -68,6 +68,23 @@ export async function listAgora(deps: ListDeps, args: ParsedArgs): Promise<numbe
     plays = plays.filter((p) => p.state === stateFilter);
   }
 
+  // Sort: substrate (PlayRepository.listAll) returns id-desc, game-asc tie-break.
+  // For `--state suspended` the user is asking "what's been hibernating, and for
+  // how long?" — id-desc (creation date) is the wrong axis there: an old play
+  // suspended yesterday should sit above a new play suspended last week.
+  // So when filtering to suspended, re-sort by the most-recent suspension
+  // timestamp (descending: newest cliff on top, oldest dormant at the bottom).
+  // Other states keep the substrate contract (id-desc).
+  if (stateFilter === 'suspended') {
+    plays = [...plays].sort((a, b) => {
+      const aAt = a.suspensions.at(-1)?.at ?? '';
+      const bAt = b.suspensions.at(-1)?.at ?? '';
+      if (aAt !== bAt) return bAt < aAt ? -1 : 1; // desc
+      // Tie-break: keep substrate's id-desc so output stays deterministic.
+      return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
+    });
+  }
+
   if (format === 'json') {
     process.stdout.write(
       JSON.stringify(
