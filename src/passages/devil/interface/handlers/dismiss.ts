@@ -75,7 +75,7 @@ export async function dismissEntry(
   const reasonRaw = requireOption(
     args,
     'reason',
-    '--reason required (one of: not-applicable | accepted-risk | false-positive | out-of-scope | mitigated-elsewhere)',
+    '<not-applicable|accepted-risk|false-positive|out-of-scope|mitigated-elsewhere>',
   );
   const reason: DismissalReason = parseDismissalReason(reasonRaw);
   const note = optionalOption(args, 'note');

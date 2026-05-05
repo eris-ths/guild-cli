@@ -117,7 +117,7 @@ test('conclude: missing --synthesis fails', (t) => {
   const id = openReview(root);
   const r = runDevil(root, ['conclude', id], { GUILD_ACTOR: 'alice' });
   assert.equal(r.status, 1);
-  assert.match(r.stderr, /--synthesis required/);
+  assert.match(r.stderr, /Missing --synthesis/);
 });
 
 test('conclude: --unresolved with valid entry ids succeeds', (t) => {

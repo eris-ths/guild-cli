@@ -59,12 +59,8 @@ export async function suspendPlay(
     );
     return 1;
   }
-  const cliff = requireOption(args, 'cliff', '--cliff required (what just happened, prose)');
-  const invitation = requireOption(
-    args,
-    'invitation',
-    '--invitation required (what the next opener should do, prose)',
-  );
+  const cliff = requireOption(args, 'cliff', '"<what just happened>"');
+  const invitation = requireOption(args, 'invitation', '"<next opener\'s move>"');
   const by = optionalOption(args, 'by', 'GUILD_ACTOR');
   if (!by) {
     process.stderr.write(

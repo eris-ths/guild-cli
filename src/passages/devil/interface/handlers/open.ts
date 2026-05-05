@@ -53,11 +53,7 @@ export async function openReview(deps: OpenDeps, args: ParsedArgs): Promise<numb
     return 1;
   }
 
-  const typeRaw = requireOption(
-    args,
-    'type',
-    '--type required (pr|file|function|commit)',
-  );
+  const typeRaw = requireOption(args, 'type', '<pr|file|function|commit>');
   // parseTargetType throws DomainError on invalid input — let it
   // bubble to the dispatcher's catch (turns into stderr error: ...).
   const type = parseTargetType(typeRaw);
