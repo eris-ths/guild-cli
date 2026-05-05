@@ -24,6 +24,16 @@ import {
  * via the explicit `start` parameter; what's missing is honest
  * isolation in tests that go through requireOption / optionalOption,
  * since those don't expose `start`.
+ *
+ * IMPORTANT — concurrency safety: process.chdir() is global state.
+ * This helper is safe today because (a) node:test runs each *.test.js
+ * file in a child process via tests/run.mjs, so chdir cannot leak
+ * across files, and (b) within one file, tests run serially by
+ * default. If a future change adds `test.concurrency > 1` to this
+ * file or imports `withCleanCwd` into another test that runs in
+ * parallel within the same process, two tests could race on cwd
+ * and silent-fail on either side. Promote to a per-call DI seam
+ * before parallelizing.
  */
 function withCleanCwd(fn: () => void): void {
   const cwdBefore = process.cwd();
