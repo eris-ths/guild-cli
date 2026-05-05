@@ -174,6 +174,8 @@ agora resume <play-id> [--note "<resume prose>"] [--by <m>]
 agora conclude <play-id> [--note "<closure prose>"] [--by <m>]
 agora list [--game <slug>] [--state <playing|suspended|concluded>]
 agora show <slug-or-play-id> [--game <slug>]   # auto-disambiguates by pattern
+agora last [--by <m>] [--state <s>] [--include-concluded]   # "which play am I in?"
+agora cliff <play-id> [--game <slug>]          # peek closing cliff/invitation, no state change
 agora schema [--verb <name>]                   # principle 10 contract
 ```
 

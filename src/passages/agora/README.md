@@ -80,7 +80,7 @@ agora-specific records live under `<content_root>/agora/`:
     plays/<game>/<play-id>.yaml     # play sessions (sequence per game per day)
 ```
 
-## Verbs (v1, complete)
+## Verbs (v1 core, complete)
 
 - `agora new` — create a Game definition (Quest or Sandbox)
 - `agora play` — start a play session against a Game
@@ -95,6 +95,23 @@ agora-specific records live under `<content_root>/agora/`:
 - `agora show <slug-or-play-id>` — detail view with full move +
   suspension/resume history paired by index
 - `agora schema` — agent dispatch contract per principle 10
+
+## Sugar verbs (read-only affordances)
+
+These layer on top of the v1 core; pure read affordances that
+answer the daily-use questions without making the actor
+remember play ids:
+
+- `agora last` — "which play am I in?" Returns the actor's
+  most recent play; defaults to open (playing|suspended).
+  Surfaces the closing cliff/invitation when state=suspended,
+  so a re-entering instance reads the resume-context without
+  even calling `agora cliff`.
+- `agora cliff <play-id>` — "what was I about to do?" Peeks
+  the closing cliff/invitation without transitioning state.
+  Distinguishes active (next-resume-closes-it) vs historical
+  (already-resumed) cliffs, so the reader doesn't mistake
+  a stale cliff for an open one.
 
 The substrate-side Zeigarnik (issue #117) is in place: every
 suspend records `cliff` (what just happened) and `invitation`

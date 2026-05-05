@@ -64,6 +64,8 @@ export const VERB_EXAMPLES: Record<string, Record<string, string>> = {
     conclude: 'conclude <play-id>',
     list: 'list',
     show: 'show <slug-or-play-id>',
+    last: 'last',
+    cliff: 'cliff <play-id>',
     schema: 'schema',
   },
   devil: {

@@ -344,6 +344,86 @@ const VERBS: readonly VerbSchema[] = [
     },
   },
   {
+    name: 'last',
+    category: 'read',
+    summary:
+      "the actor's most recent play — answers 'which play am I in?' without copying a play id from `agora list`. " +
+      'Defaults to open (playing|suspended); --include-concluded broadens to any state.',
+    input: {
+      type: 'object',
+      properties: {
+        by: strOpt('actor (defaults to GUILD_ACTOR)'),
+        state: {
+          type: 'string',
+          enum: ['playing', 'suspended', 'concluded'],
+          description: 'narrow to a single state (omit for the default open-only behaviour)',
+        },
+        'include-concluded': {
+          type: 'boolean',
+          description: 'include concluded plays in the search (default false)',
+        },
+        format: formatField,
+      },
+    },
+    output: {
+      type: 'object',
+      properties: {
+        ok: { type: 'boolean' },
+        play: {
+          description: 'most recent matching play, or null if none',
+          type: 'object',
+          properties: {
+            id: str,
+            game: str,
+            state: { type: 'string', enum: ['playing', 'suspended', 'concluded'] },
+            started_at: str,
+            started_by: str,
+            move_count: str,
+            suspension_count: str,
+            resume_count: str,
+            closing_cliff: strOpt('present when state=suspended'),
+            closing_invitation: strOpt('present when state=suspended'),
+          },
+        },
+      },
+      required: ['ok', 'play'],
+    },
+  },
+  {
+    name: 'cliff',
+    category: 'read',
+    summary:
+      'peek the closing cliff/invitation of a play without transitioning state. ' +
+      "Answers 'what was I about to do?' without committing to resume.",
+    input: {
+      type: 'object',
+      properties: {
+        play_id: { type: 'string', description: 'positional; play id (YYYY-MM-DD-NNN)' },
+        game: strOpt('disambiguate cross-game play-id collisions'),
+        format: formatField,
+      },
+      required: ['play_id'],
+    },
+    output: {
+      type: 'object',
+      properties: {
+        ok: { type: 'boolean' },
+        play_id: str,
+        game: str,
+        state: { type: 'string', enum: ['playing', 'suspended', 'concluded'] },
+        cliff: strOpt('null if play was never suspended'),
+        invitation: strOpt('null if play was never suspended'),
+        suspended_at: strOpt('present when there is a last suspension'),
+        suspended_by: strOpt('present when there is a last suspension'),
+        active: { type: 'boolean', description: 'true when this cliff awaits a resume; false when historical' },
+        resumed_at: strOpt('present when active=false'),
+        resumed_by: strOpt('present when active=false'),
+        note: strOpt('helpful note when no cliff exists'),
+      },
+      required: ['ok', 'play_id', 'game', 'state'],
+    },
+  },
+  {
     name: 'schema',
     category: 'meta',
     summary: 'this introspection payload — the agent dispatch contract',
