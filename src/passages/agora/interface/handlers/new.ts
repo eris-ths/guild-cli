@@ -2,6 +2,7 @@ import { Game, GameSlugCollision } from '../../domain/Game.js';
 import { GameRepository } from '../../application/GameRepository.js';
 import { ParsedArgs, optionalOption, requireOption, rejectUnknownFlags } from '../../../../interface/shared/parseArgs.js';
 import { GuildConfig } from '../../../../infrastructure/config/GuildConfig.js';
+import { sanitizeError } from '../../../../interface/shared/sanitizeError.js';
 
 const NEW_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'slug',
@@ -82,9 +83,15 @@ export async function newGame(deps: NewGameDeps, args: ParsedArgs): Promise<numb
     await deps.repo.saveNew(game);
   } catch (e) {
     if (e instanceof GameSlugCollision) {
+      // The collision error returns 1 from this handler instead of
+      // throwing; that bypasses the binary's main() catch where #153's
+      // sanitizer normally runs. Apply sanitizeError directly here so
+      // `<content_root>/...` collapses the host-specific prefix in this
+      // path, matching the contract for all other error-path emissions.
+      const at = sanitizeError(where_written, deps.config.contentRoot);
       process.stderr.write(
         `error: Game slug "${game.slug}" already exists.\n` +
-          `  At: ${where_written}\n` +
+          `  At: ${at}\n` +
           `  Pick a different --slug, or edit the existing file directly.\n`,
       );
       return 1;
