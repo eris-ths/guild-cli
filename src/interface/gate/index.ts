@@ -1,6 +1,7 @@
 import { buildContainer } from '../shared/container.js';
 import { parseArgs, optionalOption, HelpRequested } from '../shared/parseArgs.js';
 import { renderVerbHelp } from '../shared/verbHelp.js';
+import { nearestCommand } from '../shared/nearestCommand.js';
 import { DomainError } from '../../domain/shared/DomainError.js';
 import { REQUEST_STATES } from '../../domain/request/RequestState.js';
 import { getPackageVersion, isVersionFlag } from '../shared/version.js';
@@ -245,47 +246,6 @@ const KNOWN_COMMANDS = [
   'unresponded',
 ] as const;
 
-function levenshtein(a: string, b: string): number {
-  if (a === b) return 0;
-  const m = a.length;
-  const n = b.length;
-  if (m === 0) return n;
-  if (n === 0) return m;
-  let prev = Array.from({ length: n + 1 }, (_, i) => i);
-  const cur = new Array(n + 1).fill(0);
-  for (let i = 1; i <= m; i++) {
-    cur[0] = i;
-    for (let j = 1; j <= n; j++) {
-      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      cur[j] = Math.min(
-        cur[j - 1] + 1,
-        prev[j]! + 1,
-        prev[j - 1]! + cost,
-      );
-    }
-    prev = cur.slice();
-  }
-  return prev[n]!;
-}
-
-function nearestCommand(input: string): string | null {
-  let best: string | null = null;
-  let bestDist = Infinity;
-  // Cap distance at 2 so genuinely unrelated typos ("foo") don't draw
-  // a confident-but-wrong suggestion ("did you mean: doctor?"). Two
-  // edits covers single-letter typos AND transpositions ("requst" /
-  // "rqeuest" / "approveee").
-  const max = Math.min(2, Math.floor(input.length / 2) + 1);
-  for (const cmd of KNOWN_COMMANDS) {
-    const d = levenshtein(input.toLowerCase(), cmd);
-    if (d < bestDist && d <= max) {
-      bestDist = d;
-      best = cmd;
-    }
-  }
-  return best;
-}
-
 export async function main(argv: readonly string[]): Promise<number> {
   if (isVersionFlag(argv)) {
     process.stdout.write(`guild-cli ${getPackageVersion()}\n`);
@@ -382,7 +342,7 @@ export async function main(argv: readonly string[]): Promise<number> {
       case 'unresponded':
         return await unrespondedCmd(c, args);
       default: {
-        const hint = nearestCommand(cmd);
+        const hint = nearestCommand(cmd, KNOWN_COMMANDS);
         const suggest = hint ? `\n  did you mean: gate ${hint}?` : '';
         process.stderr.write(
           `unknown command: ${cmd}${suggest}\n` +

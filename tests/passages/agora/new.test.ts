@@ -127,7 +127,12 @@ test('agora new: JSON mode emits snake_case envelope with where_written + config
   );
   assert.equal(payload.config_file, join(root, 'guild.config.yaml'));
   assert.equal(typeof payload.suggested_next, 'object');
-  assert.equal(payload.suggested_next.verb, 'list');
+  // Post-dogfood: the natural next-step after `agora new` is `agora
+  // play --slug <slug>`. Previously this emitted `verb: 'list'` (a
+  // safer no-arg call), but text mode and JSON now agree: play first,
+  // list as the alternative path named in `reason`.
+  assert.equal(payload.suggested_next.verb, 'play');
+  assert.equal(payload.suggested_next.args.slug, 'sandbox-one');
   // No camelCase keys in the envelope (principle 11 + PR #109).
   for (const key of Object.keys(payload)) {
     assert.ok(!/[A-Z]/.test(key), `envelope key "${key}" must be snake_case`);

@@ -6,10 +6,11 @@
 // games designed for AI-first interaction with suspend/resume as
 // a first-class primitive (per design issue #117).
 //
-// This is the v0 skeleton. Only `agora new` is implemented; `play`,
-// `move`, `suspend`, `resume`, `list`, `show` will land iteratively
-// as the prototype surfaces what shape they need (per the pull-
-// driven extraction strategy chosen at design time).
+// v1 alpha: full surface implemented (new / play / move / suspend /
+// resume / conclude / list / show / schema). The pull-driven
+// extraction strategy chosen at design time has converged; later
+// changes will be enhancements (cross-passage anchoring, ingest
+// shapes), not core verb additions.
 //
 // AI-first per principle 11: the substrate is machine-parseable
 // JSON / snake_case YAML / explicit-flag CLI; any future human-
@@ -19,6 +20,8 @@ import { GuildConfig } from '../../../infrastructure/config/GuildConfig.js';
 import { parseArgs, HelpRequested } from '../../../interface/shared/parseArgs.js';
 import { renderVerbHelp } from '../../../interface/shared/verbHelp.js';
 import { sanitizeError } from '../../../interface/shared/sanitizeError.js';
+import { nearestCommand } from '../../../interface/shared/nearestCommand.js';
+import { getPackageVersion, isVersionFlag } from '../../../interface/shared/version.js';
 import { DomainError } from '../../../domain/shared/DomainError.js';
 import { YamlGameRepository } from '../infrastructure/YamlGameRepository.js';
 import { YamlPlayRepository } from '../infrastructure/YamlPlayRepository.js';
@@ -32,7 +35,7 @@ import { listAgora } from './handlers/list.js';
 import { showAgora } from './handlers/show.js';
 import { schemaCmd } from './handlers/schema.js';
 
-const HELP = `agora — game / play passage (v0 skeleton)
+const HELP = `agora — play / narrative passage (alpha, 9 verbs)
 
 Usage:
   agora new --slug <s> --kind <quest|sandbox> --title "<t>" [--by <m>]
@@ -91,7 +94,8 @@ Usage:
   agora --help                 This help.
   agora --version              Print version and exit.
 
-Passage status: v0 skeleton. Verbs landing iteratively per design issue #117.
+Passage status: alpha. Full v1 surface (new / play / move / suspend /
+resume / conclude / list / show / schema) per design issue #117.
 Substrate: shares content_root and members/ with gate; agora-specific data
 goes under <content_root>/agora/.
 
@@ -101,15 +105,27 @@ Lore upstream:
   lore/principles/04-records-outlive-writers.md       (records persist across sessions)
 `;
 
+// Mirror of the switch below for did-you-mean suggestions. Same
+// "obvious-when-broken" rule as gate's KNOWN_COMMANDS: a verb
+// forgotten here loses its typo hint, doesn't crash anything.
+const AGORA_COMMANDS = [
+  'new', 'play', 'move', 'suspend', 'resume', 'conclude',
+  'list', 'show', 'schema',
+] as const;
+
 export async function main(argv: readonly string[]): Promise<number> {
   if (argv.length === 0 || argv[0] === '--help' || argv[0] === '-h') {
     process.stdout.write(HELP);
     return 0;
   }
-  if (argv[0] === '--version') {
+  if (isVersionFlag(argv)) {
     // Single-binary version reuse — agora ships under guild-cli's
-    // package.json. No separate version surface for v0.
-    process.stdout.write('agora (under guild-cli) — snapshot/agora\n');
+    // package.json, so the version number is shared. The status
+    // phrase ("alpha, 9 verbs") is per-passage and rides alongside
+    // so a reader sees both lineage and surface maturity in one line.
+    process.stdout.write(
+      `agora (under guild-cli ${getPackageVersion()}) — alpha, 9 verbs\n`,
+    );
     return 0;
   }
 
@@ -139,9 +155,15 @@ export async function main(argv: readonly string[]): Promise<number> {
         return await showAgora({ games, plays, config }, args);
       case 'schema':
         return await schemaCmd(args);
-      default:
-        process.stderr.write(`agora: unknown verb: ${cmd}\n${HELP}`);
+      default: {
+        const hint = nearestCommand(cmd, AGORA_COMMANDS);
+        const suggest = hint ? `\n  did you mean: agora ${hint}?` : '';
+        process.stderr.write(
+          `agora: unknown verb: ${cmd}${suggest}\n` +
+            `  see 'agora --help' for the full verb catalog.\n`,
+        );
         return 1;
+      }
     }
   } catch (e) {
     if (e instanceof HelpRequested) {
