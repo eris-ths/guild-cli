@@ -201,6 +201,20 @@ test('agora play: rejects unknown flag (principle 10 input contract)', (t) => {
   assert.match(r.stderr, /unknown flag.*--bogus/);
 });
 
+test('agora play: text next-hint includes --game so the id is usable as-is', (t) => {
+  // Same touch-feel contract as agora last (PR #186): play ids are
+  // per-game sequences, so a bare id collides across games. The
+  // success-line next-hint must already include --game or the user's
+  // first follow-up call errors with "Disambiguate with --game".
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  seedGame(root, 'g-hint');
+  const r = runAgora(root, ['play', '--slug', 'g-hint'], { GUILD_ACTOR: 'alice' });
+  assert.equal(r.status, 0);
+  assert.match(r.stdout, /next: agora move .+ --game g-hint --by alice/);
+  assert.match(r.stdout, /agora suspend .+ --game g-hint --cliff/);
+});
+
 test('agora play: yaml file directory layout matches passage convention', (t) => {
   // Pin the structural decision: plays live under
   // <content_root>/agora/plays/<game-slug>/<play-id>.yaml.

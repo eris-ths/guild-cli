@@ -135,7 +135,7 @@ export async function resumePlay(deps: ResumeDeps, args: ParsedArgs): Promise<nu
       );
     }
     process.stdout.write(
-      `  next: agora move ${play.id} --by ${by} "<text addressing the invitation>"\n`,
+      `  next: agora move ${play.id} --game ${play.game} --by ${by} "<text addressing the invitation>"\n`,
     );
   }
   return 0;
