@@ -10,6 +10,7 @@ import { renderVerbHelp } from '../shared/verbHelp.js';
 import { notFoundMessage } from '../shared/notFoundHint.js';
 import { DomainError } from '../../domain/shared/DomainError.js';
 import { getPackageVersion, isVersionFlag } from '../shared/version.js';
+import { sanitizeError } from '../shared/sanitizeError.js';
 
 const HELP = `guild — member management CLI
 
@@ -107,11 +108,13 @@ export async function main(argv: readonly string[]): Promise<number> {
       renderVerbHelp('guild', e);
       return 0;
     }
-    const msg = e instanceof DomainError
-      ? `DomainError: ${e.message}${e.field ? ` (${e.field})` : ''}`
-      : e instanceof Error
-        ? e.message
-        : String(e);
+    // Mirror gate's catch shape: `error:` prefix carries the failure
+    // signal; the `DomainError:` prefix and `(field)` trailing tag
+    // were debug noise, not touch-feel signal (P3 dogfood C/A
+    // cleanup).
+    const rawMsg = e instanceof Error ? e.message : String(e);
+    // Strip absolute contentRoot prefix (issue #153).
+    const msg = sanitizeError(rawMsg, c.config.contentRoot);
     process.stderr.write(`error: ${msg}\n`);
     return 1;
   }

@@ -17,6 +17,7 @@
 import { GuildConfig } from '../../../infrastructure/config/GuildConfig.js';
 import { parseArgs, HelpRequested } from '../../../interface/shared/parseArgs.js';
 import { renderVerbHelp } from '../../../interface/shared/verbHelp.js';
+import { sanitizeError } from '../../../interface/shared/sanitizeError.js';
 import { DomainError } from '../../../domain/shared/DomainError.js';
 import { YamlCtxRepository } from '../infrastructure/YamlCtxRepository.js';
 import { CtxUseCases } from '../application/CtxUseCases.js';
@@ -75,12 +76,13 @@ export async function main(argv: readonly string[]): Promise<number> {
       renderVerbHelp('ctx', e);
       return 0;
     }
-    const msg =
-      e instanceof DomainError
-        ? `DomainError: ${e.message}${e.field ? ` (${e.field})` : ''}`
-        : e instanceof Error
-          ? e.message
-          : String(e);
+    // Mirror gate's catch shape: `error:` prefix carries the failure
+    // signal; the `DomainError:` prefix and `(field)` trailing tag
+    // were debug noise, not touch-feel signal (P3 dogfood C/A
+    // cleanup).
+    const rawMsg = e instanceof Error ? e.message : String(e);
+    // Strip absolute contentRoot prefix (issue #153).
+    const msg = sanitizeError(rawMsg, config.contentRoot);
     process.stderr.write(`error: ${msg}\n`);
     return 1;
   }

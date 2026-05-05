@@ -7,7 +7,122 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 
 ## [Unreleased]
 
-(no entries yet)
+> **Touch-feel campaign** (5 PRs, 1 design issue). A P3 dogfood pass
+> with fresh-agent eyes surfaced the same friction class repeatedly:
+> "the user knows something is wrong / done / different but not what
+> to do next." Each PR fixes one layer of that gap; together they
+> compound — by the final dogfood, every error / not-found / state
+> mismatch / list-shape touch point answers the next-move question
+> inline. No architectural changes; substrate, domain, and persistence
+> contracts unchanged.
+
+### Added
+
+- **Verb-help shows a runnable usage example.**
+  ([#163](https://github.com/eris-ths/guild-cli/pull/163))
+  PR #148 made `--help` a universal escape valve and printed each
+  verb's flag catalog. What was still missing was a runnable
+  invocation. `gate request --help` now reads:
+  ```
+  gate request: --action, --auto-review, --executor, --format, --from, --reason, --target, --with
+    e.g. gate request --action "<what>" --reason "<why>"
+    see `gate --help` for the full verb catalog.
+  ```
+  Examples live in `src/interface/shared/verbExamples.ts`, keyed by
+  `cli → verb → string` (same-named verbs across CLIs need scoping
+  so an `agora list --help` example doesn't render a `gate ...`
+  command). Coverage tests pin the (cli, verb) pairs that exist; an
+  invariant test asserts every example begins with its own verb name
+  to catch copy/paste typos.
+
+- **`requireOption` errors name the value shape and the env fallback.**
+  ([#164](https://github.com/eris-ths/guild-cli/pull/164))
+  Pre-fix: `error: Missing --from. --from required` — the second
+  sentence repeated the flag name without saying what value to put
+  there or that `GUILD_ACTOR` would have satisfied the call.
+  Post-fix:
+  ```
+  error: Missing --from <m> (or set GUILD_ACTOR).
+  error: Missing --persona <red-team|author-defender|mirror>.
+  error: Missing --severity <low|med|high>.
+  ```
+  The third argument is renamed `usage` → `shape` (the value
+  placeholder); the env hint `(or set <env>)` is composed in one
+  place and propagates to every actor-flag callsite (~22 of them).
+  All ~50 callsites swept to structured shapes — free text passes
+  `"..."`, members `<m>`, enums spell their option set inline.
+
+- **`assertTransition` lists valid next states.**
+  ([#167](https://github.com/eris-ths/guild-cli/pull/167))
+  Pre-fix: `error: Illegal state transition: pending → completed`.
+  Post-fix:
+  ```
+  error: Illegal state transition: pending → completed.
+    valid next states from pending: approved, denied.
+  ```
+  For terminal states (completed/failed/denied), the message reads
+  `X is terminal — no further transitions are allowed` instead of
+  empty `valid next: ` (which would have been more confusing than
+  the rejection itself). State names are the only domain vocabulary
+  added — verb hints belong in the interface layer and intentionally
+  stay out of `RequestState.ts`.
+
+- **`not found: <id>` gains a per-entity discovery hint.**
+  ([#167](https://github.com/eris-ths/guild-cli/pull/167))
+  Pre-fix: `not found: 2026-05-05-9999`. Post-fix:
+  ```
+  not found: 2026-05-05-9999
+    try 'gate list' or 'gate tail' to see existing requests.
+  ```
+  Centralised in `notFoundMessage(entity, id)`. Three call shapes:
+  request → `gate list` / `gate tail`; issue → `gate issues list`;
+  member → `guild list`. Wired into `gate show`, `summarize`,
+  `transcript`, `why`, `chain`, `issues note`, `guild show`.
+
+- **`gate execute` notice when actor differs from `--executor`.**
+  ([#169](https://github.com/eris-ths/guild-cli/pull/169) for
+  [#168](https://github.com/eris-ths/guild-cli/issues/168))
+  `--executor` records **intent**, not access — anyone with substrate
+  access may run `gate execute`. Pre-fix, a fresh agent reading
+  `--executor bob` reasonably interpreted it as a gate; when alice
+  ran execute on bob's assignment, the substrate captured both but
+  the surface gave no signal. Post-fix:
+  ```
+  notice: alice executed request 2026-05-05-0001 (assigned to bob); --executor records intent, not access.
+  ```
+  Mirrors the shape of the self-approve notice on `gate approve`.
+  Silent when `--executor` was never set or matches the actor.
+  AGENT.md cross-links #168 for the design rationale (recorded so
+  future readers see the deliberate choice, not an oversight).
+
+- **`gate list --state all` is sugar for "every state, no filter."**
+  ([#170](https://github.com/eris-ths/guild-cli/pull/170))
+  Pre-fix, `gate list --state all` errored `Invalid state: all`
+  while the sibling `gate issues list --state all` already accepted
+  it — broke muscle memory between the two list verbs. The hint
+  shown when `--state` is omitted now mentions `| all` and includes
+  a `gate list --state all` example line.
+
+### Changed
+
+- **DomainError trailing `(field)` tag and `DomainError:` prefix
+  dropped from human-readable error output across all five
+  dispatchers** (gate / agora / devil / ctx / guild).
+  ([#170](https://github.com/eris-ths/guild-cli/pull/170))
+  Pre-fix: `error: Invalid lense: "bogus" ... (lense)` — the
+  trailing tag was design intent at one point ("name which flag
+  was bad") but read as redundant for flag-aligned fields and as
+  debug noise for domain-internal fields (`(state)`, `(sequence)`).
+  The `DomainError:` class-name prefix on agora/devil/ctx/guild
+  also leaked an internal class name. JSON envelopes are unchanged:
+  `error.field` still surfaces in `--format json` so orchestrators
+  retain the structured info.
+
+### Tracked follow-ups
+
+- **[#168](https://github.com/eris-ths/guild-cli/issues/168)** —
+  `--executor` records intent, not access (closed by #169). Issue
+  preserved in the substrate as the design-rationale anchor.
 
 ## [0.4.0] — 2026-05-03
 
