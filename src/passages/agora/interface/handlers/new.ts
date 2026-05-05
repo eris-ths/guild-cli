@@ -36,8 +36,15 @@ export async function newGame(deps: NewGameDeps, args: ParsedArgs): Promise<numb
   rejectUnknownFlags(args, NEW_KNOWN_FLAGS, 'new');
 
   const slug = requireOption(args, 'slug', '<slug>');
-  const kind = requireOption(args, 'kind', '<quest|sandbox>');
-  const title = requireOption(args, 'title', '"..."');
+  // `--kind` and `--title` defaulted post-dogfood (#173 reviewer
+  // observation): four required flags at the entry verb fight agora's
+  // "exploration" character — a fresh agent with "ちょっと遊んでみるか"
+  // tension hits friction at the door. Defaults pick the playful
+  // shape (sandbox over quest) and reuse the slug as title so
+  // `agora new --slug today` is a one-flag entry. Full-spec form
+  // still works for callers who want to be explicit.
+  const kind = optionalOption(args, 'kind') ?? 'sandbox';
+  const title = optionalOption(args, 'title') ?? slug;
   const description = optionalOption(args, 'description');
   const by = optionalOption(args, 'by', 'GUILD_ACTOR');
   if (!by) {
