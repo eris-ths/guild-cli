@@ -1,10 +1,41 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
   parseArgs,
   requireOption,
   optionalOption,
 } from '../../src/interface/shared/parseArgs.js';
+
+/**
+ * Run `fn` with cwd pinned to a fresh tmpdir that has no `.guild-actor`
+ * file in any ancestor. Required for tests that delete `GUILD_ACTOR`
+ * and expect the env-fallback chain to fall through to "unset" — the
+ * helper internally invokes `resolveGuildActor()`, which on `develop`
+ * would otherwise pick up the repo-root `.guild-actor` and silently
+ * satisfy the call.
+ *
+ * Pinned by issue #183: PRs cut from `develop` carry `.guild-actor`
+ * into CI, breaking three env-unset tests below. The narrow fix is
+ * cwd isolation rather than a DI seam through every callsite —
+ * resolveGuildActor.test.ts already exercises the (cwd, env) matrix
+ * via the explicit `start` parameter; what's missing is honest
+ * isolation in tests that go through requireOption / optionalOption,
+ * since those don't expose `start`.
+ */
+function withCleanCwd(fn: () => void): void {
+  const cwdBefore = process.cwd();
+  const cleanRoot = mkdtempSync(join(tmpdir(), 'parseargs-cleancwd-'));
+  process.chdir(cleanRoot);
+  try {
+    fn();
+  } finally {
+    process.chdir(cwdBefore);
+    rmSync(cleanRoot, { recursive: true, force: true });
+  }
+}
 
 test('requireOption returns explicit value when present', () => {
   const args = parseArgs(['--from', 'kiri']);
@@ -22,21 +53,23 @@ test('requireOption: missing flag with env fallback names the env var', () => {
   // exporting the env would also satisfy the call. Without this hint,
   // a fresh agent has to read the env-fallback section of AGENT.md to
   // discover the alternative.
-  const args = parseArgs([]);
-  const prev = process.env['GUILD_ACTOR'];
-  delete process.env['GUILD_ACTOR'];
-  try {
-    assert.throws(
-      () => requireOption(args, 'by', '<m>', 'GUILD_ACTOR'),
-      (e: unknown) => {
-        assert.ok(e instanceof Error);
-        assert.match(e.message, /Missing --by <m> \(or set GUILD_ACTOR\)\./);
-        return true;
-      },
-    );
-  } finally {
-    if (prev !== undefined) process.env['GUILD_ACTOR'] = prev;
-  }
+  withCleanCwd(() => {
+    const args = parseArgs([]);
+    const prev = process.env['GUILD_ACTOR'];
+    delete process.env['GUILD_ACTOR'];
+    try {
+      assert.throws(
+        () => requireOption(args, 'by', '<m>', 'GUILD_ACTOR'),
+        (e: unknown) => {
+          assert.ok(e instanceof Error);
+          assert.match(e.message, /Missing --by <m> \(or set GUILD_ACTOR\)\./);
+          return true;
+        },
+      );
+    } finally {
+      if (prev !== undefined) process.env['GUILD_ACTOR'] = prev;
+    }
+  });
 });
 
 test('requireOption: missing flag without shape stays bare', () => {
@@ -84,18 +117,20 @@ test('requireOption: explicit value wins over env fallback', () => {
 });
 
 test('requireOption: empty env var is treated as unset', () => {
-  const args = parseArgs([]);
-  const prev = process.env['GUILD_ACTOR'];
-  process.env['GUILD_ACTOR'] = '';
-  try {
-    assert.throws(
-      () => requireOption(args, 'from', '<m>', 'GUILD_ACTOR'),
-      /Missing --from/,
-    );
-  } finally {
-    if (prev === undefined) delete process.env['GUILD_ACTOR'];
-    else process.env['GUILD_ACTOR'] = prev;
-  }
+  withCleanCwd(() => {
+    const args = parseArgs([]);
+    const prev = process.env['GUILD_ACTOR'];
+    process.env['GUILD_ACTOR'] = '';
+    try {
+      assert.throws(
+        () => requireOption(args, 'from', '<m>', 'GUILD_ACTOR'),
+        /Missing --from/,
+      );
+    } finally {
+      if (prev === undefined) delete process.env['GUILD_ACTOR'];
+      else process.env['GUILD_ACTOR'] = prev;
+    }
+  });
 });
 
 test('optionalOption returns undefined when missing and no env fallback', () => {
@@ -124,6 +159,40 @@ test('optionalOption: explicit value wins over env', () => {
   } finally {
     if (prev === undefined) delete process.env['GUILD_ACTOR'];
     else process.env['GUILD_ACTOR'] = prev;
+  }
+});
+
+test('withCleanCwd isolates the .guild-actor file fallback (issue #183 regression)', () => {
+  // Simulate the develop-branch CI condition: ambient .guild-actor in
+  // an ancestor directory of cwd. Without withCleanCwd, env-unset
+  // tests silent-fail because resolveGuildActor() walks up and finds
+  // the file. With withCleanCwd, the chdir happens before the helper
+  // is ever called, so cwd has no ancestor file and the fallback is
+  // genuinely empty.
+  const ambientRoot = mkdtempSync(join(tmpdir(), 'parseargs-ambient-'));
+  writeFileSync(join(ambientRoot, '.guild-actor'), 'ambient-leak');
+  const cwdBefore = process.cwd();
+  process.chdir(ambientRoot);
+  const prev = process.env['GUILD_ACTOR'];
+  delete process.env['GUILD_ACTOR'];
+  try {
+    // Sanity: without isolation, the leak resolves the actor from the
+    // file. requireOption returns the file content silently — no throw.
+    const leaked = requireOption(parseArgs([]), 'by', '<m>', 'GUILD_ACTOR');
+    assert.equal(leaked, 'ambient-leak', 'precondition: leak should be observable');
+
+    // With isolation: same call inside withCleanCwd throws as the test
+    // contract intends, regardless of the ambient file.
+    withCleanCwd(() => {
+      assert.throws(
+        () => requireOption(parseArgs([]), 'by', '<m>', 'GUILD_ACTOR'),
+        /Missing --by/,
+      );
+    });
+  } finally {
+    if (prev !== undefined) process.env['GUILD_ACTOR'] = prev;
+    process.chdir(cwdBefore);
+    rmSync(ambientRoot, { recursive: true, force: true });
   }
 });
 
@@ -186,21 +255,23 @@ test('requireOption: boolean-landing also names the env fallback when present', 
   // satisfied the call, mention it. Boolean-landing typically means
   // "you passed --by --another-flag-by-mistake", and at that point
   // the user might also benefit from knowing GUILD_ACTOR exists.
-  const args = parseArgs(['--by', '--bogus']);
-  const prev = process.env['GUILD_ACTOR'];
-  delete process.env['GUILD_ACTOR'];
-  try {
-    assert.throws(
-      () => requireOption(args, 'by', '<m>', 'GUILD_ACTOR'),
-      (e: unknown) => {
-        assert.ok(e instanceof Error);
-        assert.match(e.message, /Missing --by value \(or set GUILD_ACTOR\)\./);
-        return true;
-      },
-    );
-  } finally {
-    if (prev !== undefined) process.env['GUILD_ACTOR'] = prev;
-  }
+  withCleanCwd(() => {
+    const args = parseArgs(['--by', '--bogus']);
+    const prev = process.env['GUILD_ACTOR'];
+    delete process.env['GUILD_ACTOR'];
+    try {
+      assert.throws(
+        () => requireOption(args, 'by', '<m>', 'GUILD_ACTOR'),
+        (e: unknown) => {
+          assert.ok(e instanceof Error);
+          assert.match(e.message, /Missing --by value \(or set GUILD_ACTOR\)\./);
+          return true;
+        },
+      );
+    } finally {
+      if (prev !== undefined) process.env['GUILD_ACTOR'] = prev;
+    }
+  });
 });
 
 test('requireOption: plain missing flag does NOT emit the -- hint (stays terse)', () => {
