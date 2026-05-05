@@ -560,6 +560,20 @@ export async function reqExecute(c: C, args: ParsedArgs): Promise<number> {
     return 0;
   }
   const r = await c.requestUC.execute(id, by, note, invokedBy);
+  // `--executor` is informational, not access control: the substrate
+  // records both the assignment and the actual actor, but does not
+  // refuse a mismatched execute. Surface a notice so a fresh agent
+  // who reads `--executor bob` doesn't silently interpret it as a
+  // gate. See issue #168 for the design rationale ("anyone may
+  // execute; the audit trail captures who did"). Mirrors the shape
+  // of the self-approve notice on `gate approve`.
+  const assignedExecutor = r.executor?.value;
+  if (assignedExecutor !== undefined && assignedExecutor !== by) {
+    process.stderr.write(
+      `notice: ${by} executed request ${id} (assigned to ` +
+        `${assignedExecutor}); --executor records intent, not access.\n`,
+    );
+  }
   emitWriteResponse(parseFormat(args), r, `✓ executing: ${id}`, c.config);
   return 0;
 }
