@@ -43,7 +43,7 @@ Pick a depth. Every layer works on its own.
 | 30 min | [`docs/verbs.md`](./docs/verbs.md) | you want per-verb examples and design notes |
 | 1 hour | [`examples/dogfood-session/`](./examples/dogfood-session/) | you're adopting this seriously and want to see real sessions |
 | working notes | [`docs/domain-fit/`](./docs/domain-fit/) | you're curious whether gate fits a non-standard domain |
-| when needed | [`docs/POLICY.md`](./docs/POLICY.md) / [`SECURITY.md`](./SECURITY.md) | you're embedding guild-cli and need the stability / threat contract |
+| when needed | [`docs/POLICY.md`](./docs/POLICY.md) / [`docs/storage-format.md`](./docs/storage-format.md) / [`SECURITY.md`](./SECURITY.md) | you're embedding guild-cli and need the stability / on-disk shape / threat contract |
 
 ### Lore
 
