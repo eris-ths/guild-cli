@@ -313,9 +313,10 @@ export async function main(argv: readonly string[]): Promise<number> {
         const state = optionalOption(args, 'state');
         if (state === undefined) {
           process.stderr.write(
-            `gate list needs --state <s> (${REQUEST_STATES.join(' | ')}).\n` +
+            `gate list needs --state <s> (${REQUEST_STATES.join(' | ')} | all).\n` +
               '  For counts across every state:  gate status\n' +
-              '  For the contents of one state:  gate list --state <s>\n',
+              '  For the contents of one state:  gate list --state <s>\n' +
+              '  For every state at once:        gate list --state all\n',
           );
           return 1;
         }
@@ -396,14 +397,13 @@ export async function main(argv: readonly string[]): Promise<number> {
     }
     // The `error:` prefix gives the CLI-universal "this failed" cue;
     // prepending "DomainError:" on top leaked an internal class name
-    // into user-facing output without adding information. Keep the
-    // field suffix (`(id)`, `(from)`, etc.) — that actually names
-    // which flag was bad.
-    const msg = e instanceof DomainError
-      ? `${e.message}${e.field ? ` (${e.field})` : ''}`
-      : e instanceof Error
-        ? e.message
-        : String(e);
+    // into user-facing output without adding information. The trailing
+    // `(field)` suffix used to echo which flag was bad — but for
+    // domain-internal fields (`state`, `sequence`) it read as debug
+    // noise, and for user-typed flags the message already names the
+    // field in prose. JSON envelope retains `error.field` for
+    // programmatic consumers (P3 dogfood C/A cleanup).
+    const msg = e instanceof Error ? e.message : String(e);
     // When the caller asked for JSON output, mirror the error on
     // stderr as a JSON envelope so a tool layer doesn't have to run
     // two parsers (one on stdout JSON, one on stderr text). The

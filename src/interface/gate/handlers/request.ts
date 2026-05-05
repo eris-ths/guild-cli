@@ -162,7 +162,16 @@ export async function reqList(
       : undefined;
   const forFilter = explicitFor ?? envActor;
 
-  let items = await c.requestUC.listByState(state);
+  // `--state all` is sugar for "every state, no filter" — parity with
+  // `gate issues list --state all`. Implemented at the interface layer
+  // because `all` is a CLI-level affordance, not a domain state;
+  // parseRequestState rejects it. The asymmetry where one list verb
+  // accepted the sugar and the other errored was the touch-feel gap
+  // surfaced in P3 dogfood.
+  let items =
+    state === 'all'
+      ? await c.requestUC.listAll()
+      : await c.requestUC.listByState(state);
   if (fromFilter !== undefined) {
     items = items.filter((r) => r.from.value === fromFilter);
   }
