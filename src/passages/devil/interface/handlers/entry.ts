@@ -122,11 +122,11 @@ export async function entryOnReview(
   // Catalog resolution. Throw structured errors so the dispatcher
   // surfaces them as named failures rather than generic message text.
   const persona = deps.personas.find(personaName);
-  if (!persona) throw new PersonaNotFound(personaName);
+  if (!persona) throw new PersonaNotFound(personaName, deps.personas.names());
   if (persona.ingest_only) throw new PersonaIsIngestOnly(personaName);
 
   const lense = deps.lenses.find(lenseName);
-  if (!lense) throw new LenseNotFound(lenseName);
+  if (!lense) throw new LenseNotFound(lenseName, deps.lenses.names());
 
   // Kind handling. `gate` is reserved for ingest paths.
   const kind: EntryKind = parseEntryKind(kindRaw);

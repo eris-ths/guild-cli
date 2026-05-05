@@ -112,9 +112,18 @@ export class Persona {
 }
 
 export class PersonaNotFound extends Error {
-  constructor(name: string) {
+  /**
+   * Mirror of LenseNotFound.available — the catalog at failure time,
+   * surfaced so the interface layer can render did-you-mean hints
+   * uniformly across the two unknown-name failures `devil entry` can
+   * trip on. Empty list is legal (malformed config) and renders
+   * without a suggestion.
+   */
+  readonly available: readonly string[];
+  constructor(name: string, available: readonly string[] = []) {
     super(`Persona not found in catalog: ${name}`);
     this.name = 'PersonaNotFound';
+    this.available = available;
   }
 }
 

@@ -242,7 +242,7 @@ export async function ingestSource(
 
   const personaName = SOURCE_TO_PERSONA[source];
   const persona = deps.personas.find(personaName);
-  if (!persona) throw new PersonaNotFound(personaName);
+  if (!persona) throw new PersonaNotFound(personaName, deps.personas.names());
   if (!persona.ingest_only) {
     // Defensive — if the catalog ever gets reshaped so the source's
     // persona isn't ingest-only, refuse rather than silently
@@ -489,7 +489,7 @@ function requireKnownLense(
     throw new DomainError(`${ctx}: 'lense' required (non-empty string)`, 'lense');
   }
   if (!lenses.find(raw)) {
-    throw new LenseNotFound(raw);
+    throw new LenseNotFound(raw, lenses.names());
   }
   return raw;
 }
