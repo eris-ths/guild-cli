@@ -29,6 +29,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const GATE = resolve(here, '../../../bin/gate.mjs');
 const AGORA = resolve(here, '../../../bin/agora.mjs');
 const DEVIL = resolve(here, '../../../bin/devil.mjs');
+const CTX = resolve(here, '../../../bin/ctx.mjs');
 
 function bootstrap(): { root: string; cleanup: () => void } {
   const root = mkdtempSync(join(tmpdir(), 'guild-cross-passage-'));
@@ -160,6 +161,46 @@ test('gate boot: both passages surface independently', (t) => {
   const payload = JSON.parse(r.stdout);
   assert.ok(payload.cross_passage.agora, 'agora present');
   assert.ok(payload.cross_passage.devil, 'devil present');
+});
+
+test('gate boot: cross_passage.ctx populated when ctx records exist', (t) => {
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  const r1 = run(CTX, root, ['record', '--fact', 'first fact']);
+  assert.equal(r1.status, 0, `ctx record stderr: ${r1.stderr}`);
+  const r2 = run(CTX, root, ['record', '--fact', 'second fact']);
+  assert.equal(r2.status, 0, `ctx record stderr: ${r2.stderr}`);
+
+  const r = run(GATE, root, ['boot', '--format', 'json']);
+  assert.equal(r.status, 0, `stderr: ${r.stderr}`);
+  const payload = JSON.parse(r.stdout);
+  // ctx has no state machine in phase 1: open=count, suspended=0,
+  // last_state='recorded'. Pin all four so a future "let's add a
+  // lifecycle to ctx" change has to update this contract explicitly.
+  assert.equal(payload.cross_passage.ctx.passage, 'ctx');
+  assert.equal(payload.cross_passage.ctx.open, 2);
+  assert.equal(payload.cross_passage.ctx.suspended, 0);
+  assert.equal(payload.cross_passage.ctx.last_state, 'recorded');
+  assert.match(payload.cross_passage.ctx.last_id, /^ctx-\d{4}-\d{2}-\d{2}-\d{3}$/);
+  assert.ok(payload.cross_passage.ctx.last_at, 'last_at set');
+});
+
+test('gate boot: cross_passage omits ctx when no ctx records exist', (t) => {
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  // Seed agora only — confirms ctx provider returns null (omitted)
+  // rather than appearing as an empty stub.
+  run(AGORA, root, ['new', '--slug', 't', '--kind', 'sandbox', '--title', 'T']);
+  run(AGORA, root, ['play', '--slug', 't']);
+
+  const r = run(GATE, root, ['boot', '--format', 'json']);
+  const payload = JSON.parse(r.stdout);
+  assert.ok(payload.cross_passage.agora, 'agora present');
+  assert.equal(
+    payload.cross_passage.ctx,
+    undefined,
+    'ctx absent when no records — voice budget',
+  );
 });
 
 test('gate boot: a malformed devil review does not break the rest of boot', (t) => {
