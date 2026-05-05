@@ -161,5 +161,21 @@ export async function lastPlay(deps: LastDeps, args: ParsedArgs): Promise<number
         `  closing invitation: ${closing.invitation}\n`,
     );
   }
+  // Next-hint: include `--game <slug>` so the id is usable as-is. Play
+  // ids are per-game sequences, so a bare id collides across games and
+  // every downstream verb (move/suspend/cliff/resume) errors with a
+  // "Disambiguate with --game" message. last is an orientation verb
+  // — its job isn't done until the next call works.
+  if (last.state === 'playing') {
+    process.stdout.write(
+      `  next: agora move ${last.id} --game ${last.game} --text "..."\n` +
+        `        or agora suspend ${last.id} --game ${last.game} --cliff "..." --invitation "..."\n`,
+    );
+  } else if (last.state === 'suspended') {
+    process.stdout.write(
+      `  next: agora resume ${last.id} --game ${last.game}\n` +
+        `        or agora cliff ${last.id} --game ${last.game}  (peek without resuming)\n`,
+    );
+  }
   return 0;
 }

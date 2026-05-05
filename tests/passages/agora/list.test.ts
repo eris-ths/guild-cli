@@ -297,6 +297,42 @@ test('agora list: --state playing keeps substrate id-desc sort (no re-sort)', (t
   );
 });
 
+test('agora list: --state suspended text output surfaces suspension timestamp', (t) => {
+  // Pairs with the sort: #182 ordered suspended plays by most-recent
+  // suspension, but the text view didn't show the timestamp — so the
+  // sort axis was invisible. Surface the `at` of the latest suspension
+  // so a human reader can see why the order is what it is.
+  // Other states (playing/concluded) and the no-filter case stay clean.
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  runAgora(
+    root,
+    ['new', '--slug', 'g', '--kind', 'sandbox', '--title', 'g'],
+    { GUILD_ACTOR: 'alice' },
+  );
+  runAgora(root, ['play', '--slug', 'g'], { GUILD_ACTOR: 'alice' });
+  runAgora(root, ['play', '--slug', 'g'], { GUILD_ACTOR: 'alice' });
+  const today = new Date().toISOString().slice(0, 10);
+  runAgora(
+    root,
+    ['suspend', `${today}-001`, '--cliff', 'c', '--invitation', 'i'],
+    { GUILD_ACTOR: 'alice' },
+  );
+
+  const r = runAgora(root, ['list', '--state', 'suspended'], { GUILD_ACTOR: 'alice' });
+  assert.equal(r.status, 0);
+  // Match the trailing "(suspended <iso8601>)" — proves the timestamp
+  // is present without pinning the exact value.
+  assert.match(r.stdout, /\(suspended \d{4}-\d{2}-\d{2}T[\d:.]+Z\)/);
+
+  // Negative: --state playing should NOT carry a (suspended ...) trailer.
+  const playing = runAgora(root, ['list', '--state', 'playing'], {
+    GUILD_ACTOR: 'alice',
+  });
+  assert.equal(playing.status, 0);
+  assert.doesNotMatch(playing.stdout, /\(suspended /);
+});
+
 test('agora list: rejects unknown flag (principle 10 input contract)', (t) => {
   const { root, cleanup } = bootstrap();
   t.after(cleanup);

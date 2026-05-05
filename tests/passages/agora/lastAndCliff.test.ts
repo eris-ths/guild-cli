@@ -196,6 +196,51 @@ test('agora last: text mode renders one-line summary + cliff lines when suspende
   assert.match(r.stdout, /closing invitation:/);
 });
 
+test('agora last: text next-hint includes --game so the id is usable as-is', (t) => {
+  // Touch-feel: bare play-ids collide across games; downstream verbs
+  // (move/suspend/cliff/resume) error with "Disambiguate with --game".
+  // last is an orientation verb — the next call must work without the
+  // caller hand-pasting the slug they just read off the same line.
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  seedAlice(root);
+  run(AGORA, root, ['new', '--slug', 'gh-play', '--kind', 'sandbox', '--title', 'g'], {
+    GUILD_ACTOR: 'alice',
+  });
+  run(AGORA, root, ['play', '--slug', 'gh-play'], { GUILD_ACTOR: 'alice' });
+  const playing = run(AGORA, root, ['last'], { GUILD_ACTOR: 'alice' });
+  assert.equal(playing.status, 0);
+  assert.match(playing.stdout, /next: agora move .+ --game gh-play --text/);
+  assert.match(playing.stdout, /agora suspend .+ --game gh-play --cliff/);
+
+  // suspended state → resume + cliff hints, both --game-qualified
+  run(AGORA, root, ['new', '--slug', 'gh-susp', '--kind', 'sandbox', '--title', 'g'], {
+    GUILD_ACTOR: 'alice',
+  });
+  const susp = JSON.parse(
+    run(AGORA, root, ['play', '--slug', 'gh-susp', '--format', 'json'], {
+      GUILD_ACTOR: 'alice',
+    }).stdout,
+  );
+  run(AGORA, root, [
+    'suspend', susp.play_id, '--game', 'gh-susp', '--by', 'alice',
+    '--cliff', 'c', '--invitation', 'i',
+  ]);
+  const suspended = run(AGORA, root, ['last'], { GUILD_ACTOR: 'alice' });
+  assert.equal(suspended.status, 0);
+  assert.match(suspended.stdout, /next: agora resume .+ --game gh-susp/);
+  assert.match(suspended.stdout, /agora cliff .+ --game gh-susp/);
+
+  // JSON envelope is unchanged — orchestrators rebuild qualified args
+  // from id+game already; the hint is a text-only affordance.
+  const json = JSON.parse(
+    run(AGORA, root, ['last', '--format', 'json'], { GUILD_ACTOR: 'alice' }).stdout,
+  );
+  assert.equal(json.ok, true);
+  assert.ok(typeof json.play.id === 'string');
+  assert.ok(typeof json.play.game === 'string');
+});
+
 // --- agora cliff ---
 
 test('agora cliff: never-suspended play returns helpful "no cliff" message', (t) => {
