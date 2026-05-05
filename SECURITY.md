@@ -157,8 +157,15 @@ the issue is the active discussion.
 
 - **Error messages may leak absolute paths**
   ([#153](https://github.com/eris-ths/guild-cli/issues/153)).
-  Errors from `safeFs` include the resolved target. Acceptable for
-  a local CLI; reconsider before any network exposure.
+  Mitigated as of v1-prep #153 (boundary sanitize): each CLI's
+  top-level `catch` rewrites occurrences of the configured
+  `contentRoot` prefix to the literal token `<content_root>`
+  before writing to stderr (`src/interface/shared/sanitizeError.ts`).
+  The structural tail (`<content_root>/requests/pending/foo.yaml`)
+  is preserved so debugging is not impaired. Paths outside
+  `contentRoot` (e.g. `/etc`, `/tmp`, accidental absolute paths in
+  user input) are *not* sanitized — boundary sanitize only collapses
+  the host-specific prefix that `safeFs` resolves into.
 - **Prototype pollution from hostile YAML**
   ([#154](https://github.com/eris-ths/guild-cli/issues/154)).
   Modern `yaml` lib returns plain objects and handles `__proto__`
