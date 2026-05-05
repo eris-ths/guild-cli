@@ -168,9 +168,18 @@ the issue is the active discussion.
   the host-specific prefix that `safeFs` resolves into.
 - **Prototype pollution from hostile YAML**
   ([#154](https://github.com/eris-ths/guild-cli/issues/154)).
-  Modern `yaml` lib returns plain objects and handles `__proto__`
-  safely, but the hydration layer does not independently guard
-  against prototype keys.
+  Mitigated as of v1-prep #154 (defense-in-depth): `parseYamlSafe`
+  passes the parsed tree through `stripPrototypeKeys` before
+  returning. The walker rebuilds plain objects via
+  `Object.create(null)`, dropping `__proto__` / `constructor` /
+  `prototype` literal keys at every nesting level. Defence is now
+  layered: (1) `MemberName` rejects the three names at the domain
+  boundary, (2) the `yaml` library returns plain objects (upstream
+  guarantee), and (3) parseYamlSafe strips them independently
+  regardless of what the lib does. Class instances pass through
+  unchanged so YAML custom tags that produce e.g. `Date` carriers
+  are unaffected. Tests:
+  `tests/infrastructure/parseYamlSafe.test.ts`.
 - **Concurrent writes**
   ([#155](https://github.com/eris-ths/guild-cli/issues/155)).
   There is no lock file. Two simultaneous writes on the same record
