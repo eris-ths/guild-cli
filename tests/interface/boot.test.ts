@@ -443,6 +443,57 @@ test('gate boot text: misconfigured_cwd block suppresses content_root disclosure
   }
 });
 
+// Default tail size pin. Bumped 10→5 with principle 13 in mind:
+// boot is bootstrap-shape, called every session start, so the
+// orientation payload sits on the hot path. Smaller default keeps
+// JSON lean (~200 vs ~250 lines pretty-printed); callers that want
+// deeper history pass `--tail <N>` explicitly. If this test fails
+// because the default moved again, update both this assertion AND
+// the rationale comment in src/interface/gate/handlers/boot.ts.
+test('gate boot: default tail returns 5 entries (lean default)', () => {
+  const { root, cleanup } = bootstrap();
+  try {
+    // Seed 8 requests so a default of 5 (or 10) is observable.
+    for (let i = 0; i < 8; i++) {
+      const { status } = runGate(
+        root,
+        ['request', '--action', `seed ${i}`, '--reason', 'tail-default pin'],
+        { GUILD_ACTOR: 'alice' },
+      );
+      assert.equal(status, 0, `seed ${i} failed`);
+    }
+    const { stdout } = runGate(root, ['boot'], { GUILD_ACTOR: 'alice' });
+    const payload = JSON.parse(stdout);
+    assert.equal(
+      payload.tail.length,
+      5,
+      'gate boot default tail size — change requires updating boot.ts rationale comment',
+    );
+  } finally {
+    cleanup();
+  }
+});
+
+test('gate boot: --tail <N> overrides the default', () => {
+  const { root, cleanup } = bootstrap();
+  try {
+    for (let i = 0; i < 8; i++) {
+      runGate(
+        root,
+        ['request', '--action', `seed ${i}`, '--reason', 'override pin'],
+        { GUILD_ACTOR: 'alice' },
+      );
+    }
+    const { stdout } = runGate(root, ['boot', '--tail', '8'], {
+      GUILD_ACTOR: 'alice',
+    });
+    const payload = JSON.parse(stdout);
+    assert.equal(payload.tail.length, 8, '--tail <N> override broken');
+  } finally {
+    cleanup();
+  }
+});
+
 function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
