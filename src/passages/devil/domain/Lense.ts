@@ -142,9 +142,23 @@ export class Lense {
 }
 
 export class LenseNotFound extends Error {
-  constructor(name: string) {
+  /**
+   * `available` carries the catalog at the time of the failure so
+   * the interface layer can render a did-you-mean hint without having
+   * to round-trip back through the LenseCatalog. The domain layer
+   * is the source of truth on which lenses exist; pushing the list
+   * up via the error means error messages always reflect *what was
+   * looked at*, not what the renderer thinks should exist.
+   *
+   * Empty `available` is allowed (catalog could legitimately be
+   * empty in a malformed config) — the interface renders without
+   * the suggestion line in that case.
+   */
+  readonly available: readonly string[];
+  constructor(name: string, available: readonly string[] = []) {
     super(`Lense not found in catalog: ${name}`);
     this.name = 'LenseNotFound';
+    this.available = available;
   }
 }
 

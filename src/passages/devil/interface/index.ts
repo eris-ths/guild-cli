@@ -22,6 +22,8 @@ import { sanitizeError } from '../../../interface/shared/sanitizeError.js';
 import { nearestCommand } from '../../../interface/shared/nearestCommand.js';
 import { getPackageVersion, isVersionFlag } from '../../../interface/shared/version.js';
 import { DomainError } from '../../../domain/shared/DomainError.js';
+import { LenseNotFound } from '../domain/Lense.js';
+import { PersonaNotFound } from '../domain/Persona.js';
 import { YamlDevilReviewRepository } from '../infrastructure/YamlDevilReviewRepository.js';
 import { BundledLenseCatalog } from '../infrastructure/BundledLenseCatalog.js';
 import { BundledPersonaCatalog } from '../infrastructure/BundledPersonaCatalog.js';
@@ -229,6 +231,29 @@ export async function main(argv: readonly string[]): Promise<number> {
     // Strip absolute contentRoot prefix (issue #153).
     const msg = sanitizeError(rawMsg, config.contentRoot);
     process.stderr.write(`error: ${msg}\n`);
+    // For catalog-miss failures, render the catalog + did-you-mean
+    // hint so the caller doesn't have to round-trip through `devil
+    // schema` to recover. 12 lenses + 6 personas are too many to
+    // hold in agent working memory; surfacing them at the failure
+    // site is the same affordance gate's `nearestCommand` already
+    // provides for unknown verbs (CLAUDE.md: "Skills that *open*
+    // something → agora; that *protect* something → devil"). The
+    // hint is on stderr so JSON parsers reading stdout aren't
+    // affected. Empty `available` (malformed config) renders no
+    // hint — same shape as gate's nearestCommand-returns-null.
+    if (e instanceof LenseNotFound || e instanceof PersonaNotFound) {
+      const kind = e instanceof LenseNotFound ? 'lense' : 'persona';
+      const tried = e.message.split(': ').pop() ?? '';
+      if (e.available.length > 0) {
+        const hint = nearestCommand(tried, e.available);
+        if (hint) {
+          process.stderr.write(`  did you mean: --${kind} ${hint}?\n`);
+        }
+        process.stderr.write(
+          `  available ${kind}s: ${e.available.join(', ')}\n`,
+        );
+      }
+    }
     return 1;
   }
 }
