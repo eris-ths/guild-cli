@@ -61,6 +61,13 @@ gate fast-track --from <m> --action "..." --reason "..."   # one-shot create→c
 gate thank <to> --for <id> [--by <m>] [--reason <s>]       # gratitude (no verdict, no calibration)
 ```
 
+`--executor <m>` records **intent**, not access — anyone with substrate
+access may run `gate execute`. When the actor differs from the assignee
+the substrate captures both, and `gate execute` emits a `notice:` so
+the mismatch is visible at the surface that did it. See
+[issue #168](https://github.com/eris-ths/guild-cli/issues/168) for the
+design rationale.
+
 ## Review (Two-Persona Devil)
 
 ```bash
