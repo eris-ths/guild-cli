@@ -1,8 +1,8 @@
 // agora schema — agent dispatch contract for the second passage.
 //
 // Pins the principle 10 obligations specifically for agora:
-//   - schema lists all 9 verbs (new/play/move/suspend/resume/
-//     conclude/list/show/schema)
+//   - schema lists all 11 verbs (new/play/move/suspend/resume/
+//     conclude/list/show/last/cliff/schema)
 //   - JSON envelope shape: {$schema, passage: "agora", version, verbs}
 //   - --verb filter narrows to one verb
 //   - input completeness: every flag the runtime accepts via
@@ -59,7 +59,7 @@ test('agora schema: JSON envelope contains every verb', (t) => {
   assert.equal(payload.$schema, 'http://json-schema.org/draft-07/schema#');
   const names = (payload.verbs as Array<{ name: string }>).map((v) => v.name).sort();
   assert.deepEqual(names, [
-    'conclude', 'list', 'move', 'new', 'play',
+    'cliff', 'conclude', 'last', 'list', 'move', 'new', 'play',
     'resume', 'schema', 'show', 'suspend',
   ]);
 });
@@ -94,7 +94,7 @@ test('agora schema: text mode renders one summary per verb', (t) => {
   t.after(cleanup);
   const r = runAgora(root, ['schema', '--format', 'text'], { GUILD_ACTOR: 'alice' });
   assert.equal(r.status, 0);
-  assert.match(r.stdout, /agora — 9 verb\(s\):/);
+  assert.match(r.stdout, /agora — 11 verb\(s\):/);
   assert.match(r.stdout, /^new\s+\[write\]/m);
   assert.match(r.stdout, /^suspend\s+\[write\]/m);
   assert.match(r.stdout, /^schema\s+\[meta\]/m);

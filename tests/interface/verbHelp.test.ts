@@ -174,7 +174,7 @@ test('VERB_EXAMPLES: every documented verb is mapped to a runnable example', () 
     ],
     agora: [
       'new', 'play', 'move', 'suspend', 'resume', 'conclude',
-      'list', 'show', 'schema',
+      'list', 'show', 'last', 'cliff', 'schema',
     ],
     devil: [
       'open', 'entry', 'list', 'show', 'conclude', 'dismiss', 'resolve',
