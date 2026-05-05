@@ -88,7 +88,7 @@ gate review <id> --by <m> --lense <l> --verdict <v> --comment "..."
 
 ```bash
 gate show <id> [--fields k1,k2] [--plain]  # request detail (JSON default; --fields trims, --plain unquotes a single field for shell substitution)
-gate list --state <s> [--for <m>]       # filtered list
+gate list --state <s|all> [--for <m>]   # filtered list (--state all = every state)
 gate pending [--for <m>]                # shortcut for --state pending
 gate board [--for <m>]                  # pending + approved + executing in one view
 gate voices <name> [--lense <l>] [--verdict <v>] [--limit <N>] [--with-calibration]
