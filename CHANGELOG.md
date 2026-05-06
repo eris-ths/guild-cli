@@ -7,6 +7,52 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 
 ## [Unreleased]
 
+> **Cross-process write serialization** (#155 — landed via #193 as a
+> single squash that combined PR-A and PR-B; docs follow as PR-C).
+> Replaces "serialize at the caller" with `withGuildLock`, a
+> content-root-wide single-writer mutex enforced by per-entry
+> middleware across all five CLIs (`gate`, `guild`, `agora`, `devil`,
+> `ctx`). The optimistic per-record CAS is retained as an in-process
+> safety net.
+>
+> Convergence path: design (Eris + Noir) → devil-review surfaced 5
+> ship-blockers (entry coverage, host self-attestation, `buildContainer`
+> invariant, verb-set SOT, `doctor` chicken-and-egg) → all accepted →
+> implementation (Miki) → real-machine validation (Asteria, 14
+> scenarios) → final-gate devil pass (zero ship-blockers, 6
+> follow-ups filed: #194 / #195 / #196 / #197 / #200 / #201).
+
+### Added
+
+- **`withGuildLock` + `withEntryLock`** lock primitive and middleware
+  ([#155](https://github.com/eris-ths/guild-cli/issues/155),
+   [#193](https://github.com/eris-ths/guild-cli/pull/193)).
+  `${contentRoot}/.guild-lock` via `O_CREAT | O_EXCL`, JSON metadata
+  payload, `unlink` in `finally`. Three reclaim branches: dead pid
+  (`kill 0` → `ESRCH` with ancestor-pid safety valve), pre-boot lock
+  (`os.uptime()`-derived), and `GUILD_LOCK_MAX_AGE_MS` env cap.
+  Engaged by per-entry middleware that consults a per-passage
+  `verbs.ts` exporting three sets (`READ_VERBS` / `WRITE_VERBS` /
+  `LOCK_EXEMPT_VERBS`); decision order is EXEMPT → READ →
+  acquire-lock (unknown verbs are fail-safe to the lock side).
+  Cross-passage race is exercised in CI by
+  `tests/integration/lock/cross-passage-race.test.ts` (spawn-based
+  with a shared barrier file via `GUILD_LOCK_TEST_BARRIER`, no-op
+  in production). `buildContainer` invariant pin tests on each
+  passage (`tests/infrastructure/{gate,agora,devil,ctx}Container.test.ts`)
+  catch any regression that would put a write side-effect ahead of
+  the lock.
+- **`LockBusyError` (DomainError subclass)** — JSON envelope code
+  `lock_busy` on the gate path; non-gate parity tracked in #194.
+- **`SECURITY.md` § Concurrent writes** rewritten to describe
+  guildLock as the serialization boundary, with the threat-model
+  caveat (writers with content_root access are out of scope) and
+  links to the six follow-up issues.
+- **`docs/storage-format.md` § Cross-process serialization** —
+  on-disk contract for `.guild-lock` (path, payload shape, reclaim
+  rules, test barrier env) so the format is documented alongside
+  the rest of the substrate.
+
 > **Touch-feel campaign** (5 PRs, 1 design issue). A P3 dogfood pass
 > with fresh-agent eyes surfaced the same friction class repeatedly:
 > "the user knows something is wrong / done / different but not what
