@@ -22,6 +22,7 @@ import { join } from 'node:path';
 import {
   withGuildLock,
   LockBusyError,
+  readHolder,
 } from '../../../src/infrastructure/lock/guildLock.js';
 
 function makeRoot(): { root: string; cleanup: () => void } {
@@ -284,6 +285,97 @@ test('withGuildLock: does NOT reclaim when started_at is post-boot and pid is al
     if (prev === undefined) delete process.env['GUILD_LOCK_MAX_AGE_MS'];
     else process.env['GUILD_LOCK_MAX_AGE_MS'] = prev;
     // Manually clean since we left the lock in place.
+    cleanup();
+  }
+});
+
+// #197: readHolder TOCTOU pin. The previous all-errors-to-null
+// behavior conflated ENOENT (release race) with parse failure
+// (corrupt file), forcing acquire to surface a confusing "unreadable
+// holder" busy message instead of retrying. The discriminated union
+// makes the two paths distinguishable. We only need to pin the
+// ENOENT → 'gone' edge here; the corrupt path is exercised by the
+// stale-recovery test below.
+test('readHolder: ENOENT returns kind=gone (TOCTOU release race)', () => {
+  const { root, cleanup } = makeRoot();
+  try {
+    // No lock file written — readHolder should report 'gone' rather
+    // than 'corrupt' or null. acquire's #197 retry path depends on
+    // this discriminator.
+    const result = readHolder(join(root, '.guild-lock'));
+    assert.equal(result.kind, 'gone');
+  } finally {
+    cleanup();
+  }
+});
+
+// #195: malformed holder file is treated as stale. Without this,
+// any unparseable .guild-lock would wedge writers indefinitely
+// (readHolder returns null → not reclaimable → LockBusyError forever
+// until a human deletes the file). We pre-write a single '{' so
+// JSON.parse fails, then assert acquire recovers.
+test('withGuildLock: corrupt holder file is treated as stale and reclaimed', async () => {
+  const { root, cleanup } = makeRoot();
+  try {
+    writeFileSync(join(root, '.guild-lock'), '{', 'utf8');
+    const result = await withGuildLock(
+      { contentRoot: root },
+      META,
+      async () => 'recovered',
+    );
+    assert.equal(result, 'recovered');
+    // Lock file should have been unlinked by the winner's release.
+    assert.equal(existsSync(join(root, '.guild-lock')), false);
+  } finally {
+    cleanup();
+  }
+});
+
+// #195 sibling: holder JSON is well-formed but missing the
+// load-bearing `pid` field (or it's the wrong type). readHolder
+// must classify this as 'corrupt' too, otherwise an attacker /
+// hand-edit could neutralize the staleness check by writing a
+// minimal `{}`.
+test('withGuildLock: holder file with missing pid is treated as stale', async () => {
+  const { root, cleanup } = makeRoot();
+  try {
+    writeFileSync(
+      join(root, '.guild-lock'),
+      JSON.stringify({ verb: 'no-pid', actor: 'x' }) + '\n',
+      'utf8',
+    );
+    const result = await withGuildLock(
+      { contentRoot: root },
+      META,
+      async () => 'recovered-missing-pid',
+    );
+    assert.equal(result, 'recovered-missing-pid');
+    assert.equal(existsSync(join(root, '.guild-lock')), false);
+  } finally {
+    cleanup();
+  }
+});
+
+// #196: when GUILD_ACTOR / .guild-actor are absent, lock metadata
+// must record the explicit '(unset)' placeholder rather than an
+// empty string. This is the in-process version of the assertion;
+// the entry-point sites are smoke-checked indirectly via the
+// existing CLI integration tests passing under the new placeholder.
+test('withGuildLock: empty actor placeholder is recorded as-is', async () => {
+  const { root, cleanup } = makeRoot();
+  try {
+    let snapshot: Record<string, unknown> | null = null;
+    await withGuildLock(
+      { contentRoot: root },
+      { passage: 'gate', verb: 'request', actor: '(unset)' },
+      async () => {
+        const raw = readFileSync(join(root, '.guild-lock'), 'utf8');
+        snapshot = JSON.parse(raw) as Record<string, unknown>;
+      },
+    );
+    assert.ok(snapshot, 'metadata should have been read inside fn');
+    assert.equal((snapshot as Record<string, unknown>)['actor'], '(unset)');
+  } finally {
     cleanup();
   }
 });

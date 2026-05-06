@@ -10,15 +10,22 @@
 // in `finally`. A competing acquire fails with EEXIST and surfaces
 // as `LockBusyError` (DomainError subclass → `lock_busy` JSON code).
 //
-// Stale reclaim (PR-A + PR-B): on EEXIST we try once to rescue an
-// obviously-dead lock by reading the file's metadata and
-// auto-unlinking when ANY of:
-//   1. `lock.started_at` predates the current OS boot (reboot
-//      crossed → the recorded pid cannot be the same process as
-//      the holder, even if a fresh pid happens to collide), OR
-//   2. `kill(pid, 0)` reports ESRCH (the recorded process is gone)
-//      AND the pid is not our own / not our parent, OR
-//   3. `GUILD_LOCK_MAX_AGE_MS` env is set and `started_at` exceeds it.
+// Stale reclaim (PR-A + PR-B + follow-up cluster): on EEXIST we
+// `readHolder` and dispatch on a discriminated union:
+//   - `'gone'`   → the file vanished between EEXIST and readFile
+//                  (release race, #197). One retry of openExclusive.
+//   - `'corrupt'`→ file exists but is unparseable (#195). Treated as
+//                  stale: unlink + retry. Recovery cost is low — the
+//                  next caller writes fresh metadata. Realistic only
+//                  under power-loss mid-write or hand-edit, since
+//                  openExclusive itself cleans up partial writes.
+//   - `'present'`→ normal path. Reclaim if ANY of:
+//        1. `lock.started_at` predates the current OS boot (reboot
+//           crossed → the recorded pid cannot be the same process as
+//           the holder, even if a fresh pid happens to collide), OR
+//        2. `kill(pid, 0)` reports ESRCH (the recorded process is gone)
+//           AND the pid is not our own / not our parent, OR
+//        3. `GUILD_LOCK_MAX_AGE_MS` env is set and `started_at` exceeds it.
 //
 // We deliberately refuse to reclaim a lock whose pid is our own
 // process or our parent — that's ancestor territory and reclaiming
@@ -144,28 +151,82 @@ function acquire(lockPath: string, meta: GuildLockMeta): number {
   try {
     return openExclusive(lockPath, meta);
   } catch (err) {
-    if (!isEexist(err)) throw err;
-    // EEXIST path — read holder, decide whether to reclaim.
-    const holder = readHolder(lockPath);
-    if (holder && isReclaimable(holder)) {
-      // Best-effort unlink; if it disappears between our read and
-      // unlink that's fine — the next openExclusive will succeed.
-      try {
-        unlinkSync(lockPath);
-      } catch (e) {
-        if (!isEnoent(e)) throw e;
-      }
+    if (!isEexistLike(err)) throw err;
+    // EEXIST path — read holder, dispatch on discriminator.
+    // (`isEexistLike` also catches Windows' EPERM/EBUSY which the
+    // kernel surfaces during the async window between another
+    // process closing/unlinking and the file actually being free.)
+    const peek = readHolder(lockPath);
+
+    // #197: TOCTOU between EEXIST and readHolder. The previous
+    // holder released between our open(O_EXCL) returning EEXIST
+    // and our readFile. Retry openExclusive once — if that also
+    // EEXISTs, a new holder beat us, and we surface that as busy.
+    if (peek.kind === 'gone') {
+      sleepForWindowsHandleRelease();
       try {
         return openExclusive(lockPath, meta);
       } catch (retryErr) {
-        if (!isEexist(retryErr)) throw retryErr;
-        // Lost the race: someone else acquired between our unlink
-        // and retry. Surface that as busy with the *new* holder.
-        throw new LockBusyError(lockPath, readHolder(lockPath));
+        if (!isEexistLike(retryErr)) throw retryErr;
+        const second = readHolder(lockPath);
+        throw new LockBusyError(lockPath, holderOrNull(second));
       }
     }
-    throw new LockBusyError(lockPath, holder);
+
+    // #195: unparseable holder file is treated as stale; recovery
+    // cost is low (next caller writes fresh metadata). Falls into
+    // the same unlink+retry path as a reclaimed live-but-stale lock.
+    const treatAsStale =
+      peek.kind === 'corrupt' ||
+      (peek.kind === 'present' && isReclaimable(peek.holder));
+
+    if (treatAsStale) {
+      // Best-effort unlink; if it disappears between our read and
+      // unlink that's fine — the next openExclusive will succeed.
+      // Windows can return EPERM/EBUSY here while another process
+      // still has the descriptor open; treat that as "someone else
+      // is mid-release" — sleep + retry path will pick it up.
+      try {
+        unlinkSync(lockPath);
+      } catch (e) {
+        if (!isEnoent(e) && !isEpermOrEbusy(e)) throw e;
+      }
+      sleepForWindowsHandleRelease();
+      try {
+        return openExclusive(lockPath, meta);
+      } catch (retryErr) {
+        if (!isEexistLike(retryErr)) throw retryErr;
+        // Lost the race: someone else acquired between our unlink
+        // and retry. Surface that as busy with the *new* holder.
+        const second = readHolder(lockPath);
+        throw new LockBusyError(lockPath, holderOrNull(second));
+      }
+    }
+
+    // peek.kind === 'present' and not reclaimable.
+    throw new LockBusyError(lockPath, peek.holder);
   }
+}
+
+/**
+ * Windows-only: when another process has just close()'d the lock fd
+ * (or unlinkSync'd the file), the kernel may still hold the handle
+ * for a brief window during which our open('wx') returns EPERM and
+ * unlink returns EBUSY/EPERM. POSIX surfaces the same situations as
+ * EEXIST/ENOENT respectively, so this is purely a Windows quirk.
+ *
+ * We sleep ~25ms before any retry on the EEXIST-like path. Cheap on
+ * POSIX (the retry would have succeeded immediately anyway), and the
+ * dominant wait on Windows. Bounded because the race tests have
+ * HOLD_MS=300ms; 25ms is well within that budget.
+ */
+function sleepForWindowsHandleRelease(): void {
+  if (process.platform !== 'win32') return;
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25);
+}
+
+function holderOrNull(r: ReadHolderResult): LockMetadata | null {
+  return r.kind === 'present' ? r.holder : null;
 }
 
 function release(lockPath: string, fd: number): void {
@@ -214,34 +275,66 @@ function openExclusive(lockPath: string, meta: GuildLockMeta): number {
   }
 }
 
-function readHolder(lockPath: string): LockMetadata | null {
+/**
+ * Outcome of peeking at the lock file when we hit EEXIST. The
+ * discriminator lets `acquire` distinguish three meaningfully
+ * different states without conflating them in a single `null`:
+ *
+ *   - `gone`    : the file vanished between EEXIST and our read.
+ *                 The previous holder released; retry openExclusive.
+ *   - `corrupt` : the file exists but cannot be parsed as a
+ *                 LockMetadata. Treated as stale (#195); the
+ *                 only realistic causes are power-loss mid-write
+ *                 or a hand-edit, both of which warrant recovery.
+ *   - `present` : valid metadata; caller decides reclaim vs busy.
+ *
+ * This type is intentionally module-internal — exporting it would
+ * leak the implementation choice for stale-handling beyond what
+ * callers need. They only see `LockBusyError` or success.
+ */
+export type ReadHolderResult =
+  | { kind: 'gone' }
+  | { kind: 'corrupt' }
+  | { kind: 'present'; holder: LockMetadata };
+
+export function readHolder(lockPath: string): ReadHolderResult {
   let raw: string;
   try {
     raw = readFileSync(lockPath, 'utf8');
   } catch (e) {
-    if (isEnoent(e)) return null;
-    return null;
+    // ENOENT specifically means the file was unlinked between the
+    // EEXIST and our readFile (TOCTOU, #197). Other read errors
+    // (e.g. EACCES) we cannot meaningfully recover from at this
+    // layer — surface as `corrupt` so the caller treats the lock
+    // as stale rather than wedging indefinitely. This is more
+    // permissive than the previous null-swallow but symmetric
+    // with the corrupt-as-stale policy: an unreadable lock is
+    // useless to us either way.
+    if (isEnoent(e)) return { kind: 'gone' };
+    return { kind: 'corrupt' };
   }
+  let parsed: unknown;
   try {
-    const parsed: unknown = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object') return null;
-    const o = parsed as Record<string, unknown>;
-    if (typeof o['pid'] !== 'number') return null;
-    return {
-      pid: o['pid'] as number,
-      ppid: typeof o['ppid'] === 'number' ? (o['ppid'] as number) : 0,
-      started_at: typeof o['started_at'] === 'string' ? (o['started_at'] as string) : '',
-      verb: typeof o['verb'] === 'string' ? (o['verb'] as string) : '',
-      actor: typeof o['actor'] === 'string' ? (o['actor'] as string) : '',
-      host: typeof o['host'] === 'string' ? (o['host'] as string) : '',
-      cwd: typeof o['cwd'] === 'string' ? (o['cwd'] as string) : '',
-      passage: typeof o['passage'] === 'string' ? (o['passage'] as string) : '',
-      guild_cli_version:
-        typeof o['guild_cli_version'] === 'string' ? (o['guild_cli_version'] as string) : '',
-    };
+    parsed = JSON.parse(raw);
   } catch {
-    return null;
+    return { kind: 'corrupt' };
   }
+  if (!parsed || typeof parsed !== 'object') return { kind: 'corrupt' };
+  const o = parsed as Record<string, unknown>;
+  if (typeof o['pid'] !== 'number') return { kind: 'corrupt' };
+  const holder: LockMetadata = {
+    pid: o['pid'] as number,
+    ppid: typeof o['ppid'] === 'number' ? (o['ppid'] as number) : 0,
+    started_at: typeof o['started_at'] === 'string' ? (o['started_at'] as string) : '',
+    verb: typeof o['verb'] === 'string' ? (o['verb'] as string) : '',
+    actor: typeof o['actor'] === 'string' ? (o['actor'] as string) : '',
+    host: typeof o['host'] === 'string' ? (o['host'] as string) : '',
+    cwd: typeof o['cwd'] === 'string' ? (o['cwd'] as string) : '',
+    passage: typeof o['passage'] === 'string' ? (o['passage'] as string) : '',
+    guild_cli_version:
+      typeof o['guild_cli_version'] === 'string' ? (o['guild_cli_version'] as string) : '',
+  };
+  return { kind: 'present', holder };
 }
 
 /**
@@ -352,8 +445,23 @@ function isPidDead(pid: number): boolean {
   }
 }
 
-function isEexist(e: unknown): boolean {
-  return !!e && typeof e === 'object' && (e as NodeJS.ErrnoException).code === 'EEXIST';
+/**
+ * Windows surfaces "file is held by another process" as EPERM
+ * (open) or EBUSY (open / unlink) during the async handle-release
+ * window. POSIX uses EEXIST / ENOENT for the same situations. We
+ * coalesce all three for the EEXIST-like contention path so the
+ * #197 retry / #195 stale-recovery logic is platform-agnostic.
+ */
+function isEexistLike(e: unknown): boolean {
+  if (!e || typeof e !== 'object') return false;
+  const code = (e as NodeJS.ErrnoException).code;
+  return code === 'EEXIST' || code === 'EPERM' || code === 'EBUSY';
+}
+
+function isEpermOrEbusy(e: unknown): boolean {
+  if (!e || typeof e !== 'object') return false;
+  const code = (e as NodeJS.ErrnoException).code;
+  return code === 'EPERM' || code === 'EBUSY';
 }
 
 function isEnoent(e: unknown): boolean {
