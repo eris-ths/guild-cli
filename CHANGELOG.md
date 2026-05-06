@@ -7,6 +7,21 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
 
 ## [Unreleased]
 
+### Added
+
+- **Format-symmetry contract test (principle 11 enforcement).** A
+  v0.5 dogfood pass found that `gate status` and `gate doctor`
+  silently fell back to text mode for unknown `--format` values
+  (the inverse symmetry — every `--format`-aware verb must reject
+  unknown values uniformly — had no CI guard). New test runs both
+  `--format json` and `--format text` against a representative set
+  of read verbs (gate status / board / schema / doctor / tail,
+  agora list / schema, devil list / schema), asserts both succeed
+  and produce parseable output, plus a negative pass that pins
+  rejection of `--format yaml`. Two handler fixes shipped together:
+  `gate status` and `gate doctor` now validate `--format` at entry
+  (matches the existing pattern used by board / list / schema).
+
 ### Changed
 
 - **Actor-flag missing-arg errors unified across agora / devil / ctx

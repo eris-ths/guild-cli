@@ -168,6 +168,10 @@ export async function statusCmd(c: C, args: ParsedArgs): Promise<number> {
   rejectUnknownFlags(args, STATUS_KNOWN_FLAGS, 'status');
   const actor = optionalOption(args, 'for') ?? resolveGuildActor() ?? null;
   const format = optionalOption(args, 'format') ?? 'json';
+  if (format !== 'json' && format !== 'text') {
+    process.stderr.write(`error: --format must be 'json' or 'text', got: ${format}\n`);
+    return 1;
+  }
 
   const all = await c.requestUC.listAll();
   const summary = collectStatus(all, actor);
