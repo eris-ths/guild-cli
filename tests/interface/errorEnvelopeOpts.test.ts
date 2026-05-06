@@ -16,7 +16,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
 // We invoke a small helper-runner in a child process so that
@@ -24,11 +24,21 @@ import { dirname, resolve } from 'node:path';
 // this inline would require monkey-patching process.stderr, which
 // the test runner is opinionated about. The runner just imports
 // emitErrorEnvelope from the built dist and exercises one path.
+//
+// Paths are converted to file:// URLs because Windows absolute paths
+// (e.g. `D:\...\errorEnvelope.js`) trip ESM's url-scheme guard
+// (`ERR_UNSUPPORTED_ESM_URL_SCHEME`). pathToFileURL is the portable form.
 const here = dirname(fileURLToPath(import.meta.url));
 // dist/tests/interface/ → ../../src + ../../bin.
-const HELPER_PATH = resolve(here, '../../src/interface/shared/errorEnvelope.js');
-const DOMAIN_ERROR_PATH = resolve(here, '../../src/domain/shared/DomainError.js');
-const LOCK_PATH = resolve(here, '../../src/infrastructure/lock/guildLock.js');
+const HELPER_PATH = pathToFileURL(
+  resolve(here, '../../src/interface/shared/errorEnvelope.js'),
+).href;
+const DOMAIN_ERROR_PATH = pathToFileURL(
+  resolve(here, '../../src/domain/shared/DomainError.js'),
+).href;
+const LOCK_PATH = pathToFileURL(
+  resolve(here, '../../src/infrastructure/lock/guildLock.js'),
+).href;
 
 interface RunResult {
   envelope: { ok: boolean; error: { message: string; code?: string; field?: string } };
