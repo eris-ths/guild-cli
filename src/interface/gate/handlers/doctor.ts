@@ -38,8 +38,12 @@ const DOCTOR_KNOWN_FLAGS: ReadonlySet<string> = new Set([
 
 export async function doctorCmd(c: C, args: ParsedArgs): Promise<number> {
   rejectUnknownFlags(args, DOCTOR_KNOWN_FLAGS, 'doctor');
-  const report = await c.diagnosticUC.run();
   const format = optionalOption(args, 'format') ?? 'text';
+  if (format !== 'json' && format !== 'text') {
+    process.stderr.write(`error: --format must be 'json' or 'text', got: ${format}\n`);
+    return 1;
+  }
+  const report = await c.diagnosticUC.run();
   const summaryOnly =
     args.options['summary'] === true || args.positional[0] === 'summary';
 
