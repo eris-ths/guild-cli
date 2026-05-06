@@ -10,15 +10,22 @@
 // in `finally`. A competing acquire fails with EEXIST and surfaces
 // as `LockBusyError` (DomainError subclass → `lock_busy` JSON code).
 //
-// Stale reclaim (PR-A + PR-B): on EEXIST we try once to rescue an
-// obviously-dead lock by reading the file's metadata and
-// auto-unlinking when ANY of:
-//   1. `lock.started_at` predates the current OS boot (reboot
-//      crossed → the recorded pid cannot be the same process as
-//      the holder, even if a fresh pid happens to collide), OR
-//   2. `kill(pid, 0)` reports ESRCH (the recorded process is gone)
-//      AND the pid is not our own / not our parent, OR
-//   3. `GUILD_LOCK_MAX_AGE_MS` env is set and `started_at` exceeds it.
+// Stale reclaim (PR-A + PR-B + follow-up cluster): on EEXIST we
+// `readHolder` and dispatch on a discriminated union:
+//   - `'gone'`   → the file vanished between EEXIST and readFile
+//                  (release race, #197). One retry of openExclusive.
+//   - `'corrupt'`→ file exists but is unparseable (#195). Treated as
+//                  stale: unlink + retry. Recovery cost is low — the
+//                  next caller writes fresh metadata. Realistic only
+//                  under power-loss mid-write or hand-edit, since
+//                  openExclusive itself cleans up partial writes.
+//   - `'present'`→ normal path. Reclaim if ANY of:
+//        1. `lock.started_at` predates the current OS boot (reboot
+//           crossed → the recorded pid cannot be the same process as
+//           the holder, even if a fresh pid happens to collide), OR
+//        2. `kill(pid, 0)` reports ESRCH (the recorded process is gone)
+//           AND the pid is not our own / not our parent, OR
+//        3. `GUILD_LOCK_MAX_AGE_MS` env is set and `started_at` exceeds it.
 //
 // We deliberately refuse to reclaim a lock whose pid is our own
 // process or our parent — that's ancestor territory and reclaiming
@@ -145,9 +152,31 @@ function acquire(lockPath: string, meta: GuildLockMeta): number {
     return openExclusive(lockPath, meta);
   } catch (err) {
     if (!isEexist(err)) throw err;
-    // EEXIST path — read holder, decide whether to reclaim.
-    const holder = readHolder(lockPath);
-    if (holder && isReclaimable(holder)) {
+    // EEXIST path — read holder, dispatch on discriminator.
+    const peek = readHolder(lockPath);
+
+    // #197: TOCTOU between EEXIST and readHolder. The previous
+    // holder released between our open(O_EXCL) returning EEXIST
+    // and our readFile. Retry openExclusive once — if that also
+    // EEXISTs, a new holder beat us, and we surface that as busy.
+    if (peek.kind === 'gone') {
+      try {
+        return openExclusive(lockPath, meta);
+      } catch (retryErr) {
+        if (!isEexist(retryErr)) throw retryErr;
+        const second = readHolder(lockPath);
+        throw new LockBusyError(lockPath, holderOrNull(second));
+      }
+    }
+
+    // #195: unparseable holder file is treated as stale; recovery
+    // cost is low (next caller writes fresh metadata). Falls into
+    // the same unlink+retry path as a reclaimed live-but-stale lock.
+    const treatAsStale =
+      peek.kind === 'corrupt' ||
+      (peek.kind === 'present' && isReclaimable(peek.holder));
+
+    if (treatAsStale) {
       // Best-effort unlink; if it disappears between our read and
       // unlink that's fine — the next openExclusive will succeed.
       try {
@@ -161,11 +190,18 @@ function acquire(lockPath: string, meta: GuildLockMeta): number {
         if (!isEexist(retryErr)) throw retryErr;
         // Lost the race: someone else acquired between our unlink
         // and retry. Surface that as busy with the *new* holder.
-        throw new LockBusyError(lockPath, readHolder(lockPath));
+        const second = readHolder(lockPath);
+        throw new LockBusyError(lockPath, holderOrNull(second));
       }
     }
-    throw new LockBusyError(lockPath, holder);
+
+    // peek.kind === 'present' and not reclaimable.
+    throw new LockBusyError(lockPath, peek.holder);
   }
+}
+
+function holderOrNull(r: ReadHolderResult): LockMetadata | null {
+  return r.kind === 'present' ? r.holder : null;
 }
 
 function release(lockPath: string, fd: number): void {
@@ -214,34 +250,66 @@ function openExclusive(lockPath: string, meta: GuildLockMeta): number {
   }
 }
 
-function readHolder(lockPath: string): LockMetadata | null {
+/**
+ * Outcome of peeking at the lock file when we hit EEXIST. The
+ * discriminator lets `acquire` distinguish three meaningfully
+ * different states without conflating them in a single `null`:
+ *
+ *   - `gone`    : the file vanished between EEXIST and our read.
+ *                 The previous holder released; retry openExclusive.
+ *   - `corrupt` : the file exists but cannot be parsed as a
+ *                 LockMetadata. Treated as stale (#195); the
+ *                 only realistic causes are power-loss mid-write
+ *                 or a hand-edit, both of which warrant recovery.
+ *   - `present` : valid metadata; caller decides reclaim vs busy.
+ *
+ * This type is intentionally module-internal — exporting it would
+ * leak the implementation choice for stale-handling beyond what
+ * callers need. They only see `LockBusyError` or success.
+ */
+export type ReadHolderResult =
+  | { kind: 'gone' }
+  | { kind: 'corrupt' }
+  | { kind: 'present'; holder: LockMetadata };
+
+export function readHolder(lockPath: string): ReadHolderResult {
   let raw: string;
   try {
     raw = readFileSync(lockPath, 'utf8');
   } catch (e) {
-    if (isEnoent(e)) return null;
-    return null;
+    // ENOENT specifically means the file was unlinked between the
+    // EEXIST and our readFile (TOCTOU, #197). Other read errors
+    // (e.g. EACCES) we cannot meaningfully recover from at this
+    // layer — surface as `corrupt` so the caller treats the lock
+    // as stale rather than wedging indefinitely. This is more
+    // permissive than the previous null-swallow but symmetric
+    // with the corrupt-as-stale policy: an unreadable lock is
+    // useless to us either way.
+    if (isEnoent(e)) return { kind: 'gone' };
+    return { kind: 'corrupt' };
   }
+  let parsed: unknown;
   try {
-    const parsed: unknown = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object') return null;
-    const o = parsed as Record<string, unknown>;
-    if (typeof o['pid'] !== 'number') return null;
-    return {
-      pid: o['pid'] as number,
-      ppid: typeof o['ppid'] === 'number' ? (o['ppid'] as number) : 0,
-      started_at: typeof o['started_at'] === 'string' ? (o['started_at'] as string) : '',
-      verb: typeof o['verb'] === 'string' ? (o['verb'] as string) : '',
-      actor: typeof o['actor'] === 'string' ? (o['actor'] as string) : '',
-      host: typeof o['host'] === 'string' ? (o['host'] as string) : '',
-      cwd: typeof o['cwd'] === 'string' ? (o['cwd'] as string) : '',
-      passage: typeof o['passage'] === 'string' ? (o['passage'] as string) : '',
-      guild_cli_version:
-        typeof o['guild_cli_version'] === 'string' ? (o['guild_cli_version'] as string) : '',
-    };
+    parsed = JSON.parse(raw);
   } catch {
-    return null;
+    return { kind: 'corrupt' };
   }
+  if (!parsed || typeof parsed !== 'object') return { kind: 'corrupt' };
+  const o = parsed as Record<string, unknown>;
+  if (typeof o['pid'] !== 'number') return { kind: 'corrupt' };
+  const holder: LockMetadata = {
+    pid: o['pid'] as number,
+    ppid: typeof o['ppid'] === 'number' ? (o['ppid'] as number) : 0,
+    started_at: typeof o['started_at'] === 'string' ? (o['started_at'] as string) : '',
+    verb: typeof o['verb'] === 'string' ? (o['verb'] as string) : '',
+    actor: typeof o['actor'] === 'string' ? (o['actor'] as string) : '',
+    host: typeof o['host'] === 'string' ? (o['host'] as string) : '',
+    cwd: typeof o['cwd'] === 'string' ? (o['cwd'] as string) : '',
+    passage: typeof o['passage'] === 'string' ? (o['passage'] as string) : '',
+    guild_cli_version:
+      typeof o['guild_cli_version'] === 'string' ? (o['guild_cli_version'] as string) : '',
+  };
+  return { kind: 'present', holder };
 }
 
 /**

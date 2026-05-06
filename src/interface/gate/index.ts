@@ -268,7 +268,12 @@ export async function main(argv: readonly string[]): Promise<number> {
   const args = parseArgs(rest);
   const c = buildContainer();
   try {
-    const actor = resolveGuildActor() ?? '';
+    // #196: prefer an explicit placeholder over an empty string so
+    // lock metadata / LockBusyError messages remain self-explanatory
+    // when GUILD_ACTOR / .guild-actor are absent. Pass-through of
+    // --by/--from at the entry layer is intentionally out of scope
+    // (deferred follow-up); this is a strictly diagnostic improvement.
+    const actor = resolveGuildActor() ?? '(unset)';
     return await withEntryLock(
       c.config,
       'gate',

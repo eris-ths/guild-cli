@@ -117,7 +117,8 @@ export async function main(argv: readonly string[]): Promise<number> {
     }
   };
   try {
-    const actor = resolveGuildActor() ?? '';
+    // #196: see gate/index.ts for rationale.
+    const actor = resolveGuildActor() ?? '(unset)';
     return await withEntryLock(
       c.config,
       'guild',
