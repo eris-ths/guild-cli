@@ -3,6 +3,7 @@ import {
   optionalOption,
   rejectUnknownFlags,
 } from '../../../../interface/shared/parseArgs.js';
+import { DomainError } from '../../../../domain/shared/DomainError.js';
 
 const SCHEMA_KNOWN_FLAGS: ReadonlySet<string> = new Set(['format', 'verb']);
 
@@ -515,8 +516,10 @@ export async function schemaCmd(args: ParsedArgs): Promise<number> {
   }
   const verbs = verbFilter ? VERBS.filter((v) => v.name === verbFilter) : VERBS;
   if (verbFilter && verbs.length === 0) {
-    process.stderr.write(`error: no devil verb named "${verbFilter}"\n`);
-    return 1;
+    // Throw rather than write+return so the entry-point envelope
+    // (#194 / #205) emits a structured payload with field='verb' for
+    // JSON consumers. Same shape as agora/schema.ts's parallel site.
+    throw new DomainError(`no devil verb named "${verbFilter}"`, 'verb');
   }
 
   if (format === 'json') {

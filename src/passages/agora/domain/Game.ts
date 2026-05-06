@@ -148,9 +148,21 @@ export class Game {
   }
 }
 
-export class GameSlugCollision extends Error {
+/**
+ * Raised by repositories when a `saveNew` would clobber an existing
+ * game definition. Inherits from DomainError (not bare Error) so
+ * `emitErrorEnvelope` can derive `field='slug'` and `code='already_in_state'`
+ * without per-handler rewrap (#205 / Noir v3 + Devil v3 ratify).
+ *
+ * Message phrasing: "is already taken" (NOT "already exists") is
+ * deliberate. `deriveErrorCode`'s `already_in_state` regex is
+ * `/\bis already \w+\.?/i`; the verb-form needs "is already" to
+ * hit the more-specific code. Semantically identical to the prior
+ * "already exists: <slug>" wording.
+ */
+export class GameSlugCollision extends DomainError {
   constructor(slug: string) {
-    super(`Game slug already exists: ${slug}`);
+    super(`Game slug "${slug}" is already taken.`, 'slug');
     this.name = 'GameSlugCollision';
   }
 }

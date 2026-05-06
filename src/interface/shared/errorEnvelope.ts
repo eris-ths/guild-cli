@@ -29,27 +29,77 @@ import { LockBusyError } from '../../infrastructure/lock/guildLock.js';
 import { sanitizeError } from './sanitizeError.js';
 
 /**
+ * Per-call options for {@link emitErrorEnvelope}. All three are
+ * additive so the original 3-arg call sites in the entry-point
+ * outer-catches stay byte-identical.
+ *
+ * - `prefix` — concatenated to the raw error message *before*
+ *   `sanitizeError` runs, so #153's contentRoot collapse still
+ *   applies to anything the prefix names (e.g. `<input-path>`).
+ *   Used by handler-internal catches that previously wrote
+ *   `error: ${prefix}${e.message}` directly to stderr (#205).
+ *
+ * - `field` / `code` — caller-supplied fallbacks for synthetic
+ *   error sites where the handler is reporting a CLI-shape
+ *   problem (verb name, kind enum, --severity required, etc.)
+ *   without a domain-layer DomainError instance to derive from.
+ *
+ * **Precedence rule (locked at the helper boundary, not the
+ * caller's responsibility):**
+ *   - `field`: a `DomainError.field` on `err` ALWAYS wins. `opts.field`
+ *     is the fallback path used when `err` carries none.
+ *   - `code`:  `deriveErrorCode(err)` ALWAYS wins when it returns a
+ *     non-null code. `opts.code` is the fallback for everything else
+ *     (including `null` from derive).
+ *
+ * Rationale: caught-error sites pass `prefix` to add CLI context
+ * around a *real* domain failure; the domain field/code are
+ * authoritative there. Synthetic sites construct nothing and rely
+ * on `opts.field`/`opts.code`. The split keeps the helper's two
+ * use-modes (caught vs synthetic) from contending for the same
+ * envelope slots.
+ */
+export interface EmitOptions {
+  readonly prefix?: string;
+  readonly field?: string;
+  readonly code?: string;
+}
+
+/**
  * Render the error envelope to stderr. The caller still owns the
  * exit code (so this stays a one-line addition in catch blocks).
  *
  * - `format === 'json'` → emit the JSON envelope, then the `error:`
  *   text prologue (matches gate's existing dual-output shape).
  * - any other format    → emit only the `error:` text prologue.
+ *
+ * See {@link EmitOptions} for the precedence contract on `prefix`,
+ * `field`, `code`.
  */
 export function emitErrorEnvelope(
   err: unknown,
   format: string | undefined,
   contentRoot: string,
+  opts: EmitOptions = {},
 ): void {
   const rawMsg = err instanceof Error ? err.message : String(err);
-  const msg = sanitizeError(rawMsg, contentRoot);
+  const prefixed = opts.prefix ? `${opts.prefix}${rawMsg}` : rawMsg;
+  const msg = sanitizeError(prefixed, contentRoot);
   if (format === 'json') {
     const errObj: Record<string, unknown> = { message: msg };
+    // field: err.field wins; opts.field is fallback (see EmitOptions doc).
     if (err instanceof DomainError && err.field !== undefined) {
       errObj['field'] = err.field;
+    } else if (opts.field !== undefined) {
+      errObj['field'] = opts.field;
     }
-    const code = deriveErrorCode(err);
-    if (code !== null) errObj['code'] = code;
+    // code: deriveErrorCode(err) wins; opts.code is fallback.
+    const derived = deriveErrorCode(err);
+    if (derived !== null) {
+      errObj['code'] = derived;
+    } else if (opts.code !== undefined) {
+      errObj['code'] = opts.code;
+    }
     const payload = { ok: false, error: errObj };
     process.stderr.write(JSON.stringify(payload) + '\n');
   }

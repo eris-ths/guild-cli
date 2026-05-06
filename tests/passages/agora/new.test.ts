@@ -194,7 +194,12 @@ test('agora new: slug collision fails closed (no overwrite)', (t) => {
     { GUILD_ACTOR: 'alice' },
   );
   assert.notEqual(second.status, 0);
-  assert.match(second.stderr, /already exists/);
+  // GameSlugCollision message rebased to "is already taken" (#205):
+  // the prior "already exists" wording missed deriveErrorCode's
+  // `\bis already \w+` regex, so JSON envelopes returned
+  // code='validation_error' instead of the more-specific
+  // 'already_in_state'. Verb-form rephrasing keeps semantics.
+  assert.match(second.stderr, /is already taken/);
   // File contents unchanged.
   const after = readFileSync(
     join(root, 'agora', 'games', 'dup.yaml'),
@@ -204,12 +209,12 @@ test('agora new: slug collision fails closed (no overwrite)', (t) => {
 });
 
 test('agora new: collision error sanitizes the absolute path (#153 follow-up)', (t) => {
-  // The collision branch returns 1 from the handler instead of throwing,
-  // bypassing main()'s catch where #153's sanitizer normally runs. Pin
-  // that the `At:` line collapses contentRoot to `<content_root>` so
-  // home-directory and checkout-location info doesn't leak through this
-  // alternate egress path. Mirrors the contract sanitizeError holds for
-  // every other error-path emission across the four CLIs.
+  // The collision branch returns 1 from the handler instead of throwing.
+  // Post-#205 it routes through emitErrorEnvelope (which sanitizes the
+  // message proper) but the trailing `At: <path>` text-only hint still
+  // applies sanitizeError directly so the absolute path doesn't leak
+  // through the hint line either. Mirrors the contract sanitizeError
+  // holds for every other error-path emission across the four CLIs.
   const { root, cleanup } = bootstrap();
   t.after(cleanup);
   runAgora(
@@ -223,7 +228,8 @@ test('agora new: collision error sanitizes the absolute path (#153 follow-up)', 
     { GUILD_ACTOR: 'alice' },
   );
   assert.notEqual(second.status, 0);
-  assert.match(second.stderr, /already exists/);
+  // See "fails closed" test for the rephrasing rationale (#205).
+  assert.match(second.stderr, /is already taken/);
   // sanitizeError replaces only the host-specific contentRoot prefix;
   // the suffix is whatever path.join produced, so build the expected
   // string with join() too to keep the assertion cross-platform
