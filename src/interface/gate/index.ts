@@ -44,6 +44,12 @@ import { transcriptCmd } from './handlers/transcript.js';
 import { summarizeCmd } from './handlers/summarize.js';
 import { whyCmd } from './handlers/why.js';
 import { unrespondedCmd } from './handlers/unresponded.js';
+import { withEntryLock } from '../../infrastructure/lock/withEntryLock.js';
+import { LockBusyError } from '../../infrastructure/lock/guildLock.js';
+import { resolveGuildActor } from '../shared/resolveGuildActor.js';
+import { READ_VERBS, WRITE_VERBS, LOCK_EXEMPT_VERBS } from './verbs.js';
+import type { Container } from '../shared/container.js';
+import type { ParsedArgs } from '../shared/parseArgs.js';
 
 // Re-export for test backward-compat (tests/interface/reviewMarkers.test.ts).
 // formatReviewMarkers and computeReviewMarkerWidth live in handlers/request.ts
@@ -262,121 +268,22 @@ export async function main(argv: readonly string[]): Promise<number> {
   const args = parseArgs(rest);
   const c = buildContainer();
   try {
-    switch (cmd) {
-      case 'request':
-        return await reqCreate(c, args);
-      case 'pending':
-        return await reqList(c, 'pending', args, 'pending');
-      case 'board':
-        return await boardCmd(c, args);
-      case 'list': {
-        // `gate list` without --state is a common first-try ("show me
-        // everything"). Rather than just erroring on the missing flag,
-        // spell out the list vs status distinction — the question most
-        // first-time users actually have is "which verb do I want?"
-        const state = optionalOption(args, 'state');
-        if (state === undefined) {
-          process.stderr.write(
-            `gate list needs --state <s> (${REQUEST_STATES.join(' | ')} | all).\n` +
-              '  For counts across every state:  gate status\n' +
-              '  For the contents of one state:  gate list --state <s>\n' +
-              '  For every state at once:        gate list --state all\n',
-          );
-          return 1;
-        }
-        return await reqList(c, state, args, 'list');
-      }
-      case 'show':
-        return await reqShow(c, args);
-      case 'voices':
-        return await reqVoices(c, args);
-      case 'tail':
-        return await reqTail(c, args);
-      case 'whoami':
-        return await reqWhoami(c, args);
-      case 'register':
-        return await reqRegister(c, args);
-      case 'chain':
-        return await reqChain(c, args);
-      case 'approve':
-        return await reqApprove(c, args);
-      case 'deny':
-        return await reqDeny(c, args);
-      case 'execute':
-        return await reqExecute(c, args);
-      case 'complete':
-        return await reqComplete(c, args);
-      case 'fail':
-        return await reqFail(c, args);
-      case 'review':
-        return await reqReview(c, args);
-      case 'thank':
-        return await reqThank(c, args);
-      case 'fast-track':
-        return await reqFastTrack(c, args);
-      case 'issues':
-        return await issuesCmd(c, args);
-      case 'message':
-        return await msgSend(c, args);
-      case 'broadcast':
-        return await msgBroadcast(c, args);
-      case 'inbox':
-        return await msgInbox(c, args);
-      case 'doctor':
-        return await doctorCmd(c, args);
-      case 'repair':
-        return await repairCmd(c, args);
-      case 'status':
-        return await statusCmd(c, args);
-      case 'boot':
-        return await bootCmd(c, args);
-      case 'suggest':
-        return await suggestCmd(c, args);
-      case 'transcript':
-        return await transcriptCmd(c, args);
-      case 'summarize':
-        return await summarizeCmd(c, args);
-      case 'why':
-        return await whyCmd(c, args);
-      case 'resume':
-        return await resumeCmd(c, args);
-      case 'schema':
-        return await schemaCmd(c, args);
-      case 'unresponded':
-        return await unrespondedCmd(c, args);
-      default: {
-        const hint = nearestCommand(cmd, KNOWN_COMMANDS);
-        const suggest = hint ? `\n  did you mean: gate ${hint}?` : '';
-        process.stderr.write(
-          `unknown command: ${cmd}${suggest}\n` +
-            `  see 'gate --help' for the full command list.\n`,
-        );
-        return 1;
-      }
-    }
+    const actor = resolveGuildActor() ?? '';
+    return await withEntryLock(
+      c.config,
+      'gate',
+      cmd,
+      { READ_VERBS, WRITE_VERBS, LOCK_EXEMPT_VERBS },
+      actor,
+      () => dispatch(cmd, c, args),
+    );
   } catch (e) {
     if (e instanceof HelpRequested) {
       renderVerbHelp('gate', e);
       return 0;
     }
-    // The `error:` prefix gives the CLI-universal "this failed" cue;
-    // prepending "DomainError:" on top leaked an internal class name
-    // into user-facing output without adding information. The trailing
-    // `(field)` suffix used to echo which flag was bad — but for
-    // domain-internal fields (`state`, `sequence`) it read as debug
-    // noise, and for user-typed flags the message already names the
-    // field in prose. JSON envelope retains `error.field` for
-    // programmatic consumers (P3 dogfood C/A cleanup).
     const rawMsg = e instanceof Error ? e.message : String(e);
-    // Strip absolute contentRoot prefix from any safeFs-style paths
-    // before they reach stderr (issue #153, Direction 1).
     const msg = sanitizeError(rawMsg, c.config.contentRoot);
-    // When the caller asked for JSON output, mirror the error on
-    // stderr as a JSON envelope so a tool layer doesn't have to run
-    // two parsers (one on stdout JSON, one on stderr text). The
-    // human-readable `error: …` line still goes out too — pipelines
-    // that ignore stderr keep working, and humans reading the
-    // terminal still get a scannable message at the top.
     if (args.options['format'] === 'json') {
       const payload: Record<string, unknown> = {
         ok: false,
@@ -398,6 +305,105 @@ export async function main(argv: readonly string[]): Promise<number> {
   }
 }
 
+async function dispatch(
+  cmd: string,
+  c: Container,
+  args: ParsedArgs,
+): Promise<number> {
+  switch (cmd) {
+    case 'request':
+      return await reqCreate(c, args);
+    case 'pending':
+      return await reqList(c, 'pending', args, 'pending');
+    case 'board':
+      return await boardCmd(c, args);
+    case 'list': {
+      // `gate list` without --state is a common first-try ("show me
+      // everything"). Rather than just erroring on the missing flag,
+      // spell out the list vs status distinction — the question most
+      // first-time users actually have is "which verb do I want?"
+      const state = optionalOption(args, 'state');
+      if (state === undefined) {
+        process.stderr.write(
+          `gate list needs --state <s> (${REQUEST_STATES.join(' | ')} | all).\n` +
+            '  For counts across every state:  gate status\n' +
+            '  For the contents of one state:  gate list --state <s>\n' +
+            '  For every state at once:        gate list --state all\n',
+        );
+        return 1;
+      }
+      return await reqList(c, state, args, 'list');
+    }
+    case 'show':
+      return await reqShow(c, args);
+    case 'voices':
+      return await reqVoices(c, args);
+    case 'tail':
+      return await reqTail(c, args);
+    case 'whoami':
+      return await reqWhoami(c, args);
+    case 'register':
+      return await reqRegister(c, args);
+    case 'chain':
+      return await reqChain(c, args);
+    case 'approve':
+      return await reqApprove(c, args);
+    case 'deny':
+      return await reqDeny(c, args);
+    case 'execute':
+      return await reqExecute(c, args);
+    case 'complete':
+      return await reqComplete(c, args);
+    case 'fail':
+      return await reqFail(c, args);
+    case 'review':
+      return await reqReview(c, args);
+    case 'thank':
+      return await reqThank(c, args);
+    case 'fast-track':
+      return await reqFastTrack(c, args);
+    case 'issues':
+      return await issuesCmd(c, args);
+    case 'message':
+      return await msgSend(c, args);
+    case 'broadcast':
+      return await msgBroadcast(c, args);
+    case 'inbox':
+      return await msgInbox(c, args);
+    case 'doctor':
+      return await doctorCmd(c, args);
+    case 'repair':
+      return await repairCmd(c, args);
+    case 'status':
+      return await statusCmd(c, args);
+    case 'boot':
+      return await bootCmd(c, args);
+    case 'suggest':
+      return await suggestCmd(c, args);
+    case 'transcript':
+      return await transcriptCmd(c, args);
+    case 'summarize':
+      return await summarizeCmd(c, args);
+    case 'why':
+      return await whyCmd(c, args);
+    case 'resume':
+      return await resumeCmd(c, args);
+    case 'schema':
+      return await schemaCmd(c, args);
+    case 'unresponded':
+      return await unrespondedCmd(c, args);
+    default: {
+      const hint = nearestCommand(cmd, KNOWN_COMMANDS);
+      const suggest = hint ? `\n  did you mean: gate ${hint}?` : '';
+      process.stderr.write(
+        `unknown command: ${cmd}${suggest}\n` +
+          `  see 'gate --help' for the full command list.\n`,
+      );
+      return 1;
+    }
+  }
+}
+
 /**
  * Macro-level error classification for the JSON envelope. Patterns
  * match the current set of `DomainError` messages so a tool layer
@@ -414,6 +420,12 @@ export async function main(argv: readonly string[]): Promise<number> {
  */
 function deriveErrorCode(e: unknown): string | null {
   if (!(e instanceof Error)) return null;
+  // LockBusyError check is first: it's a DomainError subclass, so the
+  // generic `validation_error` fallback below would otherwise shadow
+  // the more-specific `lock_busy` code. Tools branching on this need
+  // to distinguish "retry-after-backoff" (lock busy) from
+  // "fix-input-and-resubmit" (validation).
+  if (e instanceof LockBusyError) return 'lock_busy';
   const m = e.message;
   if (/\bnot found\b/i.test(m)) return 'not_found';
   if (/\bis already \w+\.?/i.test(m)) return 'already_in_state';

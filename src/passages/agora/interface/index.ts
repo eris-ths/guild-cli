@@ -16,15 +16,13 @@
 // JSON / snake_case YAML / explicit-flag CLI; any future human-
 // facing UI is a projection, not a substrate change.
 
-import { GuildConfig } from '../../../infrastructure/config/GuildConfig.js';
 import { parseArgs, HelpRequested } from '../../../interface/shared/parseArgs.js';
 import { renderVerbHelp } from '../../../interface/shared/verbHelp.js';
 import { sanitizeError } from '../../../interface/shared/sanitizeError.js';
 import { nearestCommand } from '../../../interface/shared/nearestCommand.js';
 import { getPackageVersion, isVersionFlag } from '../../../interface/shared/version.js';
 import { DomainError } from '../../../domain/shared/DomainError.js';
-import { YamlGameRepository } from '../infrastructure/YamlGameRepository.js';
-import { YamlPlayRepository } from '../infrastructure/YamlPlayRepository.js';
+import { buildAgoraContainer } from './container.js';
 import { newGame } from './handlers/new.js';
 import { startPlay } from './handlers/play.js';
 import { moveOnPlay } from './handlers/move.js';
@@ -36,6 +34,9 @@ import { showAgora } from './handlers/show.js';
 import { lastPlay, LAST_BOOLEAN_FLAGS } from './handlers/last.js';
 import { cliffOf } from './handlers/cliff.js';
 import { schemaCmd } from './handlers/schema.js';
+import { withEntryLock } from '../../../infrastructure/lock/withEntryLock.js';
+import { resolveGuildActor } from '../../../interface/shared/resolveGuildActor.js';
+import { READ_VERBS, WRITE_VERBS, LOCK_EXEMPT_VERBS } from './verbs.js';
 
 const HELP = `agora — play / narrative passage (alpha, 11 verbs)
 
@@ -157,11 +158,9 @@ export async function main(argv: readonly string[]): Promise<number> {
   ]);
   const verbBooleans = cmd ? VERB_BOOLEAN_FLAGS.get(cmd) : undefined;
   const args = parseArgs(rest, verbBooleans ? { booleanFlags: verbBooleans } : {});
-  const config = GuildConfig.load();
-  const games = new YamlGameRepository(config);
-  const plays = new YamlPlayRepository(config);
+  const { config, games, plays } = buildAgoraContainer();
 
-  try {
+  const dispatch = async (): Promise<number> => {
     switch (cmd) {
       case 'new':
         return await newGame({ repo: games, config }, args);
@@ -195,6 +194,18 @@ export async function main(argv: readonly string[]): Promise<number> {
         return 1;
       }
     }
+  };
+
+  try {
+    const actor = resolveGuildActor() ?? '';
+    return await withEntryLock(
+      config,
+      'agora',
+      cmd ?? '',
+      { READ_VERBS, WRITE_VERBS, LOCK_EXEMPT_VERBS },
+      actor,
+      dispatch,
+    );
   } catch (e) {
     if (e instanceof HelpRequested) {
       renderVerbHelp('agora', e);

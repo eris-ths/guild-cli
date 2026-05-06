@@ -11,6 +11,18 @@ import { notFoundMessage } from '../shared/notFoundHint.js';
 import { DomainError } from '../../domain/shared/DomainError.js';
 import { getPackageVersion, isVersionFlag } from '../shared/version.js';
 import { sanitizeError } from '../shared/sanitizeError.js';
+import { withEntryLock } from '../../infrastructure/lock/withEntryLock.js';
+import { resolveGuildActor } from '../shared/resolveGuildActor.js';
+
+// Per-entry verb classification. `guild new` writes a member YAML;
+// list/show/validate are read-only. No EXEMPT verbs at this entry.
+const GUILD_READ_VERBS: ReadonlySet<string> = new Set([
+  'list',
+  'show',
+  'validate',
+]);
+const GUILD_WRITE_VERBS: ReadonlySet<string> = new Set(['new']);
+const GUILD_EXEMPT_VERBS: ReadonlySet<string> = new Set();
 
 const HELP = `guild — member management CLI
 
@@ -36,7 +48,7 @@ export async function main(argv: readonly string[]): Promise<number> {
   }
   const args = parseArgs(rest);
   const c = buildContainer();
-  try {
+  const dispatch = async (): Promise<number> => {
     switch (cmd) {
       case 'list': {
         rejectUnknownFlags(args, new Set(), 'list');
@@ -103,6 +115,21 @@ export async function main(argv: readonly string[]): Promise<number> {
         process.stderr.write(`unknown command: ${cmd}\n${HELP}`);
         return 1;
     }
+  };
+  try {
+    const actor = resolveGuildActor() ?? '';
+    return await withEntryLock(
+      c.config,
+      'guild',
+      cmd,
+      {
+        READ_VERBS: GUILD_READ_VERBS,
+        WRITE_VERBS: GUILD_WRITE_VERBS,
+        LOCK_EXEMPT_VERBS: GUILD_EXEMPT_VERBS,
+      },
+      actor,
+      dispatch,
+    );
   } catch (e) {
     if (e instanceof HelpRequested) {
       renderVerbHelp('guild', e);

@@ -14,16 +14,17 @@
 // snake_case YAML / explicit-flag CLI; any future human-facing UI is
 // a projection, not a substrate change.
 
-import { GuildConfig } from '../../../infrastructure/config/GuildConfig.js';
 import { parseArgs, HelpRequested } from '../../../interface/shared/parseArgs.js';
 import { renderVerbHelp } from '../../../interface/shared/verbHelp.js';
 import { sanitizeError } from '../../../interface/shared/sanitizeError.js';
 import { nearestCommand } from '../../../interface/shared/nearestCommand.js';
 import { getPackageVersion, isVersionFlag } from '../../../interface/shared/version.js';
 import { DomainError } from '../../../domain/shared/DomainError.js';
-import { YamlCtxRepository } from '../infrastructure/YamlCtxRepository.js';
-import { CtxUseCases } from '../application/CtxUseCases.js';
+import { buildCtxContainer } from './container.js';
 import { recordCtx } from './handlers/record.js';
+import { withEntryLock } from '../../../infrastructure/lock/withEntryLock.js';
+import { resolveGuildActor } from '../../../interface/shared/resolveGuildActor.js';
+import { READ_VERBS, WRITE_VERBS, LOCK_EXEMPT_VERBS } from './verbs.js';
 
 const HELP = `ctx — fact accumulation passage (phase 1: record only)
 
@@ -69,11 +70,9 @@ export async function main(argv: readonly string[]): Promise<number> {
 
   const [cmd, ...rest] = argv;
   const args = parseArgs(rest);
-  const config = GuildConfig.load();
-  const repo = new YamlCtxRepository(config);
-  const uc = new CtxUseCases(repo);
+  const { config, uc } = buildCtxContainer();
 
-  try {
+  const dispatch = async (): Promise<number> => {
     switch (cmd) {
       case 'record':
         return await recordCtx({ uc, config }, args);
@@ -91,6 +90,18 @@ export async function main(argv: readonly string[]): Promise<number> {
         return 1;
       }
     }
+  };
+
+  try {
+    const actor = resolveGuildActor() ?? '';
+    return await withEntryLock(
+      config,
+      'ctx',
+      cmd ?? '',
+      { READ_VERBS, WRITE_VERBS, LOCK_EXEMPT_VERBS },
+      actor,
+      dispatch,
+    );
   } catch (e) {
     if (e instanceof HelpRequested) {
       renderVerbHelp('ctx', e);
