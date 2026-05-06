@@ -56,16 +56,28 @@ function run(
   };
 }
 
-function setupActorAndRequests(root: string): void {
+function extractRequestId(output: string): string {
+  const m = output.match(/\d{4}-\d{2}-\d{2}-\d{4}/);
+  if (!m) throw new Error(`could not find request id in output: ${output}`);
+  return m[0];
+}
+
+function setupActorAndRequests(
+  root: string,
+): { id1: string; id2: string; id3: string } {
   run(GATE, root, ['register', '--name', 'alice']);
   run(GATE, root, ['register', '--name', 'bob']);
   // One pending, one approved, one denied — three states for --state all.
-  run(GATE, root, ['request', '--action', 'a1', '--reason', 'r1'], { GUILD_ACTOR: 'alice' });
-  run(GATE, root, ['request', '--action', 'a2', '--reason', 'r2'], { GUILD_ACTOR: 'alice' });
-  run(GATE, root, ['request', '--action', 'a3', '--reason', 'r3'], { GUILD_ACTOR: 'alice' });
+  const r1 = run(GATE, root, ['request', '--action', 'a1', '--reason', 'r1'], { GUILD_ACTOR: 'alice' });
+  const r2 = run(GATE, root, ['request', '--action', 'a2', '--reason', 'r2'], { GUILD_ACTOR: 'alice' });
+  const r3 = run(GATE, root, ['request', '--action', 'a3', '--reason', 'r3'], { GUILD_ACTOR: 'alice' });
+  const id1 = extractRequestId(r1.stdout + r1.stderr);
+  const id2 = extractRequestId(r2.stdout + r2.stderr);
+  const id3 = extractRequestId(r3.stdout + r3.stderr);
   // Approve the second, deny the third — leaves a mix.
-  run(GATE, root, ['approve', '2026-05-05-0002'], { GUILD_ACTOR: 'alice' });
-  run(GATE, root, ['deny', '2026-05-05-0003', '--reason', 'no'], { GUILD_ACTOR: 'alice' });
+  run(GATE, root, ['approve', id2], { GUILD_ACTOR: 'alice' });
+  run(GATE, root, ['deny', id3, '--reason', 'no'], { GUILD_ACTOR: 'alice' });
+  return { id1, id2, id3 };
 }
 
 // --- (1) `gate list --state all` sugar ---
@@ -73,14 +85,14 @@ function setupActorAndRequests(root: string): void {
 test('gate list --state all: returns requests across every state (text)', (t) => {
   const { root, cleanup } = bootstrap();
   t.after(cleanup);
-  setupActorAndRequests(root);
+  const { id1, id2, id3 } = setupActorAndRequests(root);
 
   const r = run(GATE, root, ['list', '--state', 'all'], { GUILD_ACTOR: 'alice' });
   assert.equal(r.status, 0, `expected exit 0, got ${r.status}; stderr=${r.stderr}`);
   // All three requests should appear, regardless of state.
-  assert.match(r.stdout, /2026-05-05-0001/);
-  assert.match(r.stdout, /2026-05-05-0002/);
-  assert.match(r.stdout, /2026-05-05-0003/);
+  assert.ok(r.stdout.includes(id1), `expected id1=${id1} in stdout:\n${r.stdout}`);
+  assert.ok(r.stdout.includes(id2), `expected id2=${id2} in stdout:\n${r.stdout}`);
+  assert.ok(r.stdout.includes(id3), `expected id3=${id3} in stdout:\n${r.stdout}`);
 });
 
 test('gate list --state all: works in --format json (sugar handled at interface)', (t) => {
@@ -121,12 +133,12 @@ test('gate list (no --state): hint mentions --state all as an option', (t) => {
 test('error message: trailing (field) tag is dropped (gate)', (t) => {
   const { root, cleanup } = bootstrap();
   t.after(cleanup);
-  setupActorAndRequests(root);
+  const { id1 } = setupActorAndRequests(root);
 
   const r = run(
     GATE,
     root,
-    ['review', '2026-05-05-0001', '--lense', 'bogus', '--verdict', 'ok', '--comment', 'x'],
+    ['review', id1, '--lense', 'bogus', '--verdict', 'ok', '--comment', 'x'],
     { GUILD_ACTOR: 'alice' },
   );
   assert.equal(r.status, 1);
@@ -163,13 +175,13 @@ test('error message: trailing (field) tag is dropped (agora)', (t) => {
 test('error JSON envelope: error.field preserved when dropped from text', (t) => {
   const { root, cleanup } = bootstrap();
   t.after(cleanup);
-  setupActorAndRequests(root);
+  const { id1 } = setupActorAndRequests(root);
 
   const r = run(
     GATE,
     root,
     [
-      'review', '2026-05-05-0001',
+      'review', id1,
       '--lense', 'bogus',
       '--verdict', 'ok',
       '--comment', 'x',
