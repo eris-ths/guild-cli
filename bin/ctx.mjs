@@ -1,11 +1,16 @@
 #!/usr/bin/env node
 // Two coupled facts to remember if you change anything here:
-//   1. This guard is duplicated across bin/{gate,guild,agora,devil,ctx}.mjs
-//      intentionally — a shared helper would itself live in dist/ and
-//      hit the same load failure (circular trap). Re-evaluate if a
-//      6th entry is added.
+//   1. The dist-missing guard is duplicated across the 5 bin entries
+//      intentionally — see gate.mjs for the rationale. The
+//      partial-staleness check is shared via bin/_lib/.
 //   2. The error message references `npm install` and the `prepare`
 //      script. If package.json drops `prepare: tsc`, update the message.
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+import { checkDistFreshness } from './_lib/checkDistFreshness.mjs';
+const here = dirname(fileURLToPath(import.meta.url));
+checkDistFreshness(join(here, '..', 'src'), join(here, '..', 'dist', 'src'));
+
 const ENTRY_URL = new URL('../dist/src/passages/ctx/interface/index.js', import.meta.url).href;
 
 let main;

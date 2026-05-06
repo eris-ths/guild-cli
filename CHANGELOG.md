@@ -37,6 +37,20 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
 
 ### Added
 
+- **Partial-dist-staleness detector at bin entry.** The existing
+  guard at #139/#140 catches "dist not built at all" but not
+  "dist exists, but lags src after a `git pull`". A v0.5 dogfood
+  pass hit the lag case — `agora last` returned `unknown verb`
+  because dist held the pre-#179 dispatcher. New shared helper
+  `bin/_lib/checkDistFreshness.mjs` (plain ESM, lives outside
+  `dist/` to avoid the circular trap) compares newest src/`*.ts`
+  mtime against newest `dist/src/*.js` mtime, with a 2-second
+  grace for fs clock skew. Emits a single stderr notice and
+  continues — staleness is dev-loop friction, not a correctness
+  failure (a stale dist often runs fine for the verbs that didn't
+  change). Silent when src/ is missing (installed-via-npm shape).
+  Wired into all 5 bin entries (gate / guild / agora / devil / ctx).
+
 - **`agora list --state all` and `devil list --state all` accept the
   cross-passage sugar.** A v0.5 dogfood pass surfaced a touch-feel
   asymmetry: `gate list --state all` and `gate issues list --state all`
