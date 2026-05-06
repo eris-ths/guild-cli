@@ -196,6 +196,13 @@ export async function main(argv: readonly string[]): Promise<number> {
   };
 
   try {
+    // #200: <write-verb> --help must not block on the lock — see
+    // gate/index.ts for rationale. dispatch walks to the verb handler's
+    // rejectUnknownFlags which throws HelpRequested before any side
+    // effect, so we route help around the lock entirely.
+    if (args.options['help'] === true) {
+      return await dispatch();
+    }
     // #196: see gate/index.ts for rationale.
     const actor = resolveGuildActor() ?? '(unset)';
     return await withEntryLock(
