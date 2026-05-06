@@ -368,6 +368,25 @@ export async function bootCmd(c: C, args: ParsedArgs): Promise<number> {
     c.config.hostNames,
   );
 
+  // Populate status.reviews_unseen for the resolved actor. Mirrors the
+  // boundary used by `actionableTransitions` (Request aggregate scope)
+  // so the scalar in `status` and the per-request entries under
+  // `verbs_available_now.actionable[]` always agree on what counts as
+  // "unseen". Skipped when no actor is resolved — there is no boundary
+  // to evaluate against.
+  if (actor) {
+    const lastAuthoredAt = computeLastAuthoredWriteAt(actor, allRequests);
+    const lower = actor.toLowerCase();
+    let unseen = 0;
+    for (const r of allRequests) {
+      if (r.from.value !== lower) continue;
+      for (const v of r.reviews) {
+        if (lastAuthoredAt === null || v.at > lastAuthoredAt) unseen += 1;
+      }
+    }
+    if (unseen > 0) status.reviews_unseen = unseen;
+  }
+
   const crossPassage = await collectCrossPassage(c.config);
 
   const payload: BootPayload = {
@@ -500,6 +519,17 @@ export function deriveBootSuggestedNext(
           `(authored by ${top.request.from.value}); approve it to unblock, ` +
           `or deny with --reason if it shouldn't proceed.`,
       }, actor);
+    case 'reviewed-authored': {
+      const n = top.reviewsUnseen ?? top.request.reviews.length;
+      return stampActorResolved({
+        verb: 'show',
+        args: { id },
+        reason:
+          `${id} (you authored) has ${n} review(s) since your last activity ` +
+          `on a request — read with gate show ${id}. ` +
+          `(boundary advances when you write to any request: status_log, reviews, or thanks.)`,
+      }, actor);
+    }
   }
 }
 
@@ -566,23 +596,52 @@ type ActionableKind =
   | 'executing-mine'
   | 'unreviewed-mine'
   | 'approved-for-me'
-  | 'pending-as-executor';
+  | 'pending-as-executor'
+  | 'reviewed-authored';
 
 interface ActionableTransition {
   kind: ActionableKind;
   request: Request;
   /** For `executing-mine`, which role the actor plays. */
   executorRole?: 'executor' | 'author';
+  /**
+   * For `reviewed-authored`: how many reviews on the authored request
+   * landed after the actor's last write to any request aggregate.
+   * Surfaced in the reason text so the agent sees how many they're
+   * about to read.
+   */
+  reviewsUnseen?: number;
 }
 
 // Priority order for suggested_next selection. Lower = picked first.
 // `verbs_available_now` uses the full list in this order, too.
+//
+// `reviewed-authored` sits at PRIORITY=4 (after the four
+// pending/approved/executing/completed transitions) because it's a
+// READ surface — the actor authored a request, peers reviewed it,
+// and the agent should read those reviews when no higher-priority
+// state-transition work is open. Boundary advances when the actor
+// writes to ANY request aggregate (status_log, reviews, or thanks),
+// so once the reviews are read and acknowledged via review/thank/
+// complete the surface clears naturally.
 const ACTIONABLE_PRIORITY: Record<ActionableKind, number> = {
   'executing-mine': 0,
   'unreviewed-mine': 1,
   'approved-for-me': 2,
   'pending-as-executor': 3,
+  'reviewed-authored': 4,
 };
+
+/**
+ * Cap on how many `reviewed-authored` entries get appended to
+ * `verbs_available_now.actionable[]`. Without a cap, an actor with N
+ * authored requests × M reviews per request could balloon the boot
+ * payload — this verb sits on the agent hot path (every session
+ * start) so payload bloat is a real cost. 5 covers the "what's piled
+ * up since I last wrote" surface; deeper backlogs are still visible
+ * via `status.reviews_unseen` (the running counter).
+ */
+const REVIEWED_AUTHORED_ACTIONABLE_CAP = 5;
 
 /**
  * Single source of truth for "what verbs does the actor have open right
@@ -641,10 +700,76 @@ function actionableTransitions(
       out.push({ kind: 'pending-as-executor', request: r });
     }
   }
+
+  // reviewed-authored: only surface when the four state-transition
+  // kinds above are empty. Devil v3 ratify: the higher-priority kinds
+  // are about state changes the actor must drive; reviewed-authored
+  // is about catching up on peer feedback. Rolling them together
+  // would push critical transitions off the suggested_next slot for
+  // every actor with stale review traffic.
+  if (out.length === 0) {
+    const lastAuthoredAt = computeLastAuthoredWriteAt(actor, allRequests);
+    for (const r of allRequests) {
+      if (r.from.value !== lower) continue;
+      if (r.reviews.length === 0) continue;
+      // Latest review timestamp on this authored request.
+      let latest: string | null = null;
+      let unseen = 0;
+      for (const v of r.reviews) {
+        if (lastAuthoredAt === null || v.at > lastAuthoredAt) unseen += 1;
+        if (latest === null || v.at > latest) latest = v.at;
+      }
+      if (latest === null) continue;
+      if (lastAuthoredAt !== null && latest <= lastAuthoredAt) continue;
+      out.push({ kind: 'reviewed-authored', request: r, reviewsUnseen: unseen });
+    }
+  }
+
   out.sort(
     (a, b) => ACTIONABLE_PRIORITY[a.kind] - ACTIONABLE_PRIORITY[b.kind],
   );
   return out;
+}
+
+/**
+ * Latest timestamp at which the actor wrote to ANY request aggregate.
+ * Boundary scope is the Request aggregate — message/inbox/issues
+ * writes are intentionally NOT counted (those have their own
+ * notification surfaces; mixing them here would dilute the signal of
+ * "have I responded to a peer review yet").
+ *
+ * Aggregates three write paths Request.ts persists:
+ *   1. status_log[] entries (transitions: pending/approved/executing/...).
+ *   2. reviews[] entries (lense-driven judgements).
+ *   3. thanks[] entries (cross-actor appreciation).
+ *
+ * Returns null when the actor has never written to any request — in
+ * which case every review on every authored request is "after" their
+ * (nonexistent) last write, and the predicate falls through to
+ * "any review on my authored request".
+ *
+ * ISO8601 lexicographic comparison is exact when every timestamp is
+ * UTC-Z formatted (the only shape Request.ts emits, see Thank.ts:43,
+ * Review.ts and StatusLog entry.at).
+ */
+export function computeLastAuthoredWriteAt(
+  actor: string,
+  allRequests: ReadonlyArray<Request>,
+): string | null {
+  const lower = actor.toLowerCase();
+  let max: string | null = null;
+  for (const r of allRequests) {
+    for (const e of r.statusLog) {
+      if (e.by === lower && (max === null || e.at > max)) max = e.at;
+    }
+    for (const v of r.reviews) {
+      if (v.by.value === lower && (max === null || v.at > max)) max = v.at;
+    }
+    for (const t of r.thanks ?? []) {
+      if (t.by.value === lower && (max === null || t.at > max)) max = t.at;
+    }
+  }
+  return max;
 }
 
 const ALWAYS_READABLE_VERBS: readonly string[] = [
@@ -686,6 +811,11 @@ function deriveVerbsAvailableNow(
   // both functions; now each kind lives in `actionableTransitions` and
   // we expand it into its valid verbs here.
   const transitions = actionableTransitions(actor, allRequests);
+  // reviewed-authored entries get appended to actionable[] with a
+  // hard cap (REVIEWED_AUTHORED_ACTIONABLE_CAP) — the running total
+  // is exposed via status.reviews_unseen so the agent sees the full
+  // backlog without the payload itself ballooning.
+  let reviewedAuthoredAppended = 0;
   for (const t of transitions) {
     const id = t.request.id.value;
     switch (t.kind) {
@@ -729,6 +859,17 @@ function deriveVerbsAvailableNow(
           reason: `${id} is pending; deny with --reason if it shouldn't proceed`,
         });
         break;
+      case 'reviewed-authored': {
+        if (reviewedAuthoredAppended >= REVIEWED_AUTHORED_ACTIONABLE_CAP) break;
+        const n = t.reviewsUnseen ?? t.request.reviews.length;
+        actionable.push({
+          verb: 'show',
+          id,
+          reason: `${id} (you authored) has ${n} review(s) since your last activity`,
+        });
+        reviewedAuthoredAppended += 1;
+        break;
+      }
     }
   }
 

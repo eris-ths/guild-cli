@@ -291,7 +291,38 @@ const VERBS: readonly VerbSchema[] = [
             "re-interpret without the payload pre-baking a host assumption; " +
             "`always_readable` is the side-effect-free verb catalog.",
           properties: {
-            actionable: { type: 'array', items: { type: 'object' } },
+            actionable: {
+              type: 'array',
+              description:
+                'State-transition verbs the caller can fire as themselves, ' +
+                'each carrying the target id + reason. The `verb` enum ' +
+                'includes `show` for the `reviewed-authored` surface — ' +
+                'the actor authored a request, peers landed reviews on it, ' +
+                'and the agent should read those reviews. Boundary advances ' +
+                'when the actor writes to any request aggregate ' +
+                '(status_log, reviews, or thanks); message and issue ' +
+                'writes do NOT advance it (those have their own ' +
+                'notification surfaces — mixing dilutes the signal).',
+              items: {
+                type: 'object',
+                properties: {
+                  verb: {
+                    type: 'string',
+                    enum: [
+                      'approve',
+                      'deny',
+                      'execute',
+                      'complete',
+                      'fail',
+                      'review',
+                      'show',
+                    ],
+                  },
+                  id: str,
+                  reason: str,
+                },
+              },
+            },
             requires_other_actor: {
               type: 'array',
               items: {
