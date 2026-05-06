@@ -17,10 +17,9 @@
 
 import { parseArgs, HelpRequested } from '../../../interface/shared/parseArgs.js';
 import { renderVerbHelp } from '../../../interface/shared/verbHelp.js';
-import { sanitizeError } from '../../../interface/shared/sanitizeError.js';
+import { emitErrorEnvelope } from '../../../interface/shared/errorEnvelope.js';
 import { nearestCommand } from '../../../interface/shared/nearestCommand.js';
 import { getPackageVersion, isVersionFlag } from '../../../interface/shared/version.js';
-import { DomainError } from '../../../domain/shared/DomainError.js';
 import { LenseNotFound } from '../domain/Lense.js';
 import { PersonaNotFound } from '../domain/Persona.js';
 import { buildDevilContainer } from './container.js';
@@ -233,14 +232,16 @@ export async function main(argv: readonly string[]): Promise<number> {
       renderVerbHelp('devil', e);
       return 0;
     }
-    // Mirror gate's catch shape: `error:` prefix carries the failure
-    // signal; the `DomainError:` prefix and `(field)` trailing tag
-    // were debug noise, not touch-feel signal (P3 dogfood C/A
-    // cleanup).
-    const rawMsg = e instanceof Error ? e.message : String(e);
-    // Strip absolute contentRoot prefix (issue #153).
-    const msg = sanitizeError(rawMsg, config.contentRoot);
-    process.stderr.write(`error: ${msg}\n`);
+    // Mirror gate's catch shape via the shared envelope helper
+    // (issue #194): `error:` prefix carries the failure signal in
+    // text mode; `--format json` adds the structured envelope on a
+    // preceding stderr line so AI tool layers can branch on `code`.
+    const fmt = args.options['format'];
+    emitErrorEnvelope(
+      e,
+      typeof fmt === 'string' ? fmt : undefined,
+      config.contentRoot,
+    );
     // For catalog-miss failures, render the catalog + did-you-mean
     // hint so the caller doesn't have to round-trip through `devil
     // schema` to recover. 12 lenses + 6 personas are too many to
