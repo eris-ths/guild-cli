@@ -3,7 +3,7 @@
 All notable changes to `guild-cli` will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to the versioning policy described in [POLICY.md](./POLICY.md).
+and this project adheres to the versioning policy described in [docs/POLICY.md](./docs/POLICY.md).
 
 ## [Unreleased]
 
