@@ -16,7 +16,10 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { resolveGuildActor } from '../../src/interface/shared/resolveGuildActor.js';
+import {
+  resolveGuildActor,
+  resolveGuildActorWithSource,
+} from '../../src/interface/shared/resolveGuildActor.js';
 
 function withEnv(actor: string | undefined, fn: () => void): void {
   const prev = process.env['GUILD_ACTOR'];
@@ -161,4 +164,69 @@ test('default start defaults to process.cwd() when no arg passed', () => {
     const result = resolveGuildActor();
     assert.equal(result, 'cwd-test');
   });
+});
+
+// ---- resolveGuildActorWithSource ----
+//
+// Same env > file > undefined contract as `resolveGuildActor`, but
+// reports which of the two sources won. Used by `gate whoami` to
+// disclose actor provenance.
+
+test('with-source: env wins, source = "env"', () => {
+  const { root, cleanup } = bootstrap();
+  try {
+    writeFileSync(join(root, '.guild-actor'), 'from-file');
+    withEnv('from-env', () => {
+      assert.deepEqual(resolveGuildActorWithSource(root), {
+        actor: 'from-env',
+        source: 'env',
+      });
+    });
+  } finally {
+    cleanup();
+  }
+});
+
+test('with-source: file fallback, source = "file"', () => {
+  const { root, cleanup } = bootstrap();
+  try {
+    writeFileSync(join(root, '.guild-actor'), 'from-file');
+    withEnv(undefined, () => {
+      assert.deepEqual(resolveGuildActorWithSource(root), {
+        actor: 'from-file',
+        source: 'file',
+      });
+    });
+  } finally {
+    cleanup();
+  }
+});
+
+test('with-source: returns undefined when neither source resolves', () => {
+  const { root, cleanup } = bootstrap();
+  try {
+    withEnv(undefined, () => {
+      assert.equal(resolveGuildActorWithSource(root), undefined);
+    });
+  } finally {
+    cleanup();
+  }
+});
+
+test('with-source: empty env string falls through to file (parity with bare resolver)', () => {
+  // The bare resolver treats GUILD_ACTOR='' as unset; the with-source
+  // variant must mirror that — otherwise callers that switched to the
+  // new helper would see different behaviour for the same input.
+  const { root, cleanup } = bootstrap();
+  try {
+    writeFileSync(join(root, '.guild-actor'), 'from-file');
+    withEnv('', () => {
+      assert.deepEqual(resolveGuildActorWithSource(root), {
+        actor: 'from-file',
+        source: 'file',
+      });
+    });
+  } finally {
+    cleanup();
+  }
 });

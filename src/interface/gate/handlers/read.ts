@@ -1,4 +1,7 @@
-import { resolveGuildActor } from '../../shared/resolveGuildActor.js';
+import {
+  resolveGuildActor,
+  resolveGuildActorWithSource,
+} from '../../shared/resolveGuildActor.js';
 import {
   ParsedArgs,
   optionalOption,
@@ -214,8 +217,8 @@ const WHOAMI_KNOWN_FLAGS: ReadonlySet<string> = new Set(['limit']);
 
 export async function reqWhoami(c: C, args: ParsedArgs): Promise<number> {
   rejectUnknownFlags(args, WHOAMI_KNOWN_FLAGS, 'whoami');
-  const actor = resolveGuildActor();
-  if (!actor || actor.length === 0) {
+  const resolved = resolveGuildActorWithSource();
+  if (!resolved) {
     process.stderr.write(
       'GUILD_ACTOR is not set.\n' +
         'Export it in your shell to identify yourself:\n' +
@@ -224,6 +227,7 @@ export async function reqWhoami(c: C, args: ParsedArgs): Promise<number> {
     );
     return 1;
   }
+  const actor = resolved.actor;
 
   const members = await c.memberUC.list();
   const actorLower = actor.toLowerCase();
@@ -246,6 +250,15 @@ export async function reqWhoami(c: C, args: ParsedArgs): Promise<number> {
   const displayName = memberRecord?.displayName;
   const displayChunk = displayName ? ` — ${displayName}` : '';
   process.stdout.write(`you are ${actor}${displayChunk} (${role})\n`);
+  // Disclose the resolution source so a fresh agent can tell
+  // GUILD_ACTOR-from-shell apart from a `.guild-actor` file dropped
+  // into the tree by a colleague. Same observability principle as
+  // `gate boot`'s misconfigured_cwd disclosure: when two equally-
+  // valid configurations produce the same resolved value, the
+  // surface should name which one was used.
+  const sourceLabel =
+    resolved.source === 'env' ? 'GUILD_ACTOR (env)' : '.guild-actor (file)';
+  process.stdout.write(`actor source: ${sourceLabel}\n`);
 
   const limit = parseOptionalIntOption(args, 'limit') ?? 5;
 
