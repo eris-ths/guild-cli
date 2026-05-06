@@ -151,8 +151,11 @@ function acquire(lockPath: string, meta: GuildLockMeta): number {
   try {
     return openExclusive(lockPath, meta);
   } catch (err) {
-    if (!isEexist(err)) throw err;
+    if (!isEexistLike(err)) throw err;
     // EEXIST path — read holder, dispatch on discriminator.
+    // (`isEexistLike` also catches Windows' EPERM/EBUSY which the
+    // kernel surfaces during the async window between another
+    // process closing/unlinking and the file actually being free.)
     const peek = readHolder(lockPath);
 
     // #197: TOCTOU between EEXIST and readHolder. The previous
@@ -160,10 +163,11 @@ function acquire(lockPath: string, meta: GuildLockMeta): number {
     // and our readFile. Retry openExclusive once — if that also
     // EEXISTs, a new holder beat us, and we surface that as busy.
     if (peek.kind === 'gone') {
+      sleepForWindowsHandleRelease();
       try {
         return openExclusive(lockPath, meta);
       } catch (retryErr) {
-        if (!isEexist(retryErr)) throw retryErr;
+        if (!isEexistLike(retryErr)) throw retryErr;
         const second = readHolder(lockPath);
         throw new LockBusyError(lockPath, holderOrNull(second));
       }
@@ -179,15 +183,19 @@ function acquire(lockPath: string, meta: GuildLockMeta): number {
     if (treatAsStale) {
       // Best-effort unlink; if it disappears between our read and
       // unlink that's fine — the next openExclusive will succeed.
+      // Windows can return EPERM/EBUSY here while another process
+      // still has the descriptor open; treat that as "someone else
+      // is mid-release" — sleep + retry path will pick it up.
       try {
         unlinkSync(lockPath);
       } catch (e) {
-        if (!isEnoent(e)) throw e;
+        if (!isEnoent(e) && !isEpermOrEbusy(e)) throw e;
       }
+      sleepForWindowsHandleRelease();
       try {
         return openExclusive(lockPath, meta);
       } catch (retryErr) {
-        if (!isEexist(retryErr)) throw retryErr;
+        if (!isEexistLike(retryErr)) throw retryErr;
         // Lost the race: someone else acquired between our unlink
         // and retry. Surface that as busy with the *new* holder.
         const second = readHolder(lockPath);
@@ -198,6 +206,23 @@ function acquire(lockPath: string, meta: GuildLockMeta): number {
     // peek.kind === 'present' and not reclaimable.
     throw new LockBusyError(lockPath, peek.holder);
   }
+}
+
+/**
+ * Windows-only: when another process has just close()'d the lock fd
+ * (or unlinkSync'd the file), the kernel may still hold the handle
+ * for a brief window during which our open('wx') returns EPERM and
+ * unlink returns EBUSY/EPERM. POSIX surfaces the same situations as
+ * EEXIST/ENOENT respectively, so this is purely a Windows quirk.
+ *
+ * We sleep ~25ms before any retry on the EEXIST-like path. Cheap on
+ * POSIX (the retry would have succeeded immediately anyway), and the
+ * dominant wait on Windows. Bounded because the race tests have
+ * HOLD_MS=300ms; 25ms is well within that budget.
+ */
+function sleepForWindowsHandleRelease(): void {
+  if (process.platform !== 'win32') return;
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25);
 }
 
 function holderOrNull(r: ReadHolderResult): LockMetadata | null {
@@ -420,8 +445,23 @@ function isPidDead(pid: number): boolean {
   }
 }
 
-function isEexist(e: unknown): boolean {
-  return !!e && typeof e === 'object' && (e as NodeJS.ErrnoException).code === 'EEXIST';
+/**
+ * Windows surfaces "file is held by another process" as EPERM
+ * (open) or EBUSY (open / unlink) during the async handle-release
+ * window. POSIX uses EEXIST / ENOENT for the same situations. We
+ * coalesce all three for the EEXIST-like contention path so the
+ * #197 retry / #195 stale-recovery logic is platform-agnostic.
+ */
+function isEexistLike(e: unknown): boolean {
+  if (!e || typeof e !== 'object') return false;
+  const code = (e as NodeJS.ErrnoException).code;
+  return code === 'EEXIST' || code === 'EPERM' || code === 'EBUSY';
+}
+
+function isEpermOrEbusy(e: unknown): boolean {
+  if (!e || typeof e !== 'object') return false;
+  const code = (e as NodeJS.ErrnoException).code;
+  return code === 'EPERM' || code === 'EBUSY';
 }
 
 function isEnoent(e: unknown): boolean {
