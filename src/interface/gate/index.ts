@@ -2,10 +2,9 @@ import { buildContainer } from '../shared/container.js';
 import { parseArgs, optionalOption, HelpRequested } from '../shared/parseArgs.js';
 import { renderVerbHelp } from '../shared/verbHelp.js';
 import { nearestCommand } from '../shared/nearestCommand.js';
-import { DomainError } from '../../domain/shared/DomainError.js';
 import { REQUEST_STATES } from '../../domain/request/RequestState.js';
 import { getPackageVersion, isVersionFlag } from '../shared/version.js';
-import { sanitizeError } from '../shared/sanitizeError.js';
+import { emitErrorEnvelope } from '../shared/errorEnvelope.js';
 import {
   reqCreate,
   reqList,
@@ -45,7 +44,6 @@ import { summarizeCmd } from './handlers/summarize.js';
 import { whyCmd } from './handlers/why.js';
 import { unrespondedCmd } from './handlers/unresponded.js';
 import { withEntryLock } from '../../infrastructure/lock/withEntryLock.js';
-import { LockBusyError } from '../../infrastructure/lock/guildLock.js';
 import { resolveGuildActor } from '../shared/resolveGuildActor.js';
 import { READ_VERBS, WRITE_VERBS, LOCK_EXEMPT_VERBS } from './verbs.js';
 import type { Container } from '../shared/container.js';
@@ -287,25 +285,12 @@ export async function main(argv: readonly string[]): Promise<number> {
       renderVerbHelp('gate', e);
       return 0;
     }
-    const rawMsg = e instanceof Error ? e.message : String(e);
-    const msg = sanitizeError(rawMsg, c.config.contentRoot);
-    if (args.options['format'] === 'json') {
-      const payload: Record<string, unknown> = {
-        ok: false,
-        error: {
-          message:
-            e instanceof DomainError
-              ? sanitizeError(e.message, c.config.contentRoot)
-              : msg,
-        },
-      };
-      const errObj = payload['error'] as Record<string, unknown>;
-      if (e instanceof DomainError && e.field) errObj['field'] = e.field;
-      const code = deriveErrorCode(e);
-      if (code) errObj['code'] = code;
-      process.stderr.write(JSON.stringify(payload) + '\n');
-    }
-    process.stderr.write(`error: ${msg}\n`);
+    const fmt = args.options['format'];
+    emitErrorEnvelope(
+      e,
+      typeof fmt === 'string' ? fmt : undefined,
+      c.config.contentRoot,
+    );
     return 1;
   }
 }
@@ -409,32 +394,3 @@ async function dispatch(
   }
 }
 
-/**
- * Macro-level error classification for the JSON envelope. Patterns
- * match the current set of `DomainError` messages so a tool layer
- * can branch on `code` instead of regex-matching the prose.
- *
- * The codes are intentionally coarse (a 4-way fork covers most retry
- * / escalate decisions): fine-grained differentiation stays in the
- * `message` + `field` pair.
- *
- * Message-pattern derivation rather than a per-throw `code` argument
- * keeps the change surgical — adding a code later at the throw site
- * remains compatible; a call that doesn't yet name one still produces
- * the right classification here.
- */
-function deriveErrorCode(e: unknown): string | null {
-  if (!(e instanceof Error)) return null;
-  // LockBusyError check is first: it's a DomainError subclass, so the
-  // generic `validation_error` fallback below would otherwise shadow
-  // the more-specific `lock_busy` code. Tools branching on this need
-  // to distinguish "retry-after-backoff" (lock busy) from
-  // "fix-input-and-resubmit" (validation).
-  if (e instanceof LockBusyError) return 'lock_busy';
-  const m = e.message;
-  if (/\bnot found\b/i.test(m)) return 'not_found';
-  if (/\bis already \w+\.?/i.test(m)) return 'already_in_state';
-  if (/illegal state transition/i.test(m)) return 'illegal_transition';
-  if (e instanceof DomainError) return 'validation_error';
-  return null;
-}

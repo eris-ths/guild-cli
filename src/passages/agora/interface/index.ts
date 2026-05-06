@@ -18,10 +18,9 @@
 
 import { parseArgs, HelpRequested } from '../../../interface/shared/parseArgs.js';
 import { renderVerbHelp } from '../../../interface/shared/verbHelp.js';
-import { sanitizeError } from '../../../interface/shared/sanitizeError.js';
+import { emitErrorEnvelope } from '../../../interface/shared/errorEnvelope.js';
 import { nearestCommand } from '../../../interface/shared/nearestCommand.js';
 import { getPackageVersion, isVersionFlag } from '../../../interface/shared/version.js';
-import { DomainError } from '../../../domain/shared/DomainError.js';
 import { buildAgoraContainer } from './container.js';
 import { newGame } from './handlers/new.js';
 import { startPlay } from './handlers/play.js';
@@ -212,15 +211,17 @@ export async function main(argv: readonly string[]): Promise<number> {
       renderVerbHelp('agora', e);
       return 0;
     }
-    // Mirror gate's catch shape: `error:` prefix carries the failure
-    // signal; the `DomainError:` prefix and `(field)` trailing tag
-    // were debug noise, not touch-feel signal (P3 dogfood C/A
-    // cleanup). DomainError still flows out as a typed object for
-    // any downstream JSON envelope.
-    const rawMsg = e instanceof Error ? e.message : String(e);
-    // Strip absolute contentRoot prefix (issue #153).
-    const msg = sanitizeError(rawMsg, config.contentRoot);
-    process.stderr.write(`error: ${msg}\n`);
+    // Mirror gate's catch shape via the shared envelope helper
+    // (issue #194): `error:` prefix carries the failure signal in
+    // text mode; `--format json` adds the structured envelope on a
+    // preceding stderr line so AI tool layers can branch on `code`
+    // (e.g. `lock_busy`) without regex-matching the prose.
+    const fmt = args.options['format'];
+    emitErrorEnvelope(
+      e,
+      typeof fmt === 'string' ? fmt : undefined,
+      config.contentRoot,
+    );
     return 1;
   }
 }
