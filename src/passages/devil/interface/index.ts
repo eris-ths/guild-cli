@@ -62,11 +62,12 @@ Usage:
                               author-defender / mirror); ingest-only
                               personas are rejected here.
 
-  devil list [--state open|concluded] [--target-type pr|file|function|commit]
+  devil list [--state open|concluded|all] [--target-type pr|file|function|commit]
              [--format json|text]
                               Enumerate review sessions. Read-only,
                               one-line-per-review summary; --state and
-                              --target-type narrow the result.
+                              --target-type narrow the result. --state
+                              all is sugar for "every state, no filter".
 
   devil show <rev-id> [--format json|text]
                               Detail view of one review (full entries +

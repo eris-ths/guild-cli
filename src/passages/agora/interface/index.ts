@@ -81,10 +81,11 @@ Usage:
                               Agent dispatch contract for this passage
                               (principle 10). draft-07 JSON Schema subset.
 
-  agora list [--game <slug>] [--state playing|suspended|concluded] [--format json|text]
+  agora list [--game <slug>] [--state playing|suspended|concluded|all] [--format json|text]
                               Enumerate games and plays. Filters: --game
                               narrows plays to one game (drops games list);
-                              --state narrows plays to a single state.
+                              --state narrows plays to a single state, or
+                              'all' for every state, no filter.
 
   agora show <slug-or-play-id> [--game <slug>] [--format json|text]
                               Detail view of one game or one play. Argument

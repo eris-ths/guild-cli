@@ -289,8 +289,9 @@ const VERBS: readonly VerbSchema[] = [
         game: strOpt('narrow plays to one game (drops games list from output)'),
         state: {
           type: 'string',
-          enum: ['playing', 'suspended', 'concluded'],
-          description: 'narrow plays to one state',
+          enum: ['playing', 'suspended', 'concluded', 'all'],
+          description:
+            'narrow plays to one state, or `all` for every state (no filter)',
         },
         format: formatField,
       },

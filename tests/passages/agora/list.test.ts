@@ -186,7 +186,74 @@ test('agora list: --state with invalid value rejects', (t) => {
     { GUILD_ACTOR: 'alice' },
   );
   assert.notEqual(r.status, 0);
-  assert.match(r.stderr, /--state must be one of playing\|suspended\|concluded/);
+  // The enum the error names now includes `|all` so the sugar is
+  // discoverable from the error itself (parity with gate list).
+  assert.match(r.stderr, /--state must be one of playing\|suspended\|concluded\|all/);
+});
+
+test('agora list: --state all returns plays in every state (sugar parity with gate)', (t) => {
+  // Mirrors `gate list --state all` and `gate issues list --state all`
+  // touch-feel sugar: muscle memory between sibling list verbs across
+  // passages should not drop on the floor at the agora boundary.
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  runAgora(
+    root,
+    ['new', '--slug', 'g', '--kind', 'sandbox', '--title', 'g'],
+    { GUILD_ACTOR: 'alice' },
+  );
+  // Three plays — leave one playing, suspend one, conclude one.
+  // After the run we have one of each state.
+  runAgora(root, ['play', '--slug', 'g'], { GUILD_ACTOR: 'alice' });
+  runAgora(root, ['play', '--slug', 'g'], { GUILD_ACTOR: 'alice' });
+  runAgora(root, ['play', '--slug', 'g'], { GUILD_ACTOR: 'alice' });
+  const today = new Date().toISOString().slice(0, 10);
+  runAgora(
+    root,
+    ['suspend', `${today}-002`, '--cliff', 'c', '--invitation', 'i'],
+    { GUILD_ACTOR: 'alice' },
+  );
+  runAgora(
+    root,
+    ['conclude', `${today}-003`, '--note', 'done'],
+    { GUILD_ACTOR: 'alice' },
+  );
+
+  const r = runAgora(
+    root,
+    ['list', '--state', 'all', '--format', 'json'],
+    { GUILD_ACTOR: 'alice' },
+  );
+  assert.equal(r.status, 0);
+  const payload = JSON.parse(r.stdout);
+  assert.equal(payload.plays.length, 3);
+  const states = new Set(payload.plays.map((p: { state: string }) => p.state));
+  // All three states present — no filter applied.
+  assert.deepEqual(
+    [...states].sort(),
+    ['concluded', 'playing', 'suspended'],
+    `expected mixed states, got: ${[...states].join(',')}`,
+  );
+});
+
+test('agora list: --state all text output omits the state= header segment', (t) => {
+  // `--state all` is "no filter", so showing `state=all` in the
+  // text header would read as a filter. Header should look like
+  // the no-state default (just the play count).
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  runAgora(
+    root,
+    ['new', '--slug', 'g', '--kind', 'sandbox', '--title', 'g'],
+    { GUILD_ACTOR: 'alice' },
+  );
+  runAgora(root, ['play', '--slug', 'g'], { GUILD_ACTOR: 'alice' });
+
+  const r = runAgora(root, ['list', '--state', 'all'], { GUILD_ACTOR: 'alice' });
+  assert.equal(r.status, 0);
+  assert.doesNotMatch(r.stdout, /state=all/);
+  // Default header still present.
+  assert.match(r.stdout, /plays \(1\):/);
 });
 
 test('agora list: JSON envelope is snake_case (principle 11)', (t) => {

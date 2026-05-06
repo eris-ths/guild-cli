@@ -17,7 +17,7 @@ const LIST_KNOWN_FLAGS: ReadonlySet<string> = new Set([
  * devil list — enumerate review sessions in the content_root.
  *
  * Usage:
- *   devil list [--state open|concluded]
+ *   devil list [--state open|concluded|all]
  *              [--target-type pr|file|function|commit]
  *              [--format json|text]
  *
@@ -26,7 +26,9 @@ const LIST_KNOWN_FLAGS: ReadonlySet<string> = new Set([
  * "what's open right now?" surface. For full detail use `devil show`.
  *
  * Filters compose: --state open --target-type pr returns only open
- * reviews on PR targets. Order is most-recent-first by id.
+ * reviews on PR targets. `--state all` is sugar for "every state,
+ * no filter" — parity with `gate list --state all` and
+ * `gate issues list --state all`. Order is most-recent-first by id.
  */
 export interface ListDeps {
   readonly reviews: DevilReviewRepository;
@@ -38,7 +40,11 @@ export async function listReviews(deps: ListDeps, args: ParsedArgs): Promise<num
 
   const stateRaw = optionalOption(args, 'state');
   let stateFilter: ReviewState | undefined;
-  if (stateRaw !== undefined) {
+  if (stateRaw !== undefined && stateRaw !== 'all') {
+    // `all` is interface-layer sugar for "no filter" — parseReviewState
+    // rejects it (the domain has no 'all' state), so intercept here.
+    // Anything else still routes through the domain parser so the
+    // single source of truth for ReviewState is preserved.
     stateFilter = parseReviewState(stateRaw); // throws DomainError on bad input
   }
   const typeRaw = optionalOption(args, 'target-type');

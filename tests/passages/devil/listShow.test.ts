@@ -92,7 +92,40 @@ test('list --state invalid fails with enum error', (t) => {
   t.after(cleanup);
   const r = runDevil(root, ['list', '--state', 'paused']);
   assert.equal(r.status, 1);
+  // `all` is interface-layer sugar (treated as no-filter before
+  // parseReviewState runs); domain still rejects unknown values
+  // through parseReviewState's existing message.
   assert.match(r.stderr, /review state must be one of/);
+});
+
+test('list --state all is accepted as sugar for "no filter" (parity with gate)', (t) => {
+  // Mirrors `gate list --state all` and `gate issues list --state all`
+  // touch-feel sugar: a user moving across passages should not get
+  // an enum error from a sibling list verb. Pre-fix, devil rejected
+  // `--state all` with `review state must be one of open, concluded`.
+  //
+  // Synthesizing a concluded review for a state-mix assertion would
+  // require driving conclude, which has its own lense-coverage gate;
+  // that's orthogonal to the sugar contract. Test the contract: the
+  // call succeeds, returns every review the substrate has, and the
+  // envelope does not echo `all` as if it were a domain state.
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  openOne(root, 'file', 'src/a.ts');
+  openOne(root, 'pr', 'https://github.com/x/y/pull/1');
+
+  const r = runDevil(root, ['list', '--state', 'all', '--format', 'json']);
+  assert.equal(r.status, 0, `expected exit 0, got ${r.status}; stderr=${r.stderr}`);
+  const payload = JSON.parse(r.stdout);
+  assert.equal(payload.reviews.length, 2);
+  // `all` is an interface affordance — JSON should record "no filter"
+  // (filters.state omitted), not a fictional state value. Substrate
+  // truth: there was no domain-level filter applied.
+  assert.equal(
+    payload.filters.state,
+    undefined,
+    'filters.state should be omitted when --state all is sugar for no-filter',
+  );
 });
 
 test('list --target-type filters by target.type', (t) => {
