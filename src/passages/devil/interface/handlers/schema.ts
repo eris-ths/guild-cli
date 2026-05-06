@@ -173,13 +173,14 @@ const VERBS: readonly VerbSchema[] = [
     category: 'read',
     summary:
       'enumerate review sessions in the content_root. Filters: --state narrows by ' +
-      'open|concluded; --target-type narrows by pr|file|function|commit. Read-only.',
+      'open|concluded, or `all` for every state (no filter); --target-type ' +
+      'narrows by pr|file|function|commit. Read-only.',
     input: {
       type: 'object',
       properties: {
         state: {
           type: 'string',
-          enum: ['open', 'concluded'],
+          enum: ['open', 'concluded', 'all'],
         },
         'target-type': {
           type: 'string',

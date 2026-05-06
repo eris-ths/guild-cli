@@ -7,6 +7,25 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
 
 ## [Unreleased]
 
+### Added
+
+- **`agora list --state all` and `devil list --state all` accept the
+  cross-passage sugar.** A v0.5 dogfood pass surfaced a touch-feel
+  asymmetry: `gate list --state all` and `gate issues list --state all`
+  both accept `all` as sugar for "every state, no filter" (#170), but
+  the sibling `agora list` and `devil list` errored:
+  ```
+  agora: error: --state must be one of playing|suspended|concluded, got: all
+  devil: error: review state must be one of open, concluded, got: all
+  ```
+  Same friction class #170 closed for `gate` — muscle memory between
+  sibling list verbs across passages was breaking on the `agora` /
+  `devil` boundary. Both now accept `--state all` and treat it as
+  "no filter" at the interface layer; the domain enums are
+  unchanged (the sugar is a CLI affordance, not a state). agora's
+  invalid-state error now also names `|all` so the option is
+  discoverable from the failure itself.
+
 ## [0.5.0] — 2026-05-06
 
 > **substrate self-improvement wave** (#207 / #208) closes the loop:

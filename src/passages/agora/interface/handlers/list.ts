@@ -19,12 +19,15 @@ const LIST_KNOWN_FLAGS: ReadonlySet<string> = new Set([
  * agora list — enumerate games and plays.
  *
  * Usage:
- *   agora list [--game <slug>] [--state playing|suspended|concluded] [--format json|text]
+ *   agora list [--game <slug>] [--state playing|suspended|concluded|all] [--format json|text]
  *
  * Default: lists every game and every play in the content root.
  * Filters narrow the scope:
  *   --game <slug>  : only plays for the given game (games list dropped)
- *   --state <s>    : only plays in the given state
+ *   --state <s>    : only plays in the given state; `all` is sugar
+ *                    for "every state, no filter" (parity with
+ *                    `gate list --state all` and `gate issues list
+ *                    --state all`)
  *
  * Read-only verb. Output shape per principle 11: JSON envelope is
  * the agent contract; text is the projection.
@@ -44,10 +47,11 @@ export async function listAgora(deps: ListDeps, args: ParsedArgs): Promise<numbe
     stateFilter !== undefined &&
     stateFilter !== 'playing' &&
     stateFilter !== 'suspended' &&
-    stateFilter !== 'concluded'
+    stateFilter !== 'concluded' &&
+    stateFilter !== 'all'
   ) {
     process.stderr.write(
-      `error: --state must be one of playing|suspended|concluded, got: ${stateFilter}\n`,
+      `error: --state must be one of playing|suspended|concluded|all, got: ${stateFilter}\n`,
     );
     return 1;
   }
@@ -64,7 +68,8 @@ export async function listAgora(deps: ListDeps, args: ParsedArgs): Promise<numbe
   let plays: Play[] = await deps.plays.listAll(
     gameFilter ? { gameSlug: gameFilter } : {},
   );
-  if (stateFilter) {
+  // `all` is interface-layer sugar for "no filter" — treat as undefined.
+  if (stateFilter && stateFilter !== 'all') {
     plays = plays.filter((p) => p.state === stateFilter);
   }
 
@@ -115,9 +120,12 @@ export async function listAgora(deps: ListDeps, args: ParsedArgs): Promise<numbe
   }
 
   // text rendering
+  // `--state all` is "no filter" — don't surface it as a filter
+  // segment in the text header (would read as state=all, confusing).
+  const showStateSegment = stateFilter && stateFilter !== 'all';
   if (gameFilter) {
     process.stdout.write(`plays for game=${gameFilter}`);
-    if (stateFilter) process.stdout.write(` state=${stateFilter}`);
+    if (showStateSegment) process.stdout.write(` state=${stateFilter}`);
     process.stdout.write(` (${plays.length}):\n`);
   } else {
     process.stdout.write(`games (${games.length}):\n`);
@@ -131,7 +139,7 @@ export async function listAgora(deps: ListDeps, args: ParsedArgs): Promise<numbe
       }
     }
     process.stdout.write(`\nplays`);
-    if (stateFilter) process.stdout.write(` state=${stateFilter}`);
+    if (showStateSegment) process.stdout.write(` state=${stateFilter}`);
     process.stdout.write(` (${plays.length}):\n`);
   }
   if (plays.length === 0) {
