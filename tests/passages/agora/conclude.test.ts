@@ -224,7 +224,9 @@ test('agora conclude: missing positional / actor / unknown flag handled', (t) =>
     { GUILD_ACTOR: '' },
   );
   assert.notEqual(noActor.status, 0);
-  assert.match(noActor.stderr, /--by required/);
+  // Post-#164 sweep across passages: actor-flag errors say
+  // `Missing --by <m> (or set GUILD_ACTOR).`
+  assert.match(noActor.stderr, /Missing --by/);
 
   const bogus = runAgora(
     root,

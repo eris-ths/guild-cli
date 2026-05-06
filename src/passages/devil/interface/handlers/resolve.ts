@@ -9,6 +9,7 @@ import {
   ParsedArgs,
   optionalOption,
   rejectUnknownFlags,
+  requireOption,
 } from '../../../../interface/shared/parseArgs.js';
 import { GuildConfig } from '../../../../infrastructure/config/GuildConfig.js';
 import { emitErrorEnvelope } from '../../../../interface/shared/errorEnvelope.js';
@@ -73,13 +74,7 @@ export async function resolveEntry(
     return 1;
   }
 
-  const by = optionalOption(args, 'by', 'GUILD_ACTOR');
-  if (!by) {
-    process.stderr.write(
-      'error: --by required (or set GUILD_ACTOR). devil resolve attributes the resolution.\n',
-    );
-    return 1;
-  }
+  const by = requireOption(args, 'by', '<m>', 'GUILD_ACTOR');
   const format = optionalOption(args, 'format') ?? 'text';
   if (format !== 'json' && format !== 'text') {
     process.stderr.write(`error: --format must be 'json' or 'text', got: ${format}\n`);

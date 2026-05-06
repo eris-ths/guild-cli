@@ -8,6 +8,7 @@ import {
   ParsedArgs,
   optionalOption,
   rejectUnknownFlags,
+  requireOption,
 } from '../../../../interface/shared/parseArgs.js';
 import { GuildConfig } from '../../../../infrastructure/config/GuildConfig.js';
 import { resolvePlayForVerb } from './resolvePlay.js';
@@ -54,13 +55,7 @@ export async function resumePlay(deps: ResumeDeps, args: ParsedArgs): Promise<nu
     return 1;
   }
   const note = optionalOption(args, 'note');
-  const by = optionalOption(args, 'by', 'GUILD_ACTOR');
-  if (!by) {
-    process.stderr.write(
-      'error: --by required (or set GUILD_ACTOR). agora resume attributes the resume to an actor.\n',
-    );
-    return 1;
-  }
+  const by = requireOption(args, 'by', '<m>', 'GUILD_ACTOR');
   const format = optionalOption(args, 'format') ?? 'text';
   if (format !== 'json' && format !== 'text') {
     process.stderr.write(`error: --format must be 'json' or 'text', got: ${format}\n`);

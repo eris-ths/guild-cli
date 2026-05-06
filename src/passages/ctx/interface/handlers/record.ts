@@ -6,7 +6,6 @@ import {
   requireOption,
   rejectUnknownFlags,
 } from '../../../../interface/shared/parseArgs.js';
-import { resolveGuildActor } from '../../../../interface/shared/resolveGuildActor.js';
 
 const RECORD_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'fact',
@@ -53,13 +52,7 @@ export async function recordCtx(
 
   const fact = requireOption(args, 'fact', '"..."');
   const tags = parseTagList(optionalOption(args, 'tag'));
-  const by = optionalOption(args, 'by') ?? resolveGuildActor();
-  if (!by) {
-    process.stderr.write(
-      'error: --by required (or set GUILD_ACTOR / .guild-actor). ctx record attributes the observation to an actor.\n',
-    );
-    return 1;
-  }
+  const by = requireOption(args, 'by', '<m>', 'GUILD_ACTOR');
   const format = optionalOption(args, 'format') ?? 'text';
   if (format !== 'json' && format !== 'text') {
     process.stderr.write(`error: --format must be 'json' or 'text', got: ${format}\n`);

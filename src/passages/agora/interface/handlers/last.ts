@@ -4,8 +4,8 @@ import {
   ParsedArgs,
   optionalOption,
   rejectUnknownFlags,
+  requireOption,
 } from '../../../../interface/shared/parseArgs.js';
-import { resolveGuildActor } from '../../../../interface/shared/resolveGuildActor.js';
 import { GuildConfig } from '../../../../infrastructure/config/GuildConfig.js';
 
 const LAST_KNOWN_FLAGS: ReadonlySet<string> = new Set([
@@ -58,13 +58,7 @@ export interface LastDeps {
 export async function lastPlay(deps: LastDeps, args: ParsedArgs): Promise<number> {
   rejectUnknownFlags(args, LAST_KNOWN_FLAGS, 'last');
 
-  const by = optionalOption(args, 'by') ?? resolveGuildActor();
-  if (!by) {
-    process.stderr.write(
-      'error: --by required (or set GUILD_ACTOR). agora last is per-actor — it asks "which play am I in?"\n',
-    );
-    return 1;
-  }
+  const by = requireOption(args, 'by', '<m>', 'GUILD_ACTOR');
 
   const stateFilter = optionalOption(args, 'state');
   if (
