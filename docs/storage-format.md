@@ -81,6 +81,73 @@ introducing a stored field that could itself drift.
 Inbox is explicit because it has a FIFO cap (`MAX_INBOX_SIZE`) — old
 messages are dropped from the head, so length isn't monotonic.
 
+The optimistic CAS is retained as an in-process safety net even after
+`.guild-lock` (next section) became the cross-process serialization
+barrier. CAS catches reordering bugs **inside** a single process;
+the lock catches concurrency **between** processes.
+
+---
+
+## Cross-process serialization (`.guild-lock`)
+
+Path: `${contentRoot}/.guild-lock`. Created by every write-classified
+verb across all five entries (`gate`, `guild`, `agora`, `devil`,
+`ctx`) via the `withEntryLock` middleware. Readers do not acquire the
+lock.
+
+Mechanism: `openSync(path, 'wx')` (i.e. `O_CREAT | O_EXCL`). The
+holder writes a JSON payload, runs the verb, and `unlink`s the file
+in `finally`. A competing acquire receives `EEXIST` and surfaces it
+as `LockBusyError` — a `DomainError` subclass that maps to JSON
+envelope `code: "lock_busy"` (gate path; other entries are tracked
+in #194).
+
+Lock metadata (treated as untrusted input on read — fields are
+escaped before display):
+
+| Field | Type | Purpose |
+|---|---|---|
+| `pid` | number | Holder's process id. Used for `kill 0` liveness check during reclaim. |
+| `ppid` | number | Holder's parent pid. Debug aid; also feeds the ancestor-pid safety valve in reclaim. |
+| `started_at` | ISO 8601 string | When the holder acquired. Used by both age-based and boottime-based reclaim. |
+| `verb` | string | The verb being executed. Surfaced in the busy-error message. |
+| `actor` | string | Resolved guild actor (env / `.guild-actor`). Currently empty when neither is set — see #196. |
+| `host` | string | Holder's hostname. Recorded for diagnostics; **not** trusted in reclaim judgement. |
+| `cwd` | string | Working directory at acquire. Helps disambiguate worktrees. |
+| `passage` | string | Entry that acquired (`gate` / `guild` / `agora` / `devil` / `ctx`). |
+| `guild_cli_version` | string | Version of the binary that wrote the lock. |
+
+Stale reclaim (best-effort, single retry on `EEXIST`):
+
+1. **Dead pid**: `kill(holder.pid, 0)` returns `ESRCH`, and
+   `holder.pid !== process.pid && holder.pid !== process.ppid` (the
+   ancestor-pid safety valve prevents reclaiming a still-running
+   ancestor).
+2. **Pre-boot lock**: `holder.started_at < (Date.now() - os.uptime() *
+   1000)` — the lock predates the current OS boot, so the original
+   process cannot be alive.
+3. **Age cap**: `GUILD_LOCK_MAX_AGE_MS` env is set, holder is older
+   than that bound. CI runners are expected to set this (e.g. 5
+   minutes); local development normally leaves it unset.
+
+If none match, the acquire fails with `LockBusyError` and surfaces
+the holder's metadata. Cross-host auto-reclaim is not implemented —
+multiple hosts sharing one content_root is off-substrate (NFS / SMB /
+iCloud Drive: atomicity of `O_CREAT | O_EXCL` is not guaranteed and
+running guild-cli there is unsupported).
+
+Test-only env: `GUILD_LOCK_TEST_BARRIER=<file>`. When set, acquire
+busy-polls for the file's existence before attempting `openExclusive`;
+production callers leave it unset and the hook is a no-op. Used by
+`tests/integration/lock/cross-passage-race.test.ts` to align spawned
+children inside a ~5ms contention window.
+
+Out-of-scope follow-ups: #194 (JSON envelope parity for non-gate
+entries), #195 (malformed lock recovery), #196 (`actor` empty when
+unset), #197 (TOCTOU between `EEXIST` and `readHolder`), #200
+(`<write-verb> --help` taking the lock), #201 (race-test child
+cleanup on barrier-wait timeout).
+
 ---
 
 ## Records

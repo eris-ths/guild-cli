@@ -182,14 +182,49 @@ the issue is the active discussion.
   `tests/infrastructure/parseYamlSafe.test.ts`.
 - **Concurrent writes**
   ([#155](https://github.com/eris-ths/guild-cli/issues/155)).
-  There is no lock file. Two simultaneous writes on the same record
-  have a last-writer-wins race unless optimistic-lock detection
-  catches the second write's stale read — `RequestVersionConflict`,
-  `InboxVersionConflict`, and `IssueVersionConflict` each cover their
-  own record class. This catches **most** concurrent mutations but is
-  not a full serialization barrier (the CAS window between re-read
-  and atomic-rename is non-zero). Serialize at the caller for
-  critical operations on any record.
+  Mitigated as of v1-prep #155: `withGuildLock` is the
+  serialization boundary. A content-root-wide single-writer lock at
+  `${contentRoot}/.guild-lock` is acquired by per-entry middleware
+  (`withEntryLock`) on every write-classified verb across all five
+  entries (`gate`, `guild`, `agora`, `devil`, `ctx`). Mechanism:
+  `O_CREAT | O_EXCL` on the lock path, JSON metadata payload
+  (pid / ppid / started_at / verb / actor / host / cwd / passage /
+  guild_cli_version), `unlink` in `finally`. Competing acquire
+  surfaces as `LockBusyError` (DomainError subclass; JSON envelope
+  `code: "lock_busy"`).
+
+  Stale reclaim covers three cases on `EEXIST`: (a) the recorded pid
+  is dead (`kill 0` → `ESRCH`) and is neither the current process nor
+  its parent; (b) `lock.started_at` predates the current OS boot
+  (`os.uptime()`-derived); (c) `GUILD_LOCK_MAX_AGE_MS` env is set and
+  the lock is older than that bound. Cross-host auto-reclaim is
+  forbidden — different hosts sharing one content_root are off the
+  supported substrate (see iCloud / NFS note below).
+
+  The pre-existing per-record CAS (`RequestVersionConflict`,
+  `InboxVersionConflict`, `IssueVersionConflict`) is retained as an
+  in-process safety net against bugs that reorder writes within a
+  single process; it is no longer the cross-process barrier.
+
+  Out of scope (tracked separately):
+  [#194](https://github.com/eris-ths/guild-cli/issues/194)
+  (`--format json` envelope parity for `agora` / `devil` / `ctx`),
+  [#195](https://github.com/eris-ths/guild-cli/issues/195)
+  (malformed `.guild-lock` recovery),
+  [#196](https://github.com/eris-ths/guild-cli/issues/196)
+  (lock metadata `actor` empty when `GUILD_ACTOR` unset),
+  [#197](https://github.com/eris-ths/guild-cli/issues/197)
+  (TOCTOU between `EEXIST` and `readHolder`),
+  [#200](https://github.com/eris-ths/guild-cli/issues/200)
+  (`<write-verb> --help` acquires the lock), and remote-FS support
+  (NFS / SMB / iCloud Drive — `O_CREAT | O_EXCL` atomicity is not
+  guaranteed there; running guild-cli against a content_root on a
+  remote FS is unsupported).
+
+  Threat-model note: an attacker who already has write access to the
+  content_root can write any YAML directly and is therefore out of
+  scope for the lock mechanism — the lock is for honest concurrent
+  writers, not for adversarial ones.
 
 ## Reporting
 
