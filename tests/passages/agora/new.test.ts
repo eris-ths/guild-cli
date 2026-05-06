@@ -292,7 +292,7 @@ test('agora new: missing GUILD_ACTOR and no --by produces a clear error', (t) =>
     { GUILD_ACTOR: '' },
   );
   assert.notEqual(r.status, 0);
-  assert.match(r.stderr, /--by required/);
+  assert.match(r.stderr, /Missing --by/);
 });
 
 test('agora new: rejects unknown flags loud (principle 10 input contract)', (t) => {

@@ -194,13 +194,7 @@ export async function ingestSource(
     return 1;
   }
 
-  const by = optionalOption(args, 'by', 'GUILD_ACTOR');
-  if (!by) {
-    process.stderr.write(
-      'error: --by required (or set GUILD_ACTOR). devil ingest attributes the ingest invocation.\n',
-    );
-    return 1;
-  }
+  const by = requireOption(args, 'by', '<m>', 'GUILD_ACTOR');
   const format = optionalOption(args, 'format') ?? 'text';
   if (format !== 'json' && format !== 'text') {
     process.stderr.write(`error: --format must be 'json' or 'text', got: ${format}\n`);

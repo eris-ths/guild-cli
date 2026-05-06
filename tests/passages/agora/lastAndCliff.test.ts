@@ -170,7 +170,7 @@ test('agora last: --by overrides GUILD_ACTOR; missing actor errors clearly', (t)
   // No --by, no GUILD_ACTOR → error
   const r2 = run(AGORA, root, ['last']);
   assert.notEqual(r2.status, 0);
-  assert.match(r2.stderr, /--by required/);
+  assert.match(r2.stderr, /Missing --by/);
 });
 
 test('agora last: text mode renders one-line summary + cliff lines when suspended', (t) => {

@@ -7,6 +7,19 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
 
 ## [Unreleased]
 
+### Changed
+
+- **Actor-flag missing-arg errors unified across agora / devil / ctx
+  to the #164 `requireOption` shape.** A v0.5 dogfood sweep found 16
+  callsites still using the pre-#164 pattern
+  (`optionalOption` + manual `--by required (or set GUILD_ACTOR)`
+  stderr write) — the gate sweep had been thorough but agora / devil /
+  ctx kept the older bespoke message. Now every actor-flag error
+  reads `Missing --by <m> (or set GUILD_ACTOR).` regardless of which
+  passage emitted it. Net deletion of ~90 lines (one `requireOption`
+  call replaces six lines of manual handling). Tests asserting the
+  prior `/--by required/` shape updated to `/Missing --by/`.
+
 ### Added
 
 - **`agora list --state all` and `devil list --state all` accept the

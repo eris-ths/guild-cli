@@ -145,7 +145,7 @@ test('devil open without --by and no GUILD_ACTOR fails', (t) => {
     { GUILD_ACTOR: '' },
   );
   assert.equal(r.status, 1);
-  assert.match(r.stderr, /--by required/);
+  assert.match(r.stderr, /Missing --by/);
 });
 
 test('devil open allocates per-day sequences (001, 002, 003)', (t) => {

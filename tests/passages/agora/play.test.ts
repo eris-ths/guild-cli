@@ -184,7 +184,7 @@ test('agora play: missing actor fails closed', (t) => {
     { GUILD_ACTOR: '' },
   );
   assert.notEqual(r.status, 0);
-  assert.match(r.stderr, /--by required/);
+  assert.match(r.stderr, /Missing --by/);
 });
 
 test('agora play: rejects unknown flag (principle 10 input contract)', (t) => {
