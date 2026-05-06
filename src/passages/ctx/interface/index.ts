@@ -24,6 +24,9 @@ import { DomainError } from '../../../domain/shared/DomainError.js';
 import { YamlCtxRepository } from '../infrastructure/YamlCtxRepository.js';
 import { CtxUseCases } from '../application/CtxUseCases.js';
 import { recordCtx } from './handlers/record.js';
+import { withEntryLock } from '../../../infrastructure/lock/withEntryLock.js';
+import { resolveGuildActor } from '../../../interface/shared/resolveGuildActor.js';
+import { READ_VERBS, WRITE_VERBS, LOCK_EXEMPT_VERBS } from './verbs.js';
 
 const HELP = `ctx — fact accumulation passage (phase 1: record only)
 
@@ -73,7 +76,7 @@ export async function main(argv: readonly string[]): Promise<number> {
   const repo = new YamlCtxRepository(config);
   const uc = new CtxUseCases(repo);
 
-  try {
+  const dispatch = async (): Promise<number> => {
     switch (cmd) {
       case 'record':
         return await recordCtx({ uc, config }, args);
@@ -91,6 +94,18 @@ export async function main(argv: readonly string[]): Promise<number> {
         return 1;
       }
     }
+  };
+
+  try {
+    const actor = resolveGuildActor() ?? '';
+    return await withEntryLock(
+      config,
+      'ctx',
+      cmd ?? '',
+      { READ_VERBS, WRITE_VERBS, LOCK_EXEMPT_VERBS },
+      actor,
+      dispatch,
+    );
   } catch (e) {
     if (e instanceof HelpRequested) {
       renderVerbHelp('ctx', e);

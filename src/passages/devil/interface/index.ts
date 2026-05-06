@@ -38,6 +38,9 @@ import { resolveEntry } from './handlers/resolve.js';
 import { suspendReview } from './handlers/suspend.js';
 import { resumeReview } from './handlers/resume.js';
 import { ingestSource } from './handlers/ingest.js';
+import { withEntryLock } from '../../../infrastructure/lock/withEntryLock.js';
+import { resolveGuildActor } from '../../../interface/shared/resolveGuildActor.js';
+import { READ_VERBS, WRITE_VERBS, LOCK_EXEMPT_VERBS } from './verbs.js';
 
 const HELP = `devil-review — security-backstop review passage (alpha, 11 verbs)
 
@@ -183,7 +186,7 @@ export async function main(argv: readonly string[]): Promise<number> {
   const lenses = new BundledLenseCatalog();
   const personas = new BundledPersonaCatalog();
 
-  try {
+  const dispatch = async (): Promise<number> => {
     switch (cmd) {
       case 'schema':
         return await schemaCmd(args);
@@ -218,6 +221,18 @@ export async function main(argv: readonly string[]): Promise<number> {
         return 1;
       }
     }
+  };
+
+  try {
+    const actor = resolveGuildActor() ?? '';
+    return await withEntryLock(
+      config,
+      'devil',
+      cmd ?? '',
+      { READ_VERBS, WRITE_VERBS, LOCK_EXEMPT_VERBS },
+      actor,
+      dispatch,
+    );
   } catch (e) {
     if (e instanceof HelpRequested) {
       renderVerbHelp('devil', e);

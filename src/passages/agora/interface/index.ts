@@ -36,6 +36,9 @@ import { showAgora } from './handlers/show.js';
 import { lastPlay, LAST_BOOLEAN_FLAGS } from './handlers/last.js';
 import { cliffOf } from './handlers/cliff.js';
 import { schemaCmd } from './handlers/schema.js';
+import { withEntryLock } from '../../../infrastructure/lock/withEntryLock.js';
+import { resolveGuildActor } from '../../../interface/shared/resolveGuildActor.js';
+import { READ_VERBS, WRITE_VERBS, LOCK_EXEMPT_VERBS } from './verbs.js';
 
 const HELP = `agora — play / narrative passage (alpha, 11 verbs)
 
@@ -161,7 +164,7 @@ export async function main(argv: readonly string[]): Promise<number> {
   const games = new YamlGameRepository(config);
   const plays = new YamlPlayRepository(config);
 
-  try {
+  const dispatch = async (): Promise<number> => {
     switch (cmd) {
       case 'new':
         return await newGame({ repo: games, config }, args);
@@ -195,6 +198,18 @@ export async function main(argv: readonly string[]): Promise<number> {
         return 1;
       }
     }
+  };
+
+  try {
+    const actor = resolveGuildActor() ?? '';
+    return await withEntryLock(
+      config,
+      'agora',
+      cmd ?? '',
+      { READ_VERBS, WRITE_VERBS, LOCK_EXEMPT_VERBS },
+      actor,
+      dispatch,
+    );
   } catch (e) {
     if (e instanceof HelpRequested) {
       renderVerbHelp('agora', e);
