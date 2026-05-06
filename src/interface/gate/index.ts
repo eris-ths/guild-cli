@@ -266,6 +266,14 @@ export async function main(argv: readonly string[]): Promise<number> {
   const args = parseArgs(rest);
   const c = buildContainer();
   try {
+    // #200: <write-verb> --help must not block on the lock. Help is
+    // read-only; routing it through withEntryLock would surface
+    // lock_busy when another writer holds the lock, even though the
+    // dispatch path here only walks to the handler's rejectUnknownFlags
+    // which throws HelpRequested before any side effect.
+    if (args.options['help'] === true) {
+      return await dispatch(cmd, c, args);
+    }
     // #196: prefer an explicit placeholder over an empty string so
     // lock metadata / LockBusyError messages remain self-explanatory
     // when GUILD_ACTOR / .guild-actor are absent. Pass-through of
