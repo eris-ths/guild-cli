@@ -55,16 +55,18 @@ function bootstrap(): { root: string; cleanup: () => void } {
 
 /**
  * Pre-seed `.guild-lock` with a holder the staleness check refuses
- * to reclaim. pid=1 (init) is alive on Unix, EPERMs on kill(1, 0)
- * (different user) which the staleness check treats as alive; ppid=1
- * means it isn't our parent; started_at is now-ish so the boottime
- * branch doesn't fire. Result: any write verb hitting withEntryLock
- * throws LockBusyError before dispatch.
+ * to reclaim. Use the test runner's own pid: kill(self, 0) succeeds
+ * (we are alive), so the dead-pid branch refuses reclaim; the
+ * ancestor-pid safety valve (`pid !== process.pid`) also blocks.
+ * started_at is now-ish so the boottime branch doesn't fire either.
+ * Result: any write verb hitting withEntryLock throws LockBusyError
+ * before dispatch. (Earlier draft used pid=1 / ppid=1 which assumed
+ * Unix init semantics — fails on Windows where pid=1 returns ESRCH.)
  */
 function seedBusyLock(root: string): void {
   const meta = {
-    pid: 1,
-    ppid: 1,
+    pid: process.pid,
+    ppid: process.ppid,
     started_at: new Date().toISOString(),
     verb: 'play',
     actor: 'someone-else',

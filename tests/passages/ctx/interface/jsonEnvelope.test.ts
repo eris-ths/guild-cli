@@ -26,9 +26,11 @@ function bootstrap(): { root: string; cleanup: () => void } {
 }
 
 function seedBusyLock(root: string): void {
+  // Use the test runner's own pid for portability — pid=1 has no
+  // Unix-init equivalent on Windows. See agora envelope test.
   const meta = {
-    pid: 1,
-    ppid: 1,
+    pid: process.pid,
+    ppid: process.ppid,
     started_at: new Date().toISOString(),
     verb: 'record',
     actor: 'someone-else',

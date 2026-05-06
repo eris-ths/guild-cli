@@ -27,11 +27,12 @@ function bootstrap(): { root: string; cleanup: () => void } {
 }
 
 function seedBusyLock(root: string): void {
-  // pid=1 alive + ppid=1 not-our-parent + recent started_at →
-  // staleness check refuses to reclaim. See agora envelope test.
+  // Use the test runner's own pid: kill(self, 0) succeeds + ancestor
+  // safety valve blocks + recent started_at avoids boottime reclaim.
+  // (pid=1 portability note in agora envelope test.)
   const meta = {
-    pid: 1,
-    ppid: 1,
+    pid: process.pid,
+    ppid: process.ppid,
     started_at: new Date().toISOString(),
     verb: 'open',
     actor: 'someone-else',
