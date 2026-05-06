@@ -175,6 +175,31 @@ is agent-friendly but not agent-first: the agent has to decide "what
 do I fetch next" during orientation. `boot` bundles the three into
 one payload so the agent can acquire full context with one tool call.
 
+**`reviewed-authored` surface — scope is the Request aggregate.**
+When peers land reviews on a request you authored, `boot` lifts them
+into `verbs_available_now.actionable[]` (as `verb: 'show'`) and
+`suggested_next` (when no higher-priority transition is open), with
+a running total under `status.reviews_unseen`. The boundary that
+decides "unseen" is **the actor's last write to any Request
+aggregate** — `status_log` entries (transitions), `reviews[]` entries
+(judgements), or `thanks[]` entries (cross-actor appreciation). All
+three advance the boundary; reading via `gate show` does not (READ
+surfaces stay side-effect-free).
+
+`message` / `broadcast` / `issues` writes are **deliberately NOT**
+counted — those aggregates have their own notification surfaces
+(inbox unread, issue worklists), and folding them into the
+reviewed-authored boundary would dilute "have I responded to a peer
+review yet" into "have I done anything anywhere". The two signals
+are separate by design. The corollary: replying to a review by
+sending a `gate message` does not clear the surface; reply with
+`gate review` / `gate thank` (or land a state transition on the same
+request) and the surface advances naturally.
+
+The per-request actionable[] is capped at 5 entries to keep the boot
+payload lean (it sits on the agent hot path); deeper backlogs remain
+visible via `status.reviews_unseen`.
+
 ### Write verbs: `--format json` and `suggested_next`
 
 Every write verb (`request`, `approve`, `deny`, `execute`, `complete`,

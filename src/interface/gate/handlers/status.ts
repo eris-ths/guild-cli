@@ -33,6 +33,18 @@ export interface StatusSummary {
    */
   unresponded: number;
   inbox_unread: number;
+  /**
+   * Reviews on the actor's authored requests that landed AFTER the
+   * actor's last write to any request aggregate (status_log, reviews,
+   * or thanks). Optional — populated by callers that derive the
+   * boundary (currently `gate boot`); other surfaces leave it absent.
+   *
+   * Sibling counter to the per-request entries surfaced under
+   * `verbs_available_now.actionable[]` (capped). The actionable list
+   * shows top-N concrete request ids; this scalar shows the running
+   * total so the agent knows when the cap is hiding additional work.
+   */
+  reviews_unseen?: number;
   last_activity: string | null;
 }
 
