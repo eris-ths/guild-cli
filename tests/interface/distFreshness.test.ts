@@ -32,11 +32,16 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
-// dist/tests/interface/ → repo root is three levels up.
-const HELPER = resolve(here, '../../../bin/_lib/checkDistFreshness.mjs');
+// dist/tests/interface/ → repo root is three levels up. Convert to a
+// file:// URL for the dynamic import — Node's ESM loader on Windows
+// rejects bare absolute paths with backslashes; same Windows-ESM
+// trap that #161 fixed for the doctor handler's plugin loader.
+const HELPER = pathToFileURL(
+  resolve(here, '../../../bin/_lib/checkDistFreshness.mjs'),
+).href;
 
 interface Helper {
   checkDistFreshness: (srcDir: string, distDir: string) => void;
