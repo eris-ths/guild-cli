@@ -28,8 +28,17 @@ export interface Container {
   unrespondedConcernsQ: UnrespondedConcernsQuery;
 }
 
-export function buildContainer(): Container {
-  const config = GuildConfig.load();
+export interface BuildContainerOpts {
+  /**
+   * Override `cwd` for `GuildConfig.load`. Tests pass a freshly
+   * `mkdtemp`-ed directory to verify the builder is side-effect-free
+   * (issue #155 PR-B pin test); production never sets this.
+   */
+  cwd?: string;
+}
+
+export function buildContainer(opts: BuildContainerOpts = {}): Container {
+  const config = GuildConfig.load(opts.cwd);
   const members = new YamlMemberRepository(config);
   const requests = new YamlRequestRepository(config);
   const issues = new YamlIssueRepository(config);
@@ -39,7 +48,7 @@ export function buildContainer(): Container {
   // onMalformed callback isn't shared with the stderr-emitting
   // default that the rest of the CLI uses.
   const buildDiagRepos = (om: OnMalformed): DiagnosticRepoBundle => {
-    const cfg = GuildConfig.load(process.cwd(), om);
+    const cfg = GuildConfig.load(opts.cwd ?? process.cwd(), om);
     return {
       members: new YamlMemberRepository(cfg),
       requests: new YamlRequestRepository(cfg),

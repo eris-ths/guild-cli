@@ -10,25 +10,33 @@
 // in `finally`. A competing acquire fails with EEXIST and surfaces
 // as `LockBusyError` (DomainError subclass → `lock_busy` JSON code).
 //
-// Stale reclaim (minimal, PR-A scope): on EEXIST we try once to
-// rescue an obviously-dead lock by reading the file's metadata and
-// auto-unlinking when EITHER:
-//   1. `kill(pid, 0)` reports ESRCH (the recorded process is gone), OR
-//   2. `GUILD_LOCK_MAX_AGE_MS` env is set and `started_at` exceeds it.
+// Stale reclaim (PR-A + PR-B): on EEXIST we try once to rescue an
+// obviously-dead lock by reading the file's metadata and
+// auto-unlinking when ANY of:
+//   1. `lock.started_at` predates the current OS boot (reboot
+//      crossed → the recorded pid cannot be the same process as
+//      the holder, even if a fresh pid happens to collide), OR
+//   2. `kill(pid, 0)` reports ESRCH (the recorded process is gone)
+//      AND the pid is not our own / not our parent, OR
+//   3. `GUILD_LOCK_MAX_AGE_MS` env is set and `started_at` exceeds it.
 //
 // We deliberately refuse to reclaim a lock whose pid is our own
 // process or our parent — that's ancestor territory and reclaiming
 // it would silently corrupt a legitimate concurrent flow within the
-// same process tree. boottime-aware reclaim is PR-B work.
+// same process tree. We do NOT walk further up the ancestor chain:
+// a portable Node API for that does not exist (Linux-only /proc is
+// out of scope), and reboot-crossing PID collisions on the
+// grandparent boundary fall under "acceptable false-reclaim" — the
+// boottime check (1) catches the common reboot case anyway.
 //
 // Lock metadata is treated as UNTRUSTED input: another writer (or a
 // hand-edited file) may put arbitrary strings in `actor` / `verb` /
 // `passage`. We never interpolate them into shell or filesystem
 // paths; user-facing surfaces JSON-stringify before display.
 
-import { openSync, writeSync, closeSync, unlinkSync, readFileSync } from 'node:fs';
+import { openSync, writeSync, closeSync, unlinkSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { hostname } from 'node:os';
+import { hostname, uptime as osUptime } from 'node:os';
 import { DomainError } from '../../domain/shared/DomainError.js';
 import { getPackageVersion } from '../../interface/shared/version.js';
 
@@ -123,6 +131,16 @@ export async function withGuildLock<T>(
  * `LockBusyError`. Returns the held file descriptor.
  */
 function acquire(lockPath: string, meta: GuildLockMeta): number {
+  // Test-only synchronization barrier. When GUILD_LOCK_TEST_BARRIER
+  // is set to a path, block (busy-poll) until that path exists
+  // before attempting `openExclusive`. The cross-passage race E2E
+  // suite uses this to make N spawned children all enter the
+  // open-O_EXCL race in the same kernel-scheduling window — without
+  // it, child N starts so much later than child 1 that child 1 has
+  // already finished and released, and the suite cannot observe a
+  // real race. Production callers never set this env, so the cost
+  // is one cheap getenv per acquire.
+  awaitTestBarrier();
   try {
     return openExclusive(lockPath, meta);
   } catch (err) {
@@ -233,14 +251,44 @@ function readHolder(lockPath: string): LockMetadata | null {
  * in-flight call within the same process tree.
  */
 function isReclaimable(holder: LockMetadata): boolean {
-  // Safety valve: never reclaim ancestor pids.
+  // Boottime check first — if started_at predates OS boot, the
+  // recorded pid cannot belong to the original holder regardless
+  // of whether the same pid is alive now (reboots reset the pid
+  // namespace). This rescues a legitimate stale lock left over by
+  // a hard crash that rebooted the machine.
+  //
+  // Strict `<` (not `<=`): the reboot-second boundary is too coarse
+  // to make a confident call from boottime alone; the kill-0 ESRCH
+  // OR the GUILD_LOCK_MAX_AGE_MS path will pick up that one-second
+  // edge case if it actually matters.
+  //
+  // os.uptime() is whole-second precision on macOS / Linux but the
+  // returned value is a Number; multiply by 1000 to compare against
+  // Date.now() in ms.
+  if (holder.started_at !== '') {
+    const startedMs = Date.parse(holder.started_at);
+    if (Number.isFinite(startedMs)) {
+      const bootMs = Date.now() - osUptime() * 1000;
+      if (startedMs < bootMs) return true;
+    }
+  }
+
+  // Safety valve: never reclaim ancestor pids via the kill-0 branch.
+  // Note: a lock surviving a reboot WILL pass through here above
+  // (boottime branch) before hitting this guard — that's intentional
+  // because post-reboot a colliding pid is by definition not our
+  // ancestor. We only refuse to reclaim ancestors in the "machine
+  // hasn't rebooted" case.
   if (holder.pid === process.pid) return false;
   if (typeof process.ppid === 'number' && holder.pid === process.ppid) return false;
 
   // Dead-process check: kill(pid, 0) → ESRCH means the process is gone.
   // EPERM means the process exists but we can't signal it (different
   // user) — treat as alive (don't reclaim). Other errors: also treat
-  // as alive (conservative).
+  // as alive (conservative). Ancestor-walk beyond pid/ppid is not
+  // portable in Node, so reboot-crossing pid collisions further up
+  // the tree fall under acceptable risk; the boottime branch above
+  // covers the common reboot case.
   if (isPidDead(holder.pid)) return true;
 
   // Age-based reclaim, opt-in via env. The env path is intended for
@@ -259,6 +307,37 @@ function isReclaimable(holder: LockMetadata): boolean {
     }
   }
   return false;
+}
+
+/**
+ * If `GUILD_LOCK_TEST_BARRIER` is set, busy-wait until the named
+ * file exists. No-op when the env is unset (the production case).
+ *
+ * Uses a tight sync poll with `existsSync` rather than fs.watch so
+ * the wait is deterministic across platforms (fs.watch semantics on
+ * macOS are different enough from Linux that test flake is real).
+ * Bounded at ~10s so a misconfigured test fails fast instead of
+ * hanging the runner indefinitely.
+ */
+function awaitTestBarrier(): void {
+  const barrier = process.env['GUILD_LOCK_TEST_BARRIER'];
+  if (barrier === undefined || barrier.length === 0) return;
+  const deadline = Date.now() + 10_000;
+  // Atomics + SharedArrayBuffer would let us sleep without burn,
+  // but pulling that in for a test-only path isn't worth the
+  // complexity. A 5ms granularity keeps CPU use trivial.
+  while (!existsSync(barrier)) {
+    if (Date.now() > deadline) {
+      throw new Error(
+        `GUILD_LOCK_TEST_BARRIER timeout: ${barrier} did not appear within 10s`,
+      );
+    }
+    // Synchronous tight loop with Atomics.wait on a dummy buffer
+    // to yield the thread without spinning hot. 5ms is well below
+    // any meaningful test timeout but well above the kernel's
+    // wakeup granularity.
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5);
+  }
 }
 
 function isPidDead(pid: number): boolean {

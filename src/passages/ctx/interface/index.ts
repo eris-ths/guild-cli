@@ -14,15 +14,13 @@
 // snake_case YAML / explicit-flag CLI; any future human-facing UI is
 // a projection, not a substrate change.
 
-import { GuildConfig } from '../../../infrastructure/config/GuildConfig.js';
 import { parseArgs, HelpRequested } from '../../../interface/shared/parseArgs.js';
 import { renderVerbHelp } from '../../../interface/shared/verbHelp.js';
 import { sanitizeError } from '../../../interface/shared/sanitizeError.js';
 import { nearestCommand } from '../../../interface/shared/nearestCommand.js';
 import { getPackageVersion, isVersionFlag } from '../../../interface/shared/version.js';
 import { DomainError } from '../../../domain/shared/DomainError.js';
-import { YamlCtxRepository } from '../infrastructure/YamlCtxRepository.js';
-import { CtxUseCases } from '../application/CtxUseCases.js';
+import { buildCtxContainer } from './container.js';
 import { recordCtx } from './handlers/record.js';
 import { withEntryLock } from '../../../infrastructure/lock/withEntryLock.js';
 import { resolveGuildActor } from '../../../interface/shared/resolveGuildActor.js';
@@ -72,9 +70,7 @@ export async function main(argv: readonly string[]): Promise<number> {
 
   const [cmd, ...rest] = argv;
   const args = parseArgs(rest);
-  const config = GuildConfig.load();
-  const repo = new YamlCtxRepository(config);
-  const uc = new CtxUseCases(repo);
+  const { config, uc } = buildCtxContainer();
 
   const dispatch = async (): Promise<number> => {
     switch (cmd) {

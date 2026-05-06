@@ -16,15 +16,13 @@
 // JSON / snake_case YAML / explicit-flag CLI; any future human-
 // facing UI is a projection, not a substrate change.
 
-import { GuildConfig } from '../../../infrastructure/config/GuildConfig.js';
 import { parseArgs, HelpRequested } from '../../../interface/shared/parseArgs.js';
 import { renderVerbHelp } from '../../../interface/shared/verbHelp.js';
 import { sanitizeError } from '../../../interface/shared/sanitizeError.js';
 import { nearestCommand } from '../../../interface/shared/nearestCommand.js';
 import { getPackageVersion, isVersionFlag } from '../../../interface/shared/version.js';
 import { DomainError } from '../../../domain/shared/DomainError.js';
-import { YamlGameRepository } from '../infrastructure/YamlGameRepository.js';
-import { YamlPlayRepository } from '../infrastructure/YamlPlayRepository.js';
+import { buildAgoraContainer } from './container.js';
 import { newGame } from './handlers/new.js';
 import { startPlay } from './handlers/play.js';
 import { moveOnPlay } from './handlers/move.js';
@@ -160,9 +158,7 @@ export async function main(argv: readonly string[]): Promise<number> {
   ]);
   const verbBooleans = cmd ? VERB_BOOLEAN_FLAGS.get(cmd) : undefined;
   const args = parseArgs(rest, verbBooleans ? { booleanFlags: verbBooleans } : {});
-  const config = GuildConfig.load();
-  const games = new YamlGameRepository(config);
-  const plays = new YamlPlayRepository(config);
+  const { config, games, plays } = buildAgoraContainer();
 
   const dispatch = async (): Promise<number> => {
     switch (cmd) {

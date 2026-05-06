@@ -193,6 +193,101 @@ test('withGuildLock: GUILD_LOCK_MAX_AGE_MS triggers age-based reclaim', async ()
   }
 });
 
+test('withGuildLock: reclaims a lock whose started_at predates OS boot', async () => {
+  // Boottime branch (PR-B): if a lock file's started_at is older
+  // than the current OS uptime, the recorded pid by definition
+  // cannot be the original holder regardless of whether a colliding
+  // pid happens to be alive now. This test plants a lock with a
+  // started_at far in the past (epoch + 1s) and a pid that *is*
+  // alive (our own ppid). Without the boottime branch, the
+  // ancestor-safety valve would refuse to reclaim. With it, the
+  // pre-boot timestamp short-circuits the ancestor check.
+  const { root, cleanup } = makeRoot();
+  try {
+    // Pid we know is alive AND would normally be refused by the
+    // ancestor guard — pick our parent. This proves the boottime
+    // branch fires BEFORE the ancestor check.
+    const livePid = process.ppid;
+    const ancientHolder = {
+      pid: livePid,
+      ppid: 1,
+      // 1970-01-01T00:00:01Z — guaranteed predates any plausible
+      // current boot time.
+      started_at: new Date(1000).toISOString(),
+      verb: 'old',
+      actor: 'ghost',
+      host: 'pre-boot',
+      cwd: '/tmp',
+      passage: 'gate',
+      guild_cli_version: '0.0.0',
+    };
+    writeFileSync(
+      join(root, '.guild-lock'),
+      JSON.stringify(ancientHolder, null, 2) + '\n',
+      'utf8',
+    );
+    const result = await withGuildLock(
+      { contentRoot: root },
+      META,
+      async () => 'reclaimed-via-boottime',
+    );
+    assert.equal(result, 'reclaimed-via-boottime');
+    assert.equal(existsSync(join(root, '.guild-lock')), false);
+  } finally {
+    cleanup();
+  }
+});
+
+test('withGuildLock: does NOT reclaim when started_at is post-boot and pid is alive', async () => {
+  // Inverse of the boottime test: a lock with a recent (post-boot)
+  // timestamp and an alive pid (our own ppid) must NOT be reclaimed.
+  // This pins the boottime branch so it doesn't accidentally green-
+  // light reclaim of legitimate in-flight locks within the same
+  // process tree.
+  const { root, cleanup } = makeRoot();
+  const prev = process.env['GUILD_LOCK_MAX_AGE_MS'];
+  try {
+    delete process.env['GUILD_LOCK_MAX_AGE_MS']; // disable age branch
+    const liveAncestorHolder = {
+      pid: process.ppid,
+      ppid: 1,
+      started_at: new Date().toISOString(), // post-boot
+      verb: 'live',
+      actor: 'parent',
+      host: 'h',
+      cwd: '/tmp',
+      passage: 'gate',
+      guild_cli_version: '0.0.0',
+    };
+    writeFileSync(
+      join(root, '.guild-lock'),
+      JSON.stringify(liveAncestorHolder, null, 2) + '\n',
+      'utf8',
+    );
+    let caught: unknown = null;
+    try {
+      await withGuildLock(
+        { contentRoot: root },
+        META,
+        async () => 'should-not-run',
+      );
+    } catch (e) {
+      caught = e;
+    }
+    assert.ok(
+      caught instanceof LockBusyError,
+      `expected LockBusyError, got ${String(caught)}`,
+    );
+    // Lock file must still be on disk (we did NOT reclaim it).
+    assert.equal(existsSync(join(root, '.guild-lock')), true);
+  } finally {
+    if (prev === undefined) delete process.env['GUILD_LOCK_MAX_AGE_MS'];
+    else process.env['GUILD_LOCK_MAX_AGE_MS'] = prev;
+    // Manually clean since we left the lock in place.
+    cleanup();
+  }
+});
+
 test('withGuildLock: writes metadata with the expected shape', async () => {
   const { root, cleanup } = makeRoot();
   try {

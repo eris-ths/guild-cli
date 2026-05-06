@@ -15,7 +15,6 @@
 // JSON / snake_case YAML / explicit-flag CLI. Any future
 // human-facing UI is a projection, not a substrate change.
 
-import { GuildConfig } from '../../../infrastructure/config/GuildConfig.js';
 import { parseArgs, HelpRequested } from '../../../interface/shared/parseArgs.js';
 import { renderVerbHelp } from '../../../interface/shared/verbHelp.js';
 import { sanitizeError } from '../../../interface/shared/sanitizeError.js';
@@ -24,9 +23,7 @@ import { getPackageVersion, isVersionFlag } from '../../../interface/shared/vers
 import { DomainError } from '../../../domain/shared/DomainError.js';
 import { LenseNotFound } from '../domain/Lense.js';
 import { PersonaNotFound } from '../domain/Persona.js';
-import { YamlDevilReviewRepository } from '../infrastructure/YamlDevilReviewRepository.js';
-import { BundledLenseCatalog } from '../infrastructure/BundledLenseCatalog.js';
-import { BundledPersonaCatalog } from '../infrastructure/BundledPersonaCatalog.js';
+import { buildDevilContainer } from './container.js';
 import { schemaCmd } from './handlers/schema.js';
 import { openReview } from './handlers/open.js';
 import { entryOnReview } from './handlers/entry.js';
@@ -181,10 +178,7 @@ export async function main(argv: readonly string[]): Promise<number> {
 
   const [cmd, ...rest] = argv;
   const args = parseArgs(rest);
-  const config = GuildConfig.load();
-  const reviews = new YamlDevilReviewRepository(config);
-  const lenses = new BundledLenseCatalog();
-  const personas = new BundledPersonaCatalog();
+  const { config, reviews, lenses, personas } = buildDevilContainer();
 
   const dispatch = async (): Promise<number> => {
     switch (cmd) {
