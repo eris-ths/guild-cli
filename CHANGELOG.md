@@ -22,6 +22,21 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
   `gate status` and `gate doctor` now validate `--format` at entry
   (matches the existing pattern used by board / list / schema).
 
+- **Schema ↔ handler flag-coverage CI test.** `<cli> schema --verb
+  <name>` is the agent-dispatch reflection layer; the handler's
+  `*_KNOWN_FLAGS` set is what the CLI actually accepts via
+  `rejectUnknownFlags`. There was no CI guard against the two
+  drifting. New test enumerates every verb across the 5 passages
+  via `<cli> schema --format json`, parses the handler's known-flag
+  set from the unknown-flag error message, and asserts set
+  equality (after filtering positionals — those carry a
+  `description: 'positional; ...'` marker in devil's schema and
+  are absent from agora's). Sub-dispatchers (`gate issues`,
+  `gate message`) are skipped: their schema models a `subcommand`
+  enum rather than a flag set. A floor-check verifies at least 3
+  verbs per CLI passed the comparison so a regression in the
+  unknown-flag error shape doesn't silently empty the loop.
+
 ### Changed
 
 - **Actor-flag missing-arg errors unified across agora / devil / ctx
