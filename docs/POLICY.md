@@ -158,7 +158,7 @@ Report security issues via GitHub's private vulnerability reporting
 
 ## Distribution context
 
-`guild-cli` is currently distributed within the Anotete group of
+`guild-cli` is currently distributed within a private group of
 companies as an internal tool, in addition to being public OSS. This
 policy applies uniformly to both audiences: there are no private
 breaking changes. All consumers — internal and external — see the same
