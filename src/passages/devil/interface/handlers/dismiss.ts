@@ -17,6 +17,8 @@ import {
   rejectUnknownFlags,
 } from '../../../../interface/shared/parseArgs.js';
 import { GuildConfig } from '../../../../infrastructure/config/GuildConfig.js';
+import { emitErrorEnvelope } from '../../../../interface/shared/errorEnvelope.js';
+import { DomainError } from '../../../../domain/shared/DomainError.js';
 
 const DISMISS_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'reason',
@@ -101,24 +103,47 @@ export async function dismissEntry(
 
   const target = review.findEntry(entryId);
   if (target === null) {
-    process.stderr.write(
-      `error: entry "${entryId}" not found in ${review.id} ` +
-        `(entries: ${review.entries.map((e) => e.id).join(', ') || '(none)'})\n`,
+    emitErrorEnvelope(
+      new DomainError(
+        `entry "${entryId}" not found in ${review.id} ` +
+          `(entries: ${review.entries.map((e) => e.id).join(', ') || '(none)'})`,
+        'entry_id',
+      ),
+      format,
+      deps.config.contentRoot,
     );
     return 1;
   }
   if (target.kind !== 'finding') {
-    process.stderr.write(
-      `error: only kind='finding' entries can be dismissed (got kind='${target.kind}' on ${entryId}).\n` +
-        `  assumption / resistance / synthesis entries don't carry status — they're held as substrate, not transitioned.\n`,
+    emitErrorEnvelope(
+      new DomainError(
+        `only kind='finding' entries can be dismissed (got kind='${target.kind}' on ${entryId}).`,
+        'kind',
+      ),
+      format,
+      deps.config.contentRoot,
     );
+    if (format !== 'json') {
+      process.stderr.write(
+        `  assumption / resistance / synthesis entries don't carry status — they're held as substrate, not transitioned.\n`,
+      );
+    }
     return 1;
   }
   if (target.status !== 'open') {
-    process.stderr.write(
-      `error: entry ${entryId} status is '${target.status}', not 'open' — refusing to overwrite the existing transition.\n` +
-        `  If the prior status is wrong, file a new entry that --addresses ${entryId} explaining the disagreement.\n`,
+    emitErrorEnvelope(
+      new DomainError(
+        `entry ${entryId} status is '${target.status}', not 'open' — refusing to overwrite the existing transition.`,
+        'status',
+      ),
+      format,
+      deps.config.contentRoot,
     );
+    if (format !== 'json') {
+      process.stderr.write(
+        `  If the prior status is wrong, file a new entry that --addresses ${entryId} explaining the disagreement.\n`,
+      );
+    }
     return 1;
   }
 

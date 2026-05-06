@@ -75,9 +75,7 @@ export async function suspendPlay(
   }
 
   const gameFilter = optionalOption(args, 'game');
-  const resolved = await resolvePlayForVerb(deps.plays, playId, gameFilter);
-  if (resolved === 'ambiguous') return 1;
-  const play = resolved;
+  const play = await resolvePlayForVerb(deps.plays, playId, gameFilter);
   if (!play) {
     throw new PlayNotFound(playId);
   }

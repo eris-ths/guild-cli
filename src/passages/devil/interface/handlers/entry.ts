@@ -26,6 +26,8 @@ import {
   rejectUnknownFlags,
 } from '../../../../interface/shared/parseArgs.js';
 import { GuildConfig } from '../../../../infrastructure/config/GuildConfig.js';
+import { emitErrorEnvelope } from '../../../../interface/shared/errorEnvelope.js';
+import { DomainError } from '../../../../domain/shared/DomainError.js';
 
 const ENTRY_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'persona',
@@ -131,9 +133,15 @@ export async function entryOnReview(
   // Kind handling. `gate` is reserved for ingest paths.
   const kind: EntryKind = parseEntryKind(kindRaw);
   if (kind === 'gate') {
-    process.stderr.write(
-      "error: kind='gate' is rejected by `devil entry` — multi-stage check output goes through `devil ingest` (which structures stages[] from a JSON input file). " +
-        'See issue #126.\n',
+    // Synthetic CLI-shape error: no caught origin, so a fresh
+    // DomainError carries field='kind' through the envelope (#205).
+    emitErrorEnvelope(
+      new DomainError(
+        "kind='gate' is rejected by `devil entry` — multi-stage check output goes through `devil ingest` (which structures stages[] from a JSON input file). See issue #126.",
+        'kind',
+      ),
+      format,
+      deps.config.contentRoot,
     );
     return 1;
   }
@@ -144,31 +152,51 @@ export async function entryOnReview(
   if (kind === 'finding') {
     const sevRaw = optionalOption(args, 'severity');
     if (!sevRaw) {
-      process.stderr.write(
-        "error: --severity required when --kind=finding (critical|high|medium|low|info)\n",
+      emitErrorEnvelope(
+        new DomainError(
+          '--severity required when --kind=finding (critical|high|medium|low|info)',
+          'severity',
+        ),
+        format,
+        deps.config.contentRoot,
       );
       return 1;
     }
     severity = parseSeverity(sevRaw);
     severityRationale = optionalOption(args, 'severity-rationale');
     if (!severityRationale) {
-      process.stderr.write(
-        "error: --severity-rationale required when --kind=finding " +
-          '(prose explaining why this severity in this codebase, per Claude Security influence).\n',
+      emitErrorEnvelope(
+        new DomainError(
+          '--severity-rationale required when --kind=finding ' +
+            '(prose explaining why this severity in this codebase, per Claude Security influence).',
+          'severity-rationale',
+        ),
+        format,
+        deps.config.contentRoot,
       );
       return 1;
     }
   } else {
     // Catch misuse: caller passed --severity for a non-finding entry.
     if (optionalOption(args, 'severity') !== undefined) {
-      process.stderr.write(
-        `error: --severity only valid when --kind=finding (got --kind=${kind})\n`,
+      emitErrorEnvelope(
+        new DomainError(
+          `--severity only valid when --kind=finding (got --kind=${kind})`,
+          'severity',
+        ),
+        format,
+        deps.config.contentRoot,
       );
       return 1;
     }
     if (optionalOption(args, 'severity-rationale') !== undefined) {
-      process.stderr.write(
-        `error: --severity-rationale only valid when --kind=finding (got --kind=${kind})\n`,
+      emitErrorEnvelope(
+        new DomainError(
+          `--severity-rationale only valid when --kind=finding (got --kind=${kind})`,
+          'severity-rationale',
+        ),
+        format,
+        deps.config.contentRoot,
       );
       return 1;
     }

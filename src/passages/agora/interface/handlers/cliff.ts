@@ -7,6 +7,7 @@ import {
 import { GuildConfig } from '../../../../infrastructure/config/GuildConfig.js';
 import { resolvePlayForVerb } from './resolvePlay.js';
 import { parsePlayId } from '../../domain/Play.js';
+import { DomainError } from '../../../../domain/shared/DomainError.js';
 
 const CLIFF_KNOWN_FLAGS: ReadonlySet<string> = new Set(['game', 'format']);
 
@@ -66,15 +67,16 @@ export async function cliffOf(deps: CliffDeps, args: ParsedArgs): Promise<number
     return 1;
   }
 
-  const resolved = await resolvePlayForVerb(deps.plays, playId, gameFilter);
-  if (resolved === 'ambiguous') return 1; // resolvePlayForVerb already wrote stderr
-  if (resolved === null) {
-    process.stderr.write(
-      `error: play ${playId} not found${gameFilter ? ` in game=${gameFilter}` : ''}.\n`,
+  // resolvePlayForVerb throws PlayIdAmbiguous on cross-game collision
+  // (#205); the entry-point's outer catch surfaces it through
+  // emitErrorEnvelope. Only the not-found path is local-handled here.
+  const play = await resolvePlayForVerb(deps.plays, playId, gameFilter);
+  if (play === null) {
+    throw new DomainError(
+      `play ${playId} not found${gameFilter ? ` in game=${gameFilter}` : ''}.`,
+      'play_id',
     );
-    return 1;
   }
-  const play = resolved;
 
   const lastSuspension = play.suspensions[play.suspensions.length - 1];
 

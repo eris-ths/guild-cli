@@ -1,5 +1,4 @@
 import { Game } from '../../domain/Game.js';
-import { Play } from '../../domain/Play.js';
 import { GameRepository } from '../../application/GameRepository.js';
 import { PlayRepository } from '../../application/PlayRepository.js';
 import {
@@ -8,6 +7,9 @@ import {
   rejectUnknownFlags,
 } from '../../../../interface/shared/parseArgs.js';
 import { GuildConfig } from '../../../../infrastructure/config/GuildConfig.js';
+import { emitErrorEnvelope } from '../../../../interface/shared/errorEnvelope.js';
+import { DomainError } from '../../../../domain/shared/DomainError.js';
+import { resolvePlayForVerb } from './resolvePlay.js';
 
 const SHOW_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'game',
@@ -66,8 +68,16 @@ export async function showAgora(deps: ShowDeps, args: ParsedArgs): Promise<numbe
   }
   // Else: treat as game slug
   if (gameFilter !== undefined) {
-    process.stderr.write(
-      `error: --game is for disambiguating play ids; "${arg}" looks like a game slug already (use just \`agora show ${arg}\`).\n`,
+    // Synthetic CLI-shape error: --game qualifier on what is clearly
+    // a game-slug positional (per PLAY_ID_PATTERN). Throw via the
+    // envelope helper so JSON callers get field='game' (#205).
+    emitErrorEnvelope(
+      new DomainError(
+        `--game is for disambiguating play ids; "${arg}" looks like a game slug already (use just \`agora show ${arg}\`).`,
+        'game',
+      ),
+      format,
+      deps.config.contentRoot,
     );
     return 1;
   }
@@ -81,9 +91,21 @@ async function showGame(
 ): Promise<number> {
   const game = await deps.games.findBySlug(slug);
   if (!game) {
-    process.stderr.write(
-      `error: game "${slug}" not found.\n  List available games: agora list\n  Or create one: agora new --slug ${slug} --kind <quest|sandbox> --title "..."\n`,
+    // JSON envelope carries field='slug' so consumers branch
+    // structurally; the multi-line text hint stays in stderr in
+    // text-mode only (gating on format keeps text-mode byte-shape
+    // identical to pre-#205, while JSON consumers see a clean
+    // single-line envelope).
+    emitErrorEnvelope(
+      new DomainError(`game "${slug}" not found.`, 'slug'),
+      format,
+      deps.config.contentRoot,
     );
+    if (format !== 'json') {
+      process.stderr.write(
+        `  List available games: agora list\n  Or create one: agora new --slug ${slug} --kind <quest|sandbox> --title "..."\n`,
+      );
+    }
     return 1;
   }
   if (format === 'json') {
@@ -107,28 +129,17 @@ async function showPlay(
   gameFilter: string | undefined,
   format: string,
 ): Promise<number> {
-  let play: Play | null = null;
-  if (gameFilter) {
-    // Targeted lookup — explicit game means findById can resolve
-    // unambiguously by walking only that game's directory. We use
-    // findAllById and filter, since findById's first-match across
-    // games could pick the wrong one.
-    const matches = await deps.plays.findAllById(playId);
-    play = matches.find((p) => p.game === gameFilter) ?? null;
-  } else {
-    const matches = await deps.plays.findAllById(playId);
-    if (matches.length > 1) {
-      const games = matches.map((p) => p.game).join(', ');
-      process.stderr.write(
-        `error: multiple games have a play with id "${playId}" (each game has its own sequence). ` +
-          `Disambiguate with --game <slug>. Candidates: ${games}\n`,
-      );
-      return 1;
-    }
-    play = matches[0] ?? null;
-  }
+  // Resolver throws PlayIdAmbiguous (DomainError, field='play_id') on
+  // cross-game collision; outer envelope catches. show used to inline
+  // the same logic — folded in per #205 / Noir v3 Arch fix 2 so all
+  // 6 caller paths share one source of truth.
+  const play = await resolvePlayForVerb(deps.plays, playId, gameFilter);
   if (!play) {
-    process.stderr.write(`error: play "${playId}" not found.\n`);
+    emitErrorEnvelope(
+      new DomainError(`play "${playId}" not found.`, 'play_id'),
+      format,
+      deps.config.contentRoot,
+    );
     return 1;
   }
   if (format === 'json') {

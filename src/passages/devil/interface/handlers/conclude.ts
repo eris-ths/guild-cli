@@ -14,6 +14,7 @@ import {
 } from '../../../../interface/shared/parseArgs.js';
 import { GuildConfig } from '../../../../infrastructure/config/GuildConfig.js';
 import { DomainError } from '../../../../domain/shared/DomainError.js';
+import { emitErrorEnvelope } from '../../../../interface/shared/errorEnvelope.js';
 
 const CONCLUDE_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'synthesis',
@@ -130,12 +131,21 @@ export async function concludeReview(
   const touchedLenses = new Set(review.entries.map((e) => e.lense));
   const missingLenses = catalogLenses.filter((l) => !touchedLenses.has(l));
   if (missingLenses.length > 0) {
-    process.stderr.write(
-      `error: cannot conclude — these lenses have no entries: ${missingLenses.join(', ')}\n` +
-        `  Per #126's substrate-as-floor design, every lense in the catalog requires at least one entry before conclude.\n` +
-        `  A 'skip' entry counts when explicitly declared with reason. For each missing lense:\n` +
-        `    devil entry ${review.id} --persona <p> --lense <l> --kind skip --text "irrelevant because ..."\n`,
+    emitErrorEnvelope(
+      new DomainError(
+        `cannot conclude — these lenses have no entries: ${missingLenses.join(', ')}`,
+        'lenses',
+      ),
+      format,
+      deps.config.contentRoot,
     );
+    if (format !== 'json') {
+      process.stderr.write(
+        `  Per #126's substrate-as-floor design, every lense in the catalog requires at least one entry before conclude.\n` +
+          `  A 'skip' entry counts when explicitly declared with reason. For each missing lense:\n` +
+          `    devil entry ${review.id} --persona <p> --lense <l> --kind skip --text "irrelevant because ..."\n`,
+      );
+    }
     return 1;
   }
 

@@ -26,6 +26,7 @@ import {
 } from '../../../../interface/shared/parseArgs.js';
 import { GuildConfig } from '../../../../infrastructure/config/GuildConfig.js';
 import { DomainError } from '../../../../domain/shared/DomainError.js';
+import { emitErrorEnvelope } from '../../../../interface/shared/errorEnvelope.js';
 
 const INGEST_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'from',
@@ -211,24 +212,47 @@ export async function ingestSource(
   try {
     raw = JSON.parse(readFileSync(inputPath, 'utf8'));
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    process.stderr.write(`error: failed to read/parse <${inputPath}>: ${msg}\n`);
+    // Caught error: emitErrorEnvelope's prefix opt prepends the
+    // CLI-context line `failed to read/parse <path>:` while
+    // preserving the underlying error's identity for code derivation.
+    // sanitizeError runs over the prefixed string so #153's
+    // contentRoot collapse covers the inputPath too.
+    emitErrorEnvelope(e, format, deps.config.contentRoot, {
+      prefix: `failed to read/parse <${inputPath}>: `,
+    });
     return 1;
   }
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
-    process.stderr.write(`error: <${inputPath}>: top-level JSON must be an object\n`);
+    // Synthetic file-shape error: no logical CLI field, so opts.field
+    // is omitted. JSON consumers see code='validation_error' (from
+    // DomainError) without a field key — matching the contract.
+    emitErrorEnvelope(
+      new DomainError(`<${inputPath}>: top-level JSON must be an object`),
+      format,
+      deps.config.contentRoot,
+    );
     return 1;
   }
   const root = raw as Record<string, unknown>;
   if (root['source'] !== source) {
-    process.stderr.write(
-      `error: <${inputPath}>: source field is '${String(root['source'])}', expected '${source}' (matching --from)\n`,
+    emitErrorEnvelope(
+      new DomainError(
+        `<${inputPath}>: source field is '${String(root['source'])}', expected '${source}' (matching --from)`,
+        'source',
+      ),
+      format,
+      deps.config.contentRoot,
     );
     return 1;
   }
   if (root['version'] !== '1') {
-    process.stderr.write(
-      `error: <${inputPath}>: only version='1' is supported in v0, got: ${String(root['version'])}\n`,
+    emitErrorEnvelope(
+      new DomainError(
+        `<${inputPath}>: only version='1' is supported in v0, got: ${String(root['version'])}`,
+        'version',
+      ),
+      format,
+      deps.config.contentRoot,
     );
     return 1;
   }
@@ -268,8 +292,12 @@ export async function ingestSource(
       ingested.push(realised);
     }
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    process.stderr.write(`error: ingest from ${source}: ${msg}\n`);
+    // Caught DomainError from buildEntriesForSource (or appendEntry CAS
+    // conflict). Helper preserves field/code from the original error;
+    // the prefix names the source for CLI context (#205).
+    emitErrorEnvelope(e, format, deps.config.contentRoot, {
+      prefix: `ingest from ${source}: `,
+    });
     return 1;
   }
 
