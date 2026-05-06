@@ -41,6 +41,43 @@ export function resolveGuildActor(start: string = process.cwd()): string | undef
 }
 
 /**
+ * The two non-flag sources `resolveGuildActor` consults, in
+ * priority order: `env` wins over `file` when both are set.
+ *
+ * Surfaced as a public type so verbs that want to disclose
+ * provenance (e.g. `gate whoami`) can name the source the actor
+ * came from. Callers that synthesise a third value when the
+ * actor came from an explicit `--by`/`--from` flag should map
+ * that to `'flag'` themselves; this helper only sees the env
+ * and file branches.
+ */
+export type ActorSource = 'env' | 'file';
+
+export interface ResolvedActor {
+  actor: string;
+  source: ActorSource;
+}
+
+/**
+ * Same resolution as `resolveGuildActor` but reports which of
+ * the two sources won. Returns undefined when neither matches —
+ * the caller decides how to surface the absence.
+ */
+export function resolveGuildActorWithSource(
+  start: string = process.cwd(),
+): ResolvedActor | undefined {
+  const env = process.env['GUILD_ACTOR'];
+  if (env !== undefined && env.length > 0) {
+    return { actor: env, source: 'env' };
+  }
+  const fromFile = findActorFile(start);
+  if (fromFile !== undefined) {
+    return { actor: fromFile, source: 'file' };
+  }
+  return undefined;
+}
+
+/**
  * Walk up from `start` looking for `.guild-actor`. Returns the first
  * file's trimmed contents or `undefined` if none found within the lookup
  * window. Same 10-level cap as `findConfig`; cross-platform via

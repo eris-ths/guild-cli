@@ -37,6 +37,19 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
   verbs per CLI passed the comparison so a regression in the
   unknown-flag error shape doesn't silently empty the loop.
 
+- **`gate whoami` discloses actor source provenance.** When
+  `GUILD_ACTOR` (env) and `.guild-actor` (file) both produce a
+  valid identity, the resolved actor looks the same on the
+  surface but the *path* that produced it carried different
+  signals (env from shell vs. file dropped into the tree by a
+  colleague). New `actor source: GUILD_ACTOR (env)` /
+  `actor source: .guild-actor (file)` line under `you are X`
+  closes the orientation gap. Sibling helper
+  `resolveGuildActorWithSource()` exposes the source as a typed
+  field for other surfaces that want it. Mirrors principle 09
+  (orientation-disclosure) — when two valid configurations
+  produce the same value, name which one was used.
+
 ### Changed
 
 - **Actor-flag missing-arg errors unified across agora / devil / ctx
