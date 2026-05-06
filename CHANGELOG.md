@@ -7,6 +7,33 @@ and this project adheres to the versioning policy described in [POLICY.md](./POL
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-05-06
+
+> **substrate self-improvement wave** (#207 / #208) closes the loop:
+> guild-cli's own `gate` substrate was used to design and ship two
+> guild-cli improvements — meta-experiment that doubled as a v0.5
+> hardening pass.
+>
+> - **`gate boot` surfaces authored requests with new reviews**
+>   ([#207](https://github.com/eris-ths/guild-cli/pull/207)). Adds a
+>   fifth `ActionableKind` `reviewed-authored` (PRIORITY=4) lifted via
+>   a derived `lastAuthoredWriteAt(actor)` boundary aggregating
+>   `status_log[].at ∪ reviews[].at ∪ thanks[].at` per actor. Zero
+>   persistence, READ/WRITE invariants intact, host/member treated
+>   uniformly (string actor space). Designed entirely via the
+>   guild-cli substrate at `data/guild/` (Noir v1→Devil reject→Noir
+>   v2→Devil concern→Noir v3→Devil ratify→Miki impl).
+> - **`<write-verb> --help` bypasses the lock**
+>   ([#208](https://github.com/eris-ths/guild-cli/pull/208)). Detects
+>   `args.options.help` after `parseArgs` and routes dispatch around
+>   `withEntryLock` so help is never gated by a contended lock.
+>   Closes [#200](https://github.com/eris-ths/guild-cli/issues/200).
+> - **Wave 8 (#155 lock landing) + envelope contract (#194 / #205)**
+>   — full notes below; v0.5 ships the locking substrate, the JSON
+>   error envelope contract across all four entries, and the
+>   handler-internal catch fix that closes the envelope gap left by
+>   #204.
+
 > **Cross-process write serialization** (#155 — landed via #193 as a
 > single squash that combined PR-A and PR-B; docs follow as PR-C).
 > Replaces "serialize at the caller" with `withGuildLock`, a
@@ -2153,7 +2180,9 @@ the infrastructure to make 0.3.0's agent-first features possible.
 - README: tighten redundancy, clarify scope and requirements. (#22)
 - CI lockfile sync, version drift guard. (#23)
 
-[Unreleased]: https://github.com/eris-ths/guild-cli/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/eris-ths/guild-cli/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/eris-ths/guild-cli/compare/v0.4.0...v0.5.0
+[0.4.0]: https://github.com/eris-ths/guild-cli/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/eris-ths/guild-cli/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eris-ths/guild-cli/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/eris-ths/guild-cli/releases/tag/v0.1.0
