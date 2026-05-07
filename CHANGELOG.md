@@ -7,6 +7,30 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
 
 ## [Unreleased]
 
+### **BREAKING**
+
+- **`gate list` (no `--state`) now defaults to `--state all`**
+  ([#218](https://github.com/eris-ths/guild-cli/pull/218),
+  closes [#217](https://github.com/eris-ths/guild-cli/issues/217)).
+  Pre-fix the no-flag call exited 1 with a hint that disclosed
+  the `--state` enum + the `all` sugar. The hint was good but
+  the exit-1-on-muscle-memory-call posture was inconsistent with
+  every sibling list verb (`agora list`, `devil list`,
+  `gate issues list` all "just work" without flags). A v0.5
+  dogfood pass surfaced this as the last remaining touch-feel
+  asymmetry across the four passages.
+  - **Before**: `gate list` → exit 1, hint on stderr.
+  - **After**: `gate list` → exit 0, every request across every
+    state, identical to `gate list --state all`.
+  - **Migration**: callers that explicitly passed `--state pending`
+    (or any other state) are unaffected. Callers relying on the
+    exit-1 + hint behaviour (likely none — this was a discovery
+    affordance, not an API) should migrate to `gate list --state
+    pending` if they wanted the pending-only triage view, or
+    `gate status` for the count snapshot. The hint itself moves
+    to `gate list --help` (the runnable-example surface from
+    PR #163), out of the hot path.
+
 ### Added
 
 - **Format-symmetry contract test (principle 11 enforcement).** A

@@ -117,15 +117,41 @@ test('gate list --state all: works in --format json (sugar handled at interface)
   assert.ok(states.size >= 2, `expected mixed states, got: ${[...states].join(',')}`);
 });
 
-test('gate list (no --state): hint mentions --state all as an option', (t) => {
+test('gate list (no --state): defaults to --state all (BREAKING in #218)', (t) => {
+  // Pre-#218 this exited 1 with a `--state` hint. Post-#218 the
+  // hot-path call "just works" — no flag returns every state,
+  // matching sibling list verbs across passages. The hint lives
+  // in `gate list --help` now (PR #163), out of the hot path.
   const { root, cleanup } = bootstrap();
   t.after(cleanup);
-  run(GATE, root, ['register', '--name', 'alice']);
+  const { id1, id2, id3 } = setupActorAndRequests(root);
 
   const r = run(GATE, root, ['list'], { GUILD_ACTOR: 'alice' });
-  assert.equal(r.status, 1);
-  assert.match(r.stderr, /\| all\)/);
-  assert.match(r.stderr, /gate list --state all/);
+  assert.equal(r.status, 0, `expected exit 0; got ${r.status}, stderr=${r.stderr}`);
+  // All three requests across every state should appear, same as
+  // explicit `--state all`.
+  assert.ok(r.stdout.includes(id1), `expected ${id1} in stdout:\n${r.stdout}`);
+  assert.ok(r.stdout.includes(id2), `expected ${id2} in stdout:\n${r.stdout}`);
+  assert.ok(r.stdout.includes(id3), `expected ${id3} in stdout:\n${r.stdout}`);
+});
+
+test('gate list (no --state): JSON envelope reports state="all" in _meta', (t) => {
+  // The default-all is implemented at the dispatcher (state ?? 'all'),
+  // so the envelope's _meta.state echoes 'all'. Same shape callers see
+  // when they pass `--state all` explicitly — no special-case for the
+  // implicit path.
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  setupActorAndRequests(root);
+
+  const r = run(GATE, root, ['list', '--format', 'json'], {
+    GUILD_ACTOR: 'alice',
+  });
+  assert.equal(r.status, 0);
+  const payload = JSON.parse(r.stdout) as {
+    _meta: { state: string };
+  };
+  assert.equal(payload._meta.state, 'all');
 });
 
 // --- (2) Trailing (field) tag dropped from human-readable errors ---
