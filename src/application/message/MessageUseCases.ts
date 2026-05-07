@@ -103,6 +103,7 @@ export class MessageUseCases {
     text: string;
     type?: string;
     invokedBy?: string;
+    expectsResponse?: boolean;
   }): Promise<BroadcastResult> {
     const from = await assertActor(input.from, '--from', this.deps.members);
     const text = sanitizeMessageText(input.text);
@@ -126,6 +127,9 @@ export class MessageUseCases {
           text,
           at: now,
           ...(invokedBy !== undefined ? { invokedBy } : {}),
+          ...(input.expectsResponse === true
+            ? { expectsResponse: true }
+            : {}),
         });
         delivered.push(to.value);
       } catch (e) {

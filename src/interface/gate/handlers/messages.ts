@@ -33,6 +33,10 @@ function toInboxJson(m: InboxMessage): Record<string, unknown> {
   if (m.readBy !== undefined) out['read_by'] = m.readBy;
   if (m.invokedBy !== undefined) out['invoked_by'] = m.invokedBy;
   if (m.related !== undefined) out['related'] = m.related;
+  // Mirror the on-disk YAML: emit `expects_response: true` only when
+  // the sender opted in. Default/legacy records omit the key — same
+  // omit-when-undefined policy as the other optional fields above.
+  if (m.expectsResponse === true) out['expects_response'] = true;
   return out;
 }
 
@@ -46,6 +50,7 @@ const MESSAGE_BROADCAST_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'from',
   'text',
   'type',
+  'expects-response',
 ]);
 const INBOX_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'for',
@@ -115,6 +120,9 @@ export async function msgBroadcast(c: C, args: ParsedArgs): Promise<number> {
   let text = requireOption(args, 'text', '"..."');
   if (text === '-') text = (await readStdin()).trim();
   const type = optionalOption(args, 'type');
+  // Bare `--expects-response` → true (parser converts no-value flags
+  // to boolean true). Absent flag → false. Default false: opt-in.
+  const expectsResponse = args.options['expects-response'] === true;
   const invokedBy = deriveInvokedBy(from);
   if (invokedBy !== undefined) {
     emitInvokedByNotice(from, invokedBy, 'broadcast from', from);
@@ -124,6 +132,7 @@ export async function msgBroadcast(c: C, args: ParsedArgs): Promise<number> {
     text,
     ...(type !== undefined ? { type } : {}),
     ...(invokedBy !== undefined ? { invokedBy } : {}),
+    ...(expectsResponse ? { expectsResponse: true } : {}),
   });
   if (delivered.length === 0 && failed.length === 0) {
     process.stdout.write(
