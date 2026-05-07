@@ -169,6 +169,22 @@ export function optionalOption(
 ): string | undefined {
   const v = args.options[key];
   if (typeof v === 'string') return v;
+  // Bare flag (`--executor` with no value) lands as boolean `true`.
+  // Pre-fix this silently fell through to envFallback / undefined,
+  // which read as "no value given". A user typing `--depth` and
+  // forgetting the enum value would see their request go through
+  // with depth unset — exact fail-open shape `tail`'s strict-reject
+  // and `gate doctor`'s --format-validation already protect against.
+  // Fail closed with the same shape `requireOption` uses for the
+  // same condition.
+  if (v === true) {
+    const envPart = envFallback ? ` (or set ${envFallback})` : '';
+    throw new Error(
+      `Missing --${key} value${envPart}.\n` +
+        `  (If your value begins with "--", use --${key}=<value> ` +
+        `or place "-- <value>" after the other flags.)`,
+    );
+  }
   if (envFallback) {
     const fallback = resolveEnvOrActorFile(envFallback);
     if (fallback !== undefined) return fallback;

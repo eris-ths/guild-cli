@@ -199,13 +199,28 @@ export async function msgInbox(c: C, args: ParsedArgs): Promise<number> {
     if (unreadOnly && m.read) continue;
     const idx = i + 1;
     const related = m.related ? ` (ref: ${m.related})` : '';
-    const readTag = m.read
-      ? m.readAt
+    // expects_response surface (issue #220 phase 1 follow-up):
+    // text mode previously showed `(unread)` only; the
+    // expects_response stamp lived only in JSON, so a human
+    // scanning the text inbox couldn't tell which broadcasts
+    // wanted a substantive response without re-running with
+    // --format json. Show it inline on unread; once read the
+    // broadcast is treated as ack'd (Phase 1 contract: read-with-
+    // mark-read is the ack proxy), so the marker would just
+    // nag rather than inform.
+    let readTag: string;
+    if (m.read) {
+      readTag = m.readAt
         ? m.readBy && m.readBy !== forName
           ? ` (read ${m.readAt} by ${m.readBy})`
           : ` (read ${m.readAt})`
-        : ' (read)'
-      : ' (unread)';
+        : ' (read)';
+    } else {
+      readTag =
+        m.expectsResponse === true
+          ? ' (unread, expects response)'
+          : ' (unread)';
+    }
     // Show invoked_by on the sender side so a recipient can tell a
     // ghost-sent message from a hand-typed one at a glance. The
     // mark-read side already has its own "by ..." marker on readTag.
