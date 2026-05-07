@@ -233,7 +233,10 @@ test('gate <verb> --help: exits 0 and renders the flag catalog', (t) => {
   run(GATE, root, ['register', '--name', 'alice', '--category', 'professional']);
   const r = run(GATE, root, ['whoami', '--help']);
   assert.equal(r.status, 0, 'whoami --help should exit 0');
-  assert.match(r.stdout, /gate whoami: --limit/);
+  // Flag catalog renders the verb's known flags. The format-symmetry
+  // fix added `--format` to whoami's KNOWN_FLAGS; iteration order is
+  // insertion order so `--format` precedes `--limit`.
+  assert.match(r.stdout, /gate whoami: --format, --limit/);
   assert.match(r.stdout, /see `gate --help`/);
 });
 
