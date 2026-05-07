@@ -213,12 +213,39 @@ export async function reqTail(c: C, args: ParsedArgs): Promise<number> {
   return 0;
 }
 
-const WHOAMI_KNOWN_FLAGS: ReadonlySet<string> = new Set(['limit']);
+const WHOAMI_KNOWN_FLAGS: ReadonlySet<string> = new Set(['limit', 'format']);
 
 export async function reqWhoami(c: C, args: ParsedArgs): Promise<number> {
   rejectUnknownFlags(args, WHOAMI_KNOWN_FLAGS, 'whoami');
+  // Format-symmetry (principle 11): whoami is a read-shape verb whose
+  // siblings (status / board / list / show / voices / tail / doctor)
+  // all expose --format json|text. Pre-this-fix whoami was text-only,
+  // forcing agents to regex-parse the principle-09 `actor source: ...`
+  // line. JSON path emits the same data with snake_case fields so
+  // orchestrators can reflect on identity / role / actor_source /
+  // recent utterances without parsing prose.
+  const format = optionalOption(args, 'format') ?? 'text';
+  if (format !== 'json' && format !== 'text') {
+    throw new Error(`--format must be 'json' or 'text', got: ${format}`);
+  }
   const resolved = resolveGuildActorWithSource();
   if (!resolved) {
+    if (format === 'json') {
+      process.stdout.write(
+        JSON.stringify(
+          {
+            ok: false,
+            error: {
+              message:
+                'GUILD_ACTOR is not set. Export it in your shell to identify yourself.',
+            },
+          },
+          null,
+          2,
+        ) + '\n',
+      );
+      return 1;
+    }
     process.stderr.write(
       'GUILD_ACTOR is not set.\n' +
         'Export it in your shell to identify yourself:\n' +
@@ -234,11 +261,47 @@ export async function reqWhoami(c: C, args: ParsedArgs): Promise<number> {
   const memberRecord = members.find((m) => m.name.value === actorLower);
   const isMember = memberRecord !== undefined;
   const isHost = c.config.hostNames.includes(actorLower);
-  const role = isMember
+  // Role enum stays compact for the JSON path (member / host / unknown).
+  // Text mode keeps the longer "unknown (not in members/ or host_names)"
+  // hint because the human reader benefits from the where-to-look pointer;
+  // the agent reader gets the structured fact in the JSON envelope.
+  const roleEnum: 'member' | 'host' | 'unknown' = isMember
+    ? 'member'
+    : isHost
+      ? 'host'
+      : 'unknown';
+  const roleText = isMember
     ? 'member'
     : isHost
       ? 'host'
       : 'unknown (not in members/ or host_names)';
+
+  const displayName = memberRecord?.displayName;
+
+  const limit = parseOptionalIntOption(args, 'limit') ?? 5;
+  const allJson = await loadAllRequestsAsJson(c);
+  const utterances = collectUtterances(allJson, {
+    name: actor,
+    limit,
+    order: 'desc',
+  });
+
+  if (format === 'json') {
+    process.stdout.write(
+      JSON.stringify(
+        {
+          actor,
+          role: roleEnum,
+          display_name: displayName ?? null,
+          actor_source: resolved.source,
+          recent_utterances: utterances,
+        },
+        null,
+        2,
+      ) + '\n',
+    );
+    return 0;
+  }
 
   // Surface display_name when present: name and display_name carry
   // different signals — name is identity, display_name is the
@@ -247,9 +310,8 @@ export async function reqWhoami(c: C, args: ParsedArgs): Promise<number> {
   // YAML and `guild list`. Em-dash separator follows how other
   // surfaces compose name/label pairs; the role parens stay so the
   // visual block parses left-to-right (name — label (role)).
-  const displayName = memberRecord?.displayName;
   const displayChunk = displayName ? ` — ${displayName}` : '';
-  process.stdout.write(`you are ${actor}${displayChunk} (${role})\n`);
+  process.stdout.write(`you are ${actor}${displayChunk} (${roleText})\n`);
   // Disclose the resolution source so a fresh agent can tell
   // GUILD_ACTOR-from-shell apart from a `.guild-actor` file dropped
   // into the tree by a colleague. Same observability principle as
@@ -259,15 +321,6 @@ export async function reqWhoami(c: C, args: ParsedArgs): Promise<number> {
   const sourceLabel =
     resolved.source === 'env' ? 'GUILD_ACTOR (env)' : '.guild-actor (file)';
   process.stdout.write(`actor source: ${sourceLabel}\n`);
-
-  const limit = parseOptionalIntOption(args, 'limit') ?? 5;
-
-  const allJson = await loadAllRequestsAsJson(c);
-  const utterances = collectUtterances(allJson, {
-    name: actor,
-    limit,
-    order: 'desc',
-  });
 
   if (utterances.length === 0) {
     process.stdout.write(

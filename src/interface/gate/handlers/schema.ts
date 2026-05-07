@@ -504,8 +504,38 @@ const VERBS: readonly VerbSchema[] = [
     name: 'whoami',
     category: 'read',
     summary: 'identity + recent utterances (requires GUILD_ACTOR)',
-    input: { type: 'object', properties: { limit: str } },
-    output: { type: 'object' },
+    input: {
+      type: 'object',
+      properties: {
+        limit: str,
+        format: formatField,
+      },
+    },
+    output: {
+      type: 'object',
+      properties: {
+        actor: str,
+        role: { type: 'string', enum: ['member', 'host', 'unknown'] },
+        display_name: {
+          type: 'string',
+          description:
+            "member's human-facing label when present; emitted as null " +
+            'for hosts or members without a display_name field. ' +
+            "(Schema dialect doesn't model nullable; runtime field can be null.)",
+        },
+        actor_source: {
+          type: 'string',
+          enum: ['env', 'file'],
+          description:
+            'how GUILD_ACTOR was resolved: `env` (shell env var) or ' +
+            '`file` (.guild-actor walked up from cwd). Surfaced so a ' +
+            'fresh agent can tell shell-export apart from tree-dropped ' +
+            'identity (principle 09: orientation-disclosure).',
+        },
+        recent_utterances: utteranceArraySchema,
+      },
+      required: ['actor', 'role', 'actor_source', 'recent_utterances'],
+    },
   },
   {
     name: 'tail',

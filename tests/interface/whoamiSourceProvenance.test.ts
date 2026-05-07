@@ -109,3 +109,84 @@ test('whoami: no source set still fails closed (no provenance line on error path
   assert.match(r.stderr, /GUILD_ACTOR is not set/);
   assert.doesNotMatch(r.stdout, /actor source:/);
 });
+
+// JSON path (added with --format json|text symmetry fix). Pins the
+// snake_case shape so orchestrators reflecting on identity / role /
+// actor_source / recent utterances don't have to regex-parse the
+// principle-09 `actor source: ...` line.
+
+function runJson(
+  cwd: string,
+  env: Record<string, string | undefined> = {},
+): { stdout: string; stderr: string; status: number } {
+  const finalEnv: Record<string, string> = { ...process.env } as Record<string, string>;
+  for (const [k, v] of Object.entries(env)) {
+    if (v === undefined) delete finalEnv[k];
+    else finalEnv[k] = v;
+  }
+  const r = spawnSync(
+    process.execPath,
+    [GATE, 'whoami', '--format', 'json'],
+    { cwd, env: finalEnv, encoding: 'utf8' },
+  );
+  return {
+    stdout: r.stdout ?? '',
+    stderr: r.stderr ?? '',
+    status: r.status ?? -1,
+  };
+}
+
+test('whoami --format json: env source returns actor_source: env', (t) => {
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  const r = runJson(root, { GUILD_ACTOR: 'alice' });
+  assert.equal(r.status, 0, `stderr: ${r.stderr}`);
+  const payload = JSON.parse(r.stdout);
+  assert.equal(payload.actor, 'alice');
+  assert.equal(payload.role, 'member');
+  assert.equal(payload.actor_source, 'env');
+  assert.equal(payload.display_name, null);
+  assert.ok(Array.isArray(payload.recent_utterances));
+});
+
+test('whoami --format json: file source returns actor_source: file', (t) => {
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  writeFileSync(join(root, '.guild-actor'), 'alice\n');
+  const r = runJson(root, { GUILD_ACTOR: undefined });
+  assert.equal(r.status, 0, `stderr: ${r.stderr}`);
+  const payload = JSON.parse(r.stdout);
+  assert.equal(payload.actor, 'alice');
+  assert.equal(payload.actor_source, 'file');
+});
+
+test('whoami --format json: missing GUILD_ACTOR emits ok:false envelope', (t) => {
+  // Error path stays machine-readable in JSON mode — orchestrators
+  // shouldn't need to switch parsers based on success/failure.
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  const r = runJson(root, { GUILD_ACTOR: undefined });
+  assert.equal(r.status, 1);
+  const payload = JSON.parse(r.stdout);
+  assert.equal(payload.ok, false);
+  assert.match(payload.error.message, /GUILD_ACTOR is not set/);
+});
+
+test('whoami --format yaml is rejected with the standard message', (t) => {
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  const r = spawnSync(
+    process.execPath,
+    [GATE, 'whoami', '--format', 'yaml'],
+    {
+      cwd: root,
+      env: { ...process.env, GUILD_ACTOR: 'alice' },
+      encoding: 'utf8',
+    },
+  );
+  assert.notEqual(r.status, 0);
+  assert.match(
+    r.stderr ?? '',
+    /--format must be 'json' or 'text'/,
+  );
+});

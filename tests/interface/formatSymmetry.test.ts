@@ -62,6 +62,7 @@ const CASES: Case[] = [
   { cli: 'gate', args: ['schema'], label: 'gate schema' },
   { cli: 'gate', args: ['doctor'], label: 'gate doctor' },
   { cli: 'gate', args: ['tail'], label: 'gate tail' },
+  { cli: 'gate', args: ['whoami'], label: 'gate whoami' },
   // agora read verbs
   { cli: 'agora', args: ['list'], label: 'agora list' },
   { cli: 'agora', args: ['schema'], label: 'agora schema' },
