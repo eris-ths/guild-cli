@@ -33,6 +33,36 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
 
 ### Added
 
+- **`gate whoami` honours `--format json|text` with a typed payload.**
+  whoami was the lone read-shape verb without `--format` support —
+  every sibling (`status` / `board` / `list` / `show` / `voices` /
+  `tail` / `doctor`) accepted both formats, but whoami declared
+  only `--limit` and was text-only. That meant the principle-09
+  `actor source: ...` disclosure was reachable to agents only via
+  regex parsing of prose. JSON now emits
+  `{actor, role, display_name, actor_source, recent_utterances}`
+  with the schema's `output` properties fleshed out to match
+  (previously declared as `{type: "object"}`, contributing to the
+  schema-as-contract gap that principle 10 names). Error path
+  (missing `GUILD_ACTOR`) returns the standard `ok: false` envelope
+  in JSON mode so orchestrators don't switch parsers based on
+  outcome. whoami joins the format-symmetry CASES; new focused
+  JSON-path tests cover env / file / missing-actor / invalid-format.
+
+- **bin entries set stdio blocking before dispatch.** Pipe-targeted
+  `process.stdout.write` is async; on `--format json` payloads above
+  ~8 KB (notably `gate schema` once whoami's output shape was
+  fleshed out, but every verb is exposed to the same race) the
+  trailing `process.exit(code)` would cut the tail of the JSON
+  envelope, surfacing as `Unexpected end of JSON input` in
+  spawn-based tests and non-tty consumers. All 5 bin entries
+  (`gate` / `agora` / `devil` / `ctx` / `guild`) now flip
+  `process.stdout._handle.setBlocking(true)` (and stderr) before
+  dispatch — tty writes are already synchronous so this is a no-op
+  on interactive runs. Latent bug surfaced by the whoami
+  schema-as-contract fix above pushing `gate schema` past the
+  threshold.
+
 - **Format-symmetry contract test (principle 11 enforcement).** A
   v0.5 dogfood pass found that `gate status` and `gate doctor`
   silently fell back to text mode for unknown `--format` values

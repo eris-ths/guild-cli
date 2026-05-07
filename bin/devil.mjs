@@ -8,6 +8,9 @@
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { checkDistFreshness } from './_lib/checkDistFreshness.mjs';
+// Match the bin/gate.mjs setBlocking comment — same rationale.
+process.stdout._handle?.setBlocking?.(true);
+process.stderr._handle?.setBlocking?.(true);
 const here = dirname(fileURLToPath(import.meta.url));
 checkDistFreshness(join(here, '..', 'src'), join(here, '..', 'dist', 'src'));
 

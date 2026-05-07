@@ -10,6 +10,14 @@
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { checkDistFreshness } from './_lib/checkDistFreshness.mjs';
+// Make stdout/stderr blocking so large payloads (e.g. `gate schema --format
+// json`, `gate boot` on busy substrates) drain before the trailing
+// `process.exit` truncates them. Pipe writes are async by default; on
+// `--format json` outputs above ~8 KB the tail of the JSON envelope was
+// being cut at exit, surfacing as `Unexpected end of JSON input` in CI.
+// tty writes are already synchronous, so the guard is a no-op there.
+process.stdout._handle?.setBlocking?.(true);
+process.stderr._handle?.setBlocking?.(true);
 const here = dirname(fileURLToPath(import.meta.url));
 checkDistFreshness(join(here, '..', 'src'), join(here, '..', 'dist', 'src'));
 
