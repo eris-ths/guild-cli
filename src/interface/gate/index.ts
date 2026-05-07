@@ -72,7 +72,7 @@ Getting started:
 Requests:
   gate request --from <m> --action <a> --reason <r>
                  [--executor <m>] [--target <s>] [--auto-review <m>]
-                 [--with <n1>[,<n2>...]]
+                 [--with <n1>[,<n2>...]] [--depth shallow|standard|deep]
   gate pending [--for <m>]
   gate board [--for <m>] [--format json|text]
                        What's in flight: pending + approved +

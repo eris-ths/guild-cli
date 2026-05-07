@@ -18,6 +18,7 @@ const REQUEST_CREATE_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'reason',
   'executor',
   'target',
+  'depth',
   'auto-review',
   'with',
   'format',
@@ -113,10 +114,27 @@ export async function reqCreate(c: C, args: ParsedArgs): Promise<number> {
   };
   const executor = optionalOption(args, 'executor');
   const target = optionalOption(args, 'target');
+  const depth = optionalOption(args, 'depth');
   const autoReview = optionalOption(args, 'auto-review');
   const withPartners = parseWithList(optionalOption(args, 'with'));
   if (executor !== undefined) input.executor = executor;
   if (target !== undefined) input.target = target;
+  // depth (issue #221): pre-check at the interface boundary so the
+  // caller sees a flag-shaped error before the domain layer fires.
+  // The advisory framing — 'shallow ⇒ surface point-check, deep ⇒
+  // arch / threat model' — lives in `gate request --help` and the
+  // schema description. Per principle 02, the value is advisory:
+  // the substrate carries it through, the reviewer agent is the one
+  // who chooses whether to honour it.
+  if (depth !== undefined) {
+    if (depth !== 'shallow' && depth !== 'standard' && depth !== 'deep') {
+      process.stderr.write(
+        `error: --depth must be one of shallow|standard|deep, got: ${depth}\n`,
+      );
+      return 1;
+    }
+    input.depth = depth;
+  }
   if (autoReview !== undefined) input.autoReview = autoReview;
   if (withPartners.length > 0) input.with = withPartners;
   // Request creation is a proxy-eligible verb same as approve/review:
