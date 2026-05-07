@@ -758,6 +758,17 @@ const VERBS: readonly VerbSchema[] = [
         reason: str,
         executor: strOpt('who will execute'),
         target: str,
+        depth: {
+          type: 'string',
+          enum: ['shallow', 'standard', 'deep'],
+          description:
+            'reviewer-depth advisory (issue #221). shallow = surface ' +
+            'point-check, no scope-widening; standard = current default ' +
+            '(unchanged); deep = arch / threat-model. Advisory only — ' +
+            'the substrate carries the value; the reviewer (typically ' +
+            'the Devil agent) is the one that adapts. Default is ' +
+            '"standard" when omitted.',
+        },
         'auto-review': strOpt('member assigned as critic'),
         with: strOpt('comma-separated dialogue partners (pair-mode)'),
         format: formatField,

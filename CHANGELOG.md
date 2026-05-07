@@ -33,6 +33,31 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
 
 ### Added
 
+- **`gate request --depth shallow|standard|deep` reviewer-depth advisory**
+  ([#221](https://github.com/eris-ths/guild-cli/issues/221) phase 1
+  substrate slot).
+  Substrate-experiment 実験 2 で発見した sharp edge への対応:
+  Devil agent が常時最大深度で grep + 検証するため、極小実装に
+  対しオーバーレビューが構造的に発生していた (PR #207 の事例)。
+  `--depth` flag を `gate request` に opt-in で追加し、enum
+  `[shallow, standard, deep]` で reviewer 側 (Devil agent) に
+  advisory を渡せるようにする。
+  - `shallow`: surface 点検、grep 自走しない
+  - `standard`: 現行と等価 (default、互換)
+  - `deep`: arch / threat-model まで掘る
+  - **substrate slot のみ**: agent 側の prompt 3 段階化は
+    operator/agent setup 側で対応する (本 repo の外)。
+    principle 02 (advisory-not-directive) のとおり、reviewer は
+    depth を尊重する義務を負わず、substrate は signal を carry
+    するだけ。
+  - **byte-stable**: `--depth` 省略時は YAML に `depth:` フィールド
+    を書かない。pre-#221 record と round-trip-byte-同等
+    (principle 04: records-outlive-writers)。
+  - hydrate tolerance: 既存 record ですべての older 形 (`depth:`
+    なし) が clean に load される test。
+  - Schema input + drift detector update + advisory-framing
+    description (principle 02 / 10)。
+
 - **`gate whoami` honours `--format json|text` with a typed payload.**
   whoami was the lone read-shape verb without `--format` support —
   every sibling (`status` / `board` / `list` / `show` / `voices` /
