@@ -316,20 +316,20 @@ async function dispatch(
     case 'board':
       return await boardCmd(c, args);
     case 'list': {
-      // `gate list` without --state is a common first-try ("show me
-      // everything"). Rather than just erroring on the missing flag,
-      // spell out the list vs status distinction — the question most
-      // first-time users actually have is "which verb do I want?"
-      const state = optionalOption(args, 'state');
-      if (state === undefined) {
-        process.stderr.write(
-          `gate list needs --state <s> (${REQUEST_STATES.join(' | ')} | all).\n` +
-            '  For counts across every state:  gate status\n' +
-            '  For the contents of one state:  gate list --state <s>\n' +
-            '  For every state at once:        gate list --state all\n',
-        );
-        return 1;
-      }
+      // `gate list` (no --state) defaults to `--state all`: the
+      // muscle-memory call returns every request across every state,
+      // matching `agora list` / `devil list` / `gate issues list`.
+      // Pre-#218 this exited 1 with a hint that disclosed the
+      // `--state` enum + the `all` sugar; now the hint lives in
+      // `<verb> --help` (PR #163) and the hot-path call "just
+      // works." Behaviour change documented under BREAKING (#217).
+      //
+      // The deliberate default-all is consistent with sibling list
+      // verbs across all 4 passages and with `ls`-style muscle
+      // memory; agents that want a specific subset still pass
+      // `--state pending` (or any other state) and get the same
+      // narrow result they did before.
+      const state = optionalOption(args, 'state') ?? 'all';
       return await reqList(c, state, args, 'list');
     }
     case 'show':
