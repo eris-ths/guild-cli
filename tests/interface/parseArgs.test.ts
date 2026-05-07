@@ -172,6 +172,62 @@ test('optionalOption: explicit value wins over env', () => {
   }
 });
 
+test('optionalOption: bare flag (no value) errors instead of silently passing', () => {
+  // Pre-fix `--depth` (no value) silently fell through to envFallback /
+  // undefined. A user typing `gate request --depth` expecting to set
+  // the value would see the request go through with depth unset.
+  // Surfaced in v0.5 dogfood; same fail-open class `requireOption`
+  // already protected against.
+  const args = parseArgs(['--depth']);
+  try {
+    optionalOption(args, 'depth');
+    assert.fail('expected throw on bare flag');
+  } catch (e) {
+    assert.match((e as Error).message, /Missing --depth value\./);
+    // Surface the escape-valve hint so a user whose value legitimately
+    // begins with `--` (e.g. `--from --foo`) sees how to pass it.
+    assert.match(
+      (e as Error).message,
+      /If your value begins with "--", use --depth=<value>/,
+    );
+  }
+});
+
+test('optionalOption: bare flag with envFallback names the env in the error', () => {
+  // Sibling shape to requireOption's same-condition error; the env
+  // hint propagates so a user who set GUILD_ACTOR sees that path is
+  // still available even though they typo'd the flag.
+  const args = parseArgs(['--for']);
+  try {
+    optionalOption(args, 'for', 'GUILD_ACTOR');
+    assert.fail('expected throw on bare flag');
+  } catch (e) {
+    assert.match(
+      (e as Error).message,
+      /Missing --for value \(or set GUILD_ACTOR\)\./,
+    );
+  }
+});
+
+test('optionalOption: bare flag error fires BEFORE env fallback resolves', () => {
+  // Pre-fix order was: bare flag → undefined → envFallback wins.
+  // Post-fix: bare flag is itself a user error and short-circuits
+  // the env path. Otherwise a typo'd `--for` would be silently
+  // overridden by the ambient env, exact silent-fail-open shape.
+  const args = parseArgs(['--for']);
+  const prev = process.env['GUILD_ACTOR'];
+  process.env['GUILD_ACTOR'] = 'should-not-be-returned';
+  try {
+    assert.throws(
+      () => optionalOption(args, 'for', 'GUILD_ACTOR'),
+      /Missing --for value/,
+    );
+  } finally {
+    if (prev === undefined) delete process.env['GUILD_ACTOR'];
+    else process.env['GUILD_ACTOR'] = prev;
+  }
+});
+
 test('withCleanCwd isolates the .guild-actor file fallback (issue #183 regression)', () => {
   // Simulate the develop-branch CI condition: ambient .guild-actor in
   // an ancestor directory of cwd. Without withCleanCwd, env-unset

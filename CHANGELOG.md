@@ -7,6 +7,41 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
 
 ## [Unreleased]
 
+### Fixed
+
+- **`optionalOption` rejects bare flags (`--depth`, `--executor`,
+  `--state`, ... with no value).** Pre-fix, an optional flag passed
+  without a value silently fell through to the env fallback / undefined.
+  Surfaced in v0.5 dogfood: `gate request --depth` (intending to set
+  the value but forgetting to type it) silently created a request
+  with no depth. Same fail-open class `requireOption` already protects
+  against; `optionalOption` now mirrors the shape:
+  ```
+  error: Missing --depth value.
+    (If your value begins with "--", use --depth=<value> or place "-- <value>" after the other flags.)
+  ```
+  Affects every callsite — `--executor`, `--target`, `--state`,
+  `--game`, `--note`, etc — uniformly. Bare-flag short-circuits the
+  env fallback path so a typo can't be silently overridden by ambient
+  GUILD_ACTOR.
+
+- **Inbox text-mode surfaces `(unread, expects response)`.** Phase 1
+  of [#220](https://github.com/eris-ths/guild-cli/issues/220) (PR #222)
+  stamped `expects_response` on inbox YAML and surfaced it via
+  `gate boot`'s `suggested_next`, but the inbox **text** rendering
+  only said `(unread)` for both flagged and unflagged broadcasts. A
+  human scanning the text inbox couldn't tell them apart without
+  re-running with `--format json`. Now the marker shows inline:
+  ```
+  1. [...] broadcast from nao (unread, expects response)
+     audit needed
+  2. [...] broadcast from nao (unread)
+     FYI only
+  ```
+  Read state suppresses the marker (Phase 1 ack proxy: read drains
+  the surface). Same principle-09 disclosure shape — visible at the
+  surface that emits it, in both text and JSON.
+
 ### **BREAKING**
 
 - **`gate list` (no `--state`) now defaults to `--state all`**
