@@ -50,6 +50,42 @@ export interface BootSuggestedNext {
 }
 
 /**
+ * Surface for unread broadcasts whose sender opted into
+ * `expects_response: true`. Distinct shape (no verb/args/reason
+ * triple) because Phase 1 deliberately does NOT prescribe a verb to
+ * call — the recipient decides whether to reply with `gate message`,
+ * file a request, mark-read as ack, or ignore. Read-with-mark-read
+ * is the proxy for "ack"; the entry disappears from this surface
+ * the moment the inbox entry flips to read.
+ *
+ * Priority sits below every state-transition kind in
+ * `actionableTransitions` (executing-mine ... reviewed-authored) so
+ * a pending review or executing request always wins suggested_next.
+ */
+export interface BootBroadcastPendingResponse {
+  kind: 'broadcast-pending-response';
+  broadcast_from: string;
+  broadcast_at: string;
+  hint: string;
+  /**
+   * Mirrors the `actor_resolved` field on `BootSuggestedNext` (and on
+   * the write-response `SuggestedNext` shape in writeFormat.ts) so the
+   * two variants of `boot.suggested_next` share one consumer-facing
+   * field. The pending-broadcast surface is always actor-resolved
+   * (true): it only fires for the calling actor's own inbox, so the
+   * "next move" is unambiguously theirs to make. Carried verbatim
+   * rather than inferred at the consumer so an orchestrator that
+   * reads `.actor_resolved` across both variants never has to
+   * branch on `.kind` first.
+   */
+  actor_resolved: true;
+}
+
+export type BootSuggestedNextOrPendingResponse =
+  | BootSuggestedNext
+  | BootBroadcastPendingResponse;
+
+/**
  * gate boot [--format json|text] [--tail <N>] [--utterances <N>]
  *
  * Single-command session orientation for agents. Composes the
@@ -81,7 +117,18 @@ interface BootPayload {
   status: StatusSummary;
   tail: ReturnType<typeof collectUtterances>;
   your_recent: ReturnType<typeof collectUtterances> | null;
-  inbox_unread: Array<{ at: string; from: string; text: string; type: string }>;
+  inbox_unread: Array<{
+    at: string;
+    from: string;
+    text: string;
+    type: string;
+    /**
+     * Mirrors `InboxMessage.expectsResponse`. Emitted only when the
+     * sender opted in (true) — absent otherwise, matching the
+     * omit-when-undefined convention used elsewhere on this payload.
+     */
+    expects_response?: boolean;
+  }>;
   last_activity: string | null;
   /**
    * Diagnostic hints to help agents detect misconfiguration early.
@@ -202,7 +249,7 @@ interface BootPayload {
    * `hints` because it's directive (a verb to call), not diagnostic
    * (a condition to notice).
    */
-  suggested_next: BootSuggestedNext | null;
+  suggested_next: BootSuggestedNextOrPendingResponse | null;
 }
 
 export async function bootCmd(c: C, args: ParsedArgs): Promise<number> {
@@ -261,7 +308,13 @@ export async function bootCmd(c: C, args: ParsedArgs): Promise<number> {
       const unread = msgs.filter((m) => !m.read);
       status.inbox_unread = unread.length;
       for (const m of unread) {
-        inboxUnread.push({ at: m.at, from: m.from, text: m.text, type: m.type });
+        inboxUnread.push({
+          at: m.at,
+          from: m.from,
+          text: m.text,
+          type: m.type,
+          ...(m.expectsResponse === true ? { expects_response: true } : {}),
+        });
       }
     } catch {
       // inbox may not exist for this actor — non-fatal
@@ -355,12 +408,23 @@ export async function bootCmd(c: C, args: ParsedArgs): Promise<number> {
     // Diagnostic errored — skip health, keep boot usable.
   }
 
-  const suggestedNext = deriveBootSuggestedNext(
+  const baseSuggestedNext = deriveBootSuggestedNext(
     actor,
     role,
     members,
     allRequests,
   );
+  // broadcast-pending-response sits at the tail of the priority
+  // ladder: only fires when no transition-kind suggestion was found
+  // (executing/unreviewed/approved/pending/reviewed-authored all
+  // empty). Pre-onboarding hints (register, export GUILD_ACTOR) also
+  // suppress it — those are stronger signals than an unanswered
+  // broadcast. Phase 1 does not resolve "who replied"; surface
+  // disappears when the entry is mark-read (read = ack proxy).
+  const suggestedNext: BootSuggestedNextOrPendingResponse | null =
+    baseSuggestedNext !== null
+      ? baseSuggestedNext
+      : derivePendingBroadcastResponse(inboxUnread);
   const verbsAvailableNow = deriveVerbsAvailableNow(
     actor,
     role,
@@ -577,6 +641,69 @@ async function collectCrossPassage(
     }
   }
   return out;
+}
+
+/**
+ * Lowest-priority hint: pick the oldest unread broadcast whose sender
+ * stamped `expects_response: true`. Returns null when no such entry
+ * exists, when expectsResponse was never opted in, or when every
+ * matching entry has been mark-read.
+ *
+ * "Oldest first" is deliberate — broadcasts pile up FIFO and the
+ * surface should drain in the same order so a backlog doesn't have
+ * the newest one perpetually shadow the earliest unanswered ask.
+ *
+ * Hint text names the sender + the act available (gate message back,
+ * or mark-read as ack). It deliberately does NOT prescribe a verb,
+ * because the reply could be a new request, a thank, a counter-
+ * broadcast, or just acknowledgement; suggesting only one would push
+ * readers toward a single shape Phase 1 doesn't intend to mandate.
+ */
+function isBroadcastPendingResponse(
+  n: BootSuggestedNextOrPendingResponse,
+): n is BootBroadcastPendingResponse {
+  return (n as BootBroadcastPendingResponse).kind === 'broadcast-pending-response';
+}
+
+function derivePendingBroadcastResponse(
+  inboxUnread: BootPayload['inbox_unread'],
+): BootBroadcastPendingResponse | null {
+  // Filter to flagged broadcast entries only. Filtering by
+  // `type === 'broadcast'` so a custom `--type handoff` direct
+  // message (which can't carry the expects_response opt-in via the
+  // broadcast handler today) doesn't accidentally surface here even
+  // if a future writer set the bit out-of-band.
+  const flagged = inboxUnread.filter(
+    (m) => m.type === 'broadcast' && m.expects_response === true,
+  );
+  if (flagged.length === 0) return null;
+  // Explicit FIFO sort: oldest `at` first. inboxUnread is already
+  // chronologically ordered today (post() appends, listFor preserves
+  // order), but sorting here pins the contract at the consumer:
+  // a long backlog must drain in the order the senders asked, even
+  // if the inbox loader's order ever changes. Lexicographic compare
+  // on ISO-Z timestamps is exact (Thank.ts:43 / Review.ts / inbox
+  // entries all emit UTC-Z).
+  const sorted = [...flagged].sort((a, b) => a.at.localeCompare(b.at));
+  const oldest = sorted[0]!;
+  // `+N more pending` suffix is FLAGGED-only: it counts the
+  // pending-response candidates, not the entire unread inbox. An
+  // unflagged twin from the same sender (or any unrelated unread
+  // entry) must NOT inflate this count — the surface is about
+  // unanswered opt-in asks, and the suffix has to mean exactly that.
+  const more =
+    sorted.length > 1 ? ` (+${sorted.length - 1} more pending)` : '';
+  return {
+    kind: 'broadcast-pending-response',
+    broadcast_from: oldest.from,
+    broadcast_at: oldest.at,
+    hint:
+      `unread broadcast from ${oldest.from} marked expects_response=true${more}; ` +
+      'reply with `gate message --to ' + oldest.from + ' --text ...` if you ' +
+      'have a substantive response, or `gate inbox mark-read` to ' +
+      'acknowledge in passing — the surface clears either way.',
+    actor_resolved: true,
+  };
 }
 
 function stampActorResolved(
@@ -1045,7 +1172,18 @@ function renderBootText(p: BootPayload): string {
     // Render the hint as a concrete shell command so the reader can
     // copy-paste. `export` is special-cased because it's a shell
     // builtin, not a gate subcommand.
-    const n = p.suggested_next;
+    const n: BootSuggestedNextOrPendingResponse = p.suggested_next;
+    if (isBroadcastPendingResponse(n)) {
+      // No single verb to print — the recipient picks the shape of
+      // their reply (message back, mark-read as ack, or branch into
+      // a request). Lead with the broadcaster + timestamp so the
+      // reader can locate the entry in their inbox.
+      lines.push(
+        `→ pending broadcast response: from ${n.broadcast_from} at ${n.broadcast_at}`,
+      );
+      lines.push(`  (${n.hint})`);
+      return lines.join('\n') + '\n';
+    }
     if (n.verb === 'export') {
       const [k, v] = Object.entries(n.args)[0] ?? ['GUILD_ACTOR', '<your-name>'];
       lines.push(`→ next: export ${k}=${v}`);

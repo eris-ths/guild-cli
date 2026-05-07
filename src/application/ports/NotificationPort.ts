@@ -15,6 +15,17 @@ export interface Notification {
    * stamped when they disagree.
    */
   invokedBy?: string;
+  /**
+   * Opt-in marker that the sender expects readers to respond
+   * (broadcast scope; default false). Persisted per-recipient
+   * inbox entry as `expects_response: true`. Boot uses this flag
+   * to surface unread broadcasts as `broadcast-pending-response`
+   * in `suggested_next` — read-with-mark-read is the proxy for
+   * "ack". Phase 1 does NOT track who/when responded; the bit
+   * disappears from the boot surface the moment the recipient
+   * marks the entry read.
+   */
+  expectsResponse?: boolean;
 }
 
 /**
@@ -47,6 +58,16 @@ export interface InboxMessage {
    */
   invokedBy?: string;
   related?: string;
+  /**
+   * Mirrored from the sender's `Notification.expectsResponse` opt-in.
+   * Persisted as `expects_response: true` in the inbox YAML; absent
+   * (undefined) and `false` are equivalent — Phase 1 does not
+   * rewrite legacy records to stamp `false` (records-outlive-writers,
+   * principle 04). Surfaced by `gate boot` as the
+   * `broadcast-pending-response` suggested_next kind for unread
+   * broadcasts that opted in.
+   */
+  expectsResponse?: boolean;
 }
 
 /**

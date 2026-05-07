@@ -78,6 +78,12 @@ export class FsInboxNotification implements NotificationPort {
     };
     if (n.related !== undefined) entry['related'] = n.related;
     if (n.invokedBy !== undefined) entry['invoked_by'] = n.invokedBy;
+    // Opt-in only: stamp `expects_response: true` when the sender
+    // asked for it; absent otherwise. Default-false records stay
+    // visually clean and legacy entries (no field) hydrate as false
+    // via normalizeMessage — principle 04 says we don't rewrite
+    // history just to add a default.
+    if (n.expectsResponse === true) entry['expects_response'] = true;
     file.messages.push(entry);
     if (file.messages.length > MAX_INBOX_SIZE) {
       file.messages = file.messages.slice(-MAX_INBOX_SIZE);
@@ -247,5 +253,11 @@ function normalizeMessage(raw: Record<string, unknown>): InboxMessage {
   if (typeof raw['read_by'] === 'string') msg.readBy = raw['read_by'];
   if (typeof raw['invoked_by'] === 'string') msg.invokedBy = raw['invoked_by'];
   if (typeof raw['related'] === 'string') msg.related = raw['related'];
+  // Strict-true coerce: only the literal `true` lights this up.
+  // Missing / false / non-boolean alike map to undefined (effectively
+  // false) — the boot detector treats undefined as false anyway, but
+  // not stamping the field at all keeps the InboxMessage shape
+  // matching what was actually on disk.
+  if (raw['expects_response'] === true) msg.expectsResponse = true;
   return msg;
 }

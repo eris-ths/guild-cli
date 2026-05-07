@@ -276,10 +276,52 @@ const VERBS: readonly VerbSchema[] = [
             'Advisory — NOT a directive. Orientation-time guidance ' +
             'about what to do next, derived from queues + open loops. ' +
             "Read `reason` and override when your judgement differs. " +
-            'Priority is shared with `gate suggest`; both are hints.',
-          // Same canonical sub-schema as suggest so the two surfaces
-          // never disagree on the suggested_next shape.
-          properties: suggestedNextProperties,
+            'Priority is shared with `gate suggest`; both are hints. ' +
+            'Two shapes share this slot: the canonical verb/args/reason ' +
+            'triple (state-transition hints) and the ' +
+            '`broadcast-pending-response` shape ' +
+            '({kind, broadcast_from, broadcast_at, hint, actor_resolved}) ' +
+            'when the only open loop is an unread opt-in broadcast. The ' +
+            'discriminator is the `kind` field — present for ' +
+            'broadcast-pending-response, absent for state-transition hints. ' +
+            '`actor_resolved` is shared across both variants (always true ' +
+            'for the broadcast variant — the surface only fires on the ' +
+            "caller's own inbox). Phase 1 does NOT track who/when " +
+            'responded; the surface clears on inbox mark-read.',
+          // Open-shape union: every field from both variants is listed
+          // as an optional property. The validator (validateActualOutput)
+          // is permissive on extras and strict on declared types, so
+          // either variant validates without false positives. JsonSchema
+          // draft-07 oneOf would be cleaner but the gate schema subset
+          // doesn't include it (see schema.ts header).
+          properties: {
+            ...suggestedNextProperties,
+            kind: {
+              type: 'string',
+              enum: ['broadcast-pending-response'],
+              description:
+                'discriminator for the pending-broadcast variant. ' +
+                'Absent on state-transition hints.',
+            },
+            broadcast_from: {
+              type: 'string',
+              description:
+                '[broadcast-pending-response only] sender of the unread ' +
+                'opt-in broadcast.',
+            },
+            broadcast_at: {
+              type: 'string',
+              description:
+                '[broadcast-pending-response only] ISO timestamp of the ' +
+                'broadcast post.',
+            },
+            hint: {
+              type: 'string',
+              description:
+                '[broadcast-pending-response only] free-form recipient ' +
+                'guidance — does not prescribe a verb.',
+            },
+          },
         },
         verbs_available_now: {
           type: 'object',
@@ -931,6 +973,16 @@ const VERBS: readonly VerbSchema[] = [
         from: str,
         text: str,
         type: strOpt('optional message kind label (e.g. "handoff", "note") — free-form, surfaced verbatim in each recipient inbox'),
+        'expects-response': {
+          type: 'boolean',
+          description:
+            'opt-in (default false). When true, each recipient inbox entry ' +
+            'is stamped expects_response: true; gate boot surfaces unread ' +
+            'opt-in broadcasts under suggested_next as ' +
+            '`broadcast-pending-response` until the recipient marks the ' +
+            'entry read (read = ack proxy). Phase 1 tracks expectation, ' +
+            'not resolution.',
+        },
       },
       required: ['text'],
     },
