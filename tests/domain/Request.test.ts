@@ -556,6 +556,66 @@ test('Request.toJSON omits promoted_from when not set (pre-promote requests byte
   assert.equal('promoted_from' in r.toJSON(), false);
 });
 
+test('Request.create accepts depth and surfaces it via toJSON', () => {
+  const r = Request.create({
+    id: RequestId.generate(d, 1),
+    from: 'alice',
+    action: 'a',
+    reason: 'r',
+    depth: 'shallow',
+  });
+  assert.equal(r.depth, 'shallow');
+  assert.equal(r.toJSON()['depth'], 'shallow');
+});
+
+test('Request.toJSON omits depth when undeclared (pre-#221 records byte-identical)', () => {
+  const r = Request.create({
+    id: RequestId.generate(d, 1),
+    from: 'alice',
+    action: 'a',
+    reason: 'r',
+  });
+  assert.equal('depth' in r.toJSON(), false);
+  assert.equal(r.depth, undefined);
+});
+
+test('Request.create rejects malformed depth at the domain boundary', () => {
+  // Defense-in-depth: interface validates first, but if a future
+  // caller bypasses the handler the domain still refuses.
+  assert.throws(
+    () =>
+      Request.create({
+        id: RequestId.generate(d, 1),
+        from: 'alice',
+        action: 'a',
+        reason: 'r',
+        // @ts-expect-error — purposely malformed
+        depth: 'medium',
+      }),
+    DomainError,
+  );
+});
+
+test('Request.restore round-trips all three depth values', () => {
+  for (const depth of ['shallow', 'standard', 'deep'] as const) {
+    const r = Request.restore({
+      id: RequestId.generate(d, 1),
+      from: MemberName.of('alice'),
+      action: 'a',
+      reason: 'r',
+      state: 'pending',
+      createdAt: '2026-04-14T00:00:00.000Z',
+      statusLog: [
+        { state: 'pending', by: 'alice', at: '2026-04-14T00:00:00.000Z' },
+      ],
+      reviews: [],
+      depth,
+    });
+    assert.equal(r.depth, depth);
+    assert.equal(r.toJSON()['depth'], depth);
+  }
+});
+
 test('Request.restore preserves promotedFrom on round-trip', () => {
   // Simulates the repo rehydrating a request that was promoted.
   // The field must survive load → toJSON without needing domain

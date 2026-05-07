@@ -51,6 +51,10 @@ export class RequestUseCases {
      *  promote`). Tool-generated structured link surviving any
      *  --action / --reason overrides. */
     promotedFrom?: string;
+    /** Author-declared review depth (issue #221). Advisory hint for
+     *  downstream reviewers; does not gate any transition. Persisted
+     *  unchanged. Validated at the interface layer. */
+    depth?: 'shallow' | 'standard' | 'deep';
   }): Promise<Request> {
     const { requests, members, clock } = this.deps;
     const from = await assertActor(input.from, '--from', members);
@@ -90,6 +94,7 @@ export class RequestUseCases {
     if (input.invokedBy !== undefined) createArgs.invokedBy = input.invokedBy;
     if (input.promotedFrom !== undefined)
       createArgs.promotedFrom = input.promotedFrom;
+    if (input.depth !== undefined) createArgs.depth = input.depth;
 
     for (let attempt = 0; attempt < 10; attempt++) {
       createArgs.id = RequestId.generate(now, seq);

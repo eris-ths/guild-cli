@@ -15,6 +15,29 @@ const MAX_REVIEWS = 50;
 const MAX_THANKS = 50;
 const MAX_STATUS_LOG = 100;
 
+/**
+ * Review depth hint set on a request at creation time.
+ *
+ *   - `shallow`  — small, single-file, no arch change. Reviewer is
+ *     expected to skim, not grep.
+ *   - `standard` — current default; reviewer behaves as-is. Stored as
+ *     "absent" on disk (no field) so existing records hydrate
+ *     unchanged (principle 04: records-outlive-writers).
+ *   - `deep`     — cross-cutting / arch / threat-model territory.
+ *
+ * The field is **advisory**: it is a hint to reviewers, not a directive.
+ * A reviewer may always escalate from `shallow` to `deep` if the
+ * surface turns out to be larger than the author thought (and vice
+ * versa). Phase 1 only persists the hint; Phase 2 will branch Devil
+ * agent prompts on it (issue #221, out of scope here).
+ */
+export type RequestDepth = 'shallow' | 'standard' | 'deep';
+export const REQUEST_DEPTHS: readonly RequestDepth[] = [
+  'shallow',
+  'standard',
+  'deep',
+];
+
 export interface StatusLogEntry {
   state: RequestState;
   by: string;
@@ -61,6 +84,15 @@ export interface RequestProps {
    * other tool-generated relationship fields (executor, autoReview).
    */
   promotedFrom?: string;
+  /**
+   * Author-declared review depth (issue #221, Phase 1). One of
+   * `shallow | standard | deep`. Advisory only — no transition reads
+   * it; downstream Devil/reviewer agents MAY read it to right-size
+   * scrutiny in a follow-up PR. Undefined for records written before
+   * the flag existed (the common case during rollout). Stored verbatim,
+   * never derived.
+   */
+  depth?: 'shallow' | 'standard' | 'deep';
   state: RequestState;
   createdAt: string;
   reviews: Review[];
@@ -115,6 +147,8 @@ export class Request {
     /** See RequestProps.promotedFrom — issue id this request was
      *  promoted from. Populated by `gate issues promote` only. */
     promotedFrom?: string;
+    /** See RequestProps.depth — advisory review depth hint. */
+    depth?: 'shallow' | 'standard' | 'deep';
   }): Request {
     const from = MemberName.of(input.from);
     const action = sanitizeText(input.action, 'action');
@@ -171,6 +205,23 @@ export class Request {
     if (input.promotedFrom !== undefined) {
       props.promotedFrom = input.promotedFrom;
     }
+    if (input.depth !== undefined) {
+      // Defense-in-depth: interface already validates the enum, but
+      // the domain re-asserts so a future caller (other use case,
+      // restore path with a malformed YAML, etc.) cannot persist a
+      // value outside the contracted three.
+      if (
+        input.depth !== 'shallow' &&
+        input.depth !== 'standard' &&
+        input.depth !== 'deep'
+      ) {
+        throw new DomainError(
+          `depth must be one of shallow|standard|deep, got: ${String(input.depth)}`,
+          'depth',
+        );
+      }
+      props.depth = input.depth;
+    }
     // New requests have no on-disk predecessor; loadedVersion=0 marks
     // "never seen" for the optimistic-lock check in save().
     return new Request(props, 0);
@@ -204,6 +255,9 @@ export class Request {
   }
   get promotedFrom(): string | undefined {
     return this.props.promotedFrom;
+  }
+  get depth(): 'shallow' | 'standard' | 'deep' | undefined {
+    return this.props.depth;
   }
   get with(): readonly MemberName[] {
     return this.props.with ?? [];
@@ -345,6 +399,12 @@ export class Request {
       out['with'] = this.props.with.map((m) => m.value);
     if (this.props.promotedFrom !== undefined)
       out['promoted_from'] = this.props.promotedFrom;
+    // Depth surfaces only when the author declared one. Records created
+    // before #221 (no --depth ever passed) emit no `depth` key — same
+    // forward-compat shape as `thanks` and `with`. Default-on-read is
+    // not synthesised here: a missing key means "author did not declare",
+    // which is semantically distinct from "author chose standard".
+    if (this.props.depth !== undefined) out['depth'] = this.props.depth;
     // Derive legacy closure keys from the last status_log entry so
     // external consumers (chain / voices / show --format text) keep
     // working unchanged. Single source of truth: status_log[-1].note.

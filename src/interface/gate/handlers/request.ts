@@ -20,7 +20,21 @@ const REQUEST_CREATE_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'target',
   'auto-review',
   'with',
+  'depth',
   'format',
+]);
+
+// `--depth` advertises the author's intended review depth (issue #221
+// Phase 1). Advisory: a downstream Devil agent / reviewer MAY read this
+// to right-size scrutiny, but the value does not gate any state
+// transition or refuse any review. The author can always be overridden
+// by a reviewer choosing to go deeper. Phase 1 records the value;
+// Devil prompt three-stage routing is deliberately scope-out (separate
+// PR) so silent behavioural change can't ride this PR.
+const REQUEST_DEPTH_VALUES: ReadonlySet<string> = new Set([
+  'shallow',
+  'standard',
+  'deep',
 ]);
 const APPROVE_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'by',
@@ -115,10 +129,22 @@ export async function reqCreate(c: C, args: ParsedArgs): Promise<number> {
   const target = optionalOption(args, 'target');
   const autoReview = optionalOption(args, 'auto-review');
   const withPartners = parseWithList(optionalOption(args, 'with'));
+  const depth = optionalOption(args, 'depth');
   if (executor !== undefined) input.executor = executor;
   if (target !== undefined) input.target = target;
   if (autoReview !== undefined) input.autoReview = autoReview;
   if (withPartners.length > 0) input.with = withPartners;
+  if (depth !== undefined) {
+    if (!REQUEST_DEPTH_VALUES.has(depth)) {
+      // Reject up-front with the same enum-list shape `gate review
+      // --verdict <bad>` uses, so the agent dispatch error is
+      // shape-symmetric with the schema enum it would have read.
+      throw new Error(
+        `--depth must be one of: shallow, standard, deep (got: ${depth})`,
+      );
+    }
+    input.depth = depth as 'shallow' | 'standard' | 'deep';
+  }
   // Request creation is a proxy-eligible verb same as approve/review:
   // when GUILD_ACTOR differs from --from, the agent is filing on a
   // member's behalf. Derive the invoker pre-create so it lands on

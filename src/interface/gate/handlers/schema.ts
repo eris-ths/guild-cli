@@ -760,6 +760,19 @@ const VERBS: readonly VerbSchema[] = [
         target: str,
         'auto-review': strOpt('member assigned as critic'),
         with: strOpt('comma-separated dialogue partners (pair-mode)'),
+        depth: {
+          type: 'string',
+          enum: ['shallow', 'standard', 'deep'],
+          // Advisory framing (principle 02): the value is the author's
+          // declared review intent, not a directive. A reviewer MAY
+          // right-size scrutiny based on it, but is free to go deeper
+          // — the author cannot bind a reviewer's depth. Phase 1
+          // (issue #221) records the value; downstream Devil prompt
+          // three-stage routing is a separate PR so behavioural change
+          // is not bundled with the schema admission.
+          description:
+            "author-declared review depth hint; advisory only — a reviewer may go deeper. shallow = 1 file / <50 LOC / no arch change; standard = current default; deep = cross-cutting / arch / security.",
+        },
         format: formatField,
       },
       required: ['action', 'reason'],

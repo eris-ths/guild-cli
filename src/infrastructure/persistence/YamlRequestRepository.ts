@@ -481,6 +481,18 @@ function hydrate(
     if (typeof obj['promoted_from'] === 'string') {
       props.promotedFrom = obj['promoted_from'] as string;
     }
+    // Depth (issue #221). Hydrate only the three contracted values;
+    // a malformed value (typo, future-extension we don't recognise)
+    // is dropped silently so a corrupt record can still be read for
+    // recovery. The drift detector + interface enum prevent malformed
+    // values from being WRITTEN; the read path stays forgiving.
+    if (
+      obj['depth'] === 'shallow' ||
+      obj['depth'] === 'standard' ||
+      obj['depth'] === 'deep'
+    ) {
+      props.depth = obj['depth'] as 'shallow' | 'standard' | 'deep';
+    }
     // Legacy top-level closure keys (completion_note / deny_reason /
     // failure_reason) are no longer written separately — status_log[-1].note
     // is the single source of truth. Handle the three migration cases
