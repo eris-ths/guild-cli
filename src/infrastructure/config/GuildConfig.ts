@@ -139,8 +139,18 @@ export class GuildConfig implements GuildConfigProps {
 function findConfig(start: string): string | null {
   let dir = resolve(start);
   for (let i = 0; i < 10; i++) {
-    const candidate = join(dir, 'guild.config.yaml');
-    if (existsSync(candidate)) return candidate;
+    // Prefer in-repo `.gate-sessions/` convention adopted by repos that
+    // sandbox guild data into a single subdirectory (projector,
+    // yori-code, ...). When the config lives there, content_root and
+    // path entries inside the file resolve relative to `.gate-sessions/`,
+    // which is what those repos already write.
+    const inSubdir = join(dir, '.gate-sessions', 'guild.config.yaml');
+    if (existsSync(inSubdir)) return inSubdir;
+    // Legacy top-level placement: when the project IS the guild
+    // (THS-style content_root where everything sits at the top of the
+    // tree), guild.config.yaml lives directly next to requests/issues/...
+    const topLevel = join(dir, 'guild.config.yaml');
+    if (existsSync(topLevel)) return topLevel;
     const parent = resolve(dir, '..');
     if (parent === dir) break;
     dir = parent;
