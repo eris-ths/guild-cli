@@ -44,6 +44,21 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
 
 ### **BREAKING**
 
+- **`gate show --format text` label rename: `executor:` → `executors:`**
+  ([#230](https://github.com/eris-ths/guild-cli/issues/230)). text mode
+  の label が常に複数形になる (単数 wave でも `executors: miki`)。
+  人間スクリプト (`grep '^executor:'`, `sed 's/executor: //'`, etc.)
+  を破壊するため BREAKING として明示。
+  - **Before**: `executor: miki` (単数 wave のとき) / `executor: miki, leysia` (複数のとき、暫定 v0.5 形式は未存在)
+  - **After**: `executors: miki` / `executors: miki, leysia` (uniformly plural)
+  - **Migration**: 新 label に追従するか、構造化 consumer は
+    `--format json` の `executors` array key を使うこと。永続化
+    YAML 側の field rename (`executor` → `executors`) は同じ
+    release で起きるが、read-only の legacy hydrate により旧
+    record は透過に load される (詳細は
+    [docs/storage-format.md](./docs/storage-format.md) §Request
+    の Hydrate tolerance)。
+
 - **`gate list` (no `--state`) now defaults to `--state all`**
   ([#218](https://github.com/eris-ths/guild-cli/pull/218),
   closes [#217](https://github.com/eris-ths/guild-cli/issues/217)).
@@ -67,6 +82,23 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
     PR #163), out of the hot path.
 
 ### Added
+
+- **`gate request --executors a,b,c` records multiple executors per
+  request** ([#230](https://github.com/eris-ths/guild-cli/issues/230)).
+  parallel-impl wave 等で複数の executor を attribution として
+  正しく保存できるようになる。各要素は member name regex
+  (`/^[a-z][a-z0-9_-]{0,31}$/`) で個別検証、重複・空文字は loud に
+  reject。`--executor` 単数 flag は後方互換 alias として継続するが、
+  `--executors` と同時指定すると排他エラー。永続化 YAML は
+  `executors: [<name>, ...]` (array) で書かれ、単数 wave でも
+  `executors: [miki]` の形を取る (uniformity)。pre-#230 の
+  `executor: <single>` record は read 時に透過 hydrate され、
+  次回 save 時に新形式へ rewrite される (in-place migration なし)。
+  substrate-experiment 実験 6 で実証された並列実装 attribution
+  race を構造的に解く修正。
+- **`gate issues promote --executors a,b,c` symmetric with request**
+  (Devil concern follow-up from #230). promote 経路でも複数 executor
+  を一発で記録できる。`--executor` 単数 alias は同様に継続。
 
 - **`gate request --depth shallow|standard|deep` reviewer-depth advisory**
   ([#221](https://github.com/eris-ths/guild-cli/issues/221) phase 1
@@ -165,6 +197,24 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
   produce the same value, name which one was used.
 
 ### Changed
+
+- **`gate show --format text`: label `executor:` → `executors:`**
+  ([#230](https://github.com/eris-ths/guild-cli/issues/230)). uniformity:
+  単数 wave でも複数形 `executors: miki` で表示される (record の
+  arity に関わらず)。grep / sed で `^executor:` を expecting する
+  外部スクリプトは `executors:` に追従が必要 — 移行先は
+  `executors:` を grep するか、`--format json` の `executors`
+  array key を使う。BREAKING 節にも明示。
+- **`gate show --format json` adds `executors: <array>` key**
+  ([#230](https://github.com/eris-ths/guild-cli/issues/230); canonical
+  shape). 既存の `executor: <string>` key も back-compat として
+  first-of-list 値を 1 リリース継続 emit する (consumer の段階
+  移行のため)。`executor` JSON key は **v0.7 で削除予定**。
+  consumer は `executors` array に migrate すること。
+- **`gate list --executor <name>` matches against the array.**
+  ([#230](https://github.com/eris-ths/guild-cli/issues/230)). 1 人でも
+  array に含まれていれば match。flag 名は `--executor` 単数のまま
+  (filter は単一 name 検索なので、複数指定の必要なし)。
 
 - **Actor-flag missing-arg errors unified across agora / devil / ctx
   to the #164 `requireOption` shape.** A v0.5 dogfood sweep found 16

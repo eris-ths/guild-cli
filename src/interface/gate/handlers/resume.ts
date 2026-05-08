@@ -270,9 +270,13 @@ function collectOpenLoops(
       since: at,
       age_hint: ageHint(at, now),
     };
-    if (r.state === 'approved' && r.executor?.value === actorLower) {
+    // Multi-executor membership (issue #230 — Devil review blocker
+    // 1): scalar `r.executor?.value === actorLower` would silently
+    // skip every executor past index 0. Awaiting-execution and
+    // currently-executing loops surface to ALL named executors.
+    if (r.state === 'approved' && r.hasExecutor(actorLower)) {
       loops.push({ ...loopBase, type: 'awaiting_execution', role: 'executor' });
-    } else if (r.state === 'executing' && r.executor?.value === actorLower) {
+    } else if (r.state === 'executing' && r.hasExecutor(actorLower)) {
       loops.push({ ...loopBase, type: 'executing', role: 'executor' });
     } else if (r.state === 'completed' && r.autoReview?.value === actorLower) {
       const alreadyReviewed = r.reviews.some(

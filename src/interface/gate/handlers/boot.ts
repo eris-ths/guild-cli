@@ -789,17 +789,25 @@ function actionableTransitions(
   const lower = actor.toLowerCase();
   const out: ActionableTransition[] = [];
   for (const r of allRequests) {
-    // Executing-mine: actor is either assigned executor or the author
-    // (which happens for requests filed-then-self-executed).
+    // Executing-mine: actor is either assigned executor (anywhere in
+    // the multi-executor list, issue #230) or the author (which
+    // happens for requests filed-then-self-executed).
+    //
+    // Membership-based on `r.hasExecutor` rather than scalar
+    // `r.executor?.value === lower`: that earlier shape silently
+    // dropped every executor past index 0 — a parallel-impl wave with
+    // `--executors miki,leysia` would surface to miki and never to
+    // leysia (substrate-experiment 6's attribution race regenerated
+    // at the agent-loop layer). Devil review #230 blocker 1.
     if (
       r.state === 'executing' &&
-      (r.executor?.value === lower || r.from.value === lower)
+      (r.hasExecutor(lower) || r.from.value === lower)
     ) {
       out.push({
         kind: 'executing-mine',
         request: r,
         executorRole:
-          r.executor?.value === lower ? 'executor' : 'author',
+          r.hasExecutor(lower) ? 'executor' : 'author',
       });
       continue;
     }
@@ -812,16 +820,20 @@ function actionableTransitions(
       out.push({ kind: 'unreviewed-mine', request: r });
       continue;
     }
-    // Approved-for-me: ready to start executing.
-    if (r.state === 'approved' && r.executor?.value === lower) {
+    // Approved-for-me: ready to start executing. Same array-aware
+    // membership as executing-mine — every named executor sees the
+    // approval, not just the first.
+    if (r.state === 'approved' && r.hasExecutor(lower)) {
       out.push({ kind: 'approved-for-me', request: r });
       continue;
     }
     // Pending-as-executor: approval bottleneck (non-self; self-approve
-    // is still legal but fires the "self-approval" notice).
+    // is still legal but fires the "self-approval" notice). Multi-
+    // executor extension: any named executor receives the bottleneck
+    // signal — none of them is silently skipped.
     if (
       r.state === 'pending' &&
-      r.executor?.value === lower &&
+      r.hasExecutor(lower) &&
       r.from.value !== lower
     ) {
       out.push({ kind: 'pending-as-executor', request: r });
@@ -1025,7 +1037,11 @@ function deriveVerbsAvailableNow(
       // Otherwise every pending request in the content_root would
       // show up for every member, which is noise.
       const isAuthor = r.from.value === actorLower;
-      const isExecutor = r.executor?.value === actorLower;
+      // Multi-executor membership (issue #230): scalar
+      // `r.executor?.value` would silently miss every later-listed
+      // executor. Use the array-aware predicate so all named
+      // executors see the blocker.
+      const isExecutor = r.hasExecutor(actorLower);
       const isPair = r.with.some((p) => p.value === actorLower);
       if (!isAuthor && !isExecutor && !isPair) continue;
       // Executor (when not also author) can self-approve via the

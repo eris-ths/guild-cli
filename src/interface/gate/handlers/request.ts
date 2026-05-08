@@ -17,6 +17,7 @@ const REQUEST_CREATE_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'action',
   'reason',
   'executor',
+  'executors',
   'target',
   'depth',
   'auto-review',
@@ -60,6 +61,7 @@ const FAST_TRACK_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'action',
   'reason',
   'executor',
+  'executors',
   'auto-review',
   'note',
   'with',
@@ -113,10 +115,31 @@ export async function reqCreate(c: C, args: ParsedArgs): Promise<number> {
     reason,
   };
   const executor = optionalOption(args, 'executor');
+  const executorsRaw = optionalOption(args, 'executors');
   const target = optionalOption(args, 'target');
   const depth = optionalOption(args, 'depth');
   const autoReview = optionalOption(args, 'auto-review');
   const withPartners = parseWithList(optionalOption(args, 'with'));
+  // Mutual-exclusion: --executor (singular) and --executors (plural)
+  // share semantics; allowing both would invite ambiguity ("which one
+  // wins?") and let a typo go silent. Reject up front with a flag-
+  // shaped message — same treatment as --reason vs positional reason
+  // collisions elsewhere. Issue #230.
+  if (executor !== undefined && executorsRaw !== undefined) {
+    process.stderr.write(
+      `error: --executor and --executors are mutually exclusive (got both). ` +
+        `Use --executors a,b,c for multiple, or --executor <m> for one.\n`,
+    );
+    return 1;
+  }
+  if (executorsRaw !== undefined) {
+    const parsed = parseExecutorsList(executorsRaw);
+    if (parsed.error) {
+      process.stderr.write(`error: --executors ${parsed.error}\n`);
+      return 1;
+    }
+    if (parsed.list.length > 0) input.executors = parsed.list;
+  }
   if (executor !== undefined) input.executor = executor;
   if (target !== undefined) input.target = target;
   // depth (issue #221): pre-check at the interface boundary so the
@@ -194,7 +217,12 @@ export async function reqList(
     items = items.filter((r) => r.from.value === fromFilter);
   }
   if (executorFilter !== undefined) {
-    items = items.filter((r) => r.executor?.value === executorFilter);
+    // Multi-executor (issue #230): match if the filter name appears
+    // anywhere in the assigned list. Single-executor records still
+    // hit because their `executors` is a one-element array.
+    items = items.filter((r) =>
+      r.executors.some((m) => m.value === executorFilter),
+    );
   }
   if (autoReviewFilter !== undefined) {
     items = items.filter((r) => r.autoReview?.value === autoReviewFilter);
@@ -203,7 +231,7 @@ export async function reqList(
     items = items.filter(
       (r) =>
         r.from.value === forFilter ||
-        r.executor?.value === forFilter ||
+        r.executors.some((m) => m.value === forFilter) ||
         r.autoReview?.value === forFilter,
     );
   }
@@ -237,7 +265,9 @@ export async function reqList(
       filterEcho['for_source'] = explicitFor !== undefined ? '--for' : 'GUILD_ACTOR';
     }
     const payload: Record<string, unknown> = {
-      requests: items.map((r) => r.toJSON()),
+      // toRenderJSON keeps the deprecated `executor` alias visible
+      // alongside the new `executors` array (issue #230 back-compat).
+      requests: items.map((r) => r.toRenderJSON()),
       _meta: {
         state,
         verb,
@@ -319,7 +349,12 @@ export async function reqShow(c: C, args: ParsedArgs): Promise<number> {
           'For multiple fields, drop --plain and read the JSON object.',
       );
     }
-    const payload = r.toJSON();
+    // toRenderJSON: JSON-side back-compat surface (issue #230 — Devil
+    // review blocker 2). `gate show --fields executor --plain $id` was
+    // a documented selector; preserve it by emitting the deprecated
+    // alias on the render path. Persistence still writes only the new
+    // `executors` key.
+    const payload = r.toRenderJSON();
     const key = keep[0]!;
     if (!(key in payload)) {
       // Missing field: emit nothing, exit 1 so shell `[ -z "$v" ]`
@@ -343,7 +378,10 @@ export async function reqShow(c: C, args: ParsedArgs): Promise<number> {
     // agent checking just `state` in a tight loop, that's a lot of
     // tokens for one boolean-ish answer. Only available in JSON mode
     // (text already has its own compact summary).
-    let payload: Record<string, unknown> = r.toJSON();
+    // toRenderJSON: include the deprecated `executor` alias so the
+    // documented `--fields state,executor` shape keeps working. See
+    // toRenderJSON for the deprecation timeline.
+    let payload: Record<string, unknown> = r.toRenderJSON();
     if (fields !== undefined) {
       const keep = fields
         .split(',')
@@ -367,7 +405,15 @@ function formatRequestText(r: Request): string {
   const lines: string[] = [];
   lines.push(`${j['id']}  [${j['state']}]`);
   lines.push(`  from:     ${j['from']}`);
-  if (j['executor']) lines.push(`  executor: ${j['executor']}`);
+  // executors: new wire form (array) — render as `executors: a, b`.
+  // Records that hydrated from the legacy `executor: <string>` shape
+  // come through toJSON as a single-element array. The label is
+  // pluralised even for one entry so the schema is uniform; the
+  // single-name case still reads naturally (`executors: alice`).
+  // Issue #230.
+  if (Array.isArray(j['executors']) && (j['executors'] as unknown[]).length > 0) {
+    lines.push(`  executors: ${(j['executors'] as string[]).join(', ')}`);
+  }
   if (j['target']) lines.push(`  target:   ${j['target']}`);
   if (j['auto_review']) lines.push(`  reviewer: ${j['auto_review']}`);
   if (Array.isArray(j['with']) && j['with'].length > 0) {
@@ -587,18 +633,28 @@ export async function reqExecute(c: C, args: ParsedArgs): Promise<number> {
     return 0;
   }
   const r = await c.requestUC.execute(id, by, note, invokedBy);
-  // `--executor` is informational, not access control: the substrate
-  // records both the assignment and the actual actor, but does not
-  // refuse a mismatched execute. Surface a notice so a fresh agent
-  // who reads `--executor bob` doesn't silently interpret it as a
-  // gate. See issue #168 for the design rationale ("anyone may
-  // execute; the audit trail captures who did"). Mirrors the shape
-  // of the self-approve notice on `gate approve`.
-  const assignedExecutor = r.executor?.value;
-  if (assignedExecutor !== undefined && assignedExecutor !== by) {
+  // `--executor` / `--executors` is informational, not access
+  // control: the substrate records both the assignment and the actual
+  // actor, but does not refuse a mismatched execute. Surface a notice
+  // so a fresh agent who reads `--executor bob` doesn't silently
+  // interpret it as a gate. See issue #168 for the design rationale
+  // ("anyone may execute; the audit trail captures who did"). Mirrors
+  // the shape of the self-approve notice on `gate approve`.
+  //
+  // Multi-executor (issue #230 — Devil review blocker 1): the notice
+  // fires only when `by` is NOT in the assigned set. Earlier shape
+  // (`assignedExecutor !== by` against scalar first-of-list) would
+  // print "assigned to miki" when leysia executed a request with
+  // `--executors miki,leysia` — a false-positive misdirection that
+  // contradicts the actual record. Membership check resolves both
+  // false-positives and silent drops.
+  const assigned = r.executors;
+  if (assigned.length > 0 && !r.hasExecutor(by)) {
+    const assignedList = assigned.map((m) => m.value).join(', ');
+    const noun = assigned.length === 1 ? 'assigned to' : 'assigned to one of';
     process.stderr.write(
-      `notice: ${by} executed request ${id} (assigned to ` +
-        `${assignedExecutor}); --executor records intent, not access.\n`,
+      `notice: ${by} executed request ${id} (${noun} ` +
+        `${assignedList}); --executor records intent, not access.\n`,
     );
   }
   emitWriteResponse(parseFormat(args), r, `✓ executing: ${id}`, c.config);
@@ -681,6 +737,48 @@ function dashedValueHint(args: ParsedArgs, keys: readonly string[]): string {
  * `--with "eris, , alice"` behaves the way it reads. Exact name
  * validation happens upstream (MemberName.of / assertActor).
  */
+/**
+ * Parse `--executors a,b,c` (issue #230) into a clean string list with
+ * structural validation done at the interface boundary so the user sees
+ * a flag-shaped error before any domain hydration occurs.
+ *
+ * Rules (per spec):
+ *   - Empty / whitespace-only entry  → error  (`--executors miki,` is a typo, not "no second")
+ *   - Duplicate entry                → error  (silent dedupe would mask the typo)
+ *   - Per-entry charset              → MemberName.of validates regex / reserved names
+ *
+ * Returns either `{ list, error: undefined }` on success or
+ * `{ list: [], error: <message> }` on failure. Caller writes the
+ * message to stderr and returns exit 1.
+ */
+export function parseExecutorsList(
+  raw: string,
+): { list: string[]; error?: string } {
+  const parts = raw.split(',').map((s) => s.trim());
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const p of parts) {
+    if (p.length === 0) {
+      return {
+        list: [],
+        error:
+          'contains empty entry — comma-separated list must have no blanks ' +
+          '(e.g. "miki,leysia", not "miki," or "miki,,leysia")',
+      };
+    }
+    const lower = p.toLowerCase();
+    if (seen.has(lower)) {
+      return {
+        list: [],
+        error: `contains duplicate executor "${lower}" — each name may appear at most once`,
+      };
+    }
+    seen.add(lower);
+    out.push(p);
+  }
+  return { list: out };
+}
+
 function parseWithList(raw: string | undefined): string[] {
   if (raw === undefined) return [];
   return raw
@@ -712,17 +810,42 @@ export async function reqFastTrack(c: C, args: ParsedArgs): Promise<number> {
   const action = requireOption(args, 'action', '"..."');
   let reason = requireOption(args, 'reason', '"..."');
   if (reason === '-') reason = (await readStdin()).trim();
-  const executor = optionalOption(args, 'executor') ?? from;
+  const executorOpt = optionalOption(args, 'executor');
+  const executorsRaw = optionalOption(args, 'executors');
   const autoReview = optionalOption(args, 'auto-review');
   const note = optionalOption(args, 'note');
   const withPartners = parseWithList(optionalOption(args, 'with'));
+  // Same mutual-exclusion as `gate request`. Fast-track defaults the
+  // single-executor case to `from` (self-execute) when neither flag
+  // is supplied; the multi-executor case must be explicit.
+  if (executorOpt !== undefined && executorsRaw !== undefined) {
+    process.stderr.write(
+      `error: --executor and --executors are mutually exclusive (got both).\n`,
+    );
+    return 1;
+  }
+  let executorsList: readonly string[] | undefined;
+  if (executorsRaw !== undefined) {
+    const parsed = parseExecutorsList(executorsRaw);
+    if (parsed.error) {
+      process.stderr.write(`error: --executors ${parsed.error}\n`);
+      return 1;
+    }
+    if (parsed.list.length > 0) executorsList = parsed.list;
+  }
+  // Single-executor surface: explicit --executor wins, else default
+  // to the author for the self-execute happy path.
+  const executor = executorsList === undefined
+    ? (executorOpt ?? from)
+    : undefined;
 
   const createInput: Parameters<typeof c.requestUC.create>[0] = {
     from,
     action,
     reason,
-    executor,
   };
+  if (executor !== undefined) createInput.executor = executor;
+  if (executorsList !== undefined) createInput.executors = executorsList;
   if (autoReview !== undefined) createInput.autoReview = autoReview;
   if (withPartners.length > 0) createInput.with = withPartners;
   const created = await c.requestUC.create(createInput);
@@ -732,17 +855,24 @@ export async function reqFastTrack(c: C, args: ParsedArgs): Promise<number> {
   // three transitions. Resolve the invoker once (which also prints
   // the delegation notice exactly once) and pass it to each step.
   const invokedByFrom = resolveInvokedBy(from, 'fast-track', id);
-  // `executor` may legitimately differ from `from`; when it does we
+  // For the execute/complete steps fast-track needs ONE actor on
+  // record. With --executors a,b the substrate genuinely doesn't know
+  // which one ran the work — pick the first as the on-record actor
+  // (deterministic, explicit in the assignment list) and let the
+  // status_log + invoked_by capture the rest. Single-executor stays
+  // exactly as before.
+  const execActor = executor ?? executorsList?.[0] ?? from;
+  // `execActor` may legitimately differ from `from`; when it does we
   // don't emit a second notice here — the env actor vs executor
   // mismatch is the same delegation already surfaced above.
   const envActor = resolveGuildActor();
   const invokedByExec =
-    envActor && envActor.length > 0 && envActor !== executor
+    envActor && envActor.length > 0 && envActor !== execActor
       ? envActor
       : undefined;
   await c.requestUC.approve(id, from, 'fast-track: self-approved', invokedByFrom);
-  await c.requestUC.execute(id, executor, 'fast-track: self-executed', invokedByExec);
-  const completed = await c.requestUC.complete(id, executor, note, invokedByExec);
+  await c.requestUC.execute(id, execActor, 'fast-track: self-executed', invokedByExec);
+  const completed = await c.requestUC.complete(id, execActor, note, invokedByExec);
 
   const extraLines: string[] = [];
   if (completed.autoReview) {

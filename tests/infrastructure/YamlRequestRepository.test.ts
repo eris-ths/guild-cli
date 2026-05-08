@@ -440,3 +440,88 @@ test('save() does not throw spurious VersionConflict when reviews carries non-ob
     cleanup();
   }
 });
+
+// ── multi-executor hydrate (issue #230) ─────────────────────────────
+
+test('hydrate: legacy `executor: <string>` upgrades to executors[0] without breaking', async () => {
+  // Records-outlive-writers (principle 04): a YAML file written before
+  // #230 carries the old single-executor form. Loading and re-saving
+  // must (a) preserve the assignment, (b) round-trip through the new
+  // `executors:` key on disk. The test plants the legacy YAML by hand
+  // so we exercise hydrate's tolerance path, not the write path.
+  const { root, repo, cfg, cleanup } = makeRoot();
+  try {
+    mkdirSync(join(root, 'requests', 'pending'), { recursive: true });
+    const idStr = '2026-04-16-0001';
+    const path = join(root, 'requests', 'pending', `${idStr}.yaml`);
+    const legacyDoc = {
+      id: idStr,
+      from: 'alice',
+      action: 'a',
+      reason: 'r',
+      state: 'pending',
+      created_at: '2026-04-16T00:00:00Z',
+      executor: 'bob', // legacy single-executor form
+      status_log: [
+        { state: 'pending', by: 'alice', at: '2026-04-16T00:00:00Z' },
+      ],
+      reviews: [],
+    };
+    writeFileSync(path, YAML.stringify(legacyDoc));
+
+    const reloaded = await repo.findById(RequestId.of(idStr));
+    assert.ok(reloaded);
+    assert.deepEqual(
+      reloaded!.executors.map((m) => m.value),
+      ['bob'],
+      'legacy executor: <string> should hydrate as a one-element array',
+    );
+    assert.equal(reloaded!.hasExecutor('bob'), true);
+
+    // Round-trip: a transition triggers a save; the file should be
+    // upgraded to the new `executors:` form on disk.
+    reloaded!.approve(MemberName.of('human'));
+    await repo.save(reloaded!);
+
+    // Old file moved to approved/ on transition; read raw to confirm
+    // the new wire form is what got written.
+    const newPath = join(root, 'requests', 'approved', `${idStr}.yaml`);
+    assert.ok(existsSync(newPath), 'approved file should exist');
+    const written = readFileSync(newPath, 'utf8');
+    const parsed = YAML.parse(written) as Record<string, unknown>;
+    assert.deepEqual(parsed['executors'], ['bob']);
+    assert.equal(parsed['executor'], undefined, 'legacy key not re-emitted');
+    cfg;
+  } finally {
+    cleanup();
+  }
+});
+
+test('hydrate: new `executors: [a, b]` round-trips byte-stable', async () => {
+  // New-form record: write via the create path, reload via findById,
+  // re-save with no mutation should produce the same `executors` key.
+  // (Strict byte-stable would require the same key ordering / quoting
+  // as YAML.stringify produces; we assert the structural equivalence.)
+  const { repo, cleanup } = makeRoot();
+  try {
+    const id = RequestId.generate(new Date('2026-04-16T00:00:00Z'), 1);
+    const r = Request.create({
+      id,
+      from: 'alice',
+      action: 'a',
+      reason: 'r',
+      executors: ['miki', 'leysia'],
+    });
+    await repo.saveNew(r);
+
+    const reloaded = await repo.findById(id);
+    assert.ok(reloaded);
+    assert.deepEqual(
+      reloaded!.executors.map((m) => m.value),
+      ['miki', 'leysia'],
+    );
+    assert.deepEqual(reloaded!.toJSON()['executors'], ['miki', 'leysia']);
+  } finally {
+    cleanup();
+  }
+});

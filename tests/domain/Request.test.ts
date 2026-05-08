@@ -182,6 +182,168 @@ test('Request rejects invalid executor name', () => {
   );
 });
 
+// ── multi-executor (issue #230) ─────────────────────────────────
+
+test('Request.create accepts --executors a,b and stores them in order', () => {
+  const r = Request.create({
+    id: RequestId.generate(d, 1),
+    from: 'alice',
+    action: 'a',
+    reason: 'r',
+    executors: ['miki', 'leysia'],
+  });
+  assert.deepEqual(
+    r.executors.map((m) => m.value),
+    ['miki', 'leysia'],
+  );
+  // first-of-list reachable via `r.executors[0]` for callers that
+  // legitimately need a representative (display, default --by); the
+  // former scalar `executor` getter was removed in the Devil-review
+  // pass to prevent silent drops of later-listed executors.
+  assert.equal(r.executors[0]?.value, 'miki');
+  // `hasExecutor` is the preferred membership predicate — multi-
+  // executor wave members must all see the same belongs-to-me result.
+  assert.equal(r.hasExecutor('miki'), true);
+  assert.equal(r.hasExecutor('leysia'), true);
+  assert.equal(r.hasExecutor('alice'), false);
+});
+
+test('Request.create rejects --executor + --executors combined', () => {
+  assert.throws(
+    () =>
+      Request.create({
+        id: RequestId.generate(d, 1),
+        from: 'alice',
+        action: 'a',
+        reason: 'r',
+        executor: 'miki',
+        executors: ['leysia'],
+      }),
+    DomainError,
+  );
+});
+
+test('Request.create rejects duplicate --executors entries', () => {
+  assert.throws(
+    () =>
+      Request.create({
+        id: RequestId.generate(d, 1),
+        from: 'alice',
+        action: 'a',
+        reason: 'r',
+        executors: ['miki', 'miki'],
+      }),
+    DomainError,
+  );
+});
+
+test('Request.create rejects malformed --executors entry (regex check via MemberName)', () => {
+  assert.throws(
+    () =>
+      Request.create({
+        id: RequestId.generate(d, 1),
+        from: 'alice',
+        action: 'a',
+        reason: 'r',
+        executors: ['../bob'],
+      }),
+    DomainError,
+  );
+});
+
+test('Request.toJSON: emits executors array (single-executor input), no legacy key on persistence path', () => {
+  const r = Request.create({
+    id: RequestId.generate(d, 1),
+    from: 'alice',
+    action: 'a',
+    reason: 'r',
+    executor: 'bob',
+  });
+  // Spec: persistence always uses new-form `executors:` regardless of
+  // which input flag was used. The legacy `executor:` key MUST NOT
+  // appear in toJSON — that's the YAML repo serialisation path and
+  // re-emitting both keys would pollute on-disk records.
+  assert.deepEqual(r.toJSON()['executors'], ['bob']);
+  assert.equal(r.toJSON()['executor'], undefined);
+});
+
+test('Request.toRenderJSON: emits BOTH `executors` and deprecated `executor` (JSON back-compat)', () => {
+  // Devil review #230 blocker 2: tool wirings reading `gate show
+  // --format json | jq .executor` were a documented surface. The
+  // render-side projection keeps the deprecated alias visible
+  // alongside the new array key. Persistence (toJSON) stays clean.
+  const r = Request.create({
+    id: RequestId.generate(d, 1),
+    from: 'alice',
+    action: 'a',
+    reason: 'r',
+    executors: ['miki', 'leysia'],
+  });
+  const j = r.toRenderJSON();
+  assert.deepEqual(j['executors'], ['miki', 'leysia']);
+  // Deprecated alias = first-of-list. Multi-executor consumers should
+  // already be reading `executors`; this key is back-compat only.
+  assert.equal(j['executor'], 'miki');
+});
+
+test('Request.toRenderJSON: omits both keys when no executor assigned', () => {
+  const r = Request.create({
+    id: RequestId.generate(d, 1),
+    from: 'alice',
+    action: 'a',
+    reason: 'r',
+  });
+  const j = r.toRenderJSON();
+  assert.equal(j['executors'], undefined);
+  assert.equal(j['executor'], undefined);
+});
+
+test('Request.toJSON: emits executors array (multi)', () => {
+  const r = Request.create({
+    id: RequestId.generate(d, 1),
+    from: 'alice',
+    action: 'a',
+    reason: 'r',
+    executors: ['miki', 'leysia'],
+  });
+  assert.deepEqual(r.toJSON()['executors'], ['miki', 'leysia']);
+});
+
+test('Request.toJSON: omits executors key when none assigned', () => {
+  const r = Request.create({
+    id: RequestId.generate(d, 1),
+    from: 'alice',
+    action: 'a',
+    reason: 'r',
+  });
+  assert.equal(r.toJSON()['executors'], undefined);
+  assert.equal(r.toJSON()['executor'], undefined);
+});
+
+test('Request.restore: legacy `executor:` (string) is normalised to executors[0] (records-outlive-writers)', () => {
+  // This restores a Request as if it were just hydrated from the
+  // legacy YAML form. We can't go through hydrate() without the
+  // repository, but we verify the post-hydrate aggregate behaviour:
+  // the getter returns `bob`, the new array surface returns `[bob]`,
+  // and toJSON re-emits the new form on round-trip.
+  const r = Request.restore({
+    id: RequestId.generate(d, 1),
+    from: MemberName.of('alice'),
+    action: 'a',
+    reason: 'r',
+    state: 'pending',
+    createdAt: '2026-04-14T00:00:00.000Z',
+    executors: [MemberName.of('bob')],
+    statusLog: [
+      { state: 'pending', by: 'alice', at: '2026-04-14T00:00:00.000Z' },
+    ],
+    reviews: [],
+  });
+  assert.equal(r.executors[0]?.value, 'bob');
+  assert.deepEqual(r.executors.map((m) => m.value), ['bob']);
+  assert.deepEqual(r.toJSON()['executors'], ['bob']);
+});
+
 test('Review strips control chars', () => {
   const rev = Review.create({
     by: 'eris',

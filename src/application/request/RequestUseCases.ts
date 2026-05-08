@@ -43,6 +43,10 @@ export class RequestUseCases {
     action: string;
     reason: string;
     executor?: string;
+    /** Multi-executor variant (issue #230). Mutually exclusive with
+     *  `executor`; both surfaced here so `gate request --executors a,b`
+     *  threads through unchanged from the interface layer. */
+    executors?: readonly string[];
     target?: string;
     /** Reviewer-depth advisory ('shallow' | 'standard' | 'deep').
      *  Validated at the domain boundary in Request.create. See
@@ -58,8 +62,22 @@ export class RequestUseCases {
   }): Promise<Request> {
     const { requests, members, clock } = this.deps;
     const from = await assertActor(input.from, '--from', members);
+    if (input.executor !== undefined && input.executors !== undefined) {
+      // Belt + braces: interface layer rejects this combination first
+      // (with a flag-shaped message), but the use case is also a
+      // legitimate entry point for non-CLI callers.
+      throw new DomainError(
+        '--executor and --executors are mutually exclusive',
+        'executor',
+      );
+    }
     if (input.executor !== undefined) {
       await assertActor(input.executor, '--executor', members);
+    }
+    if (input.executors !== undefined) {
+      for (const e of input.executors) {
+        await assertActor(e, '--executors', members);
+      }
     }
     if (input.autoReview !== undefined) {
       await assertActor(input.autoReview, '--auto-review', members);
@@ -86,6 +104,9 @@ export class RequestUseCases {
       id: RequestId.generate(now, seq),
     };
     if (input.executor !== undefined) createArgs.executor = input.executor;
+    if (input.executors !== undefined && input.executors.length > 0) {
+      createArgs.executors = input.executors;
+    }
     if (input.target !== undefined) createArgs.target = input.target;
     if (input.depth !== undefined) createArgs.depth = input.depth;
     if (input.autoReview !== undefined)

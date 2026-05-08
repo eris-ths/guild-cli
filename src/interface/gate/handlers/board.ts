@@ -64,10 +64,12 @@ export async function boardCmd(c: C, args: ParsedArgs): Promise<number> {
   for (const state of BOARD_STATES) {
     let items = await c.requestUC.listByState(state);
     if (forFilter !== undefined) {
+      // Multi-executor membership (issue #230): match if the actor
+      // is named anywhere in the executor list, not just at index 0.
       items = items.filter(
         (r) =>
           r.from.value === forFilter ||
-          r.executor?.value === forFilter ||
+          r.hasExecutor(forFilter) ||
           r.autoReview?.value === forFilter,
       );
     }
@@ -91,7 +93,10 @@ export async function boardCmd(c: C, args: ParsedArgs): Promise<number> {
     // filtered" from "empty because nothing in flight".
     const payload: Record<string, unknown> = {};
     for (const { state, items } of sections) {
-      payload[state] = items.map((r) => r.toJSON());
+      // toRenderJSON: emit the deprecated `executor` alias for back-
+      // compat with tool wirings reading the singleton key (issue
+      // #230). Persistence still writes only `executors`.
+      payload[state] = items.map((r) => r.toRenderJSON());
     }
     if (forFilter !== undefined) {
       payload['_meta'] = {
@@ -131,7 +136,15 @@ export async function boardCmd(c: C, args: ParsedArgs): Promise<number> {
       // sections (executor is the next-action holder). For pending
       // rows it's usually the same as `from`, so still useful to
       // show but not redundant enough to suppress.
-      const executor = j['executor'] ? `  exec=${j['executor']}` : '';
+      // `exec=` summary: for a single executor we show the name; for
+      // multiple (issue #230) we list comma-separated. Compact enough
+      // for the approved/executing rows where the executor is the
+      // next-action holder. Reads from the new `executors` array form;
+      // legacy single-executor records hydrate as a one-element list.
+      const execList = Array.isArray(j['executors'])
+        ? (j['executors'] as string[])
+        : [];
+      const executor = execList.length > 0 ? `  exec=${execList.join(',')}` : '';
       process.stdout.write(
         `  ${j['id']}  from=${j['from']}${executor}  ${markers}${String(j['action']).slice(0, 60)}\n`,
       );

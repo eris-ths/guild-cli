@@ -190,7 +190,9 @@ completed / cancelled / denied / failed).
 | `reason` | string | optional | `'(no reason)'` |
 | `state` | string | optional | directory name (`stateHint`), else `'pending'` |
 | `created_at` | ISO-8601 | optional | now (`created` accepted as legacy alias) |
-| `executor` / `executor_actual` / `executor_preferred` | string | optional | tries the three keys in order |
+| `executors` | array of `MemberName` | optional | each element validated by `MemberName.of`; empty array drops the field |
+| `executor` (legacy, read-only) | string | optional | hydrated as `executors: [<value>]` if `executors` is absent; never written back |
+| `executor_actual` / `executor_preferred` | string | optional (legacy) | tried in order if both `executors` and `executor` are absent |
 | `auto_review` | string | optional | absent |
 | `target` | string | optional | absent |
 | `with` | string[] | optional | absent (each parsed as `MemberName`) |
@@ -215,6 +217,14 @@ completed / cancelled / denied / failed).
   `'(no ...)'` placeholder. This is the load-bearing tolerance the
   issue (#157) specifically called out; do not tighten without a
   minor bump.
+- `executor` (singular, legacy) — records written before
+  [#230](https://github.com/eris-ths/guild-cli/issues/230) use a
+  singular `executor: <name>` field. gate reads them transparently
+  as `executors: [<name>]` and rewrites them in the new array form
+  on the next save (no in-place migration; the rewrite happens
+  organically when the request transitions state). External tooling
+  reading raw YAML should expect either shape until all live records
+  have been touched at least once.
 - `state` — falls back to the parent directory name (CLI invariant
   is "the state matches the directory"). If that fails too,
   `'pending'`.
@@ -233,7 +243,7 @@ action: ship the agora touch-feel patch
 reason: noir's devil review surfaced a consistency break across 4 verbs
 state: completed
 created_at: 2026-05-05T08:13:53.376Z
-executor: claude
+executors: [claude]
 status_log:
   - state: pending
     by: alice
@@ -257,6 +267,41 @@ reviews:
     at: 2026-05-05T08:35:00.000Z
 thanks: []
 ```
+
+**Worked example** (a parallel-impl wave with multiple executors,
+post-[#230](https://github.com/eris-ths/guild-cli/issues/230)):
+
+```yaml
+id: 2026-05-08-0003
+from: eris
+action: docs + src split fix for #230 multi-executor wave
+reason: devil review flagged doc drift; parallel impl preserves attribution
+state: executing
+created_at: 2026-05-08T09:00:00.000Z
+executors: [miki, leysia]
+status_log:
+  - state: pending
+    by: eris
+    at: 2026-05-08T09:00:00.000Z
+  - state: approved
+    by: nao
+    at: 2026-05-08T09:05:00.000Z
+  - state: executing
+    by: miki
+    at: 2026-05-08T09:06:00.000Z
+    note: kicked off; leysia on docs, miki on src
+```
+
+Single-executor records are still written in the new shape
+(`executors: [miki]`, not `executor: miki`) — uniformity matters
+for downstream parsing, and `gate show --format text` always
+prints the plural `executors:` label regardless of arity.
+
+**`--format json` back-compat.** `gate show --format json` emits
+both `executors: <array>` (canonical) and `executor: <string>`
+(deprecated, equal to the first element of `executors`) for one
+release. The singular `executor` JSON key is scheduled for removal
+in v0.7; consumers should migrate to `executors`.
 
 ---
 

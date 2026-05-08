@@ -83,7 +83,14 @@ function buildTranscript(r: Request): TranscriptPayload {
   const from = String(j['from']);
   const action = String(j['action']);
   const reason = String(j['reason']);
-  const executor = j['executor'] ? String(j['executor']) : undefined;
+  // Issue #230: read from the new `executors` array. For single-
+  // executor records the array has exactly one entry, preserving the
+  // existing prose ("naming alice as executor"); for multi-executor
+  // records we render the joined list ("naming alice, bob as
+  // executors"). Plural form is selected below.
+  const executors = Array.isArray(j['executors'])
+    ? (j['executors'] as string[])
+    : [];
   const autoReview = j['auto_review'] ? String(j['auto_review']) : undefined;
   const log = Array.isArray(j['status_log'])
     ? (j['status_log'] as Array<Record<string, unknown>>)
@@ -108,7 +115,11 @@ function buildTranscript(r: Request): TranscriptPayload {
   frameParts.push(
     `${capitalise(from)} filed ${id} — "${action}" — seeking ${lowercase(reason)}`,
   );
-  if (executor) frameParts.push(`naming ${executor} as executor`);
+  if (executors.length === 1) {
+    frameParts.push(`naming ${executors[0]} as executor`);
+  } else if (executors.length > 1) {
+    frameParts.push(`naming ${executors.join(', ')} as executors`);
+  }
   if (autoReview) frameParts.push(`with auto-review assigned to ${autoReview}`);
   paragraphs.push(frameParts.join(', ') + '.');
 
