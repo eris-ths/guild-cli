@@ -41,7 +41,7 @@ sections in [`AGENT.md`](../AGENT.md) and worked examples in
 
 | You used… | Closest guild-cli concept | Key difference |
 |-----------|--------------------------|----------------|
-| **Jira / Linear** (issues + assignees) | `request` has `executor` like assignee, `state` like status | `request` also carries multi-lense `review`s and forced `reason`; it's closer to an ADR + ticket fused together |
+| **Jira / Linear** (issues + assignees) | `request` has `executors` like assignees, `state` like status | `request` also carries multi-lense `review`s and forced `reason`; it's closer to an ADR + ticket fused together. Multiple executors are first-class — see [#230](https://github.com/eris-ths/guild-cli/issues/230) for parallel-impl waves. |
 | **`issues` in guild-cli** | `issue` | In guild-cli, `issue` is a lightweight observation that hasn't become a decision yet. Promote it to a `request` when someone commits to act. |
 | **GitHub pull request review** | `gate review --lense X --verdict Y` | Reviews in gate attach to *requests* (decisions), not diffs. Multiple reviewers can each apply different lenses to the same request. (`lense` is the project's spelling — see vocabulary below.) |
 | **Slack / Discord DM** | `gate message --from A --to B` | Push-based messaging with an `inbox`, same channel as the decision log — you can DM about a specific `request` and the reference persists. |
@@ -53,7 +53,7 @@ sections in [`AGENT.md`](../AGENT.md) and worked examples in
 
 - **actor** — a human or AI agent. Has a `MemberName` (lowercase ASCII) and lives as `members/<name>.yaml`.
 - **host** — an actor that runs the content_root (not a member, but can `--by` / `--from` anything). Listed under `host_names:` in `guild.config.yaml`.
-- **request** — a decision-in-motion. Has `action`, `reason`, optional `executor` / `auto-review`, and moves through `pending → approved → executing → completed` (or `denied` / `failed`).
+- **request** — a decision-in-motion. Has `action`, `reason`, optional `executors` (one or more) / `auto-review`, and moves through `pending → approved → executing → completed` (or `denied` / `failed`). Even single-actor requests use the plural `executors:` field for uniformity — same shape across single and parallel waves means downstream tools never branch on arity. See [#230](https://github.com/eris-ths/guild-cli/issues/230) for the attribution rationale.
 - **review** — multi-perspective feedback on a request. Carries a `lense` (one of `devil | layer | cognitive | user` by default — extend via config) and a `verdict` (`ok | concern | reject`).
 - **lense** — the angle a reviewer is taking. (Spelled with a trailing `e` throughout this project — the value object, the CLI flag, and prose all align.) `devil` = "what breaks?", `layer` = "which structural layer is this on?", `cognitive` = "where would someone hesitate?", `user` = "whose happiness (LDD)?". Add domain lenses (`security`, `perf`, `a11y`, ...) in `guild.config.yaml`.
   - **gate vs devil enforcement.** `gate review` accepts any lense string from `guild.config.yaml`'s configurable list — free-form, the host project picks. `devil entry` requires a name from a strict bundled catalog (12 lenses in v1, see `docs/verbs.md` § Lenses). Same word, different enforcement: gate's lense is a label the team agrees on; devil's lense is a covered axis of the security-knowledge floor.
@@ -75,7 +75,7 @@ gate boot
 
 # 3. Record your first decision (single-actor, self-approved lane).
 gate fast-track --from <you> --action "first-touch" \
-  --reason "getting oriented" --executor <you>
+  --reason "getting oriented" --executors <you>
 ```
 
 That's enough to exist in the content_root. Everything below is
@@ -91,6 +91,19 @@ observe → file an issue (maybe) → decide → file a request
                                           review ←── review ←── review
                                          (devil) (layer) (cognitive) (user)
 ```
+
+## When more than one actor is implementing
+
+Most requests have one executor. Some don't — a parallel-impl wave
+splits work across `src` and `docs` (or any two file-disjoint
+scopes) so two agents can move at the same time without stepping
+on each other. Use `--executors a,b` to record both at request
+time; `gate list --executor <name>` matches if `<name>` appears
+anywhere in the array. The point isn't scheduling — it's keeping
+*who actually did what* legible afterward, so reviews and devil
+findings can be addressed back to the right hands. Single-actor
+waves still write the same shape (`executors: [you]`); the
+uniformity is the feature.
 
 ## The one thing most newcomers miss
 
