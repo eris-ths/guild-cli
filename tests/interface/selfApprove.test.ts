@@ -219,6 +219,129 @@ test('non-self approve passes under swarm (forbidden gate is self-only)', (t) =>
   assert.doesNotMatch(ap.stderr, /self-approve forbidden/);
 });
 
+// Asteria-found CRITICAL bypass (#233 follow-up): the original
+// self-detection compared raw `--by` against the canonical
+// `request.from.value` (lowercased+trimmed by MemberName at create
+// time). Daily typing habits — `--by ALICE`, `--by 'alice '` — slipped
+// past the swarm `forbidden` policy and landed in YAML as `by: alice`
+// without ever firing the gate. These tests pin the contract at the
+// CLI surface: actor representation must be normalized BEFORE the
+// self-detection compare so `forbidden` is not bypassable by
+// case/whitespace.
+
+test('swarm + --by ALICE (uppercase): self-approve forbidden (case bypass closed)', (t) => {
+  const { root, cleanup } = bootstrap(
+    'content_root: .\nhost_names: [eris]\nprofile: swarm\n',
+  );
+  t.after(cleanup);
+  registerAll(root, ['alice', 'bob']);
+  const id = createRequest(root, { from: 'alice', executors: ['bob'] });
+
+  const ap = run(root, ['approve', id, '--by', 'ALICE']);
+  assert.equal(
+    ap.status,
+    1,
+    `uppercase --by must NOT bypass swarm forbidden: stderr=${ap.stderr}`,
+  );
+  assert.match(ap.stderr, /self-approve forbidden/);
+});
+
+test("swarm + --by 'alice ' (trailing space): self-approve forbidden (whitespace bypass closed)", (t) => {
+  const { root, cleanup } = bootstrap(
+    'content_root: .\nhost_names: [eris]\nprofile: swarm\n',
+  );
+  t.after(cleanup);
+  registerAll(root, ['alice', 'bob']);
+  const id = createRequest(root, { from: 'alice', executors: ['bob'] });
+
+  const ap = run(root, ['approve', id, '--by', 'alice ']);
+  assert.equal(
+    ap.status,
+    1,
+    `trailing whitespace --by must NOT bypass swarm forbidden: stderr=${ap.stderr}`,
+  );
+  assert.match(ap.stderr, /self-approve forbidden/);
+});
+
+test("swarm + --by ' alice' (leading space): self-approve forbidden", (t) => {
+  const { root, cleanup } = bootstrap(
+    'content_root: .\nhost_names: [eris]\nprofile: swarm\n',
+  );
+  t.after(cleanup);
+  registerAll(root, ['alice', 'bob']);
+  const id = createRequest(root, { from: 'alice', executors: ['bob'] });
+
+  const ap = run(root, ['approve', id, '--by', ' alice']);
+  assert.equal(
+    ap.status,
+    1,
+    `leading whitespace --by must NOT bypass swarm forbidden: stderr=${ap.stderr}`,
+  );
+  assert.match(ap.stderr, /self-approve forbidden/);
+});
+
+test('standard + --by ALICE: notice fires (warn path also normalizes)', (t) => {
+  const { root, cleanup } = bootstrap(
+    'content_root: .\nhost_names: [eris]\nprofile: standard\n',
+  );
+  t.after(cleanup);
+  registerAll(root, ['alice', 'bob']);
+  const id = createRequest(root, { from: 'alice', executors: ['bob'] });
+
+  const ap = run(root, ['approve', id, '--by', 'ALICE']);
+  assert.equal(ap.status, 0, `should pass: stderr=${ap.stderr}`);
+  assert.match(
+    ap.stderr,
+    /approved their own request/,
+    `warn-path notice must fire on case-only typo: ${ap.stderr}`,
+  );
+});
+
+test('allowed override + --by ALICE: silent pass (no notice, but normalized)', (t) => {
+  const { root, cleanup } = bootstrap(
+    'content_root: .\nhost_names: [eris]\nprofile: standard\n' +
+      'features:\n  self_approve: allowed\n',
+  );
+  t.after(cleanup);
+  registerAll(root, ['alice', 'bob']);
+  const id = createRequest(root, { from: 'alice', executors: ['bob'] });
+
+  const ap = run(root, ['approve', id, '--by', 'ALICE']);
+  assert.equal(ap.status, 0, `should pass: stderr=${ap.stderr}`);
+  assert.doesNotMatch(
+    ap.stderr,
+    /approved their own request/,
+    `allowed must stay silent even on case-typo: ${ap.stderr}`,
+  );
+});
+
+test('invoked-by surface: trailing whitespace --by does not leak into the notice line', (t) => {
+  // The "# verb id: invoked by X on behalf of Y" line takes `by` from
+  // the same source as self-detection. Pre-fix this leaked the raw
+  // string ("on behalf of alice ") which made grep / golden-string
+  // checks fragile and broke the human-readable surface.
+  const { root, cleanup } = bootstrap(
+    'content_root: .\nhost_names: [eris]\nprofile: standard\n',
+  );
+  t.after(cleanup);
+  registerAll(root, ['alice', 'bob']);
+  const id = createRequest(root, { from: 'alice', executors: ['bob'] });
+
+  // GUILD_ACTOR=charlie + --by 'alice ' triggers the invoked-by line.
+  const ap = run(root, ['approve', id, '--by', 'alice '], 'charlie');
+  // The line lands when env != by; whitespace must not survive.
+  assert.doesNotMatch(
+    ap.stderr,
+    /on behalf of alice $/m,
+    `--by trailing space leaked into invoked-by surface: ${ap.stderr}`,
+  );
+  assert.doesNotMatch(
+    ap.stderr,
+    /on behalf of alice \n/,
+    `--by trailing space leaked into invoked-by surface: ${ap.stderr}`,
+  );
+});
+
 test('malformed features.self_approve → onMalformed warn + profile default applies', (t) => {
   const { root, cleanup } = bootstrap(
     'content_root: .\nhost_names: [eris]\nprofile: swarm\n' +

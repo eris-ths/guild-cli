@@ -31,6 +31,17 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
   optional fields use. `fast-track` is unaffected (orthogonal verb,
   never gated). Non-self approve is also unaffected regardless of
   profile/policy — the gate is self-only.
+  + Self-detection is now performed on the canonical actor
+    representation (case-fold + trim, via `MemberName`) rather than
+    the raw CLI argument. Pre-fix, daily typing habits like `--by
+    ALICE` or `--by 'alice '` slipped past the swarm `forbidden`
+    gate even though the persisted record collapsed both to `alice`
+    — a critical bypass surfaced by Asteria during cross-review.
+    The same normalization is applied to all handler-side
+    self-detection sites (review's self-review warning, thank's
+    self-thank notice, message's self-message advisory) and to the
+    `# verb id: invoked by X on behalf of Y` surface line, so
+    whitespace no longer leaks into the audit trail.
 - **`gate witness <id> --by <actor>` / `gate unwitness <id> --by <actor>`
   for non-exclusive cross-session observation**
   ([#244](https://github.com/eris-ths/guild-cli/issues/244),

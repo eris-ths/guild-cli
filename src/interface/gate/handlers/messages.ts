@@ -10,6 +10,7 @@ import {
   deriveInvokedBy,
   emitInvokedByNotice,
   readStdin,
+  normalizeActor,
 } from './internal.js';
 import { InboxMessage } from '../../../application/ports/NotificationPort.js';
 
@@ -60,8 +61,13 @@ const INBOX_KNOWN_FLAGS: ReadonlySet<string> = new Set([
 
 export async function msgSend(c: C, args: ParsedArgs): Promise<number> {
   rejectUnknownFlags(args, MESSAGE_SEND_KNOWN_FLAGS, 'message');
-  const from = requireOption(args, 'from', '<m>', 'GUILD_ACTOR');
-  const to = requireOption(args, 'to', '<m>');
+  // Canonicalize both sides of the self-message compare for the same
+  // reason as thank/approve: raw CLI args bypass the lowercase/trim
+  // collapse the persisted record applies.
+  const from = normalizeActor(
+    requireOption(args, 'from', '<m>', 'GUILD_ACTOR'),
+  );
+  const to = normalizeActor(requireOption(args, 'to', '<m>'));
   let text = requireOption(args, 'text', '"..."');
   // `--text -` reads from stdin — same sentinel as `gate issues note
   // --text -` and `gate review --comment -`. Heredoc bodies for long
@@ -116,7 +122,9 @@ export async function msgSend(c: C, args: ParsedArgs): Promise<number> {
 
 export async function msgBroadcast(c: C, args: ParsedArgs): Promise<number> {
   rejectUnknownFlags(args, MESSAGE_BROADCAST_KNOWN_FLAGS, 'broadcast');
-  const from = requireOption(args, 'from', '<m>', 'GUILD_ACTOR');
+  const from = normalizeActor(
+    requireOption(args, 'from', '<m>', 'GUILD_ACTOR'),
+  );
   let text = requireOption(args, 'text', '"..."');
   if (text === '-') text = (await readStdin()).trim();
   const type = optionalOption(args, 'type');

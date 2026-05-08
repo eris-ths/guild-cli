@@ -100,12 +100,15 @@ import {
   resolveInvokedBy,
   isDryRun,
   emitDryRunPreview,
+  normalizeActor,
 } from './internal.js';
 import { emitWriteResponse, parseFormat } from './writeFormat.js';
 
 export async function reqCreate(c: C, args: ParsedArgs): Promise<number> {
   rejectUnknownFlags(args, REQUEST_CREATE_KNOWN_FLAGS, 'request');
-  const from = requireOption(args, 'from', '<m>', 'GUILD_ACTOR');
+  const from = normalizeActor(
+    requireOption(args, 'from', '<m>', 'GUILD_ACTOR'),
+  );
   const action = requireOption(args, 'action', '"..."');
   let reason = requireOption(args, 'reason', '"..."');
   // `--reason -` reads from stdin — parity with `gate review --comment -`.
@@ -606,7 +609,15 @@ export async function reqApprove(c: C, args: ParsedArgs): Promise<number> {
   rejectUnknownFlags(args, APPROVE_KNOWN_FLAGS, 'approve');
   const id = args.positional[0];
   if (!id) throw new Error('Usage: gate approve <id> --by <m> [--dry-run]');
-  const by = requireOption(args, 'by', '<m>', 'GUILD_ACTOR');
+  // Canonicalize `--by` BEFORE the self-detection compare and BEFORE
+  // any user-facing notice/invoked-by line is emitted. The raw CLI
+  // arg (`ALICE`, `alice `, etc.) survives into the comparison
+  // otherwise — `prior.from.value` was canonicalized at create time,
+  // so a raw compare let `--by ALICE` slip past the swarm
+  // `forbidden` policy (#233 follow-up Asteria critical bypass).
+  const by = normalizeActor(
+    requireOption(args, 'by', '<m>', 'GUILD_ACTOR'),
+  );
   const note = optionalOption(args, 'note');
   const invokedBy = resolveInvokedBy(by, 'approve', id);
   if (isDryRun(args)) {
@@ -663,7 +674,9 @@ export async function reqDeny(c: C, args: ParsedArgs): Promise<number> {
         dashedValueHint(args, ['reason', 'note']),
     );
   }
-  const by = requireOption(args, 'by', '<m>', 'GUILD_ACTOR');
+  const by = normalizeActor(
+    requireOption(args, 'by', '<m>', 'GUILD_ACTOR'),
+  );
   const invokedBy = resolveInvokedBy(by, 'deny', id);
   if (isDryRun(args)) {
     const prior = await c.requestUC.show(id);
@@ -683,7 +696,9 @@ export async function reqExecute(c: C, args: ParsedArgs): Promise<number> {
   const id = args.positional[0];
   if (!id)
     throw new Error('Usage: gate execute <id> --by <m> [--cwd <path>] [--dry-run]');
-  const by = requireOption(args, 'by', '<m>', 'GUILD_ACTOR');
+  const by = normalizeActor(
+    requireOption(args, 'by', '<m>', 'GUILD_ACTOR'),
+  );
   const note = optionalOption(args, 'note');
   // --cwd lets a caller declare "I'm running from THIS filesystem"
   // explicitly. Defaults to process.cwd() because every real call
@@ -788,7 +803,9 @@ export async function reqComplete(c: C, args: ParsedArgs): Promise<number> {
   rejectUnknownFlags(args, COMPLETE_KNOWN_FLAGS, 'complete');
   const id = args.positional[0];
   if (!id) throw new Error('Usage: gate complete <id> --by <m> [--dry-run]');
-  const by = requireOption(args, 'by', '<m>', 'GUILD_ACTOR');
+  const by = normalizeActor(
+    requireOption(args, 'by', '<m>', 'GUILD_ACTOR'),
+  );
   const note = optionalOption(args, 'note');
   const invokedBy = resolveInvokedBy(by, 'complete', id);
   if (isDryRun(args)) {
@@ -823,7 +840,9 @@ export async function reqFail(c: C, args: ParsedArgs): Promise<number> {
         dashedValueHint(args, ['reason', 'note']),
     );
   }
-  const by = requireOption(args, 'by', '<m>', 'GUILD_ACTOR');
+  const by = normalizeActor(
+    requireOption(args, 'by', '<m>', 'GUILD_ACTOR'),
+  );
   const invokedBy = resolveInvokedBy(by, 'fail', id);
   if (isDryRun(args)) {
     const prior = await c.requestUC.show(id);
@@ -929,7 +948,13 @@ async function resolveReason(args: ParsedArgs, _verb: string): Promise<string> {
 
 export async function reqFastTrack(c: C, args: ParsedArgs): Promise<number> {
   rejectUnknownFlags(args, FAST_TRACK_KNOWN_FLAGS, 'fast-track');
-  const from = requireOption(args, 'from', '<m>', 'GUILD_ACTOR');
+  // Canonicalize the author once at entry so every downstream use
+  // (executor defaulting, invoked-by surface, env-actor compare) sees
+  // the same value as `Request.from` will after MemberName.of()
+  // normalizes it inside the use case.
+  const from = normalizeActor(
+    requireOption(args, 'from', '<m>', 'GUILD_ACTOR'),
+  );
   const action = requireOption(args, 'action', '"..."');
   let reason = requireOption(args, 'reason', '"..."');
   if (reason === '-') reason = (await readStdin()).trim();

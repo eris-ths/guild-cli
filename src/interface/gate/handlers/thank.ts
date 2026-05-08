@@ -10,6 +10,7 @@ import {
   resolveInvokedBy,
   isDryRun,
   emitDryRunPreview,
+  normalizeActor,
 } from './internal.js';
 import { emitWriteResponse, parseFormat } from './writeFormat.js';
 
@@ -39,14 +40,20 @@ const THANK_KNOWN_FLAGS: ReadonlySet<string> = new Set([
  */
 export async function reqThank(c: C, args: ParsedArgs): Promise<number> {
   rejectUnknownFlags(args, THANK_KNOWN_FLAGS, 'thank');
-  const to = args.positional[0];
-  if (!to) {
+  const toRaw = args.positional[0];
+  if (!toRaw) {
     throw new Error(
       'Usage: gate thank <to> --for <id> [--reason <s>] [--dry-run]',
     );
   }
   const id = requireOption(args, 'for', '<request-id>');
-  const by = requireOption(args, 'by', '<m>', 'GUILD_ACTOR');
+  // Canonicalize both sides of the self-thank compare: raw CLI input
+  // would let `--by ALICE --to alice` slip past `by === to` even
+  // though the persisted record collapses both to `alice`.
+  const by = normalizeActor(
+    requireOption(args, 'by', '<m>', 'GUILD_ACTOR'),
+  );
+  const to = normalizeActor(toRaw);
   let reason = optionalOption(args, 'reason');
   if (reason === '-') reason = (await readStdin()).trim();
   const invokedBy = resolveInvokedBy(by, 'thank', id);
