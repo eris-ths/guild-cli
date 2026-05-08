@@ -28,7 +28,7 @@ const SCHEMA_KNOWN_FLAGS: ReadonlySet<string> = new Set(['format', 'verb']);
  *    consumable by any schema-aware LLM.
  */
 
-type JsonSchema = {
+export type JsonSchema = {
   type?: string;
   properties?: Record<string, JsonSchema>;
   required?: string[];
@@ -38,7 +38,7 @@ type JsonSchema = {
   oneOf?: JsonSchema[];
 };
 
-interface VerbSchema {
+export interface VerbSchema {
   readonly name: string;
   readonly summary: string;
   readonly category: 'read' | 'write' | 'admin' | 'meta';
@@ -1314,16 +1314,31 @@ const VERBS: readonly VerbSchema[] = [
   },
 ];
 
-export async function schemaCmd(_c: C, args: ParsedArgs): Promise<number> {
+export async function schemaCmd(c: C, args: ParsedArgs): Promise<number> {
   rejectUnknownFlags(args, SCHEMA_KNOWN_FLAGS, 'schema');
   const format = optionalOption(args, 'format') ?? 'json';
   if (format !== 'json' && format !== 'text') {
     throw new Error(`--format must be 'json' or 'text', got: ${format}`);
   }
   const verbFilter = optionalOption(args, 'verb');
+  // Plugin verbs (#36 Phase 1 step 4) are spliced into the schema
+  // payload as siblings of built-ins. They carry `source: 'plugin'`
+  // so a consumer can filter on origin without a name lookup. Built-
+  // ins always come first — `gate schema --format text` reads
+  // top-down, and burying core surface under plugins would push the
+  // most-used verbs off-screen on small terminals.
+  const pluginVerbs: VerbSchema[] = c.verbPlugins.map((p) => ({
+    name: p.name,
+    category: p.category,
+    summary: p.summary,
+    input: p.input,
+    output: p.output,
+    source: 'plugin',
+  }));
+  const allVerbs: VerbSchema[] = [...VERBS, ...pluginVerbs];
   const verbs = verbFilter
-    ? VERBS.filter((v) => v.name === verbFilter)
-    : VERBS;
+    ? allVerbs.filter((v) => v.name === verbFilter)
+    : allVerbs;
   if (verbFilter && verbs.length === 0) {
     throw new Error(`unknown verb: ${verbFilter}`);
   }

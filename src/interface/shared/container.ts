@@ -20,6 +20,10 @@ import { YamlPlayRepository } from '../../passages/agora/infrastructure/YamlPlay
 import { PlayRepository } from '../../passages/agora/application/PlayRepository.js';
 import { FsTemplateRepository } from '../../infrastructure/template/TemplateRepository.js';
 import { TemplateUseCases } from '../../application/template/TemplateUseCases.js';
+import {
+  VerbPlugin,
+  VerbPluginLoadError,
+} from '../../application/plugin/VerbPlugin.js';
 
 export interface Container {
   config: GuildConfig;
@@ -47,6 +51,22 @@ export interface Container {
    * `<content_root>/data/guild/templates/wave-brief/`.
    */
   templateUC: TemplateUseCases;
+  /**
+   * Verb plugins loaded at CLI startup (issue #36 Phase 1 step 4).
+   * Empty array when `plugins.trusted: true` is absent from
+   * `guild.config.yaml` or no plugins are listed under `plugins.verbs`.
+   * Built-in verb names are reserved — collisions are rejected by the
+   * loader and surface as `verbPluginErrors` rather than overriding
+   * core dispatch.
+   */
+  verbPlugins: readonly VerbPlugin[];
+  /**
+   * Per-path load failures from the verb plugin loader. Surfaced via
+   * `gate doctor` so a broken plugin is visible to the operator
+   * instead of silently dropping the verb. Empty array on a clean
+   * load.
+   */
+  verbPluginErrors: readonly VerbPluginLoadError[];
 }
 
 export interface BuildContainerOpts {
@@ -56,6 +76,27 @@ export interface BuildContainerOpts {
    * (issue #155 PR-B pin test); production never sets this.
    */
   cwd?: string;
+  /**
+   * Pre-loaded verb plugins (issue #36 Phase 1 step 4). main() loads
+   * them via `loadVerbPlugins` before constructing the container —
+   * dynamic ESM import is async, so the loading can't live inside
+   * the synchronous `buildContainer` call. Defaults to `[]` so tests
+   * and use-cases that don't care about plugins stay unchanged.
+   */
+  verbPlugins?: readonly VerbPlugin[];
+  /**
+   * Per-path load errors collected by the verb plugin loader.
+   * Defaults to `[]`. `gate doctor` reads this list and surfaces
+   * each entry as a finding (`area: 'plugin'`).
+   */
+  verbPluginErrors?: readonly VerbPluginLoadError[];
+  /**
+   * Per-path load outcome (success + failure) from the verb plugin
+   * loader. Mirrors the `PluginLoadInfo[]` shape doctor plugins use
+   * so the doctor renderer can display verb plugin paths in the
+   * same "plugins loaded" section. Defaults to `[]`.
+   */
+  verbPluginsLoaded?: ReadonlyArray<{ path: string; status: 'loaded' | 'error' }>;
 }
 
 export function buildContainer(opts: BuildContainerOpts = {}): Container {
@@ -89,6 +130,18 @@ export function buildContainer(opts: BuildContainerOpts = {}): Container {
       buildDiagRepos,
       config.doctorPlugins,
       { root: config.root, contentRoot: config.contentRoot },
+      {
+        // Surface every loader path (success + failure) so doctor
+        // displays "what ran" identically to doctor plugins. Falls
+        // back to a derived list when only `verbPlugins` was passed
+        // (test convenience), but production main() always provides
+        // both arrays explicitly via opts.
+        pluginsLoaded: opts.verbPluginsLoaded ?? [],
+        errors: (opts.verbPluginErrors ?? []).map((e) => ({
+          path: e.path,
+          reason: e.reason,
+        })),
+      },
     ),
     repairUC: new RepairUseCases(quarantine),
     unrespondedConcernsQ: new UnrespondedConcernsQuery(requests, issues),
@@ -96,5 +149,7 @@ export function buildContainer(opts: BuildContainerOpts = {}): Container {
     templateUC: new TemplateUseCases(
       new FsTemplateRepository(config.contentRoot, config.onMalformed),
     ),
+    verbPlugins: opts.verbPlugins ?? [],
+    verbPluginErrors: opts.verbPluginErrors ?? [],
   };
 }
