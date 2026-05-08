@@ -210,9 +210,12 @@ export async function reqCreate(c: C, args: ParsedArgs): Promise<number> {
   // nudge. Text mode only — JSON consumers read suggested_next, which
   // already pre-fills approve with the host actor.
   const executorList = r.executors.map((m) => m.value);
+  // executorList[0] is already MemberName.value (canonical: trim+lower).
+  // from is raw CLI input — normalize via trim+lower so whitespace
+  // padding (`--from 'alice '`) doesn't hide a true self-wave.
   const isSelfWave =
     executorList.length === 1 &&
-    executorList[0]!.toLowerCase() === from.toLowerCase();
+    executorList[0]! === from.trim().toLowerCase();
   const extraLines: string[] = [];
   if (isSelfWave) {
     extraLines.push(

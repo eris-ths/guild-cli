@@ -196,6 +196,26 @@ test('#228(3): gate request hints fast-track when author == executor', (t) => {
   assert.match(r.stdout, /suggested_next:.*fast-track/);
 });
 
+test('#228(3): self-wave detection survives whitespace padding on --from', (t) => {
+  // Devil concern (medium): trim asymmetry. executorList[0] is canonical
+  // (MemberName.value already trim+lower); from is raw CLI input. Without
+  // trim on from, '--from "alice " --executor alice' silently suppresses
+  // the fast-track hint despite being a true self-wave.
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  run(root, ['register', '--name', 'alice']);
+  const r = run(root, [
+    'request',
+    '--from', 'alice ',          // trailing space
+    '--action', 'self-do',
+    '--reason', 'just me',
+    '--executor', 'alice',
+  ]);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /suggested_next:.*fast-track/,
+    'whitespace on --from must not hide a true self-wave');
+});
+
 test('#228(3): gate request does NOT hint fast-track when executor differs', (t) => {
   const { root, cleanup } = bootstrap();
   t.after(cleanup);
