@@ -1,5 +1,6 @@
 import {
   ParsedArgs,
+  optionalOption,
   requireOption,
   rejectUnknownFlags,
 } from '../../shared/parseArgs.js';
@@ -35,6 +36,7 @@ import { emitWriteResponse, parseFormat } from './writeFormat.js';
 //     follow-up alongside witness.
 const CLAIM_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'by',
+  'note',
   'dry-run',
   'format',
 ]);
@@ -43,11 +45,23 @@ export async function reqClaim(c: C, args: ParsedArgs): Promise<number> {
   rejectUnknownFlags(args, CLAIM_KNOWN_FLAGS, 'claim');
   const id = args.positional[0];
   if (!id) {
-    throw new Error('Usage: gate claim <id> --by <m> [--dry-run]');
+    throw new Error('Usage: gate claim <id> --by <m> [--note <text>] [--dry-run]');
   }
   const by = requireOption(args, 'by', '<m>', 'GUILD_ACTOR');
+  // Optional stake-note (issue #246). Tight-scope: single short
+  // string ≤ 80 chars, sanitized at the domain boundary; empty /
+  // whitespace-only collapses to undefined so a bare `--note ""`
+  // is a true no-op on the note dimension. Discussion belongs in
+  // agora plays — the schema description names this "metadata,
+  // not commentary".
+  const note = optionalOption(args, 'note');
   if (isDryRun(args)) {
-    const { request } = await c.requestUC.claim({ id, by, dryRun: true });
+    const { request } = await c.requestUC.claim({
+      id,
+      by,
+      ...(note !== undefined ? { note } : {}),
+      dryRun: true,
+    });
     // Claim doesn't transition lifecycle state — the verb is orthogonal
     // to pending/approved/etc — so omit `would_transition`. The preview
     // payload carries the prospective claimed_by/at via toRenderJSON.
@@ -60,7 +74,11 @@ export async function reqClaim(c: C, args: ParsedArgs): Promise<number> {
     });
     return 0;
   }
-  const { request, mutated } = await c.requestUC.claim({ id, by });
+  const { request, mutated } = await c.requestUC.claim({
+    id,
+    by,
+    ...(note !== undefined ? { note } : {}),
+  });
   // Re-claim message is distinct so a caller that re-runs claim (e.g.
   // a session restart) sees that the call was idempotent rather than
   // wondering whether anything changed. The state of the record is
