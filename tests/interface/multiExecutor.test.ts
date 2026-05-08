@@ -95,8 +95,11 @@ test('gate request --executors a,b: writes executors array (multi)', (t) => {
   assert.equal(showJson.status, 0);
   const payload = JSON.parse(showJson.stdout) as Record<string, unknown>;
   assert.deepEqual(payload['executors'], ['miki', 'leysia']);
-  // Legacy single key must not surface on new-form records.
-  assert.equal(payload['executor'], undefined);
+  // Devil review #230 blocker 2: render-side keeps the deprecated
+  // `executor` key (= first-of-list) for back-compat with tool
+  // wirings reading the singleton directly. Persistence (YAML) does
+  // NOT carry this alias — verified separately in the repo test.
+  assert.equal(payload['executor'], 'miki');
 });
 
 test('gate request --executor (singular) still works as a back-compat alias', (t) => {

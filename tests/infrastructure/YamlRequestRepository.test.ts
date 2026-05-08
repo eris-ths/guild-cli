@@ -476,7 +476,7 @@ test('hydrate: legacy `executor: <string>` upgrades to executors[0] without brea
       ['bob'],
       'legacy executor: <string> should hydrate as a one-element array',
     );
-    assert.equal(reloaded!.executor?.value, 'bob');
+    assert.equal(reloaded!.hasExecutor('bob'), true);
 
     // Round-trip: a transition triggers a save; the file should be
     // upgraded to the new `executors:` form on disk.

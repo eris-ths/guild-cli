@@ -154,7 +154,10 @@ export function emitDryRunPreview(p: {
   by: string;
   fromState?: string;
   toState?: string;
-  after: { toJSON(): Record<string, unknown> };
+  after: {
+    toJSON(): Record<string, unknown>;
+    toRenderJSON(): Record<string, unknown>;
+  };
   format?: string;
 }): void {
   if (p.format !== undefined && p.format !== 'json') {
@@ -172,7 +175,10 @@ export function emitDryRunPreview(p: {
   if (p.fromState !== undefined && p.toState !== undefined) {
     envelope['would_transition'] = { from: p.fromState, to: p.toState };
   }
-  envelope['preview'] = p.after.toJSON();
+  // toRenderJSON: dry-run preview is a render-side surface (agent
+  // reads it to plan the next call), so include the deprecated
+  // `executor` alias for back-compat per #230 review.
+  envelope['preview'] = p.after.toRenderJSON();
   process.stdout.write(JSON.stringify(envelope, null, 2) + '\n');
 }
 

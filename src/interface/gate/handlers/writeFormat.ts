@@ -119,19 +119,42 @@ export function deriveSuggestedNext(
       }, envActor);
     }
     case 'approved': {
-      const executor = req.executor?.value ?? '';
+      // Multi-executor (issue #230): when one executor is named we
+      // pre-fill `by` so a tool wiring can dispatch immediately. When
+      // multiple are named the substrate genuinely doesn't know
+      // which one will run the work next; pre-filling first-of-list
+      // would (a) silently nominate one party and (b) let the other
+      // inadvertently chain-call the suggestion under the wrong `by`.
+      // Omit `by` and let the caller (or human at the keyboard)
+      // choose explicitly. Mirrors the multi-host approve path.
+      const executors = req.executors;
+      const single = executors.length === 1 ? executors[0]!.value : undefined;
       return withActorResolved({
         verb: 'execute',
-        args: executor ? { id, by: executor } : { id },
-        reason: 'request is approved; executor should begin work',
+        args: single ? { id, by: single } : { id },
+        reason:
+          executors.length > 1
+            ? `request is approved; one of [${executors
+                .map((m) => m.value)
+                .join(', ')}] should begin work — supply --by explicitly`
+            : 'request is approved; executor should begin work',
       }, envActor);
     }
     case 'executing': {
-      const executor = req.executor?.value ?? '';
+      // Same multi-executor handling as the approved branch — when
+      // multiple executors share the work the suggestion does not
+      // pre-nominate one. Devil review #230 blocker 1.
+      const executors = req.executors;
+      const single = executors.length === 1 ? executors[0]!.value : undefined;
       return withActorResolved({
         verb: 'complete',
-        args: executor ? { id, by: executor } : { id },
-        reason: 'request is executing; executor should complete (or fail) when done',
+        args: single ? { id, by: single } : { id },
+        reason:
+          executors.length > 1
+            ? `request is executing; the executor that ran the work should complete (or fail) when done — supply --by explicitly (assigned: ${executors
+                .map((m) => m.value)
+                .join(', ')})`
+            : 'request is executing; executor should complete (or fail) when done',
       }, envActor);
     }
     case 'completed': {

@@ -77,12 +77,18 @@ export function collectStatus(
     }
   }
 
+  // Multi-executor membership (issue #230 — Devil review blocker 1):
+  // counts use `hasExecutor(actorLower)` so a parallel-impl wave with
+  // `--executors miki,leysia` reports "1 as_executor" to BOTH miki
+  // and leysia rather than just to miki (silent drop). The per-state
+  // counts are deliberately fact-of-membership, not weighted by list
+  // length, since each named executor is genuinely on the hook.
   return {
     actor: actorLower,
     pending: {
       total: pending.length,
       as_executor: actorLower
-        ? pending.filter((r) => r.executor?.value === actorLower).length
+        ? pending.filter((r) => r.hasExecutor(actorLower)).length
         : 0,
       as_author: actorLower
         ? pending.filter((r) => r.from.value === actorLower).length
@@ -91,7 +97,7 @@ export function collectStatus(
     approved: {
       total: approved.length,
       awaiting_execution: actorLower
-        ? approved.filter((r) => r.executor?.value === actorLower).length
+        ? approved.filter((r) => r.hasExecutor(actorLower)).length
         : approved.length,
     },
     executing: {
@@ -99,7 +105,7 @@ export function collectStatus(
       by_actor: actorLower
         ? executing.filter(
             (r) =>
-              r.executor?.value === actorLower ||
+              r.hasExecutor(actorLower) ||
               r.from.value === actorLower,
           ).length
         : 0,

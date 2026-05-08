@@ -758,7 +758,8 @@ const VERBS: readonly VerbSchema[] = [
         reason: str,
         executor: strOpt('single executor (mutually exclusive with --executors)'),
         executors: strOpt(
-          'comma-separated executor list, e.g. "miki,leysia" (issue #230, ' +
+          'comma-separated executor list, whitespace-trimmed per entry, ' +
+            'e.g. "miki, leysia" or "miki,leysia" (issue #230, ' +
             'multi-executor; mutually exclusive with --executor). Each name ' +
             'must match /^[a-z][a-z0-9_-]{0,31}$/; duplicates and empty ' +
             'entries rejected.',
@@ -923,8 +924,8 @@ const VERBS: readonly VerbSchema[] = [
         reason: str,
         executor: str,
         executors: strOpt(
-          'comma-separated executor list (issue #230); mutually ' +
-            'exclusive with --executor.',
+          'comma-separated executor list, whitespace-trimmed per entry ' +
+            '(issue #230); mutually exclusive with --executor.',
         ),
         'auto-review': str,
         with: strOpt('comma-separated dialogue partners (pair-mode)'),

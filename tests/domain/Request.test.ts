@@ -196,8 +196,16 @@ test('Request.create accepts --executors a,b and stores them in order', () => {
     r.executors.map((m) => m.value),
     ['miki', 'leysia'],
   );
-  // `executor` getter returns the first as a back-compat read path
-  assert.equal(r.executor?.value, 'miki');
+  // first-of-list reachable via `r.executors[0]` for callers that
+  // legitimately need a representative (display, default --by); the
+  // former scalar `executor` getter was removed in the Devil-review
+  // pass to prevent silent drops of later-listed executors.
+  assert.equal(r.executors[0]?.value, 'miki');
+  // `hasExecutor` is the preferred membership predicate — multi-
+  // executor wave members must all see the same belongs-to-me result.
+  assert.equal(r.hasExecutor('miki'), true);
+  assert.equal(r.hasExecutor('leysia'), true);
+  assert.equal(r.hasExecutor('alice'), false);
 });
 
 test('Request.create rejects --executor + --executors combined', () => {
@@ -243,7 +251,7 @@ test('Request.create rejects malformed --executors entry (regex check via Member
   );
 });
 
-test('Request.toJSON: emits executors array (single-executor input)', () => {
+test('Request.toJSON: emits executors array (single-executor input), no legacy key on persistence path', () => {
   const r = Request.create({
     id: RequestId.generate(d, 1),
     from: 'alice',
@@ -251,11 +259,43 @@ test('Request.toJSON: emits executors array (single-executor input)', () => {
     reason: 'r',
     executor: 'bob',
   });
-  // Spec: write side is always new-form `executors:` regardless of
-  // which input flag was used. The legacy `executor:` key is no
-  // longer emitted.
+  // Spec: persistence always uses new-form `executors:` regardless of
+  // which input flag was used. The legacy `executor:` key MUST NOT
+  // appear in toJSON — that's the YAML repo serialisation path and
+  // re-emitting both keys would pollute on-disk records.
   assert.deepEqual(r.toJSON()['executors'], ['bob']);
   assert.equal(r.toJSON()['executor'], undefined);
+});
+
+test('Request.toRenderJSON: emits BOTH `executors` and deprecated `executor` (JSON back-compat)', () => {
+  // Devil review #230 blocker 2: tool wirings reading `gate show
+  // --format json | jq .executor` were a documented surface. The
+  // render-side projection keeps the deprecated alias visible
+  // alongside the new array key. Persistence (toJSON) stays clean.
+  const r = Request.create({
+    id: RequestId.generate(d, 1),
+    from: 'alice',
+    action: 'a',
+    reason: 'r',
+    executors: ['miki', 'leysia'],
+  });
+  const j = r.toRenderJSON();
+  assert.deepEqual(j['executors'], ['miki', 'leysia']);
+  // Deprecated alias = first-of-list. Multi-executor consumers should
+  // already be reading `executors`; this key is back-compat only.
+  assert.equal(j['executor'], 'miki');
+});
+
+test('Request.toRenderJSON: omits both keys when no executor assigned', () => {
+  const r = Request.create({
+    id: RequestId.generate(d, 1),
+    from: 'alice',
+    action: 'a',
+    reason: 'r',
+  });
+  const j = r.toRenderJSON();
+  assert.equal(j['executors'], undefined);
+  assert.equal(j['executor'], undefined);
 });
 
 test('Request.toJSON: emits executors array (multi)', () => {
@@ -299,7 +339,7 @@ test('Request.restore: legacy `executor:` (string) is normalised to executors[0]
     ],
     reviews: [],
   });
-  assert.equal(r.executor?.value, 'bob');
+  assert.equal(r.executors[0]?.value, 'bob');
   assert.deepEqual(r.executors.map((m) => m.value), ['bob']);
   assert.deepEqual(r.toJSON()['executors'], ['bob']);
 });

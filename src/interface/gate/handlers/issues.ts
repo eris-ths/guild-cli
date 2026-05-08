@@ -5,6 +5,7 @@ import {
   rejectUnknownFlags,
 } from '../../shared/parseArgs.js';
 import { notFoundMessage } from '../../shared/notFoundHint.js';
+import { parseExecutorsList } from './request.js';
 import {
   C,
   readStdin,
@@ -27,6 +28,12 @@ const ISSUES_LIST_KNOWN_FLAGS: ReadonlySet<string> = new Set([
 const ISSUES_PROMOTE_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'from',
   'executor',
+  // Multi-executor (issue #230): `gate issues promote` should accept
+  // the same executor surface as `gate request` — promote → request
+  // is the same write-side primitive under the hood, so any
+  // attribution-race surface that the multi-executor schema closes on
+  // `gate request` must close here too. Devil review concern 1.
+  'executors',
   'auto-review',
   'action',
   'reason',
@@ -215,13 +222,22 @@ async function issuesPromote(c: C, args: ParsedArgs): Promise<number> {
   const id = args.positional[1];
   if (!id) {
     throw new Error(
-      'Usage: gate issues promote <id> --from <m> [--executor <m>] ' +
+      'Usage: gate issues promote <id> --from <m> [--executor <m> | --executors a,b] ' +
         '[--auto-review <m>] [--action <a>] [--reason <r>]',
     );
   }
   const from = requireOption(args, 'from', '<m>', 'GUILD_ACTOR');
   const executor = optionalOption(args, 'executor');
+  const executorsRaw = optionalOption(args, 'executors');
   const autoReview = optionalOption(args, 'auto-review');
+  // Mutual exclusion mirrors `gate request` — single + multiple
+  // executor flags must never coexist (issue #230).
+  if (executor !== undefined && executorsRaw !== undefined) {
+    process.stderr.write(
+      `error: --executor and --executors are mutually exclusive (got both).\n`,
+    );
+    return 1;
+  }
   const actionOverride = optionalOption(args, 'action');
   const reasonOverride = optionalOption(args, 'reason');
 
@@ -257,6 +273,16 @@ async function issuesPromote(c: C, args: ParsedArgs): Promise<number> {
     promotedFrom: id,
   };
   if (executor !== undefined) input.executor = executor;
+  if (executorsRaw !== undefined) {
+    // Reuse the same comma-parser + validation as `gate request` so
+    // promote shares one error-message vocabulary (issue #230).
+    const parsed = parseExecutorsList(executorsRaw);
+    if (parsed.error) {
+      process.stderr.write(`error: --executors ${parsed.error}\n`);
+      return 1;
+    }
+    if (parsed.list.length > 0) input.executors = parsed.list;
+  }
   if (autoReview !== undefined) input.autoReview = autoReview;
   // Promote creates a request on `from`'s behalf; when GUILD_ACTOR
   // differs, the invariant applies the same way as plain `gate

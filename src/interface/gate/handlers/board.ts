@@ -64,10 +64,12 @@ export async function boardCmd(c: C, args: ParsedArgs): Promise<number> {
   for (const state of BOARD_STATES) {
     let items = await c.requestUC.listByState(state);
     if (forFilter !== undefined) {
+      // Multi-executor membership (issue #230): match if the actor
+      // is named anywhere in the executor list, not just at index 0.
       items = items.filter(
         (r) =>
           r.from.value === forFilter ||
-          r.executor?.value === forFilter ||
+          r.hasExecutor(forFilter) ||
           r.autoReview?.value === forFilter,
       );
     }
@@ -91,7 +93,10 @@ export async function boardCmd(c: C, args: ParsedArgs): Promise<number> {
     // filtered" from "empty because nothing in flight".
     const payload: Record<string, unknown> = {};
     for (const { state, items } of sections) {
-      payload[state] = items.map((r) => r.toJSON());
+      // toRenderJSON: emit the deprecated `executor` alias for back-
+      // compat with tool wirings reading the singleton key (issue
+      // #230). Persistence still writes only `executors`.
+      payload[state] = items.map((r) => r.toRenderJSON());
     }
     if (forFilter !== undefined) {
       payload['_meta'] = {

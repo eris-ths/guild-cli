@@ -266,18 +266,25 @@ export class Request {
   get state(): RequestState {
     return this.props.state;
   }
-  /**
-   * First-of-list executor, or undefined when none assigned. Kept for
-   * back-compat with single-executor call sites (boot, resume, status,
-   * writeFormat); new code that needs to honour all assigned executors
-   * should read `executors` instead. Issue #230.
-   */
-  get executor(): MemberName | undefined {
-    return this.props.executors?.[0];
-  }
-  /** Full executor list (possibly empty). Order preserved as given. */
+  /** Full executor list (possibly empty). Order preserved as given.
+   *  This is the only read surface for executors after #230. The
+   *  former `executor` scalar getter was removed in the Devil-review
+   *  pass — it returned first-of-list and seven call sites read it as
+   *  if "the" executor were a singleton, silently dropping every
+   *  later-listed executor (the exact attribution race the multi-
+   *  executor schema was meant to resolve). When you need a single
+   *  representative — display, default `--by` for execute — pick
+   *  intentionally at the call site (e.g. `r.executors[0]?.value`)
+   *  with a comment naming why "first" is meaningful there. */
   get executors(): readonly MemberName[] {
     return this.props.executors ?? [];
+  }
+  /** Membership check — preferred predicate for "is this actor an
+   *  assigned executor?". Pushed onto the aggregate so call sites
+   *  don't open-code `r.executors.some(m => m.value === x)` and risk
+   *  drifting on case / encoding. */
+  hasExecutor(name: string): boolean {
+    return (this.props.executors ?? []).some((m) => m.value === name);
   }
   get target(): string | undefined {
     return this.props.target;
@@ -423,12 +430,18 @@ export class Request {
     if (thanks.length > 0) {
       out['thanks'] = thanks.map((t) => t.toJSON());
     }
-    // Executors: always emit the new `executors` array form when any
-    // are assigned (issue #230). Old records that hydrated from the
-    // legacy `executor: <string>` shape come through here as a
-    // single-element array — round-trip on save upgrades the file to
-    // the new form. Per principle 04 (records-outlive-writers) the
-    // legacy form is read-tolerated forever; we never write it back.
+    // Executors (issue #230). Wire form is always the new `executors`
+    // array; YAML persistence stays clean (no duplicated keys, per
+    // principle 04 — records-outlive-writers — and the spec line
+    // "旧形式は read のみ tolerance"). The legacy `executor` JSON key
+    // is emitted only by `toRenderJSON()` for the `gate show --format
+    // json` agent surface, where dropping it outright would break
+    // tool wirings that read it directly (e.g. `jq .executor`). The
+    // split lives in two methods rather than one option-flag because
+    // YAML.stringify is called from a different code path than
+    // process.stdout.write — keeping them as separate functions makes
+    // it impossible to accidentally pollute the persistence side with
+    // the back-compat alias.
     const execList = this.props.executors ?? [];
     if (execList.length > 0) {
       out['executors'] = execList.map((m) => m.value);
@@ -455,6 +468,30 @@ export class Request {
       else if (last.state === 'failed') out['failure_reason'] = last.note;
     }
     return out;
+  }
+
+  /**
+   * Render-side JSON projection. Same shape as `toJSON` PLUS the
+   * deprecated `executor` (= `executors[0]`) back-compat key for tool
+   * wirings that read the singleton directly (e.g. `gate show --format
+   * json | jq .executor`). Keeping persistence (`toJSON`, called by
+   * the YAML repo) and rendering (this) as separate methods makes it
+   * structurally impossible to pollute the on-disk record with the
+   * deprecated alias — a single option-flag would have left that mode
+   * one wrong default away. See toJSON for the spec rationale.
+   *
+   * TODO: remove the deprecated `executor` JSON key in v0.7.0 of
+   * guild-cli, kept for back-compat per #230 review (Devil verdict
+   * blocker 2). Multi-executor consumers should already read from
+   * `executors`.
+   */
+  toRenderJSON(): Record<string, unknown> {
+    const base = this.toJSON();
+    const execList = this.props.executors ?? [];
+    if (execList.length > 0) {
+      base['executor'] = execList[0]!.value;
+    }
+    return base;
   }
 }
 

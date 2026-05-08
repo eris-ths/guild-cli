@@ -265,7 +265,9 @@ export async function reqList(
       filterEcho['for_source'] = explicitFor !== undefined ? '--for' : 'GUILD_ACTOR';
     }
     const payload: Record<string, unknown> = {
-      requests: items.map((r) => r.toJSON()),
+      // toRenderJSON keeps the deprecated `executor` alias visible
+      // alongside the new `executors` array (issue #230 back-compat).
+      requests: items.map((r) => r.toRenderJSON()),
       _meta: {
         state,
         verb,
@@ -347,7 +349,12 @@ export async function reqShow(c: C, args: ParsedArgs): Promise<number> {
           'For multiple fields, drop --plain and read the JSON object.',
       );
     }
-    const payload = r.toJSON();
+    // toRenderJSON: JSON-side back-compat surface (issue #230 — Devil
+    // review blocker 2). `gate show --fields executor --plain $id` was
+    // a documented selector; preserve it by emitting the deprecated
+    // alias on the render path. Persistence still writes only the new
+    // `executors` key.
+    const payload = r.toRenderJSON();
     const key = keep[0]!;
     if (!(key in payload)) {
       // Missing field: emit nothing, exit 1 so shell `[ -z "$v" ]`
@@ -371,7 +378,10 @@ export async function reqShow(c: C, args: ParsedArgs): Promise<number> {
     // agent checking just `state` in a tight loop, that's a lot of
     // tokens for one boolean-ish answer. Only available in JSON mode
     // (text already has its own compact summary).
-    let payload: Record<string, unknown> = r.toJSON();
+    // toRenderJSON: include the deprecated `executor` alias so the
+    // documented `--fields state,executor` shape keeps working. See
+    // toRenderJSON for the deprecation timeline.
+    let payload: Record<string, unknown> = r.toRenderJSON();
     if (fields !== undefined) {
       const keep = fields
         .split(',')
@@ -623,18 +633,28 @@ export async function reqExecute(c: C, args: ParsedArgs): Promise<number> {
     return 0;
   }
   const r = await c.requestUC.execute(id, by, note, invokedBy);
-  // `--executor` is informational, not access control: the substrate
-  // records both the assignment and the actual actor, but does not
-  // refuse a mismatched execute. Surface a notice so a fresh agent
-  // who reads `--executor bob` doesn't silently interpret it as a
-  // gate. See issue #168 for the design rationale ("anyone may
-  // execute; the audit trail captures who did"). Mirrors the shape
-  // of the self-approve notice on `gate approve`.
-  const assignedExecutor = r.executor?.value;
-  if (assignedExecutor !== undefined && assignedExecutor !== by) {
+  // `--executor` / `--executors` is informational, not access
+  // control: the substrate records both the assignment and the actual
+  // actor, but does not refuse a mismatched execute. Surface a notice
+  // so a fresh agent who reads `--executor bob` doesn't silently
+  // interpret it as a gate. See issue #168 for the design rationale
+  // ("anyone may execute; the audit trail captures who did"). Mirrors
+  // the shape of the self-approve notice on `gate approve`.
+  //
+  // Multi-executor (issue #230 — Devil review blocker 1): the notice
+  // fires only when `by` is NOT in the assigned set. Earlier shape
+  // (`assignedExecutor !== by` against scalar first-of-list) would
+  // print "assigned to miki" when leysia executed a request with
+  // `--executors miki,leysia` — a false-positive misdirection that
+  // contradicts the actual record. Membership check resolves both
+  // false-positives and silent drops.
+  const assigned = r.executors;
+  if (assigned.length > 0 && !r.hasExecutor(by)) {
+    const assignedList = assigned.map((m) => m.value).join(', ');
+    const noun = assigned.length === 1 ? 'assigned to' : 'assigned to one of';
     process.stderr.write(
-      `notice: ${by} executed request ${id} (assigned to ` +
-        `${assignedExecutor}); --executor records intent, not access.\n`,
+      `notice: ${by} executed request ${id} (${noun} ` +
+        `${assignedList}); --executor records intent, not access.\n`,
     );
   }
   emitWriteResponse(parseFormat(args), r, `✓ executing: ${id}`, c.config);
@@ -731,7 +751,7 @@ function dashedValueHint(args: ParsedArgs, keys: readonly string[]): string {
  * `{ list: [], error: <message> }` on failure. Caller writes the
  * message to stderr and returns exit 1.
  */
-function parseExecutorsList(
+export function parseExecutorsList(
   raw: string,
 ): { list: string[]; error?: string } {
   const parts = raw.split(',').map((s) => s.trim());
