@@ -23,9 +23,17 @@ export function renderVerbHelp(cli: string, e: HelpRequested): void {
       : '(no flags)';
   const example = VERB_EXAMPLES[cli]?.[e.verb];
   const exampleLine = example !== undefined ? `  e.g. ${cli} ${example}\n` : '';
+  // Verb-specific extras (e.g. the resolved `lenses:` set for `gate
+  // review`) ride between the example line and the footer. Each entry
+  // is a single rendered line; emitted only when the verb opts into
+  // extras at rejectUnknownFlags time. Indentation matches the example
+  // line so the visual hierarchy is consistent.
+  const extrasBlock =
+    e.extras.length > 0 ? e.extras.map((s) => `  ${s}\n`).join('') : '';
   process.stdout.write(
     `${cli} ${e.verb}: ${flags}\n` +
       exampleLine +
+      extrasBlock +
       `  see \`${cli} --help\` for the full verb catalog.\n`,
   );
 }
