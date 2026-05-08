@@ -102,9 +102,13 @@ test('gate rest --format json: emits the structured envelope', (t) => {
   assert.match(payload.id, /^\d{4}-\d{2}-\d{2}-\d{3,4}$/);
   assert.match(payload.at, /^\d{4}-\d{2}-\d{2}T/);
   assert.match(payload.message, /✓ rested:/);
-  // suggested_next is null until `gate wake` ships — no fake
-  // prescription of a verb that doesn't exist.
-  assert.equal(payload.suggested_next, null);
+  // Rest's natural pair is `gate wake` (#36 Phase 2 step 2).
+  // The suggestion is advisory — wake doesn't require a prior
+  // rest, but stamping the matching boundary makes the gap
+  // recoverable from the record.
+  assert.equal(payload.suggested_next.verb, 'wake');
+  assert.equal(payload.suggested_next.args.by, 'alice');
+  assert.match(payload.suggested_next.reason, /gap between rest and wake/);
 });
 
 test('gate rest: GUILD_ACTOR fallback when --by omitted', (t) => {
