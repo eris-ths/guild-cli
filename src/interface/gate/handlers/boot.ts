@@ -86,6 +86,55 @@ export type BootSuggestedNextOrPendingResponse =
   | BootBroadcastPendingResponse;
 
 /**
+ * Surface for active (non-terminal) requests sharing a target.
+ *
+ * Two or more `pending` / `approved` / `executing` requests pointing
+ * at the same `target` string indicate cross-session race risk:
+ * substrate-experiment 5 saw an independent session pre-empt our
+ * #221 implementation because nobody booted into "someone else is
+ * already working on that target".
+ *
+ * Detection is exact-match on the freeform `target` field. Fuzzy
+ * grouping (startsWith / contains) would false-positive on common
+ * path prefixes (`src/`, `data/guild/templates`) and is deferred —
+ * see issue #234 "overlap 検知ロジック".
+ *
+ * Profile gating: phase 1 surfaces overlaps as a notice on every
+ * profile. The harder enforcement (`profile: swarm` refuses
+ * unclaimed overlapping requests at create time) is the parent
+ * epic's territory (#227) and not in this slot.
+ *
+ * Empty array when no active group has size ≥ 2; readers should
+ * gate text rendering on `length > 0` to avoid emitting a noise
+ * section in the common "no overlap" case.
+ */
+export interface BootActiveOverlap {
+  /** The shared target string, verbatim. */
+  target: string;
+  /**
+   * The active requests sharing the target, in id ascending order
+   * (deterministic across runs so an agent doing diff reasoning
+   * over successive boots sees stable membership).
+   */
+  requests: ReadonlyArray<{
+    id: string;
+    state: 'pending' | 'approved' | 'executing';
+    /** Recorded executors. May be empty (none assigned yet). */
+    executors: readonly string[];
+    /**
+     * Member who staked an exclusive claim via `gate claim` (#226
+     * phase 1). Omitted when nobody has claimed — absence on read
+     * is the unclaimed signal, mirroring the omit-when-undefined
+     * convention used elsewhere on this payload (e.g.
+     * `inbox_unread[].expects_response`). Renders as `claim_held`
+     * in text mode so a coordinating actor sees who currently owns
+     * the wave at a glance.
+     */
+    claimed_by?: string;
+  }>;
+}
+
+/**
  * gate boot [--format json|text] [--tail <N>] [--utterances <N>]
  *
  * Single-command session orientation for agents. Composes the
@@ -194,6 +243,15 @@ interface BootPayload {
    * findable on re-entry, not just present on disk.
    */
   cross_passage: Record<string, PassageOrientationSummary>;
+  /**
+   * Active (non-terminal) requests sharing a target, surfaced for
+   * cross-session race detection (issue #234). Empty array when no
+   * group has size ≥ 2. Each entry's `requests` list carries enough
+   * for an agent to decide whether to coordinate via `gate claim` /
+   * `gate witness` (#226) or proceed in parallel. See
+   * BootActiveOverlap for the per-entry contract.
+   */
+  active_overlapping_targets: ReadonlyArray<BootActiveOverlap>;
   /**
    * Discoverability hint: what verbs are applicable right now?
    *
@@ -452,6 +510,7 @@ export async function bootCmd(c: C, args: ParsedArgs): Promise<number> {
   }
 
   const crossPassage = await collectCrossPassage(c.config);
+  const activeOverlappingTargets = computeActiveOverlappingTargets(allRequests);
 
   const payload: BootPayload = {
     actor,
@@ -469,6 +528,7 @@ export async function bootCmd(c: C, args: ParsedArgs): Promise<number> {
       content_root_health: contentRootHealth,
     },
     cross_passage: crossPassage,
+    active_overlapping_targets: activeOverlappingTargets,
     suggested_next: suggestedNext,
     verbs_available_now: verbsAvailableNow,
   };
@@ -891,6 +951,65 @@ function actionableTransitions(
  * UTC-Z formatted (the only shape Request.ts emits, see Thank.ts:43,
  * Review.ts and StatusLog entry.at).
  */
+/**
+ * Group active (non-terminal) requests by their `target` and surface
+ * groups with size ≥ 2 as overlap warnings. See BootActiveOverlap
+ * for the surface contract and issue #234 for the parent context
+ * (substrate-experiment 5: independent sessions silently raced on
+ * the same wave because the substrate had no "someone else is on
+ * it" surface at boot).
+ *
+ * Active = `pending` | `approved` | `executing`. Terminal states
+ * (`completed` | `failed` | `denied`) are skipped — a completed
+ * wave on the same target is not a race; it is history.
+ *
+ * Targets that are unset, empty, or whitespace-only are skipped:
+ * "two requests with no target" is not a coordination signal.
+ *
+ * Per-group output is sorted by id ascending so consecutive boots
+ * agree on member order (an agent diff-reasoning over the field
+ * across runs sees stable composition); the overall list is sorted
+ * by target so the same property holds across multiple groups.
+ */
+export function computeActiveOverlappingTargets(
+  allRequests: ReadonlyArray<Request>,
+): BootActiveOverlap[] {
+  const ACTIVE: ReadonlySet<string> = new Set([
+    'pending',
+    'approved',
+    'executing',
+  ]);
+  const groups = new Map<string, Request[]>();
+  for (const r of allRequests) {
+    if (!ACTIVE.has(r.state)) continue;
+    const target = r.target;
+    if (target === undefined || target.trim() === '') continue;
+    const arr = groups.get(target);
+    if (arr) arr.push(r);
+    else groups.set(target, [r]);
+  }
+  const overlaps: BootActiveOverlap[] = [];
+  for (const [target, reqs] of groups) {
+    if (reqs.length < 2) continue;
+    const sorted = [...reqs].sort((a, b) =>
+      a.id.value < b.id.value ? -1 : a.id.value > b.id.value ? 1 : 0,
+    );
+    overlaps.push({
+      target,
+      requests: sorted.map((r) => ({
+        id: r.id.value,
+        state: r.state as 'pending' | 'approved' | 'executing',
+        executors: r.executors.map((e) => e.value),
+        ...(r.claimedBy !== undefined ? { claimed_by: r.claimedBy.value } : {}),
+      })),
+    });
+  }
+  overlaps.sort((a, b) =>
+    a.target < b.target ? -1 : a.target > b.target ? 1 : 0,
+  );
+  return overlaps;
+}
+
 export function computeLastAuthoredWriteAt(
   actor: string,
   allRequests: ReadonlyArray<Request>,
@@ -1157,6 +1276,29 @@ function renderBootText(p: BootPayload): string {
           : '';
       lines.push(`${s.passage}: ${s.open} open${suspendedNote}${lastNote}`);
     }
+  }
+
+  // Cross-session race surface (issue #234). Only rendered when at
+  // least one target has ≥ 2 active requests; the empty case stays
+  // silent so the common "no overlap" boot doesn't carry an empty
+  // header line. JSON consumers read `active_overlapping_targets`
+  // directly — text mode here is the human-readable projection.
+  if (p.active_overlapping_targets.length > 0) {
+    lines.push('');
+    lines.push('active waves with overlapping target:');
+    for (const o of p.active_overlapping_targets) {
+      for (const r of o.requests) {
+        const exec =
+          r.executors.length > 0 ? r.executors.join(',') : '(no executor)';
+        const claim = r.claimed_by !== undefined ? ', claim_held' : '';
+        lines.push(
+          `  - ${r.id} (${exec}, ${r.state}${claim}) — target: ${o.target}`,
+        );
+      }
+    }
+    lines.push(
+      '  ⚠ overlap detected. coordinate via `gate witness <id>` or `gate claim <id>`.',
+    );
   }
 
   if (p.tail.length > 0) {
