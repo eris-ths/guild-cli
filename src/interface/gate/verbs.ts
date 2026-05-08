@@ -59,6 +59,7 @@ export const WRITE_VERBS: ReadonlySet<string> = new Set([
   'inbox',
   'rest',
   'wake',
+  'farewell',
 ]);
 
 export const LOCK_EXEMPT_VERBS: ReadonlySet<string> = new Set([

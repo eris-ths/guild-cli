@@ -643,6 +643,33 @@ const VERBS: readonly VerbSchema[] = [
     },
   },
   {
+    name: 'farewell',
+    category: 'write',
+    summary:
+      'ceremonial close (#36 Phase 2): stamps an "until next session" timestamp. Distinct from `gate rest` — farewell ends the session, rest is a mid-session break. Pairs with `gate resume` at the next session start. suggested_next is null (terminal in the session sense).',
+    input: {
+      type: 'object',
+      properties: {
+        by: strOpt('actor (defaults to $GUILD_ACTOR)'),
+        note: strOpt('optional free-form context (≤ 240 chars)'),
+        format: formatField,
+      },
+    },
+    output: {
+      type: 'object',
+      properties: {
+        ok: { type: 'boolean' },
+        id: { type: 'string', description: 'YYYY-MM-DD-NNN per-day sequence' },
+        kind: { type: 'string', enum: ['rest', 'wake', 'farewell'] },
+        by: str,
+        at: str,
+        note: strOpt(),
+        message: str,
+        suggested_next: { type: 'object' },
+      },
+    },
+  },
+  {
     name: 'whoami',
     category: 'read',
     summary: 'identity + recent utterances (requires GUILD_ACTOR)',
