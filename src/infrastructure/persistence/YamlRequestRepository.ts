@@ -222,12 +222,17 @@ export class YamlRequestRepository implements RequestRepository {
     }
 
     // 2. Optimistic-lock check: the highest on-disk total mutation
-    //    count (status_log.length + reviews.length) must equal the
-    //    version we loaded. Using status_log alone would miss
-    //    concurrent addReview races — two reviewers writing at once
-    //    both touch reviews[] without growing status_log, so a
-    //    status_log-only check would let one review silently vanish
-    //    under last-writer-wins.
+    //    count (status_log.length + reviews.length + thanks.length +
+    //    mutation_seq) must equal the version we loaded. status_log
+    //    alone would miss concurrent addReview races; status_log +
+    //    reviews + thanks alone would miss concurrent claim/witness/
+    //    unwitness (Devil REJECT root cause on #244) — those verbs
+    //    mutate without appending to any array, so length-only check
+    //    saw identical pre/post and let last-writer-wins atomic
+    //    rename silently drop one of two concurrent witnesses. The
+    //    explicit mutation_seq counter (bumped per real claim/witness/
+    //    unwitness/terminal-reset, see Request.bumpMutationSeq) closes
+    //    that hole.
     const maxOnDisk = existing.reduce((m, e) => Math.max(m, e.version), 0);
     if (maxOnDisk !== request.loadedVersion) {
       throw new RequestVersionConflict(
@@ -301,7 +306,19 @@ function readVersion(parsed: unknown): number {
   const thanks = Array.isArray(obj['thanks'])
     ? (obj['thanks'] as unknown[]).filter(isObjectEntry).length
     : 0;
-  return computeVersion(log, reviews, thanks);
+  // mutation_seq (issue #244 follow-up). Tolerated on read only when
+  // it's a finite non-negative number; anything else (string, NaN,
+  // negative, missing) is treated as 0 — mirrors the conservative
+  // hydrate path. The version-token monotonicity is enforced at write
+  // time by the domain (`Request.bumpMutationSeq`), so a malformed
+  // on-disk value just degrades to "no extra signal" rather than
+  // poisoning the lock.
+  const rawSeq = obj['mutation_seq'];
+  const seq =
+    typeof rawSeq === 'number' && Number.isFinite(rawSeq) && rawSeq >= 0
+      ? Math.floor(rawSeq)
+      : 0;
+  return computeVersion(log, reviews, thanks, seq);
 }
 
 /**
@@ -541,6 +558,65 @@ function hydrate(
     ) {
       props.claimedBy = MemberName.of(obj['claimed_by']);
       props.claimedAt = obj['claimed_at'] as string;
+    }
+    // Witnesses (issue #244). Restore only well-typed string entries;
+    // anything else (objects, numbers) is dropped silently following
+    // the same conservative read pattern as `with`. Pre-#244 records
+    // lack the field entirely and hydrate as no witnesses (the empty-
+    // by-absence default), preserving byte-stable round-trip.
+    //
+    // Dedup invariant: the domain `witness()` keeps the array as a set
+    // ordered by first registration (re-witness is a no-op), so the
+    // hydrated array must match — otherwise hand-edited YAML carrying
+    // `witnesses: [asteria, asteria]` would let `unwitness` consume
+    // entries one-at-a-time (findIndex + splice removes one), forcing
+    // the actor to invoke unwitness twice and see their name still on
+    // `show` between the two calls. We dedup here on first-occurrence
+    // (same order semantics as the domain) and warn via onMalformed so
+    // the migration is visible, not silent.
+    if (Array.isArray(obj['witnesses'])) {
+      const observers: MemberName[] = [];
+      const seen = new Set<string>();
+      let duplicates = 0;
+      for (const raw of obj['witnesses'] as unknown[]) {
+        if (typeof raw !== 'string') continue;
+        if (seen.has(raw)) {
+          duplicates += 1;
+          continue;
+        }
+        seen.add(raw);
+        observers.push(MemberName.of(raw));
+      }
+      if (duplicates > 0) {
+        onMalformed(
+          source,
+          `witnesses array contained ${duplicates} duplicate entr${duplicates === 1 ? 'y' : 'ies'}; deduped on first occurrence (the domain treats witnesses as a set; the next save will emit the deduped form)`,
+        );
+      }
+      if (observers.length > 0) props.witnesses = observers;
+    }
+    // mutation_seq (issue #244 follow-up; Devil REJECT root cause).
+    // Counter for cross-session-mutating verbs (claim/witness/
+    // unwitness + terminal auto-reset) that don't grow status_log /
+    // reviews / thanks but still must move the optimistic-lock token.
+    // Tolerated only as a finite non-negative number; anything else
+    // is treated as 0 with an `onMalformed` warn so silent corruption
+    // is impossible. Pre-#244 records lack the field and load as 0
+    // (the never-mediated default), preserving byte-stable round-trip.
+    if (obj['mutation_seq'] !== undefined) {
+      const rawSeq = obj['mutation_seq'];
+      if (
+        typeof rawSeq === 'number' &&
+        Number.isFinite(rawSeq) &&
+        rawSeq >= 0
+      ) {
+        props.mutationSeq = Math.floor(rawSeq);
+      } else {
+        onMalformed(
+          source,
+          `mutation_seq is not a non-negative finite number (got ${typeof rawSeq === 'number' ? String(rawSeq) : typeof rawSeq}); treating as 0 — the optimistic-lock counter degrades to "no extra signal" until the next mutation rebuilds it`,
+        );
+      }
     }
     // Legacy top-level closure keys (completion_note / deny_reason /
     // failure_reason) are no longer written separately — status_log[-1].note

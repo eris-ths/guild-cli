@@ -496,6 +496,14 @@ function formatRequestText(r: Request): string {
     if (typeof j['claimed_by'] === 'string' && typeof j['claimed_at'] === 'string') {
       lines.push(`    claimed by: ${j['claimed_by']} at ${j['claimed_at']}`);
     }
+    // Witnesses (issue #244). Surfaced just below the claim line —
+    // both share the "who has eyes on this right now" axis. Only
+    // rendered when non-empty; an unwitnessed record is the common
+    // case and an empty `witnesses:` line would clutter every show.
+    if (Array.isArray(j['witnesses']) && j['witnesses'].length > 0) {
+      const names = (j['witnesses'] as unknown[]).map((w) => String(w)).join(', ');
+      lines.push(`    witnesses: ${names}`);
+    }
   }
 
   const reviews = Array.isArray(j['reviews']) ? j['reviews'] : [];

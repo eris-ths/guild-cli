@@ -9,6 +9,38 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
 
 ### Added
 
+- **`gate witness <id> --by <actor>` / `gate unwitness <id> --by <actor>`
+  for non-exclusive cross-session observation**
+  ([#244](https://github.com/eris-ths/guild-cli/issues/244),
+  [#226](https://github.com/eris-ths/guild-cli/issues/226) phase 2).
+  Companion verb to `claim` (phase 1): where claim is "I'm working on
+  this right now, do not double-stake" (exclusive, refuses on
+  conflict), witness is "I'm watching this" (non-exclusive — multiple
+  actors can witness simultaneously, never refuses on conflict with a
+  claim or another witness). Re-witness by the same actor is a no-op
+  (idempotent — the array doubles as a set ordered by first
+  registration). `unwitness` removes only the caller's own witness,
+  refusing on a foreign actor (no kick semantics in this primitive).
+  State guard: witness allowed on pending/approved/executing (the live
+  race window — passive observation of in-progress work is
+  legitimate); terminal states refuse and auto-reset existing
+  witnesses to `[]` on the transition. Pre-#244 records hydrate as no
+  witnesses and YAML stays byte-stable (the `witnesses:` field is
+  omitted when empty). `gate show` surfaces `witnesses: a, b, c` below
+  the claim line in text mode, and exposes the structured `witnesses`
+  array in JSON mode (omitted when empty in both surfaces).
+  + Hydrate dedup: hand-edited YAML with duplicate `witnesses` entries
+    is collapsed to first-occurrence on load (matching the domain's
+    set-by-first-registration semantic) and the migration surfaces via
+    `onMalformed` rather than passing silently — without this, a single
+    `unwitness` would leave duplicate names visible on `show`.
+    + Terminal-aware `unwitness` error: when invoked on a closed record
+    (completed/failed/denied) where auto-reset has already cleared the
+    list, the error message names the auto-release behavior and signals
+    "no action needed", distinguishing a benign cleanup pass from a
+    real misnamed `--by` typo (which keeps the original phrasing on
+    pending/approved/executing).
+
 - **`gate claim <id> --by <actor>` for cross-session stake**
   ([#226](https://github.com/eris-ths/guild-cli/issues/226) phase 1).
   Two concurrent main-session agents that independently pick up the
@@ -23,6 +55,32 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
   verbs are deferred to a follow-up issue — phase 1 ships claim only.
 
 ### Fixed
+
+- **`witness` / `unwitness` / `claim` concurrency safety
+  ([#244](https://github.com/eris-ths/guild-cli/issues/244) Devil
+  REJECT root cause).** Pre-fix: these verbs mutated state without
+  appending to `status_log` / `reviews` / `thanks`, so the optimistic-
+  lock token (sum of those three array lengths) was non-monotonic
+  across them. Two concurrent `gate witness` calls both passed the
+  lock check on identical pre-state and last-writer-wins atomic
+  rename silently dropped one of the two writes — Devil's repro
+  showed 4 parallel witnesses landing exactly 1 entry, parallel
+  `unwitness` losing the loser, and `claim ⊥ witness` mixed races
+  destroying the #244 core promise that "witness coexists with any
+  claim". Fix: each `claim` / `witness` / `unwitness` mutation (and
+  every per-actor terminal auto-reset) bumps a new `mutation_seq`
+  counter on Request, and `computeVersion` includes it in the
+  optimistic-lock token; concurrent writers now throw
+  `RequestVersionConflict` and the use case
+  (`RequestUseCases.{claim,witness,unwitness}`) retries the load →
+  mutate → save loop on conflict (bounded, with stagger). Idempotent
+  re-claim / re-witness by the same actor does NOT bump (no-op, save
+  skipped). Per-actor accounting on terminal auto-reset means a
+  frontier collapsing "claim + 3 witnesses" contributes `+4` so the
+  seq delta remains a faithful "how many actors were mediating"
+  signal. YAML byte-stable: `mutation_seq` is omitted when 0, so
+  pre-#244 records and never-mediated post-fix records round-trip
+  identically.
 
 - **darwin path-comparison flakes in `tests/{interface,passages}/`
   ([#238](https://github.com/eris-ths/guild-cli/issues/238)).** Twelve

@@ -135,6 +135,55 @@ export interface RequestProps {
   /** ISO 8601 timestamp of the claim, paired with `claimedBy`. Both
    *  fields move together — set together, cleared together. */
   claimedAt?: string;
+  /**
+   * Cross-session non-exclusive observers (issue #226 phase 2 / #244).
+   * Sibling primitive to `claimedBy`: where claim is "I'm working on
+   * this right now, do not double-stake" (exclusive, refuses on
+   * conflict), `witnesses` is "I'm watching this" (non-exclusive,
+   * multiple actors can witness simultaneously, never refuses on
+   * conflict with claim or with another witness). Order is meaningful
+   * — registration order — so a reader can see "first observer" first.
+   *
+   * Persistence: omitted from YAML when empty (byte-stable round-trip
+   * with pre-#244 records). Old records hydrate as []. Auto-resets
+   * to [] on terminal transitions for the same reason claim does:
+   * the verb mediates the live cross-session race window, and a
+   * terminal record carries no further race signal.
+   */
+  witnesses?: MemberName[];
+  /**
+   * Monotonic mutation counter for cross-session-mutating verbs that
+   * are NOT append-only on a recorded array (issue #244 follow-up;
+   * Devil REJECT root cause). `claim` / `witness` / `unwitness` and
+   * the terminal auto-reset of both can each remove entries from
+   * `claimed_by` / `witnesses[]`, so length-based version tokens
+   * (`status_log + reviews + thanks`) are non-monotonic across these
+   * verbs and let the optimistic-lock check pass concurrent writers
+   * that would silently drop one another's mutation under last-
+   * writer-wins atomic rename.
+   *
+   * Bumped exactly once per real mutation:
+   *   - `claim()` — first-time claim by an actor (idempotent re-claim
+   *     by same actor does NOT bump, matching its no-op save path).
+   *   - `witness()` — first-time witness by an actor (re-witness no-op
+   *     does NOT bump).
+   *   - `unwitness()` — every successful removal.
+   *   - `transition()` terminal auto-reset — `+1` per cleared actor
+   *     (one for the claim if held, one per witness in the list) so
+   *     a single terminal frontier collapsing "claim + 3 witnesses"
+   *     bumps `+4` total. Per-actor accounting keeps the version
+   *     observable from outside: a reader can see "exactly 4 actors
+   *     were mediating at terminal time" via the seq delta.
+   *
+   * Persistence: `mutation_seq` is omitted from YAML when 0 (the
+   * common case for never-mediated records — pre-#244 records load
+   * as 0 and round-trip clean). Hydrate accepts the field when
+   * present and a finite non-negative number; anything else is
+   * treated as 0 with an `onMalformed` warn so the migration is
+   * visible. Surfaced through `computeVersion` so the repository's
+   * optimistic-lock check is monotonic across every legal mutation.
+   */
+  mutationSeq?: number;
 }
 
 /**
@@ -302,13 +351,22 @@ export class Request {
 
   static restore(props: RequestProps): Request {
     // loadedVersion snapshots the TOTAL mutation count at load time —
-    // status_log entries PLUS reviews. Using status_log alone would
-    // miss concurrent addReview races (reviews push into reviews[]
-    // without touching status_log), letting two simultaneous reviewers
-    // silently lose one review on last-writer-wins. See
-    // `computeVersion` below for the single place that defines the
-    // invariant.
-    return new Request({ ...props }, computeVersion(props.statusLog.length, props.reviews.length, (props.thanks ?? []).length));
+    // status_log entries + reviews + thanks + mutation_seq. The first
+    // three are append-only array lengths (concurrent addReview races
+    // would silently drop a review under last-writer-wins if the
+    // counter ignored reviews). mutation_seq closes the equivalent
+    // hole for claim / witness / unwitness, which mutate state without
+    // appending to any of those arrays. See `computeVersion` below
+    // for the single place that defines the invariant.
+    return new Request(
+      { ...props },
+      computeVersion(
+        props.statusLog.length,
+        props.reviews.length,
+        (props.thanks ?? []).length,
+        props.mutationSeq ?? 0,
+      ),
+    );
   }
 
   get id(): RequestId {
@@ -399,11 +457,13 @@ export class Request {
   /**
    * Total mutation count observed when this aggregate was loaded from
    * disk (0 for freshly-created instances). Defined as
-   * `status_log.length + reviews.length + thanks.length` — all three
-   * arrays are append-only, so their combined length is a monotonic
-   * version. The repository uses it as an optimistic-lock token: if
-   * the on-disk total has grown since, another writer won the race
-   * and our save is rejected.
+   * `status_log.length + reviews.length + thanks.length + mutation_seq`
+   * — the first three are append-only arrays, the fourth is an
+   * explicit monotonic counter for non-array mutations (claim /
+   * witness / unwitness; see `RequestProps.mutationSeq`). The
+   * repository uses the sum as an optimistic-lock token: if the on-
+   * disk total has grown since, another writer won the race and our
+   * save is rejected (`RequestVersionConflict`).
    */
   get loadedVersion(): number {
     return this._loadedVersion;
@@ -414,7 +474,27 @@ export class Request {
    * repository will write with, so `loadedVersion` + delta = `currentVersion`.
    */
   get currentVersion(): number {
-    return computeVersion(this.props.statusLog.length, this.props.reviews.length, (this.props.thanks ?? []).length);
+    return computeVersion(
+      this.props.statusLog.length,
+      this.props.reviews.length,
+      (this.props.thanks ?? []).length,
+      this.props.mutationSeq ?? 0,
+    );
+  }
+
+  /** Current mutation-sequence counter (0 when never mediated by
+   *  claim / witness / unwitness or their terminal auto-reset). See
+   *  `RequestProps.mutationSeq` for the full contract. */
+  get mutationSeq(): number {
+    return this.props.mutationSeq ?? 0;
+  }
+
+  /** Bump the mutation counter by one. Private — only the verbs that
+   *  contractually count as a "mutation" (claim/witness/unwitness and
+   *  the terminal auto-reset, per-cleared-actor) call this. Defined
+   *  centrally so the invariant lives in one place. */
+  private bumpMutationSeq(): void {
+    this.props.mutationSeq = (this.props.mutationSeq ?? 0) + 1;
   }
 
   approve(by: MemberName, note?: string, invokedBy?: string): void {
@@ -525,6 +605,11 @@ export class Request {
     }
     this.props.claimedBy = by;
     this.props.claimedAt = at;
+    // Real mutation — bump so the optimistic-lock token moves and a
+    // concurrent claim by another actor (which would race past the
+    // status_log+reviews+thanks length check, since claim doesn't
+    // touch any of those) is detected at save time.
+    this.bumpMutationSeq();
   }
 
   /**
@@ -537,6 +622,132 @@ export class Request {
     if (this.props.claimedBy === undefined) return;
     delete this.props.claimedBy;
     delete this.props.claimedAt;
+    // Per-actor accounting: a terminal frontier that clears one claim
+    // counts as one mutation. See `RequestProps.mutationSeq` for the
+    // rationale (observability of how many actors were mediating at
+    // the time the request closed).
+    this.bumpMutationSeq();
+  }
+
+  /** Current witnesses in registration order. Empty when no observers. Issue #244. */
+  get witnesses(): readonly MemberName[] {
+    return this.props.witnesses ?? [];
+  }
+
+  /**
+   * Register a non-exclusive observer (issue #244). Witness is the
+   * companion verb to claim:
+   *
+   *   - claim     : "I'm working on this" — exclusive; refuses on conflict.
+   *   - witness   : "I'm watching this" — non-exclusive; never refuses.
+   *
+   * Multiple actors may witness in parallel; a witness coexists with
+   * any claim (by the same actor or a different one). Re-witness by
+   * the same actor is a no-op — duplicates are not appended, so the
+   * array doubles as a set ordered by first registration. The state
+   * guard mirrors claim: only `pending` / `approved` / `executing`
+   * accept new witnesses, since terminal records have moved past the
+   * live race window the verb exists to surface.
+   *
+   * Unlike claim, witness is permitted on `executing` because passive
+   * observation of work-in-progress is a legitimate "I'm following
+   * this" signal, whereas claim on `executing` would be too late to
+   * mediate the cross-session race claim is designed for.
+   */
+  witness(by: MemberName): void {
+    if (
+      this.props.state !== 'pending' &&
+      this.props.state !== 'approved' &&
+      this.props.state !== 'executing'
+    ) {
+      throw new DomainError(
+        `Cannot witness a request in state "${this.props.state}"; ` +
+          `witness only applies while pending, approved, or executing ` +
+          `(the live race window).`,
+        'state',
+      );
+    }
+    const list = this.props.witnesses ?? [];
+    if (list.some((m) => m.value === by.value)) {
+      // Idempotent re-witness — already observing, no mutation.
+      return;
+    }
+    list.push(by);
+    this.props.witnesses = list;
+    // Real mutation — bump for the same reason claim does. See
+    // `bumpMutationSeq` doc and `RequestProps.mutationSeq`.
+    this.bumpMutationSeq();
+  }
+
+  /**
+   * Remove the caller's witness (issue #244). Three outcomes:
+   *
+   *   1. Caller is in the list → remove (the normal case).
+   *   2. Caller is not in the list → throw. Quietly no-op'ing would
+   *      make a typo (`gate unwitness <id> --by mki`) indistinguishable
+   *      from success, and the intent of `unwitness` is to assert
+   *      "I want my name OFF this" — a missing entry is meaningful.
+   *   3. Foreign actor on someone else's witness → throw. The verb is
+   *      reflexive: each actor may only release their own witness,
+   *      never another's. (No "kick" semantics in this primitive; if
+   *      that ever lands, it gets its own verb name.)
+   *
+   * State guard intentionally absent: unwitness must work in any
+   * state so an observer who joined a request which then progressed
+   * to a terminal state can still clean up. In practice the auto-
+   * reset on terminal transition does the cleanup first, so a manual
+   * unwitness on a closed record finds an empty list — we surface a
+   * terminal-aware "no action needed" message instead of the typo
+   * error, so an actor running a defensive cleanup pass can tell the
+   * benign case from a real misnamed --by.
+   */
+  unwitness(by: MemberName): void {
+    const list = this.props.witnesses ?? [];
+    const idx = list.findIndex((m) => m.value === by.value);
+    if (idx < 0) {
+      const state = this.props.state;
+      const isTerminal =
+        state === 'completed' || state === 'failed' || state === 'denied';
+      const msg = isTerminal
+        ? `${by.value} is not currently a witness of request ${this.props.id.value} ` +
+          `(state=${state}; witnesses are auto-released on terminal transitions, ` +
+          `so any prior witness has already been cleared. No action needed.)`
+        : `${by.value} is not a witness of request ${this.props.id.value}; ` +
+          `unwitness only removes the caller's own witness (use witness ` +
+          `to register first, or check the actor name).`;
+      throw new DomainError(msg, 'witnesses');
+    }
+    list.splice(idx, 1);
+    if (list.length === 0) {
+      // Drop the prop entirely so toJSON's "omit when empty" branch
+      // emits the same byte-stable YAML as a never-witnessed record.
+      delete this.props.witnesses;
+    } else {
+      this.props.witnesses = list;
+    }
+    // Real mutation — bump so two concurrent unwitness calls by
+    // different actors don't both pass the optimistic-lock check
+    // (which sees identical pre-mutation length on both sides) and
+    // last-writer-wins one of them off the record.
+    this.bumpMutationSeq();
+  }
+
+  /**
+   * Clear all witnesses. Called from `transition` on terminal states
+   * for the same reason claim auto-releases — once the request is
+   * completed/failed/denied, the live observation channel is moot,
+   * and leaving stale witness names on a closed record is just noise.
+   */
+  private resetWitnesses(): void {
+    const list = this.props.witnesses;
+    if (list === undefined || list.length === 0) return;
+    const cleared = list.length;
+    delete this.props.witnesses;
+    // Per-actor accounting: bump once per cleared witness so a
+    // terminal frontier collapsing N witnesses contributes +N to the
+    // version token. Keeps "how many actors were observing at close"
+    // recoverable from the seq delta around the terminal entry.
+    for (let i = 0; i < cleared; i++) this.bumpMutationSeq();
   }
 
   private transition(
@@ -586,6 +797,10 @@ export class Request {
     // surviving across that boundary as a "still mine" marker.
     if (to === 'completed' || to === 'failed' || to === 'denied') {
       this.releaseClaim();
+      // Witnesses (issue #244) auto-reset on the same terminal frontier
+      // as claim. Same rationale: the verb mediates the live race
+      // window, and a terminal record carries no further race signal.
+      this.resetWitnesses();
     }
   }
 
@@ -653,6 +868,24 @@ export class Request {
       out['claimed_by'] = this.props.claimedBy.value;
       out['claimed_at'] = this.props.claimedAt;
     }
+    // Witnesses (issue #244). Surface only when non-empty — empty
+    // witnesses is the common case and an empty array would clutter
+    // every YAML record. Order is preserved (registration order, not
+    // sorted) so a reader sees "first observer first". Pre-#244
+    // records lack the field entirely and round-trip clean.
+    const witnessList = this.props.witnesses ?? [];
+    if (witnessList.length > 0) {
+      out['witnesses'] = witnessList.map((m) => m.value);
+    }
+    // mutation_seq (issue #244 follow-up). Surface only when > 0 so
+    // pre-#244 records and never-mediated post-#244 records both emit
+    // byte-identical YAML — the field appears on disk only after the
+    // first claim/witness/unwitness mutation. See
+    // `RequestProps.mutationSeq` for the optimistic-lock contract.
+    const seq = this.props.mutationSeq ?? 0;
+    if (seq > 0) {
+      out['mutation_seq'] = seq;
+    }
     // Derive legacy closure keys from the last status_log entry so
     // external consumers (chain / voices / show --format text) keep
     // working unchanged. Single source of truth: status_log[-1].note.
@@ -707,17 +940,34 @@ function statusLogEntryToJSON(e: StatusLogEntry): Record<string, unknown> {
 }
 
 /**
- * Total mutation count: status_log entries + reviews + thanks. All
- * three arrays are append-only so the sum is monotonic across any
- * legal mutation. Thanks are included despite being orthogonal to the
- * analytical memory (principle 06): they are still records that
- * outlive writers (principle 04), and a concurrent addThank that
- * silently loses to last-writer-wins would violate append-only.
+ * Total mutation count: status_log entries + reviews + thanks +
+ * mutation_seq. The first three are append-only array lengths
+ * (monotonic by construction — entries are only ever pushed, never
+ * removed during a mutation). The fourth is the explicit counter for
+ * verbs that DON'T touch any of those arrays but still mutate state
+ * (`claim`, `witness`, `unwitness`, terminal auto-reset of either) —
+ * see `RequestProps.mutationSeq` for the full rationale.
+ *
+ * Thanks are included despite being orthogonal to the analytical
+ * memory (principle 06): they are still records that outlive writers
+ * (principle 04), and a concurrent addThank that silently loses to
+ * last-writer-wins would violate append-only. mutation_seq closes the
+ * symmetric hole for non-array mutations (Devil REJECT root cause on
+ * #244): without it, two concurrent witnesses both saw `{statusLog,
+ * reviews, thanks}` length unchanged and both passed the optimistic-
+ * lock check, letting last-writer-wins atomic rename silently drop
+ * one of them.
+ *
  * Kept as a module-private helper so the invariant is defined in one
  * place and the repository can reuse it when reading raw YAML.
  */
-export function computeVersion(statusLogLen: number, reviewsLen: number, thanksLen: number = 0): number {
-  return statusLogLen + reviewsLen + thanksLen;
+export function computeVersion(
+  statusLogLen: number,
+  reviewsLen: number,
+  thanksLen: number = 0,
+  mutationSeq: number = 0,
+): number {
+  return statusLogLen + reviewsLen + thanksLen + mutationSeq;
 }
 
 // Local wrapper over the shared sanitizer: every call in this file used

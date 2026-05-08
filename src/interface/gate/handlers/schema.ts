@@ -904,12 +904,55 @@ const VERBS: readonly VerbSchema[] = [
     summary:
       'stake a cross-session claim on a pending or approved request (issue #226 phase 1). ' +
       'Same-actor re-claim is a no-op; conflicting claim by a different actor is refused. ' +
-      'Auto-releases when the request reaches a terminal state (completed/failed/denied).',
+      'Auto-releases when the request reaches a terminal state (completed/failed/denied). ' +
+      'Concurrency: each mutation bumps a monotonic mutation_seq mediated by the optimistic-lock; ' +
+      'concurrent writes throw RequestVersionConflict and rely on the use-case retry loop.',
     input: {
       type: 'object',
       properties: {
         id: idStr,
         by: strOpt('claimant (defaults to $GUILD_ACTOR)'),
+        format: formatField,
+        'dry-run': dryRunField,
+      },
+      required: ['id'],
+    },
+    output: writeResponseSchema,
+  },
+  {
+    name: 'witness',
+    category: 'write',
+    summary:
+      'register as a non-exclusive observer on a pending/approved/executing request (issue #244). ' +
+      'Multiple actors may witness simultaneously; coexists with any claim. ' +
+      'Same-actor re-witness is a no-op. Auto-resets when the request reaches a terminal state. ' +
+      'Concurrency: each mutation bumps a monotonic mutation_seq mediated by the optimistic-lock; ' +
+      'concurrent writes throw RequestVersionConflict and rely on the use-case retry loop.',
+    input: {
+      type: 'object',
+      properties: {
+        id: idStr,
+        by: strOpt('observer (defaults to $GUILD_ACTOR)'),
+        format: formatField,
+        'dry-run': dryRunField,
+      },
+      required: ['id'],
+    },
+    output: writeResponseSchema,
+  },
+  {
+    name: 'unwitness',
+    category: 'write',
+    summary:
+      "remove the caller's own witness from a request (issue #244). " +
+      'Refuses if the caller is not currently a witness, or for any other actor. ' +
+      'Concurrency: each mutation bumps a monotonic mutation_seq mediated by the optimistic-lock; ' +
+      'concurrent writes throw RequestVersionConflict and rely on the use-case retry loop.',
+    input: {
+      type: 'object',
+      properties: {
+        id: idStr,
+        by: strOpt('observer to remove (must match caller; defaults to $GUILD_ACTOR)'),
         format: formatField,
         'dry-run': dryRunField,
       },
