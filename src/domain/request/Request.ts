@@ -38,7 +38,19 @@ export interface RequestProps {
   from: MemberName;
   action: string;
   reason: string;
-  executor?: MemberName;
+  /**
+   * Assigned executor(s). Internal representation is always an array
+   * (possibly empty); the legacy single-executor read path is exposed
+   * via the `executor` getter, which returns the first element. See
+   * issue #230 — the multi-executor form structurally resolves the
+   * attribution race surfaced in substrate-experiment 6 (parallel-impl
+   * waves where two agents both claim authorship of one request).
+   *
+   * Persistence: `toJSON` always emits `executors: [...]` (new form).
+   * Hydrate accepts the legacy `executor: <string>` and normalises it
+   * to a single-element array — old records load without migration.
+   */
+  executors?: MemberName[];
   target?: string;
   /**
    * Reviewer-depth advisory (issue #221). Optional; absence reads
@@ -109,7 +121,16 @@ export class Request {
     from: string;
     action: string;
     reason: string;
+    /** Single-executor convenience; mutually exclusive with `executors`.
+     *  Both forms feed the same internal array — present here so legacy
+     *  call sites that build one executor at a time (issues promote,
+     *  fast-track default-to-self) keep their existing surface. */
     executor?: string;
+    /** Multiple executors (issue #230). Order preserved; duplicates
+     *  rejected; empty array allowed (= no executor assigned). When
+     *  both `executor` and `executors` are passed, `create` throws —
+     *  the interface layer should never let both through. */
+    executors?: readonly string[];
     target?: string;
     /** Reviewer-depth advisory; rejected at create time if not in
      *  the RequestDepth enum. Absent = no field persisted ('standard'
@@ -157,8 +178,36 @@ export class Request {
       thanks: [],
       statusLog: [initialEntry],
     };
-    if (input.executor !== undefined) {
-      props.executor = MemberName.of(input.executor);
+    // Executor(s): single + multiple are mutually exclusive at the
+    // domain boundary so a confused caller (interface bug) can't
+    // silently land both into the aggregate. The interface layer is
+    // expected to reject the combination first — this is the second
+    // line of defence.
+    if (input.executor !== undefined && input.executors !== undefined) {
+      throw new DomainError(
+        '--executor and --executors are mutually exclusive',
+        'executor',
+      );
+    }
+    if (input.executors !== undefined) {
+      const seen = new Set<string>();
+      const list: MemberName[] = [];
+      for (const raw of input.executors) {
+        const m = MemberName.of(raw);
+        if (seen.has(m.value)) {
+          throw new DomainError(
+            `Duplicate executor: ${m.value}`,
+            'executors',
+          );
+        }
+        seen.add(m.value);
+        list.push(m);
+      }
+      // Empty array is allowed — same as omitting the field. Persist
+      // the field only when non-empty, matching how `with` behaves.
+      if (list.length > 0) props.executors = list;
+    } else if (input.executor !== undefined) {
+      props.executors = [MemberName.of(input.executor)];
     }
     if (input.autoReview !== undefined) {
       props.autoReview = MemberName.of(input.autoReview);
@@ -217,8 +266,18 @@ export class Request {
   get state(): RequestState {
     return this.props.state;
   }
+  /**
+   * First-of-list executor, or undefined when none assigned. Kept for
+   * back-compat with single-executor call sites (boot, resume, status,
+   * writeFormat); new code that needs to honour all assigned executors
+   * should read `executors` instead. Issue #230.
+   */
   get executor(): MemberName | undefined {
-    return this.props.executor;
+    return this.props.executors?.[0];
+  }
+  /** Full executor list (possibly empty). Order preserved as given. */
+  get executors(): readonly MemberName[] {
+    return this.props.executors ?? [];
   }
   get target(): string | undefined {
     return this.props.target;
@@ -364,7 +423,16 @@ export class Request {
     if (thanks.length > 0) {
       out['thanks'] = thanks.map((t) => t.toJSON());
     }
-    if (this.props.executor) out['executor'] = this.props.executor.value;
+    // Executors: always emit the new `executors` array form when any
+    // are assigned (issue #230). Old records that hydrated from the
+    // legacy `executor: <string>` shape come through here as a
+    // single-element array — round-trip on save upgrades the file to
+    // the new form. Per principle 04 (records-outlive-writers) the
+    // legacy form is read-tolerated forever; we never write it back.
+    const execList = this.props.executors ?? [];
+    if (execList.length > 0) {
+      out['executors'] = execList.map((m) => m.value);
+    }
     if (this.props.autoReview)
       out['auto_review'] = this.props.autoReview.value;
     if (this.props.target !== undefined) out['target'] = this.props.target;

@@ -459,16 +459,41 @@ function hydrate(
       statusLog,
     };
     if (thanks.length > 0) props.thanks = thanks;
-    const executorRaw =
-      typeof obj['executor'] === 'string'
-        ? (obj['executor'] as string)
-        : typeof obj['executor_actual'] === 'string'
-          ? (obj['executor_actual'] as string)
-          : typeof obj['executor_preferred'] === 'string'
-            ? (obj['executor_preferred'] as string)
-            : undefined;
-    if (executorRaw !== undefined)
-      props.executor = MemberName.of(executorRaw);
+    // Executor(s): the new wire form is `executors: [a, b, ...]`
+    // (issue #230, multi-executor — structurally resolves the
+    // attribution race seen in substrate-experiment 6). Old records
+    // wrote `executor: <string>` (with rare `executor_actual` /
+    // `executor_preferred` aliases from an earlier experimental
+    // branch); both legacy shapes are accepted on read and folded
+    // into a single-element array. The next save() upgrades the file
+    // to the new form. Records-outlive-writers (principle 04) — we
+    // tolerate the legacy keys forever, never write them.
+    let executorList: MemberName[] | undefined;
+    if (Array.isArray(obj['executors'])) {
+      const list: MemberName[] = [];
+      const seen = new Set<string>();
+      for (const raw of obj['executors'] as unknown[]) {
+        if (typeof raw !== 'string') continue;
+        const m = MemberName.of(raw);
+        if (seen.has(m.value)) continue; // de-dupe defensively on read
+        seen.add(m.value);
+        list.push(m);
+      }
+      if (list.length > 0) executorList = list;
+    } else {
+      const executorRaw =
+        typeof obj['executor'] === 'string'
+          ? (obj['executor'] as string)
+          : typeof obj['executor_actual'] === 'string'
+            ? (obj['executor_actual'] as string)
+            : typeof obj['executor_preferred'] === 'string'
+              ? (obj['executor_preferred'] as string)
+              : undefined;
+      if (executorRaw !== undefined) {
+        executorList = [MemberName.of(executorRaw)];
+      }
+    }
+    if (executorList !== undefined) props.executors = executorList;
     if (typeof obj['auto_review'] === 'string')
       props.autoReview = MemberName.of(obj['auto_review']);
     if (typeof obj['target'] === 'string') props.target = obj['target'] as string;

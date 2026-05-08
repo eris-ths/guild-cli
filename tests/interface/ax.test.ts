@@ -240,11 +240,15 @@ test('show --fields: trims JSON to requested keys', () => {
       ['request', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executor', 'bob'],
       { GUILD_ACTOR: 'alice' },
     );
-    const { stdout } = runGate(root, ['show', rid(1), '--fields', 'state,executor']);
+    // Issue #230: the on-record / wire-form key is now `executors`
+    // (array). The single-executor input above hydrates as a one-
+    // element list; the legacy `executor` key is no longer emitted
+    // by toJSON. Tool wirings asking for the new key get the array.
+    const { stdout } = runGate(root, ['show', rid(1), '--fields', 'state,executors']);
     const payload = JSON.parse(stdout);
-    assert.deepEqual(Object.keys(payload).sort(), ['executor', 'state']);
+    assert.deepEqual(Object.keys(payload).sort(), ['executors', 'state']);
     assert.equal(payload.state, 'pending');
-    assert.equal(payload.executor, 'bob');
+    assert.deepEqual(payload.executors, ['bob']);
   } finally {
     cleanup();
   }
