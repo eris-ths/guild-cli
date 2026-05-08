@@ -338,6 +338,38 @@ test('gate show text: witnesses line surfaces below the claim line', (t) => {
   );
 });
 
+test('gate show text: claim + witnesses render under a stake: sub-section, not inside status_log (#245)', (t) => {
+  // Before #245 the lines were emitted at status_log's 4-space
+  // entry indent, directly under `status_log (1):`. Read scans
+  // saw "witnesses: ..." as a transition entry. The fix lifts
+  // them into their own `stake:` subsection between status_log
+  // and reviews. This test pins the new structural contract.
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  registerAll(root, ['alice', 'leysia', 'miki']);
+  const id = newRequest(root, 'alice');
+  assert.equal(run(root, ['claim', id, '--by', 'leysia']).status, 0);
+  assert.equal(run(root, ['witness', id, '--by', 'miki']).status, 0);
+
+  const r = run(root, ['show', id, '--format', 'text']);
+  assert.equal(r.status, 0);
+
+  // The `stake:` header exists, sits at section indent, and
+  // appears after status_log but before its own line items.
+  const idxLog = r.stdout.indexOf('status_log');
+  const idxStake = r.stdout.indexOf('\n  stake:\n');
+  const idxClaim = r.stdout.indexOf('claimed by:');
+  const idxWit = r.stdout.indexOf('witnesses:');
+  assert.ok(idxLog >= 0, 'status_log section is rendered');
+  assert.ok(idxStake > idxLog, 'stake: header appears after status_log');
+  assert.ok(idxClaim > idxStake, 'claimed by: line is inside stake: section');
+  assert.ok(idxWit > idxClaim, 'witnesses: line follows claimed by: inside stake:');
+
+  // The stake lines are at the section-item 4-space indent.
+  assert.match(r.stdout, /\n {4}claimed by: leysia at /);
+  assert.match(r.stdout, /\n {4}witnesses: miki\n/);
+});
+
 test('gate show text: unwitnessed record omits the witnesses line', (t) => {
   const { root, cleanup } = bootstrap();
   t.after(cleanup);
@@ -347,6 +379,10 @@ test('gate show text: unwitnessed record omits the witnesses line', (t) => {
   const r = run(root, ['show', id, '--format', 'text']);
   assert.equal(r.status, 0);
   assert.doesNotMatch(r.stdout, /witnesses:/);
+  // An unstaked record (no claim, no witnesses) emits no
+  // `stake:` block at all. This is the (#245) fix's empty-case
+  // contract — don't clutter every show with an empty header.
+  assert.doesNotMatch(r.stdout, /\n  stake:\n/);
 });
 
 test('hydrate tolerance: legacy record (no witnesses field) loads as unwitnessed', (t) => {

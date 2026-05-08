@@ -728,32 +728,41 @@ function formatRequestText(r: Request): string {
       );
       prevAt = at;
     }
-    // Cross-session claim (issue #226). Surfaced just below the state
-    // log because logically it sits on the same axis as transitions:
-    // "who has this right now". Only rendered when set — unclaimed is
-    // the common case and a `(no claim)` line would clutter every
-    // show. JSON consumers read the structured fields directly.
-    if (typeof j['claimed_by'] === 'string' && typeof j['claimed_at'] === 'string') {
+  }
+
+  // Stake markers (issues #226 / #244): claim and witnesses sit on
+  // the "who has this right now / who has eyes on it" axis. Rendered
+  // as their own sub-section below status_log so they don't read as
+  // a transition entry — same indentation under the same header was
+  // misleading scanners (#245). Only emitted when at least one is
+  // set; an unstaked record produces no `stake:` block.
+  const hasClaim =
+    typeof j['claimed_by'] === 'string' && typeof j['claimed_at'] === 'string';
+  const hasWitnesses =
+    Array.isArray(j['witnesses']) && (j['witnesses'] as unknown[]).length > 0;
+  if (hasClaim || hasWitnesses) {
+    lines.push('');
+    lines.push('  stake:');
+    if (hasClaim) {
       lines.push(`    claimed by: ${j['claimed_by']} at ${j['claimed_at']}`);
     }
-    // Witnesses (issue #244). Surfaced just below the claim line —
-    // both share the "who has eyes on this right now" axis. Only
-    // rendered when non-empty; an unwitnessed record is the common
-    // case and an empty `witnesses:` line would clutter every show.
-    if (Array.isArray(j['witnesses']) && j['witnesses'].length > 0) {
-      const names = (j['witnesses'] as unknown[]).map((w) => String(w)).join(', ');
+    if (hasWitnesses) {
+      const names = (j['witnesses'] as unknown[])
+        .map((w) => String(w))
+        .join(', ');
       lines.push(`    witnesses: ${names}`);
     }
-    // Template stamp (issue #235). Rendered when the request was
-    // bootstrapped from a wave-brief template. Surfaces on the same
-    // axis as claim/witness so readers see "this wave's framing is
-    // canon-blessed" without dipping into JSON.
-    if (typeof j['template'] === 'string') {
-      const v =
-        typeof j['template_version'] === 'number' ? ` (v${j['template_version']})` : '';
-      const ack = j['gate_required_acknowledged'] === true ? ' [gate-ack]' : '';
-      lines.push(`    template: ${j['template']}${v}${ack}`);
-    }
+  }
+
+  // Template stamp (issue #235): wave-brief provenance. Lifted out
+  // of status_log alongside the stake markers (#245) — the same
+  // "looks like a log entry" anti-pattern applied here.
+  if (typeof j['template'] === 'string') {
+    const v =
+      typeof j['template_version'] === 'number' ? ` (v${j['template_version']})` : '';
+    const ack = j['gate_required_acknowledged'] === true ? ' [gate-ack]' : '';
+    lines.push('');
+    lines.push(`  template: ${j['template']}${v}${ack}`);
   }
 
   const reviews = Array.isArray(j['reviews']) ? j['reviews'] : [];
