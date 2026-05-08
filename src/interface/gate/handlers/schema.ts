@@ -271,6 +271,41 @@ const VERBS: readonly VerbSchema[] = [
             'across session boundaries (records-outlive-writers requires ' +
             'records also be findable on re-entry).',
         },
+        active_overlapping_targets: {
+          type: 'array',
+          description:
+            'Cross-session race detection (issue #234). Active ' +
+            "(pending|approved|executing) requests sharing a `target` " +
+            'string, grouped by target, surfaced when any group has ' +
+            'size ≥ 2. Exact-match grouping; fuzzy variants are out of ' +
+            'scope per the issue. Empty array in the no-overlap common ' +
+            'case. Per-entry: { target, requests: [{ id, state, ' +
+            'executors[], claimed_by | null }] }; per-target requests ' +
+            'are sorted by id ascending. Phase 1 surfaces the warning ' +
+            'on every profile (the swarm-side refuse-on-create lives ' +
+            "with the parent epic #227, not in this slot).",
+          items: {
+            type: 'object',
+            properties: {
+              target: { type: 'string' },
+              requests: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    id: { type: 'string' },
+                    state: {
+                      type: 'string',
+                      enum: ['pending', 'approved', 'executing'],
+                    },
+                    executors: { type: 'array', items: { type: 'string' } },
+                    claimed_by: { type: 'string' },
+                  },
+                },
+              },
+            },
+          },
+        },
         suggested_next: {
           type: 'object',
           description:

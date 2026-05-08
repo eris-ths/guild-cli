@@ -53,6 +53,7 @@ test('gate boot: JSON top-level keys are stable', () => {
     assert.deepEqual(
       keys,
       [
+        'active_overlapping_targets',
         'actor',
         'cross_passage',
         'hints',
@@ -869,4 +870,186 @@ test('computeLastAuthoredWriteAt aggregates across status_log, reviews, and than
     stubs as unknown as Parameters<typeof computeLastAuthoredWriteAt>[1],
   );
   assert.equal(lastNobody, null);
+});
+
+// active_overlapping_targets — cross-session race surface (#234).
+//
+// Surfaces active (pending|approved|executing) requests that share
+// the same `target` so a booting agent sees "someone else is on
+// it" before pre-empting. Phase 1: detection + warning, no refuse.
+// Refuse-on-create lives with #227 (swarm profile epic).
+
+function registerMember(root: string, name: string): void {
+  runGate(root, ['register', '--name', name]);
+}
+
+function makeRequestWithTarget(
+  root: string,
+  from: string,
+  action: string,
+  target: string,
+): string {
+  const r = spawnSync(
+    process.execPath,
+    [
+      GATE,
+      'request',
+      '--from', from,
+      '--action', action,
+      '--reason', 'overlap test',
+      '--target', target,
+      '--format', 'json',
+    ],
+    { cwd: root, env: { ...process.env }, encoding: 'utf8' },
+  );
+  if (r.status !== 0) {
+    throw new Error(`gate request failed: ${r.stderr}`);
+  }
+  const j = JSON.parse(r.stdout);
+  return j.id ?? j.request_id;
+}
+
+test('gate boot: active_overlapping_targets surfaces two pending requests on the same target', () => {
+  const { root, cleanup } = bootstrap();
+  try {
+    registerMember(root, 'leysia');
+    const id1 = makeRequestWithTarget(root, 'alice', 'work A', 'data/guild/templates');
+    const id2 = makeRequestWithTarget(root, 'leysia', 'work B', 'data/guild/templates');
+
+    const { stdout } = runGate(root, ['boot']);
+    const payload = JSON.parse(stdout);
+    assert.equal(Array.isArray(payload.active_overlapping_targets), true);
+    assert.equal(payload.active_overlapping_targets.length, 1);
+    const entry = payload.active_overlapping_targets[0];
+    assert.equal(entry.target, 'data/guild/templates');
+    assert.equal(entry.requests.length, 2);
+    // Sorted by id ascending — deterministic across boots.
+    assert.deepEqual(
+      entry.requests.map((r: { id: string }) => r.id),
+      [id1, id2].sort(),
+    );
+    // Each entry carries state + executors[]. claimed_by is omitted
+    // for unclaimed waves (omit-when-undefined convention).
+    for (const r of entry.requests) {
+      assert.ok(['pending', 'approved', 'executing'].includes(r.state));
+      assert.ok(Array.isArray(r.executors));
+      assert.equal('claimed_by' in r, false);
+    }
+  } finally {
+    cleanup();
+  }
+});
+
+test('gate boot: active_overlapping_targets is empty when targets differ', () => {
+  const { root, cleanup } = bootstrap();
+  try {
+    registerMember(root, 'leysia');
+    makeRequestWithTarget(root, 'alice', 'work A', 'src/foo');
+    makeRequestWithTarget(root, 'leysia', 'work B', 'src/bar');
+
+    const { stdout } = runGate(root, ['boot']);
+    const payload = JSON.parse(stdout);
+    assert.deepEqual(payload.active_overlapping_targets, []);
+  } finally {
+    cleanup();
+  }
+});
+
+test('gate boot: active_overlapping_targets ignores requests with no target', () => {
+  // Two requests, both untargeted → no group key → no overlap.
+  // Untargeted overlap is not a coordination signal (the freeform
+  // target is the only handle for "same wave").
+  const { root, cleanup } = bootstrap();
+  try {
+    registerMember(root, 'leysia');
+    const r1 = spawnSync(
+      process.execPath,
+      [GATE, 'request', '--from', 'alice', '--action', 'a', '--reason', 'r', '--format', 'json'],
+      { cwd: root, env: { ...process.env }, encoding: 'utf8' },
+    );
+    assert.equal(r1.status, 0, r1.stderr);
+    const r2 = spawnSync(
+      process.execPath,
+      [GATE, 'request', '--from', 'leysia', '--action', 'b', '--reason', 'r', '--format', 'json'],
+      { cwd: root, env: { ...process.env }, encoding: 'utf8' },
+    );
+    assert.equal(r2.status, 0, r2.stderr);
+
+    const { stdout } = runGate(root, ['boot']);
+    const payload = JSON.parse(stdout);
+    assert.deepEqual(payload.active_overlapping_targets, []);
+  } finally {
+    cleanup();
+  }
+});
+
+test('gate boot: active_overlapping_targets carries claim_held marker for claimed wave', () => {
+  const { root, cleanup } = bootstrap();
+  try {
+    registerMember(root, 'leysia');
+    // Use --executor to populate the executors[] slot the surface
+    // renders (matching the issue's example output shape, which
+    // names the executor next to the id).
+    const r1 = spawnSync(
+      process.execPath,
+      [
+        GATE, 'request',
+        '--from', 'alice',
+        '--executor', 'alice',
+        '--action', 'work A',
+        '--reason', 'overlap test',
+        '--target', 'shared/path',
+        '--format', 'json',
+      ],
+      { cwd: root, env: { ...process.env }, encoding: 'utf8' },
+    );
+    assert.equal(r1.status, 0, r1.stderr);
+    const id1 = JSON.parse(r1.stdout).id;
+    const r2 = spawnSync(
+      process.execPath,
+      [
+        GATE, 'request',
+        '--from', 'leysia',
+        '--executor', 'leysia',
+        '--action', 'work B',
+        '--reason', 'overlap test',
+        '--target', 'shared/path',
+        '--format', 'json',
+      ],
+      { cwd: root, env: { ...process.env }, encoding: 'utf8' },
+    );
+    assert.equal(r2.status, 0, r2.stderr);
+
+    // Stake an exclusive claim on the first request.
+    const claim = runGate(root, ['claim', id1, '--by', 'alice']);
+    assert.equal(claim.status, 0);
+
+    const { stdout } = runGate(root, ['boot']);
+    const payload = JSON.parse(stdout);
+    const entry = payload.active_overlapping_targets[0];
+    const claimed = entry.requests.find((r: { id: string }) => r.id === id1);
+    assert.equal(claimed.claimed_by, 'alice');
+    // Text mode renders the marker too (`claim_held` flag).
+    const t = runGate(root, ['boot', '--format', 'text']);
+    assert.match(t.stdout, /active waves with overlapping target:/);
+    assert.match(t.stdout, new RegExp(`${id1} \\(alice, pending, claim_held\\)`));
+    assert.match(t.stdout, /target: shared\/path/);
+    assert.match(t.stdout, /coordinate via .gate witness/);
+  } finally {
+    cleanup();
+  }
+});
+
+test('gate boot: active_overlapping_targets text section is omitted when no overlap', () => {
+  // Voice budget — fresh roots / single-wave roots should not see
+  // the warning header line. Empty array is a JSON contract; text
+  // mode silences entirely.
+  const { root, cleanup } = bootstrap();
+  try {
+    const t = runGate(root, ['boot', '--format', 'text']);
+    assert.equal(t.status, 0);
+    assert.doesNotMatch(t.stdout, /active waves with overlapping target/);
+  } finally {
+    cleanup();
+  }
 });
