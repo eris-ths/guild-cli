@@ -42,7 +42,7 @@ const GATE_ALL = [
   'thank', 'fast-track', 'issues',
   'message', 'broadcast', 'inbox', 'doctor', 'repair', 'status',
   'boot', 'suggest', 'transcript', 'summarize', 'why', 'resume',
-  'schema', 'unresponded', 'templates', 'rest',
+  'schema', 'unresponded', 'templates', 'rest', 'wake',
 ] as const;
 
 const AGORA_ALL = [

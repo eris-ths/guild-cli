@@ -54,11 +54,17 @@ export async function restCmd(c: C, args: ParsedArgs): Promise<number> {
           ok: true,
           ...event.toJSON(),
           message,
-          // No suggested_next: the natural pair (`gate wake`) lands
-          // in a follow-up PR. Pre-suggesting a verb that doesn't
-          // exist yet would be a fake prescription. Once `wake`
-          // ships, this slot will name it.
-          suggested_next: null,
+          // Rest → wake: the natural pair. The agent stamps a
+          // boundary now, picks the work back up later with
+          // `gate wake`. Both verbs are independent (wake doesn't
+          // require a prior rest, rest doesn't require a follow-
+          // up wake); the suggestion is advisory, not enforced.
+          suggested_next: {
+            verb: 'wake',
+            args: { by: event.by.value },
+            reason:
+              'When you return, `gate wake` stamps the matching boundary so the gap between rest and wake is recoverable from the record. Skip if the run is abandoned — wake is optional.',
+          },
         },
         null,
         2,

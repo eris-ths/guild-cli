@@ -37,6 +37,7 @@ import { bootCmd } from './handlers/boot.js';
 import { schemaCmd } from './handlers/schema.js';
 import { resumeCmd } from './handlers/resume.js';
 import { restCmd } from './handlers/rest.js';
+import { wakeCmd } from './handlers/wake.js';
 import { reqRegister } from './handlers/register.js';
 import {
   msgSend,
@@ -280,6 +281,7 @@ const KNOWN_COMMANDS = [
   'unresponded',
   'templates',
   'rest',
+  'wake',
 ] as const;
 
 export async function main(argv: readonly string[]): Promise<number> {
@@ -461,6 +463,8 @@ async function dispatch(
       return await resumeCmd(c, args);
     case 'rest':
       return await restCmd(c, args);
+    case 'wake':
+      return await wakeCmd(c, args);
     case 'schema':
       return await schemaCmd(c, args);
     case 'unresponded':
