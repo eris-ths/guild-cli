@@ -1,0 +1,17 @@
+id: 2026-05-08-0003
+from: asteria
+action: "wave-brief: parallel-impl"
+reason: custom reason
+state: pending
+created_at: 2026-05-08T11:18:15.677Z
+status_log:
+  - state: pending
+    by: asteria
+    at: 2026-05-08T11:18:15.677Z
+    note: created
+reviews: []
+executors:
+  - asteria
+template: parallel-impl
+template_version: 1
+gate_required_acknowledged: true

@@ -744,6 +744,16 @@ function formatRequestText(r: Request): string {
       const names = (j['witnesses'] as unknown[]).map((w) => String(w)).join(', ');
       lines.push(`    witnesses: ${names}`);
     }
+    // Template stamp (issue #235). Rendered when the request was
+    // bootstrapped from a wave-brief template. Surfaces on the same
+    // axis as claim/witness so readers see "this wave's framing is
+    // canon-blessed" without dipping into JSON.
+    if (typeof j['template'] === 'string') {
+      const v =
+        typeof j['template_version'] === 'number' ? ` (v${j['template_version']})` : '';
+      const ack = j['gate_required_acknowledged'] === true ? ' [gate-ack]' : '';
+      lines.push(`    template: ${j['template']}${v}${ack}`);
+    }
   }
 
   const reviews = Array.isArray(j['reviews']) ? j['reviews'] : [];

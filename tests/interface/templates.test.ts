@@ -215,6 +215,11 @@ test('gate request --template <known>: skeleton expansion + record stamp', (t) =
   assert.equal(j['gate_required_acknowledged'], true);
   assert.match(String(j['action']), /parallel-impl/);
   assert.match(String(j['reason']), /parallel implementation/);
+  // Asteria #8: text mode must surface the template stamp too,
+  // not only json. Renders on the claim/witness axis as
+  // `template: <name> (vN) [gate-ack]`.
+  const showText = run(root, ['show', id, '--format', 'text']);
+  assert.match(showText.stdout, /template: parallel-impl \(v1\) \[gate-ack\]/);
 });
 
 test('gate request --template <known> --action --reason: overrides survive, stamp persists', (t) => {
