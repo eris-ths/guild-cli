@@ -15,6 +15,15 @@ const MAX_TEXT = 4096;
 const MAX_REVIEWS = 50;
 const MAX_THANKS = 50;
 const MAX_STATUS_LOG = 100;
+/**
+ * Stake-note ceiling (issue #246). Single short string per claim or
+ * per witness — terminal-friendly, fits one line in `gate show` and
+ * resists the "let's discuss it here" drift that motivated the
+ * silent-stake principle in the first place. Wider context belongs
+ * in agora plays; the note is metadata for the stake event, not
+ * commentary on lifecycle.
+ */
+const MAX_STAKE_NOTE = 80;
 
 export interface StatusLogEntry {
   state: RequestState;
@@ -175,6 +184,29 @@ export interface RequestProps {
    *  fields move together — set together, cleared together. */
   claimedAt?: string;
   /**
+   * Optional short metadata attached to the claim (issue #246).
+   *
+   * Tight-scope: a single string up to MAX_STAKE_NOTE chars,
+   * overwritten on re-claim by the same actor. Sanitized via the
+   * shared text path (control chars stripped, trim, length capped),
+   * so empty / whitespace-only input lands as undefined. Cleared
+   * with the rest of the claim on terminal auto-reset and on
+   * different-actor refusal (the latter doesn't reach the field
+   * because the throw happens first — but the rule is symmetric
+   * with `claimedBy` for the future explicit-release verb).
+   *
+   * NOT a discussion forum: the schema description names this
+   * "metadata, not commentary" so the surface stays thin. Cross-
+   * actor talk belongs in agora plays; the elements that warrant
+   * a stake note are things like "watching for the dedup fix" or
+   * "blocked on review #233" — single-line context that scoped to
+   * the current stake event.
+   *
+   * Persistence: omitted from YAML when undefined (byte-stable
+   * round-trip with pre-#246 records).
+   */
+  claimNote?: string;
+  /**
    * Cross-session non-exclusive observers (issue #226 phase 2 / #244).
    * Sibling primitive to `claimedBy`: where claim is "I'm working on
    * this right now, do not double-stake" (exclusive, refuses on
@@ -190,6 +222,21 @@ export interface RequestProps {
    * terminal record carries no further race signal.
    */
   witnesses?: MemberName[];
+  /**
+   * Per-witness short metadata (issue #246). Map keyed by lowercase
+   * actor name, mirroring `witnesses[]`. Same tight-scope rules as
+   * `claimNote`: single string ≤ MAX_STAKE_NOTE chars, overwrite-on-
+   * re-witness, sanitized empty → omitted. Witnesses without notes
+   * are simply absent from the map; an unannotated witness list with
+   * no notes round-trips as the field being undefined. unwitness
+   * removes both the witness entry and (if present) its note.
+   *
+   * NOT a discussion forum — same caveat as `claimNote`. The map
+   * shape was chosen over a parallel-array-of-objects so byte-stable
+   * round-trip stays trivial: pre-#246 records have neither field;
+   * post-#246 records that nobody noted on still have neither field.
+   */
+  witnessNotes?: Map<string, string>;
   /**
    * Monotonic mutation counter for cross-session-mutating verbs that
    * are NOT append-only on a recorded array (issue #244 follow-up;
@@ -661,6 +708,19 @@ export class Request {
   get claimedBy(): MemberName | undefined {
     return this.props.claimedBy;
   }
+  /** Optional metadata attached to the current claim. Undefined when
+   *  unclaimed or when the claimer didn't supply a --note. Issue #246. */
+  get claimNote(): string | undefined {
+    return this.props.claimNote;
+  }
+  /**
+   * Per-witness notes keyed by lowercase actor name. Empty map when
+   * no witness has noted; absent witnesses simply have no entry.
+   * Returned as a read-only view. Issue #246.
+   */
+  get witnessNotes(): ReadonlyMap<string, string> {
+    return this.props.witnessNotes ?? new Map();
+  }
   /** ISO timestamp matched with `claimedBy`. Undefined when unclaimed. */
   get claimedAt(): string | undefined {
     return this.props.claimedAt;
@@ -686,7 +746,7 @@ export class Request {
    * State guard is checked here (domain invariant) rather than only at
    * the use case so non-CLI callers can't bypass it.
    */
-  claim(by: MemberName, at: string): void {
+  claim(by: MemberName, at: string, note?: string): void {
     if (this.props.state !== 'pending' && this.props.state !== 'approved') {
       throw new DomainError(
         `Cannot claim a request in state "${this.props.state}"; ` +
@@ -695,10 +755,36 @@ export class Request {
         'state',
       );
     }
+    // Optional stake-note (issue #246). Sanitize at the boundary so
+    // empty / whitespace-only input lands as undefined, the cap
+    // throws if exceeded, and the value stored is identical to what
+    // round-trip emits. Per the tight-scope rule the note is metadata
+    // for THIS stake event — re-claim by the same actor with a new
+    // note overwrites; absence on re-claim leaves the prior note in
+    // place (doesn't clear it — clearing requires a release/terminal).
+    let cleanedNote: string | undefined;
+    if (note !== undefined) {
+      cleanedNote = sharedSanitizeText(note, 'claim_note', {
+        maxLen: MAX_STAKE_NOTE,
+        requireNonEmpty: false,
+      });
+      if (cleanedNote.length === 0) cleanedNote = undefined;
+    }
     const existing = this.props.claimedBy;
     if (existing !== undefined) {
       if (existing.value === by.value) {
-        // Idempotent re-claim — see method doc. No mutation, no log.
+        // Same-actor re-claim. Idempotent on the (claim, claimedBy,
+        // claimedAt) pair — re-stamping the timestamp would muddy
+        // "when did this stake first land". The note is the only
+        // field that may genuinely differ session-to-session, so it
+        // updates if and only if the caller supplied one and it
+        // diverges from what's stored. Empty/whitespace --note is
+        // already collapsed to undefined above, so a bare re-claim
+        // (no flag) is a true no-op.
+        if (cleanedNote !== undefined && cleanedNote !== this.props.claimNote) {
+          this.props.claimNote = cleanedNote;
+          this.bumpMutationSeq();
+        }
         return;
       }
       throw new DomainError(
@@ -711,6 +797,7 @@ export class Request {
     }
     this.props.claimedBy = by;
     this.props.claimedAt = at;
+    if (cleanedNote !== undefined) this.props.claimNote = cleanedNote;
     // Real mutation — bump so the optimistic-lock token moves and a
     // concurrent claim by another actor (which would race past the
     // status_log+reviews+thanks length check, since claim doesn't
@@ -728,6 +815,10 @@ export class Request {
     if (this.props.claimedBy === undefined) return;
     delete this.props.claimedBy;
     delete this.props.claimedAt;
+    // claim_note (issue #246) moves with the claim — terminal
+    // auto-reset clears it alongside, so a closed record never
+    // carries a stale stake note.
+    delete this.props.claimNote;
     // Per-actor accounting: a terminal frontier that clears one claim
     // counts as one mutation. See `RequestProps.mutationSeq` for the
     // rationale (observability of how many actors were mediating at
@@ -760,7 +851,7 @@ export class Request {
    * this" signal, whereas claim on `executing` would be too late to
    * mediate the cross-session race claim is designed for.
    */
-  witness(by: MemberName): void {
+  witness(by: MemberName, note?: string): void {
     if (
       this.props.state !== 'pending' &&
       this.props.state !== 'approved' &&
@@ -773,13 +864,42 @@ export class Request {
         'state',
       );
     }
+    // Optional stake-note (issue #246) — same tight-scope rules as
+    // claim's. Sanitized empty → undefined; whitespace-only --note is
+    // a true no-op on the note dimension (re-witness with bare flag
+    // doesn't fire a mutation just to clear an absent note).
+    let cleanedNote: string | undefined;
+    if (note !== undefined) {
+      cleanedNote = sharedSanitizeText(note, 'witness_note', {
+        maxLen: MAX_STAKE_NOTE,
+        requireNonEmpty: false,
+      });
+      if (cleanedNote.length === 0) cleanedNote = undefined;
+    }
     const list = this.props.witnesses ?? [];
-    if (list.some((m) => m.value === by.value)) {
-      // Idempotent re-witness — already observing, no mutation.
+    const actorKey = by.value;
+    if (list.some((m) => m.value === actorKey)) {
+      // Same-actor re-witness. Update the note if and only if the
+      // caller supplied one and it diverges from what's stored —
+      // mirrors claim's overwrite-only-on-divergence rule. A bare
+      // `gate witness <id>` re-run stays a true no-op.
+      const notes = this.props.witnessNotes;
+      const current = notes?.get(actorKey);
+      if (cleanedNote !== undefined && cleanedNote !== current) {
+        const map = notes ?? new Map<string, string>();
+        map.set(actorKey, cleanedNote);
+        this.props.witnessNotes = map;
+        this.bumpMutationSeq();
+      }
       return;
     }
     list.push(by);
     this.props.witnesses = list;
+    if (cleanedNote !== undefined) {
+      const map = this.props.witnessNotes ?? new Map<string, string>();
+      map.set(actorKey, cleanedNote);
+      this.props.witnessNotes = map;
+    }
     // Real mutation — bump for the same reason claim does. See
     // `bumpMutationSeq` doc and `RequestProps.mutationSeq`.
     this.bumpMutationSeq();
@@ -831,6 +951,17 @@ export class Request {
     } else {
       this.props.witnesses = list;
     }
+    // Drop the per-actor note (issue #246) alongside the witness
+    // entry. unwitness is a removal of the stake; the note is
+    // metadata for that stake and has no meaning once the actor is
+    // gone from the list. If this leaves the map empty, drop the
+    // map prop entirely so YAML round-trips byte-identically to a
+    // record that never had any witness notes.
+    const notes = this.props.witnessNotes;
+    if (notes !== undefined) {
+      notes.delete(by.value);
+      if (notes.size === 0) delete this.props.witnessNotes;
+    }
     // Real mutation — bump so two concurrent unwitness calls by
     // different actors don't both pass the optimistic-lock check
     // (which sees identical pre-mutation length on both sides) and
@@ -849,6 +980,10 @@ export class Request {
     if (list === undefined || list.length === 0) return;
     const cleared = list.length;
     delete this.props.witnesses;
+    // Per-witness notes (issue #246) move with the witnesses on
+    // terminal auto-reset, same rationale as claim_note: closed
+    // records carry no stake metadata.
+    delete this.props.witnessNotes;
     // Per-actor accounting: bump once per cleared witness so a
     // terminal frontier collapsing N witnesses contributes +N to the
     // version token. Keeps "how many actors were observing at close"
@@ -990,6 +1125,12 @@ export class Request {
     if (this.props.claimedBy !== undefined && this.props.claimedAt !== undefined) {
       out['claimed_by'] = this.props.claimedBy.value;
       out['claimed_at'] = this.props.claimedAt;
+      // Optional metadata for the claim (issue #246). Surface only
+      // when set so pre-#246 records and noteless claims both emit
+      // byte-identical YAML on round-trip.
+      if (this.props.claimNote !== undefined) {
+        out['claim_note'] = this.props.claimNote;
+      }
     }
     // Witnesses (issue #244). Surface only when non-empty — empty
     // witnesses is the common case and an empty array would clutter
@@ -999,6 +1140,19 @@ export class Request {
     const witnessList = this.props.witnesses ?? [];
     if (witnessList.length > 0) {
       out['witnesses'] = witnessList.map((m) => m.value);
+    }
+    // Per-witness metadata (issue #246). Map keyed by lowercase
+    // actor name. Surfaced as a plain object for YAML — ordered
+    // implicitly by Map insertion (mirroring witness registration
+    // order). Omitted entirely when no witness has noted, so a
+    // post-#246 record with no notes round-trips byte-identically
+    // to a pre-#246 record.
+    if (this.props.witnessNotes !== undefined && this.props.witnessNotes.size > 0) {
+      const notes: Record<string, string> = {};
+      for (const [actor, note] of this.props.witnessNotes) {
+        notes[actor] = note;
+      }
+      out['witness_notes'] = notes;
     }
     // mutation_seq (issue #244 follow-up). Surface only when > 0 so
     // pre-#244 records and never-mediated post-#244 records both emit

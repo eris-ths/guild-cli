@@ -598,6 +598,20 @@ function hydrate(
     ) {
       props.claimedBy = MemberName.of(obj['claimed_by']);
       props.claimedAt = obj['claimed_at'] as string;
+      // claim_note (issue #246). Tolerated only as a non-empty
+      // string — empty / non-string values fall through to "no
+      // note", matching the domain rule that whitespace-only input
+      // collapses to undefined. Length cap is enforced on the next
+      // save; a hand-edited YAML carrying an over-long note hydrates
+      // verbatim so reads stay non-destructive (Devil-style "the
+      // record always wins on read"), and the next mutation that
+      // touches the note path goes through sanitizeText.
+      if (
+        typeof obj['claim_note'] === 'string' &&
+        obj['claim_note'].length > 0
+      ) {
+        props.claimNote = obj['claim_note'];
+      }
     }
     // Witnesses (issue #244). Restore only well-typed string entries;
     // anything else (objects, numbers) is dropped silently following
@@ -634,6 +648,33 @@ function hydrate(
         );
       }
       if (observers.length > 0) props.witnesses = observers;
+    }
+    // witness_notes (issue #246). Map keyed by lowercase actor name.
+    // Restored only when the field is a plain object whose values are
+    // non-empty strings; entries pointing at non-string or empty
+    // values are dropped silently (same tolerance as the witnesses
+    // array). Notes for actors NOT in `witnesses[]` are also dropped
+    // — a stray note has no anchor to attach to, and silently keeping
+    // it would muddy the next save's byte-stability. Pre-#246
+    // records and post-#246 records with no notes both lack the
+    // field and hydrate as undefined.
+    if (
+      obj['witness_notes'] !== null &&
+      typeof obj['witness_notes'] === 'object' &&
+      !Array.isArray(obj['witness_notes'])
+    ) {
+      const validActors = new Set(
+        (props.witnesses ?? []).map((m) => m.value),
+      );
+      const notes = new Map<string, string>();
+      for (const [actor, raw] of Object.entries(
+        obj['witness_notes'] as Record<string, unknown>,
+      )) {
+        if (typeof raw !== 'string' || raw.length === 0) continue;
+        if (!validActors.has(actor)) continue;
+        notes.set(actor, raw);
+      }
+      if (notes.size > 0) props.witnessNotes = notes;
     }
     // mutation_seq (issue #244 follow-up; Devil REJECT root cause).
     // Counter for cross-session-mutating verbs (claim/witness/

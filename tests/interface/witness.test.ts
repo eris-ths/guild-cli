@@ -561,3 +561,149 @@ test('unwitness on live-window: error message is the typo-oriented form', (t) =>
   assert.match(r.stderr, /unwitness only removes the caller's own witness/);
   assert.doesNotMatch(r.stderr, /auto-released on terminal/);
 });
+
+// --- issue #246: tight-scope --note on claim/witness (NOT unwitness) ---
+
+test('gate witness --note: stamps witness_note inline in show text', (t) => {
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  registerAll(root, ['alice', 'leysia']);
+  const id = newRequest(root, 'alice');
+  const r = run(root, ['witness', id, '--by', 'leysia', '--note', 'watching the dedup fix']);
+  assert.equal(r.status, 0);
+
+  const show = run(root, ['show', id, '--format', 'text']);
+  assert.equal(show.status, 0);
+  assert.match(show.stdout, /witnesses: leysia \(watching the dedup fix\)/);
+
+  // Same in JSON: top-level witness_notes map carries the entry.
+  const showJson = run(root, ['show', id, '--format', 'json']);
+  const payload = JSON.parse(showJson.stdout);
+  assert.deepEqual(payload.witness_notes, { leysia: 'watching the dedup fix' });
+});
+
+test('gate claim --note: stamps claim_note on the claim line', (t) => {
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  registerAll(root, ['alice', 'leysia']);
+  const id = newRequest(root, 'alice');
+  const r = run(root, ['claim', id, '--by', 'leysia', '--note', 'starting now']);
+  assert.equal(r.status, 0);
+
+  const show = run(root, ['show', id, '--format', 'text']);
+  assert.match(show.stdout, /claimed by: leysia at \d{4}-\d{2}-\d{2}T.*— starting now/);
+
+  const showJson = run(root, ['show', id, '--format', 'json']);
+  const payload = JSON.parse(showJson.stdout);
+  assert.equal(payload.claim_note, 'starting now');
+});
+
+test('gate witness --note: same-actor re-witness with divergent note overwrites', (t) => {
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  registerAll(root, ['alice', 'leysia']);
+  const id = newRequest(root, 'alice');
+  assert.equal(run(root, ['witness', id, '--by', 'leysia', '--note', 'first take']).status, 0);
+  // Divergent note → mutation, overwrite.
+  const r = run(root, ['witness', id, '--by', 'leysia', '--note', 'second take']);
+  assert.equal(r.status, 0);
+  // Message should reflect mutation (not the no-op variant).
+  assert.match(r.stdout, /✓ witnessed:/);
+
+  const show = run(root, ['show', id, '--format', 'json']);
+  const payload = JSON.parse(show.stdout);
+  assert.deepEqual(payload.witness_notes, { leysia: 'second take' });
+});
+
+test('gate witness: bare --note "" is a true no-op on the note dimension', (t) => {
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  registerAll(root, ['alice', 'leysia']);
+  const id = newRequest(root, 'alice');
+  // First witness with a note.
+  assert.equal(run(root, ['witness', id, '--by', 'leysia', '--note', 'kept']).status, 0);
+  // Re-witness with empty --note: per the spec, whitespace-only
+  // input collapses to undefined, which means no overwrite — the
+  // original note survives.
+  const r = run(root, ['witness', id, '--by', 'leysia', '--note', '   ']);
+  assert.equal(r.status, 0);
+  assert.match(r.stdout, /already witnessing.*no change/);
+
+  const show = run(root, ['show', id, '--format', 'json']);
+  const payload = JSON.parse(show.stdout);
+  assert.deepEqual(payload.witness_notes, { leysia: 'kept' });
+});
+
+test('gate claim --note: rejects > 80 chars', (t) => {
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  registerAll(root, ['alice', 'leysia']);
+  const id = newRequest(root, 'alice');
+  const longNote = 'x'.repeat(81);
+  const r = run(root, ['claim', id, '--by', 'leysia', '--note', longNote]);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /claim_note too long \(max 80 chars\)/);
+});
+
+test('gate unwitness: --note flag is rejected', (t) => {
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  registerAll(root, ['alice', 'leysia']);
+  const id = newRequest(root, 'alice');
+  assert.equal(run(root, ['witness', id, '--by', 'leysia']).status, 0);
+  // unwitness is a removal, not a stake — the note has no anchor.
+  const r = run(root, ['unwitness', id, '--by', 'leysia', '--note', 'leaving']);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /unwitness: unknown flag: --note/);
+});
+
+test('gate witness --note: terminal auto-reset clears witness_notes', (t) => {
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  registerAll(root, ['alice', 'leysia']);
+  const id = newRequest(root, 'alice', 'alice');
+  assert.equal(run(root, ['witness', id, '--by', 'leysia', '--note', 'soon-cleared']).status, 0);
+  // Drive the request to completed.
+  assert.equal(run(root, ['approve', id, '--by', 'eris']).status, 0);
+  assert.equal(run(root, ['execute', id, '--by', 'alice']).status, 0);
+  assert.equal(run(root, ['complete', id, '--by', 'alice', '--note', 'done']).status, 0);
+
+  const show = run(root, ['show', id, '--format', 'json']);
+  const payload = JSON.parse(show.stdout);
+  // witnesses[] auto-resets on terminal; witness_notes goes with it.
+  assert.equal(payload.witnesses, undefined);
+  assert.equal(payload.witness_notes, undefined);
+});
+
+test('gate claim --note: terminal auto-reset clears claim_note', (t) => {
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  registerAll(root, ['alice']);
+  const id = newRequest(root, 'alice', 'alice');
+  assert.equal(run(root, ['claim', id, '--by', 'alice', '--note', 'soon-cleared']).status, 0);
+  assert.equal(run(root, ['approve', id, '--by', 'eris']).status, 0);
+  assert.equal(run(root, ['execute', id, '--by', 'alice']).status, 0);
+  assert.equal(run(root, ['complete', id, '--by', 'alice', '--note', 'done']).status, 0);
+
+  const show = run(root, ['show', id, '--format', 'json']);
+  const payload = JSON.parse(show.stdout);
+  assert.equal(payload.claimed_by, undefined);
+  assert.equal(payload.claim_note, undefined);
+});
+
+test('gate unwitness: drops the actor\'s witness_note alongside the witness entry', (t) => {
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  registerAll(root, ['alice', 'leysia', 'miki']);
+  const id = newRequest(root, 'alice');
+  assert.equal(run(root, ['witness', id, '--by', 'leysia', '--note', 'leysia note']).status, 0);
+  assert.equal(run(root, ['witness', id, '--by', 'miki', '--note', 'miki note']).status, 0);
+  // Drop leysia.
+  assert.equal(run(root, ['unwitness', id, '--by', 'leysia']).status, 0);
+
+  const show = run(root, ['show', id, '--format', 'json']);
+  const payload = JSON.parse(show.stdout);
+  assert.deepEqual(payload.witnesses, ['miki']);
+  // leysia's note removed; miki's preserved.
+  assert.deepEqual(payload.witness_notes, { miki: 'miki note' });
+});

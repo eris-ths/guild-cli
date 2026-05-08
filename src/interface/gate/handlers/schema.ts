@@ -1023,6 +1023,15 @@ const VERBS: readonly VerbSchema[] = [
       properties: {
         id: idStr,
         by: strOpt('claimant (defaults to $GUILD_ACTOR)'),
+        note: strOpt(
+          'optional stake metadata (issue #246). Single short string ' +
+            '≤ 80 chars — metadata for THIS stake event, not commentary. ' +
+            'Cross-actor discussion belongs in agora plays; the note is ' +
+            'for context like "watching the dedup fix" or "blocked on ' +
+            'review #233". Same-actor re-claim with a divergent --note ' +
+            'overwrites the previous note (single value per claim). ' +
+            'Auto-cleared on terminal transitions and on release.',
+        ),
         format: formatField,
         'dry-run': dryRunField,
       },
@@ -1044,6 +1053,14 @@ const VERBS: readonly VerbSchema[] = [
       properties: {
         id: idStr,
         by: strOpt('observer (defaults to $GUILD_ACTOR)'),
+        note: strOpt(
+          'optional per-witness metadata (issue #246). Single short string ' +
+            '≤ 80 chars — metadata for THIS stake event, not commentary. ' +
+            'Cross-actor discussion belongs in agora plays. Same-actor ' +
+            're-witness with a divergent --note overwrites the previous ' +
+            'note (single value per witness). Auto-cleared on terminal ' +
+            'transitions and on unwitness.',
+        ),
         format: formatField,
         'dry-run': dryRunField,
       },

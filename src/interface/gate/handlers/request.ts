@@ -744,12 +744,30 @@ function formatRequestText(r: Request): string {
     lines.push('');
     lines.push('  stake:');
     if (hasClaim) {
-      lines.push(`    claimed by: ${j['claimed_by']} at ${j['claimed_at']}`);
+      // Optional claim_note (issue #246) appended after an em-dash
+      // separator. Stays on one line so the stake block scans
+      // compactly even with several witnesses.
+      const claimNote =
+        typeof j['claim_note'] === 'string' && j['claim_note'].length > 0
+          ? ` — ${j['claim_note']}`
+          : '';
+      lines.push(`    claimed by: ${j['claimed_by']} at ${j['claimed_at']}${claimNote}`);
     }
     if (hasWitnesses) {
-      const names = (j['witnesses'] as unknown[])
-        .map((w) => String(w))
-        .join(', ');
+      // Per-witness notes (issue #246) emitted inline as
+      // `name (note)` so a 5-witness wave with mixed annotations
+      // reads naturally:  `witnesses: alice (watching dedup), bob, carol (perf)`.
+      const witnessNotes =
+        j['witness_notes'] && typeof j['witness_notes'] === 'object' && !Array.isArray(j['witness_notes'])
+          ? (j['witness_notes'] as Record<string, string>)
+          : {};
+      const names = (j['witnesses'] as unknown[]).map((w) => {
+        const name = String(w);
+        const note = witnessNotes[name];
+        return typeof note === 'string' && note.length > 0
+          ? `${name} (${note})`
+          : name;
+      }).join(', ');
       lines.push(`    witnesses: ${names}`);
     }
   }

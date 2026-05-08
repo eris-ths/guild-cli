@@ -332,6 +332,7 @@ export class RequestUseCases {
   async claim(input: {
     id: string;
     by: string;
+    note?: string;
     dryRun?: boolean;
   }): Promise<{ request: Request; mutated: boolean }> {
     const actor = await assertActor(input.by, '--by', this.deps.members);
@@ -344,9 +345,14 @@ export class RequestUseCases {
     // safe and bounded.
     return retryOnVersionConflict('claim', input.id, async () => {
       const req = await this.loadOrThrow(input.id);
-      const before = req.claimedBy?.value;
-      req.claim(actor, this.deps.clock.now().toISOString());
-      const mutated = before !== req.claimedBy?.value;
+      // mutationSeq is the canonical "real change happened" witness —
+      // covers the (#246) case where a same-actor re-claim with a
+      // divergent --note is a real mutation even though claimedBy
+      // didn't change. Pre-#246 the claimedBy delta sufficed; under
+      // notes, it doesn't.
+      const before = req.mutationSeq;
+      req.claim(actor, this.deps.clock.now().toISOString(), input.note);
+      const mutated = req.mutationSeq !== before;
       if (mutated && !input.dryRun) await this.deps.requests.save(req);
       return { request: req, mutated };
     });
@@ -363,14 +369,18 @@ export class RequestUseCases {
   async witness(input: {
     id: string;
     by: string;
+    note?: string;
     dryRun?: boolean;
   }): Promise<{ request: Request; mutated: boolean }> {
     const actor = await assertActor(input.by, '--by', this.deps.members);
     return retryOnVersionConflict('witness', input.id, async () => {
       const req = await this.loadOrThrow(input.id);
-      const before = req.witnesses.length;
-      req.witness(actor);
-      const mutated = before !== req.witnesses.length;
+      // mutationSeq tracks both first-time witness and same-actor
+      // re-witness with a divergent note (#246) — the latter doesn't
+      // change witnesses.length but is a real mutation.
+      const before = req.mutationSeq;
+      req.witness(actor, input.note);
+      const mutated = req.mutationSeq !== before;
       if (mutated && !input.dryRun) await this.deps.requests.save(req);
       return { request: req, mutated };
     });
