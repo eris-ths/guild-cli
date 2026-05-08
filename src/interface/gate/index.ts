@@ -45,6 +45,7 @@ import { transcriptCmd } from './handlers/transcript.js';
 import { summarizeCmd } from './handlers/summarize.js';
 import { whyCmd } from './handlers/why.js';
 import { unrespondedCmd } from './handlers/unresponded.js';
+import { templatesCmd } from './handlers/templates.js';
 import { withEntryLock } from '../../infrastructure/lock/withEntryLock.js';
 import { resolveGuildActor } from '../shared/resolveGuildActor.js';
 import { READ_VERBS, WRITE_VERBS, LOCK_EXEMPT_VERBS } from './verbs.js';
@@ -273,6 +274,7 @@ const KNOWN_COMMANDS = [
   'broadcast', 'inbox', 'doctor', 'repair', 'status', 'boot',
   'suggest', 'transcript', 'summarize', 'why', 'resume', 'schema',
   'unresponded',
+  'templates',
 ] as const;
 
 export async function main(argv: readonly string[]): Promise<number> {
@@ -418,6 +420,8 @@ async function dispatch(
       return await schemaCmd(c, args);
     case 'unresponded':
       return await unrespondedCmd(c, args);
+    case 'templates':
+      return await templatesCmd(c, args);
     default: {
       const hint = nearestCommand(cmd, KNOWN_COMMANDS);
       const suggest = hint ? `\n  did you mean: gate ${hint}?` : '';

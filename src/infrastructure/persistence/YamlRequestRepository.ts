@@ -556,6 +556,36 @@ function hydrate(
     if (obj['requires_worktree_isolation'] === true) {
       props.requiresWorktreeIsolation = true;
     }
+    // Template stamp (#235). Hydrate when `template` is present and a
+    // non-empty string. `template_version` is tolerated as a positive
+    // integer (default 1 if absent / malformed); `gate_required_acknowledged`
+    // is tolerated as boolean (default true since presence of `template`
+    // is the positive assertion in phase 1). Pre-#235 records lack all
+    // three fields and round-trip clean. Records-outlive-writers
+    // (principle 04): malformed values degrade to defaults rather than
+    // dropping the whole record.
+    if (typeof obj['template'] === 'string' && (obj['template'] as string).length > 0) {
+      props.template = obj['template'] as string;
+      const rawVer = obj['template_version'];
+      if (typeof rawVer === 'number' && Number.isFinite(rawVer) && rawVer >= 1) {
+        props.templateVersion = Math.floor(rawVer);
+      } else {
+        if (rawVer !== undefined) {
+          onMalformed(
+            source,
+            `template_version is not a positive integer (got ${typeof rawVer === 'number' ? String(rawVer) : typeof rawVer}); defaulting to 1`,
+          );
+        }
+        props.templateVersion = 1;
+      }
+      const rawAck = obj['gate_required_acknowledged'];
+      if (typeof rawAck === 'boolean') {
+        props.gateRequiredAcknowledged = rawAck;
+      } else {
+        // presence of `template` implies acknowledgement in phase 1
+        props.gateRequiredAcknowledged = true;
+      }
+    }
     // Cross-session claim (issue #226). Restore only when BOTH fields
     // are present and well-typed — a record with one of the two is
     // structurally inconsistent (claim should never be half-set) and

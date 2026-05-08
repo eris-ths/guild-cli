@@ -38,6 +38,11 @@ const REQUEST_CREATE_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   // schemaInputDriftDetector.test.ts.)
   'from-agora',
   'game',
+  // #235 wave-brief template registry: --template name expands a brief
+  // skeleton; explicit --action and --reason override the defaults.
+  // Mutually exclusive with --from-agora (both supply action/reason
+  // defaults; combining them would make precedence ambiguous).
+  'template',
 ]);
 const APPROVE_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'by',
@@ -145,6 +150,50 @@ export async function reqCreate(c: C, args: ParsedArgs): Promise<number> {
     return 1;
   }
 
+  // #235 — wave-brief template skeleton expansion.
+  // When `--template <name>` is supplied, the template's `intended_use`
+  // becomes the default `--reason`, and a `wave-brief: <name>` summary
+  // becomes the default `--action`. Explicit `--action` / `--reason`
+  // override the skeleton; the template stamp itself (template name,
+  // version, gate-required acknowledgement) survives caller overrides.
+  //
+  // Mutex with --from-agora: both supply action/reason defaults, so
+  // combining them would make precedence ambiguous (does the play's
+  // invitation win, or the template's wave-brief stub?). Refuse up
+  // front rather than silently picking one — same fail-open class
+  // rejectUnknownFlags is built to prevent.
+  const templateName = optionalOption(args, 'template');
+  if (templateName !== undefined && fromAgoraRaw !== undefined) {
+    process.stderr.write(
+      `error: --template and --from-agora are mutually exclusive ` +
+        `(both supply default --action / --reason; precedence would be ` +
+        `ambiguous). Pick one: use --template <name> for a wave-brief ` +
+        `skeleton, or --from-agora <play_id> to bridge an agora play.\n`,
+    );
+    return 1;
+  }
+  let templateMeta:
+    | { name: string; version: number; intendedUse: string; gateRequired: boolean }
+    | undefined;
+  if (templateName !== undefined) {
+    const t = c.templateUC.show(templateName);
+    if (!t) {
+      const available = c.templateUC.list().map((s) => s.name);
+      const hint =
+        available.length === 0
+          ? `  (registry empty at ${c.templateUC.registryDir()})`
+          : `  available: ${available.join(', ')}`;
+      process.stderr.write(`error: unknown template "${templateName}"\n${hint}\n`);
+      return 1;
+    }
+    templateMeta = {
+      name: t.name,
+      version: t.version,
+      intendedUse: t.intendedUse,
+      gateRequired: t.gateRequired,
+    };
+  }
+
   const actionRaw = optionalOption(args, 'action');
   let reasonRaw = optionalOption(args, 'reason');
   // `--reason -` reads from stdin — parity with `gate review --comment -`.
@@ -221,6 +270,22 @@ export async function reqCreate(c: C, args: ParsedArgs): Promise<number> {
     reason = reasonRaw !== undefined && reasonRaw.trim().length > 0
       ? reasonRaw
       : lift.cliff;
+  } else if (templateMeta !== undefined) {
+    // #235 — template skeleton path. Defaults derive from the template;
+    // explicit --action / --reason override. The template stamp itself
+    // (name + version + gate_required ack) is set further below and
+    // survives any caller override of action/reason.
+    action =
+      actionRaw !== undefined && actionRaw.trim().length > 0
+        ? actionRaw
+        : `wave-brief: ${templateMeta.name}`;
+    if (reasonRaw !== undefined && reasonRaw.trim().length > 0) {
+      reason = reasonRaw;
+    } else if (templateMeta.intendedUse.length > 0) {
+      reason = templateMeta.intendedUse;
+    } else {
+      reason = `wave-brief template ${templateMeta.name} (v${templateMeta.version})`;
+    }
   } else {
     // Plain `gate request` — action/reason are both required, same
     // contract as before #232. requireOption surfaces the usage hint
@@ -236,6 +301,11 @@ export async function reqCreate(c: C, args: ParsedArgs): Promise<number> {
     reason,
   };
   if (sourceAgoraPlay !== undefined) input.sourceAgoraPlay = sourceAgoraPlay;
+  if (templateMeta !== undefined) {
+    input.template = templateMeta.name;
+    input.templateVersion = templateMeta.version;
+    input.gateRequiredAcknowledged = true;
+  }
   const executor = optionalOption(args, 'executor');
   const executorsRaw = optionalOption(args, 'executors');
   const target = optionalOption(args, 'target');
@@ -285,6 +355,25 @@ export async function reqCreate(c: C, args: ParsedArgs): Promise<number> {
           `in guild.config.yaml to enforce per-cwd isolation.\n`,
       );
     }
+  }
+  // #235 — profile=swarm gating for parallel-shaped templates. Stub:
+  // the brief catalogue carries `template_name` like `parallel-impl`
+  // / `compare-and-ratify` that imply >1 executor; under swarm we
+  // *should* require `--template` for parallel-executor waves so the
+  // brief is on record. Phase 1 emits a warning notice only;
+  // enforcement (refuse without --template) is the follow-up. Single-
+  // executor and standard-profile callers are silent.
+  if (
+    c.config.profile === 'swarm' &&
+    parallelExecutors &&
+    templateMeta === undefined
+  ) {
+    process.stderr.write(
+      `notice: parallel executors under profile=swarm without --template ` +
+        `(#235 phase 1: warning only; enforcement is follow-up). ` +
+        `Consider \`gate templates list\` to find a wave-brief template, ` +
+        `or pass --template <name> when filing this request.\n`,
+    );
   }
   // depth (issue #221): pre-check at the interface boundary so the
   // caller sees a flag-shaped error before the domain layer fires.
