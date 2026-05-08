@@ -35,6 +35,7 @@ type JsonSchema = {
   enum?: string[];
   description?: string;
   items?: JsonSchema;
+  oneOf?: JsonSchema[];
 };
 
 interface VerbSchema {
@@ -807,15 +808,19 @@ const VERBS: readonly VerbSchema[] = [
         ),
         format: formatField,
       },
-      // action/reason are conditionally required. JSON Schema can't
-      // express the "required iff --from-agora is absent" branch in
-      // a single `required:` array without `oneOf`; rather than add
-      // the conditional shape (and force every existing JSON consumer
-      // through an `oneOf` walk), we drop the unconditional require
-      // and rely on the runtime handler — `requireOption` surfaces
-      // the same usage error for plain `gate request` callers, and
-      // the description on each field names the conditional contract.
+      // action/reason are conditionally required: required iff
+      // --from-agora is absent. `oneOf` expresses the two-shape
+      // contract for JSON Schema consumers (codegen, form-builders,
+      // AI tool-use schemas) so they don't read action as
+      // unconditionally optional. Either shape A (`action`+`reason`,
+      // no agora bridge) or shape B (`from-agora`, lifts both) is
+      // valid; the runtime handler enforces the same branch via
+      // `requireOption`.
       required: [],
+      oneOf: [
+        { required: ['action', 'reason'] },
+        { required: ['from-agora'] },
+      ],
     },
     output: writeResponseSchema,
   },
