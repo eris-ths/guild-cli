@@ -24,6 +24,8 @@ import {
   VerbPlugin,
   VerbPluginLoadError,
 } from '../../application/plugin/VerbPlugin.js';
+import type { HookSubscriptions } from '../../application/plugin/HookBus.js';
+import type { HookPluginLoadError } from '../../application/plugin/HookPlugin.js';
 
 export interface Container {
   config: GuildConfig;
@@ -67,6 +69,18 @@ export interface Container {
    * load.
    */
   verbPluginErrors: readonly VerbPluginLoadError[];
+  /**
+   * Hook plugin subscriptions (#36 Phase 1 step 5). Empty map when no
+   * hook plugins are loaded. Lifecycle handlers (`approve`, `deny`,
+   * `execute`, `complete`, `fail`, `review`) call `fireBeforeHook` /
+   * `fireAfterHook` against this map at fire points.
+   */
+  hookSubscriptions: HookSubscriptions;
+  /**
+   * Per-path hook plugin load errors. Surfaced via `gate doctor` as
+   * `area: 'plugin'` findings, same channel as verb plugin errors.
+   */
+  hookPluginErrors: readonly HookPluginLoadError[];
 }
 
 export interface BuildContainerOpts {
@@ -97,6 +111,21 @@ export interface BuildContainerOpts {
    * same "plugins loaded" section. Defaults to `[]`.
    */
   verbPluginsLoaded?: ReadonlyArray<{ path: string; status: 'loaded' | 'error' }>;
+  /**
+   * Pre-loaded hook plugin subscription map (#36 Phase 1 step 5).
+   * main() builds it via `loadHookPlugins`. Defaults to an empty
+   * Map.
+   */
+  hookSubscriptions?: HookSubscriptions;
+  /**
+   * Per-path hook plugin load errors. Defaults to `[]`.
+   */
+  hookPluginErrors?: readonly HookPluginLoadError[];
+  /**
+   * Per-path load outcome (success + failure) from the hook plugin
+   * loader. Mirrors `verbPluginsLoaded`.
+   */
+  hookPluginsLoaded?: ReadonlyArray<{ path: string; status: 'loaded' | 'error' }>;
 }
 
 export function buildContainer(opts: BuildContainerOpts = {}): Container {
@@ -136,11 +165,20 @@ export function buildContainer(opts: BuildContainerOpts = {}): Container {
         // back to a derived list when only `verbPlugins` was passed
         // (test convenience), but production main() always provides
         // both arrays explicitly via opts.
-        pluginsLoaded: opts.verbPluginsLoaded ?? [],
-        errors: (opts.verbPluginErrors ?? []).map((e) => ({
-          path: e.path,
-          reason: e.reason,
-        })),
+        pluginsLoaded: [
+          ...(opts.verbPluginsLoaded ?? []),
+          ...(opts.hookPluginsLoaded ?? []),
+        ],
+        errors: [
+          ...(opts.verbPluginErrors ?? []).map((e) => ({
+            path: e.path,
+            reason: `verb plugin: ${e.reason}`,
+          })),
+          ...(opts.hookPluginErrors ?? []).map((e) => ({
+            path: e.path,
+            reason: `hook plugin: ${e.reason}`,
+          })),
+        ],
       },
     ),
     repairUC: new RepairUseCases(quarantine),
@@ -151,5 +189,7 @@ export function buildContainer(opts: BuildContainerOpts = {}): Container {
     ),
     verbPlugins: opts.verbPlugins ?? [],
     verbPluginErrors: opts.verbPluginErrors ?? [],
+    hookSubscriptions: opts.hookSubscriptions ?? new Map(),
+    hookPluginErrors: opts.hookPluginErrors ?? [],
   };
 }

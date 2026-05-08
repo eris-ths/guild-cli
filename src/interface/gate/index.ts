@@ -1,6 +1,7 @@
 import { buildContainer } from '../shared/container.js';
 import { GuildConfig } from '../../infrastructure/config/GuildConfig.js';
 import { loadVerbPlugins } from '../../infrastructure/plugin/VerbPluginLoader.js';
+import { loadHookPlugins } from '../../infrastructure/plugin/HookPluginLoader.js';
 import { parseArgs, optionalOption, HelpRequested } from '../shared/parseArgs.js';
 import { renderVerbHelp } from '../shared/verbHelp.js';
 import { nearestCommand } from '../shared/nearestCommand.js';
@@ -302,10 +303,19 @@ export async function main(argv: readonly string[]): Promise<number> {
     config.verbPluginPaths,
     builtInNames,
   );
+  // Hook plugins (#36 Phase 1 step 5). Loaded in parallel with verb
+  // plugins because the two are independent; sequential here only
+  // because the await contract is simpler. Container exposes the
+  // resulting subscription map and load errors to handlers and
+  // doctor respectively.
+  const hookPluginLoad = await loadHookPlugins(config.hookPluginPaths);
   const c = buildContainer({
     verbPlugins: verbPluginLoad.plugins,
     verbPluginErrors: verbPluginLoad.errors,
     verbPluginsLoaded: verbPluginLoad.pluginsLoaded,
+    hookSubscriptions: hookPluginLoad.subscriptions,
+    hookPluginErrors: hookPluginLoad.errors,
+    hookPluginsLoaded: hookPluginLoad.pluginsLoaded,
   });
   try {
     // #200: <write-verb> --help must not block on the lock. Help is
