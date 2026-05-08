@@ -9,39 +9,18 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
 
 ### Added
 
-- **Worktree isolation enforcement for parallel waves under
-  `profile: swarm` ([#231](https://github.com/eris-ths/guild-cli/issues/231)).**
-  Filesystem-layer guard for the substrate-experiment-6 race that sits
-  one layer below the multi-executor record fix (#230). New
-  `guild.config.yaml` keys: `profile: standard | swarm` and
-  `features.worktree_required_for_parallel`. Under `profile: swarm`,
-  `gate request --executors a,b,...` stamps
-  `requires_worktree_isolation: true` on the record, and `gate execute`
-  refuses a second invocation from the same physical cwd against the
-  same target — the operator must spawn the second executor in a
-  separate git worktree. New `gate execute --cwd <path>` flag (defaults
-  to `process.cwd()`) + `executing_at_cwd` stamp on the `executing`
-  status_log entry. Both the supplied cwd and the on-disk peer values
-  are canonicalised via `realpath` so symlink farms (`/var/X` vs
-  `/private/var/X` on darwin tmpdir, etc.) collapse to a single
-  identity for the comparison. Pre-#231 records hydrate as
-  non-isolated (no false-refuse). Under `profile: standard` the same
-  input emits a warning notice but does not refuse, preserving
-  existing single-cwd workflows.
-
-  **Best-effort race window (Devil HIGH-2 follow-up).** The collision
-  check is a peer scan → judgment → save sequence. The optimistic-lock
-  in `YamlRequestRepository.save` only guards same-request concurrent
-  writes; it does NOT serialize judgments across peer aggregates. Two
-  `gate execute` invocations against *different* request ids sharing a
-  `target` + cwd can both pass the scan before either lands. A
-  cross-process advisory lock (e.g. `<root>/requests/.execute.lock`)
-  is the structural fix and is scoped out of this wave — cross-platform
-  locking has its own design surface (Windows `LockFile`, NFS quirks,
-  stale-lock recovery) and belongs in a follow-up issue. Until then,
-  the record + agent-loop layers (#230) carry the actual safety; #231
-  closes the read-the-screen-and-recognise-the-collision class, not
-  the microsecond-window race.
+- **`gate claim <id> --by <actor>` for cross-session stake**
+  ([#226](https://github.com/eris-ths/guild-cli/issues/226) phase 1).
+  Two concurrent main-session agents that independently pick up the
+  same id (substrate-experiment 5) can now mediate the race by
+  claiming the request before working on it. Same-actor re-claim is
+  a no-op (idempotent — `claimed_at` is NOT bumped, the timestamp is
+  a "since when" stamp, not a heartbeat); a different actor's claim
+  is refused while one is held; the claim auto-releases when the
+  request reaches a terminal state (completed/failed/denied).
+  Pre-#226 records hydrate as unclaimed and YAML stays byte-stable
+  (the field is omitted entirely when null). Witness/explicit-release
+  verbs are deferred to a follow-up issue — phase 1 ships claim only.
 
 ### Fixed
 

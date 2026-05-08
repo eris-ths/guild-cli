@@ -899,6 +899,25 @@ const VERBS: readonly VerbSchema[] = [
     output: writeResponseSchema,
   },
   {
+    name: 'claim',
+    category: 'write',
+    summary:
+      'stake a cross-session claim on a pending or approved request (issue #226 phase 1). ' +
+      'Same-actor re-claim is a no-op; conflicting claim by a different actor is refused. ' +
+      'Auto-releases when the request reaches a terminal state (completed/failed/denied).',
+    input: {
+      type: 'object',
+      properties: {
+        id: idStr,
+        by: strOpt('claimant (defaults to $GUILD_ACTOR)'),
+        format: formatField,
+        'dry-run': dryRunField,
+      },
+      required: ['id'],
+    },
+    output: writeResponseSchema,
+  },
+  {
     name: 'thank',
     category: 'write',
     summary:
