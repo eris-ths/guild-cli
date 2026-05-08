@@ -36,6 +36,7 @@ import { repairCmd } from './handlers/repair.js';
 import { bootCmd } from './handlers/boot.js';
 import { schemaCmd } from './handlers/schema.js';
 import { resumeCmd } from './handlers/resume.js';
+import { restCmd } from './handlers/rest.js';
 import { reqRegister } from './handlers/register.js';
 import {
   msgSend,
@@ -278,6 +279,7 @@ const KNOWN_COMMANDS = [
   'suggest', 'transcript', 'summarize', 'why', 'resume', 'schema',
   'unresponded',
   'templates',
+  'rest',
 ] as const;
 
 export async function main(argv: readonly string[]): Promise<number> {
@@ -457,6 +459,8 @@ async function dispatch(
       return await whyCmd(c, args);
     case 'resume':
       return await resumeCmd(c, args);
+    case 'rest':
+      return await restCmd(c, args);
     case 'schema':
       return await schemaCmd(c, args);
     case 'unresponded':

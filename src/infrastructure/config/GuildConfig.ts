@@ -80,6 +80,12 @@ export interface GuildConfigProps {
     requests: string;
     issues: string;
     inbox: string;
+    /**
+     * Per-event session-boundary records (`gate rest` /
+     * `gate wake` / `gate farewell`, #36 Phase 2). One YAML file
+     * per event under `<content_root>/sessions/<id>.yaml`.
+     */
+    sessions: string;
   };
   hostNames: readonly string[];
   lenses: readonly string[];
@@ -159,6 +165,7 @@ export class GuildConfig implements GuildConfigProps {
       requests: resolveUnder(contentRoot, p.requests ?? 'requests'),
       issues: resolveUnder(contentRoot, p.issues ?? 'issues'),
       inbox: resolveUnder(contentRoot, p.inbox ?? 'inbox'),
+      sessions: resolveUnder(contentRoot, p.sessions ?? 'sessions'),
     };
     const hostNames = Array.isArray(raw.host_names)
       ? raw.host_names
@@ -291,6 +298,7 @@ export class GuildConfig implements GuildConfigProps {
         requests: join(abs, 'requests'),
         issues: join(abs, 'issues'),
         inbox: join(abs, 'inbox'),
+        sessions: join(abs, 'sessions'),
       },
       [...DEFAULT_HOSTS],
       [...DEFAULT_LENSES],

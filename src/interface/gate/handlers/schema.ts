@@ -589,6 +589,33 @@ const VERBS: readonly VerbSchema[] = [
     },
   },
   {
+    name: 'rest',
+    category: 'write',
+    summary:
+      'boundary record (#36 Phase 2). Stamps a "putting this down now" timestamp; not a lifecycle toggle. Optional --note. The matching `gate wake` and `gate farewell` verbs ship in follow-up PRs.',
+    input: {
+      type: 'object',
+      properties: {
+        by: strOpt('actor (defaults to $GUILD_ACTOR)'),
+        note: strOpt('optional free-form context (≤ 240 chars)'),
+        format: formatField,
+      },
+    },
+    output: {
+      type: 'object',
+      properties: {
+        ok: { type: 'boolean' },
+        id: { type: 'string', description: 'YYYY-MM-DD-NNN per-day sequence' },
+        kind: { type: 'string', enum: ['rest', 'wake', 'farewell'] },
+        by: str,
+        at: str,
+        note: strOpt(),
+        message: str,
+        suggested_next: { type: 'object' },
+      },
+    },
+  },
+  {
     name: 'whoami',
     category: 'read',
     summary: 'identity + recent utterances (requires GUILD_ACTOR)',
