@@ -31,6 +31,17 @@ export interface StatusLogEntry {
    * (the common case, so existing records stay byte-identical).
    */
   invokedBy?: string;
+  /**
+   * Filesystem cwd at which this transition was issued. Stamped on
+   * `executing` entries when a `cwd` is supplied, so the worktree-
+   * isolation check (issue #231) can compare two parallel executors'
+   * filesystems and refuse the second when they collide. Persisted
+   * as `executing_at_cwd` to keep the field name self-documenting in
+   * YAML — it's the path that was current at execute time, not a
+   * generic "cwd of any actor". Absent on every non-execute entry
+   * and on pre-#231 records.
+   */
+  executingAtCwd?: string;
 }
 
 export interface RequestProps {
@@ -83,6 +94,18 @@ export interface RequestProps {
    * other tool-generated relationship fields (executor, autoReview).
    */
   promotedFrom?: string;
+  /**
+   * Worktree-isolation requirement (issue #231). When true, parallel
+   * `gate execute` invocations on the same target from the SAME
+   * filesystem cwd are refused — the second `execute` errors out so
+   * the operator can spawn each agent in its own git worktree before
+   * retrying. Filesystem-layer guard for the substrate-experiment-6
+   * race that sits one layer below the multi-executor record fix
+   * (#230). Set at request-creation time when the `swarm` profile
+   * sees `executors.length > 1`; absent (= false) on every other
+   * record, including all pre-#231 history.
+   */
+  requiresWorktreeIsolation?: boolean;
   state: RequestState;
   createdAt: string;
   reviews: Review[];
@@ -150,6 +173,12 @@ export class Request {
     /** See RequestProps.promotedFrom — issue id this request was
      *  promoted from. Populated by `gate issues promote` only. */
     promotedFrom?: string;
+    /** See RequestProps.requiresWorktreeIsolation — set by the
+     *  interface layer when profile=swarm + executors.length > 1.
+     *  Persisted as `requires_worktree_isolation: true` only when
+     *  truthy; older / single-executor / standard-profile records
+     *  carry no field at all (false-by-absence). Issue #231. */
+    requiresWorktreeIsolation?: boolean;
   }): Request {
     const from = MemberName.of(input.from);
     const action = sanitizeText(input.action, 'action');
@@ -241,6 +270,13 @@ export class Request {
     if (input.promotedFrom !== undefined) {
       props.promotedFrom = input.promotedFrom;
     }
+    // Worktree-isolation: persist only when explicitly true. The
+    // false case is represented by field absence on disk so the YAML
+    // surface stays minimal (matches `depth`, `with`, `target` etc).
+    // Issue #231.
+    if (input.requiresWorktreeIsolation === true) {
+      props.requiresWorktreeIsolation = true;
+    }
     // New requests have no on-disk predecessor; loadedVersion=0 marks
     // "never seen" for the optimistic-lock check in save().
     return new Request(props, 0);
@@ -301,6 +337,35 @@ export class Request {
   get with(): readonly MemberName[] {
     return this.props.with ?? [];
   }
+  /** Issue #231 — true when the request was created under
+   *  profile=swarm with multiple executors and so demands per-cwd
+   *  isolation at execute time. False (or absent) on every other
+   *  record, including all pre-#231 history. Read surface used by
+   *  the gate execute handler to gate the cwd-collision check. */
+  get requiresWorktreeIsolation(): boolean {
+    return this.props.requiresWorktreeIsolation === true;
+  }
+  /** Most recent `executing` status_log entry's cwd, or undefined
+   *  when the request has never been executed (or when the on-disk
+   *  record predates #231). Returns the freshest entry so a request
+   *  that re-entered `executing` (rare but possible after a `fail`-
+   *  retry edit path) reflects the latest filesystem. Read by the
+   *  gate execute cwd-collision check.
+   *
+   *  TODO (Devil follow-up #231): same shape as the executor scalar
+   *  leak Devil flagged on #230 — a "latest-only" getter silently
+   *  drops history. Promote to `hasExecutingFromCwd(cwd)` predicate
+   *  in a follow-up issue once we settle whether older `executing`
+   *  entries should ever count for collision detection. */
+  get lastExecutingCwd(): string | undefined {
+    for (let i = this.props.statusLog.length - 1; i >= 0; i--) {
+      const entry = this.props.statusLog[i]!;
+      if (entry.state === 'executing' && entry.executingAtCwd !== undefined) {
+        return entry.executingAtCwd;
+      }
+    }
+    return undefined;
+  }
   get action(): string {
     return this.props.action;
   }
@@ -342,8 +407,16 @@ export class Request {
     this.transition('denied', by, reason, invokedBy);
   }
 
-  execute(by: MemberName, note?: string, invokedBy?: string): void {
-    this.transition('executing', by, note, invokedBy);
+  execute(
+    by: MemberName,
+    note?: string,
+    invokedBy?: string,
+    cwd?: string,
+  ): void {
+    // cwd lands on the status_log entry only when supplied; the
+    // common (#231-unaware) call path keeps emitting byte-identical
+    // YAML.
+    this.transition('executing', by, note, invokedBy, cwd);
   }
 
   complete(by: MemberName, note?: string, invokedBy?: string): void {
@@ -385,6 +458,7 @@ export class Request {
     by: MemberName,
     note?: string,
     invokedBy?: string,
+    cwd?: string,
   ): void {
     assertTransition(this.props.state, to);
     this.props.state = to;
@@ -407,6 +481,13 @@ export class Request {
     // YAML with redundant fields.
     if (invokedBy !== undefined && invokedBy !== by.value) {
       entry.invokedBy = invokedBy;
+    }
+    // cwd is meaningful only on `executing` entries: it's what the
+    // worktree-isolation check (#231) compares across parallel
+    // executors. Stamping cwd on approve/complete/fail would just
+    // bloat the log without giving the check anything to read.
+    if (to === 'executing' && cwd !== undefined && cwd.length > 0) {
+      entry.executingAtCwd = cwd;
     }
     this.props.statusLog.push(entry);
   }
@@ -458,6 +539,12 @@ export class Request {
       out['with'] = this.props.with.map((m) => m.value);
     if (this.props.promotedFrom !== undefined)
       out['promoted_from'] = this.props.promotedFrom;
+    // Worktree isolation requirement (#231). Surface only when true —
+    // the YAML stays minimal and pre-#231 records remain byte-stable
+    // on round-trip (false-by-absence is the load tolerance).
+    if (this.props.requiresWorktreeIsolation === true) {
+      out['requires_worktree_isolation'] = true;
+    }
     // Derive legacy closure keys from the last status_log entry so
     // external consumers (chain / voices / show --format text) keep
     // working unchanged. Single source of truth: status_log[-1].note.
@@ -507,6 +594,7 @@ function statusLogEntryToJSON(e: StatusLogEntry): Record<string, unknown> {
   };
   if (e.note !== undefined) out['note'] = e.note;
   if (e.invokedBy !== undefined) out['invoked_by'] = e.invokedBy;
+  if (e.executingAtCwd !== undefined) out['executing_at_cwd'] = e.executingAtCwd;
   return out;
 }
 

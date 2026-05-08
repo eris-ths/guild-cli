@@ -1,3 +1,5 @@
+import { resolve as resolvePath } from 'node:path';
+import { realpathSync } from 'node:fs';
 import { resolveGuildActor } from '../../shared/resolveGuildActor.js';
 import {
   ParsedArgs,
@@ -40,6 +42,7 @@ const DENY_KNOWN_FLAGS: ReadonlySet<string> = new Set([
 const EXECUTE_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'by',
   'note',
+  'cwd',
   'dry-run',
   'format',
 ]);
@@ -142,6 +145,28 @@ export async function reqCreate(c: C, args: ParsedArgs): Promise<number> {
   }
   if (executor !== undefined) input.executor = executor;
   if (target !== undefined) input.target = target;
+  // Worktree-isolation gating (#231). Two effects, both keyed on
+  // "is this a parallel wave?" (executors.length > 1):
+  //   - profile=swarm  → stamp `requires_worktree_isolation: true`
+  //                       so `gate execute` later refuses a same-cwd
+  //                       collision (filesystem-layer guard).
+  //   - profile=standard → emit a warning notice (no stamp).
+  // Single-executor requests are never gated, regardless of profile —
+  // there is no race to gate against.
+  const parallelExecutors =
+    Array.isArray(input.executors) && input.executors.length > 1;
+  if (parallelExecutors) {
+    if (c.config.features.worktreeRequiredForParallel) {
+      input.requiresWorktreeIsolation = true;
+    } else {
+      process.stderr.write(
+        `notice: parallel executors (${input.executors!.length}) under ` +
+          `profile=${c.config.profile} — same-cwd collisions are NOT refused. ` +
+          `Set 'profile: swarm' (or 'features.worktree_required_for_parallel: true') ` +
+          `in guild.config.yaml to enforce per-cwd isolation.\n`,
+      );
+    }
+  }
   // depth (issue #221): pre-check at the interface boundary so the
   // caller sees a flag-shaped error before the domain layer fires.
   // The advisory framing — 'shallow ⇒ surface point-check, deep ⇒
@@ -620,19 +645,81 @@ export async function reqDeny(c: C, args: ParsedArgs): Promise<number> {
 export async function reqExecute(c: C, args: ParsedArgs): Promise<number> {
   rejectUnknownFlags(args, EXECUTE_KNOWN_FLAGS, 'execute');
   const id = args.positional[0];
-  if (!id) throw new Error('Usage: gate execute <id> --by <m> [--dry-run]');
+  if (!id)
+    throw new Error('Usage: gate execute <id> --by <m> [--cwd <path>] [--dry-run]');
   const by = requireOption(args, 'by', '<m>', 'GUILD_ACTOR');
   const note = optionalOption(args, 'note');
+  // --cwd lets a caller declare "I'm running from THIS filesystem"
+  // explicitly. Defaults to process.cwd() because every real call
+  // path already runs from the agent's worktree; the override exists
+  // mainly for tests (which spawn a subprocess and want to assert
+  // the cwd-collision check fires deterministically) and for tools
+  // that proxy the verb without changing process directories.
+  // Issue #231.
+  const cwdFlag = optionalOption(args, 'cwd');
+  // Canonicalize via realpath so symlink farms collapse to a single
+  // identity. Devil HIGH-1 (#231 follow-up): plain `path.resolve`
+  // leaves `/var/foo` and `/private/var/foo` distinct strings even
+  // though they name the same physical directory — on darwin the
+  // tmpdir is the canonical example. The collision check compares
+  // against `peer.lastExecutingCwd` which was ALSO realpath'd at
+  // write time below, so equality reflects "same physical worktree"
+  // and not "same string". Falls back to the resolved (un-canonical)
+  // path on EACCES / ENOENT so a missing parent doesn't crash a
+  // legitimate execute — the comparison is best-effort by design
+  // (race window noted in CHANGELOG; advisory lock is follow-up).
+  const cwdResolved =
+    cwdFlag !== undefined ? resolvePath(cwdFlag) : process.cwd();
+  let cwd: string;
+  try {
+    cwd = realpathSync(cwdResolved);
+  } catch {
+    cwd = cwdResolved;
+  }
   const invokedBy = resolveInvokedBy(by, 'execute', id);
+
+  // Worktree-isolation collision check (#231). Runs only for
+  // requests that were stamped at creation time (profile=swarm +
+  // executors > 1). The check is best-effort, not transactional:
+  //   1. Load the target request.
+  //   2. Find every OTHER request with the same `target` whose state
+  //      is `executing`.
+  //   3. If any of them last entered `executing` from THIS cwd,
+  //      refuse — the operator must spawn a separate worktree.
+  // Race window between this check and the save() inside
+  // requestUC.execute is intentional: filesystem layer is one of
+  // three race-mitigations (record + agent loop + filesystem), and
+  // the optimistic-lock in YamlRequestRepository.save catches any
+  // residual collision at the *record* layer.
+  const target = await c.requestUC.show(id);
+  if (target && target.requiresWorktreeIsolation && target.target !== undefined) {
+    const peers = await c.requestUC.listByState('executing');
+    for (const peer of peers) {
+      if (peer.id.value === id) continue;
+      if (peer.target !== target.target) continue;
+      const peerCwd = peer.lastExecutingCwd;
+      if (peerCwd !== undefined && peerCwd === cwd) {
+        process.stderr.write(
+          `error: refusing to execute ${id} from cwd=${cwd}: ` +
+            `peer request ${peer.id.value} (target=${peer.target}) is already ` +
+            `executing from the same filesystem. This wave was created with ` +
+            `requires_worktree_isolation=true (profile=swarm); ` +
+            `spawn this executor in a separate git worktree and retry.\n`,
+        );
+        return 1;
+      }
+    }
+  }
+
   if (isDryRun(args)) {
     const prior = await c.requestUC.show(id);
     if (!prior) throw new Error(`Request not found: ${id}`);
     const fromState = prior.state;
-    const r = await c.requestUC.execute(id, by, note, invokedBy, { dryRun: true });
+    const r = await c.requestUC.execute(id, by, note, invokedBy, { dryRun: true, cwd });
     emitDryRunPreview({ verb: 'execute', id, by, fromState, toState: r.state, after: r, format: parseFormat(args) });
     return 0;
   }
-  const r = await c.requestUC.execute(id, by, note, invokedBy);
+  const r = await c.requestUC.execute(id, by, note, invokedBy, { cwd });
   // `--executor` / `--executors` is informational, not access
   // control: the substrate records both the assignment and the actual
   // actor, but does not refuse a mismatched execute. Surface a notice
