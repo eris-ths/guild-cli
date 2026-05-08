@@ -1,4 +1,6 @@
 import { buildContainer } from '../shared/container.js';
+import { GuildConfig } from '../../infrastructure/config/GuildConfig.js';
+import { loadVerbPlugins } from '../../infrastructure/plugin/VerbPluginLoader.js';
 import { parseArgs, optionalOption, HelpRequested } from '../shared/parseArgs.js';
 import { renderVerbHelp } from '../shared/verbHelp.js';
 import { nearestCommand } from '../shared/nearestCommand.js';
@@ -288,7 +290,23 @@ export async function main(argv: readonly string[]): Promise<number> {
     return 0;
   }
   const args = parseArgs(rest);
-  const c = buildContainer();
+  // Verb plugins (#36 Phase 1 step 4). Loaded before buildContainer
+  // because dynamic ESM `import()` is async; the container itself
+  // stays synchronous so test bootstraps don't need to thread an
+  // async pre-pass through their helpers. Built-in command names
+  // are reserved — the loader rejects collisions, so a plugin can
+  // never shadow a core verb.
+  const config = GuildConfig.load();
+  const builtInNames = new Set<string>(KNOWN_COMMANDS);
+  const verbPluginLoad = await loadVerbPlugins(
+    config.verbPluginPaths,
+    builtInNames,
+  );
+  const c = buildContainer({
+    verbPlugins: verbPluginLoad.plugins,
+    verbPluginErrors: verbPluginLoad.errors,
+    verbPluginsLoaded: verbPluginLoad.pluginsLoaded,
+  });
   try {
     // #200: <write-verb> --help must not block on the lock. Help is
     // read-only; routing it through withEntryLock would surface
@@ -304,11 +322,24 @@ export async function main(argv: readonly string[]): Promise<number> {
     // --by/--from at the entry layer is intentionally out of scope
     // (deferred follow-up); this is a strictly diagnostic improvement.
     const actor = resolveGuildActor() ?? '(unset)';
+    // Augment the verb sets with the loaded plugins so the lock
+    // middleware classifies plugin verbs by their declared category
+    // rather than falling through to the unknown→write fail-safe.
+    // category 'meta' rides with READ (introspection); 'admin' rides
+    // with LOCK_EXEMPT (doctor / repair maintenance pattern).
+    const readSet = new Set<string>(READ_VERBS);
+    const writeSet = new Set<string>(WRITE_VERBS);
+    const exemptSet = new Set<string>(LOCK_EXEMPT_VERBS);
+    for (const p of c.verbPlugins) {
+      if (p.category === 'read' || p.category === 'meta') readSet.add(p.name);
+      else if (p.category === 'write') writeSet.add(p.name);
+      else if (p.category === 'admin') exemptSet.add(p.name);
+    }
     return await withEntryLock(
       c.config,
       'gate',
       cmd,
-      { READ_VERBS, WRITE_VERBS, LOCK_EXEMPT_VERBS },
+      { READ_VERBS: readSet, WRITE_VERBS: writeSet, LOCK_EXEMPT_VERBS: exemptSet },
       actor,
       () => dispatch(cmd, c, args),
     );
@@ -423,7 +454,24 @@ async function dispatch(
     case 'templates':
       return await templatesCmd(c, args);
     default: {
-      const hint = nearestCommand(cmd, KNOWN_COMMANDS);
+      // Verb plugin dispatch (#36 Phase 1 step 4). Built-in cases
+      // run first (the switch above); plugins are the fall-through
+      // step before "unknown command". Built-in name collisions are
+      // already filtered out in the loader, so a plugin reaching
+      // this point is guaranteed not to shadow core dispatch.
+      for (const p of c.verbPlugins) {
+        if (p.name === cmd) {
+          return await p.run(c, args);
+        }
+      }
+      // The did-you-mean hint searches both core verbs and loaded
+      // plugins so a typo against a plugin verb still gets a useful
+      // suggestion ("did you mean: gate myverb?").
+      const candidates = [
+        ...KNOWN_COMMANDS,
+        ...c.verbPlugins.map((p) => p.name),
+      ];
+      const hint = nearestCommand(cmd, candidates);
       const suggest = hint ? `\n  did you mean: gate ${hint}?` : '';
       process.stderr.write(
         `unknown command: ${cmd}${suggest}\n` +
