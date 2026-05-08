@@ -44,6 +44,16 @@ interface VerbSchema {
   readonly category: 'read' | 'write' | 'admin' | 'meta';
   readonly input: JsonSchema;
   readonly output: JsonSchema;
+  /**
+   * Origin discriminator (issue #36 Phase 1 groundwork). Built-in
+   * verbs declared in this file omit the field and are emitted as
+   * `source: 'core'` by `schemaCmd`'s default. The forthcoming
+   * verb-plugin loader will register schemas with `source: 'plugin'`
+   * so MCP wirings and LLM tool layers can filter built-in surface
+   * from extensions without cross-checking another source of truth.
+   * Stability contract: `docs/POLICY.md` § "Plugin stability".
+   */
+  readonly source?: 'core' | 'plugin';
 }
 
 const str: JsonSchema = { type: 'string' };
@@ -1326,6 +1336,13 @@ export async function schemaCmd(_c: C, args: ParsedArgs): Promise<number> {
     verbs: verbs.map((v) => ({
       name: v.name,
       category: v.category,
+      // `source` defaults to 'core' when the VerbSchema entry omits
+      // it — the built-in VERBS table never sets it explicitly so a
+      // future loader landing 'plugin' is the only signal worth
+      // emitting verbatim. Always emitted on the wire so consumers
+      // never see undefined and can filter unconditionally. See
+      // VerbSchema interface comment for the discrimination contract.
+      source: v.source ?? 'core',
       summary: v.summary,
       input: v.input,
       output: v.output,
@@ -1337,7 +1354,13 @@ export async function schemaCmd(_c: C, args: ParsedArgs): Promise<number> {
     const lines: string[] = [];
     for (const v of verbs) {
       const req = v.input.required?.join(', ') ?? '';
-      lines.push(`${v.name} [${v.category}] — ${v.summary}`);
+      // `source` is rendered only for plugin verbs — every built-in
+      // verb is `core` and a `[core]` tag on every line would just
+      // be noise (voice budget). The plugin marker calls attention
+      // to extensions because filtering by it is the typical reason
+      // a reader would consult `gate schema --format text`.
+      const src = v.source === 'plugin' ? ' [plugin]' : '';
+      lines.push(`${v.name} [${v.category}]${src} — ${v.summary}`);
       if (req) lines.push(`  required: ${req}`);
     }
     process.stdout.write(lines.join('\n') + '\n');
