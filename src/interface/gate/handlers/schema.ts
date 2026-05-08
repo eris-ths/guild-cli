@@ -918,6 +918,43 @@ const VERBS: readonly VerbSchema[] = [
     output: writeResponseSchema,
   },
   {
+    name: 'witness',
+    category: 'write',
+    summary:
+      'register as a non-exclusive observer on a pending/approved/executing request (issue #244). ' +
+      'Multiple actors may witness simultaneously; coexists with any claim. ' +
+      'Same-actor re-witness is a no-op. Auto-resets when the request reaches a terminal state.',
+    input: {
+      type: 'object',
+      properties: {
+        id: idStr,
+        by: strOpt('observer (defaults to $GUILD_ACTOR)'),
+        format: formatField,
+        'dry-run': dryRunField,
+      },
+      required: ['id'],
+    },
+    output: writeResponseSchema,
+  },
+  {
+    name: 'unwitness',
+    category: 'write',
+    summary:
+      "remove the caller's own witness from a request (issue #244). " +
+      'Refuses if the caller is not currently a witness, or for any other actor.',
+    input: {
+      type: 'object',
+      properties: {
+        id: idStr,
+        by: strOpt('observer to remove (must match caller; defaults to $GUILD_ACTOR)'),
+        format: formatField,
+        'dry-run': dryRunField,
+      },
+      required: ['id'],
+    },
+    output: writeResponseSchema,
+  },
+  {
     name: 'thank',
     category: 'write',
     summary:

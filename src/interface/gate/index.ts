@@ -18,6 +18,7 @@ import {
 } from './handlers/request.js';
 import { reqReview } from './handlers/review.js';
 import { reqClaim } from './handlers/claim.js';
+import { reqWitness, reqUnwitness } from './handlers/witness.js';
 import { reqThank } from './handlers/thank.js';
 import {
   reqVoices,
@@ -108,6 +109,17 @@ Requests:
                        is refused. The claim auto-releases when the
                        request reaches a terminal state (completed /
                        failed / denied).
+  gate witness <id> --by <m> [--dry-run]
+  gate unwitness <id> --by <m> [--dry-run]
+                       Register / remove a non-exclusive observer on
+                       a pending / approved / executing request
+                       (issue #244). Multiple actors may witness in
+                       parallel and witness coexists with any claim.
+                       Same-actor re-witness is a no-op; unwitness
+                       only removes the caller's own witness (refuses
+                       on a foreign actor). Auto-resets to no
+                       witnesses when the request reaches a terminal
+                       state.
                        --dry-run on any write verb above emits a
                        preview JSON envelope (dry_run/verb/would_
                        transition/preview) without persisting.
@@ -256,7 +268,8 @@ Meta:
 const KNOWN_COMMANDS = [
   'request', 'pending', 'board', 'list', 'show', 'voices', 'tail',
   'whoami', 'register', 'chain', 'approve', 'deny', 'execute',
-  'complete', 'fail', 'review', 'claim', 'thank', 'fast-track', 'issues', 'message',
+  'complete', 'fail', 'review', 'claim', 'witness', 'unwitness',
+  'thank', 'fast-track', 'issues', 'message',
   'broadcast', 'inbox', 'doctor', 'repair', 'status', 'boot',
   'suggest', 'transcript', 'summarize', 'why', 'resume', 'schema',
   'unresponded',
@@ -367,6 +380,10 @@ async function dispatch(
       return await reqReview(c, args);
     case 'claim':
       return await reqClaim(c, args);
+    case 'witness':
+      return await reqWitness(c, args);
+    case 'unwitness':
+      return await reqUnwitness(c, args);
     case 'thank':
       return await reqThank(c, args);
     case 'fast-track':

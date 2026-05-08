@@ -9,6 +9,27 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
 
 ### Added
 
+- **`gate witness <id> --by <actor>` / `gate unwitness <id> --by <actor>`
+  for non-exclusive cross-session observation**
+  ([#244](https://github.com/eris-ths/guild-cli/issues/244),
+  [#226](https://github.com/eris-ths/guild-cli/issues/226) phase 2).
+  Companion verb to `claim` (phase 1): where claim is "I'm working on
+  this right now, do not double-stake" (exclusive, refuses on
+  conflict), witness is "I'm watching this" (non-exclusive — multiple
+  actors can witness simultaneously, never refuses on conflict with a
+  claim or another witness). Re-witness by the same actor is a no-op
+  (idempotent — the array doubles as a set ordered by first
+  registration). `unwitness` removes only the caller's own witness,
+  refusing on a foreign actor (no kick semantics in this primitive).
+  State guard: witness allowed on pending/approved/executing (the live
+  race window — passive observation of in-progress work is
+  legitimate); terminal states refuse and auto-reset existing
+  witnesses to `[]` on the transition. Pre-#244 records hydrate as no
+  witnesses and YAML stays byte-stable (the `witnesses:` field is
+  omitted when empty). `gate show` surfaces `witnesses: a, b, c` below
+  the claim line in text mode, and exposes the structured `witnesses`
+  array in JSON mode (omitted when empty in both surfaces).
+
 - **`gate claim <id> --by <actor>` for cross-session stake**
   ([#226](https://github.com/eris-ths/guild-cli/issues/226) phase 1).
   Two concurrent main-session agents that independently pick up the

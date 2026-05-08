@@ -135,6 +135,22 @@ export interface RequestProps {
   /** ISO 8601 timestamp of the claim, paired with `claimedBy`. Both
    *  fields move together — set together, cleared together. */
   claimedAt?: string;
+  /**
+   * Cross-session non-exclusive observers (issue #226 phase 2 / #244).
+   * Sibling primitive to `claimedBy`: where claim is "I'm working on
+   * this right now, do not double-stake" (exclusive, refuses on
+   * conflict), `witnesses` is "I'm watching this" (non-exclusive,
+   * multiple actors can witness simultaneously, never refuses on
+   * conflict with claim or with another witness). Order is meaningful
+   * — registration order — so a reader can see "first observer" first.
+   *
+   * Persistence: omitted from YAML when empty (byte-stable round-trip
+   * with pre-#244 records). Old records hydrate as []. Auto-resets
+   * to [] on terminal transitions for the same reason claim does:
+   * the verb mediates the live cross-session race window, and a
+   * terminal record carries no further race signal.
+   */
+  witnesses?: MemberName[];
 }
 
 /**
@@ -539,6 +555,104 @@ export class Request {
     delete this.props.claimedAt;
   }
 
+  /** Current witnesses in registration order. Empty when no observers. Issue #244. */
+  get witnesses(): readonly MemberName[] {
+    return this.props.witnesses ?? [];
+  }
+
+  /**
+   * Register a non-exclusive observer (issue #244). Witness is the
+   * companion verb to claim:
+   *
+   *   - claim     : "I'm working on this" — exclusive; refuses on conflict.
+   *   - witness   : "I'm watching this" — non-exclusive; never refuses.
+   *
+   * Multiple actors may witness in parallel; a witness coexists with
+   * any claim (by the same actor or a different one). Re-witness by
+   * the same actor is a no-op — duplicates are not appended, so the
+   * array doubles as a set ordered by first registration. The state
+   * guard mirrors claim: only `pending` / `approved` / `executing`
+   * accept new witnesses, since terminal records have moved past the
+   * live race window the verb exists to surface.
+   *
+   * Unlike claim, witness is permitted on `executing` because passive
+   * observation of work-in-progress is a legitimate "I'm following
+   * this" signal, whereas claim on `executing` would be too late to
+   * mediate the cross-session race claim is designed for.
+   */
+  witness(by: MemberName): void {
+    if (
+      this.props.state !== 'pending' &&
+      this.props.state !== 'approved' &&
+      this.props.state !== 'executing'
+    ) {
+      throw new DomainError(
+        `Cannot witness a request in state "${this.props.state}"; ` +
+          `witness only applies while pending, approved, or executing ` +
+          `(the live race window).`,
+        'state',
+      );
+    }
+    const list = this.props.witnesses ?? [];
+    if (list.some((m) => m.value === by.value)) {
+      // Idempotent re-witness — already observing, no mutation.
+      return;
+    }
+    list.push(by);
+    this.props.witnesses = list;
+  }
+
+  /**
+   * Remove the caller's witness (issue #244). Three outcomes:
+   *
+   *   1. Caller is in the list → remove (the normal case).
+   *   2. Caller is not in the list → throw. Quietly no-op'ing would
+   *      make a typo (`gate unwitness <id> --by mki`) indistinguishable
+   *      from success, and the intent of `unwitness` is to assert
+   *      "I want my name OFF this" — a missing entry is meaningful.
+   *   3. Foreign actor on someone else's witness → throw. The verb is
+   *      reflexive: each actor may only release their own witness,
+   *      never another's. (No "kick" semantics in this primitive; if
+   *      that ever lands, it gets its own verb name.)
+   *
+   * State guard intentionally absent: unwitness must work in any
+   * state so an observer who joined a request which then progressed
+   * to a terminal state can still clean up. (In practice the auto-
+   * reset on terminal transition does this for them, but a manual
+   * unwitness on a closed record stays a clean no-mutation throw.)
+   */
+  unwitness(by: MemberName): void {
+    const list = this.props.witnesses ?? [];
+    const idx = list.findIndex((m) => m.value === by.value);
+    if (idx < 0) {
+      throw new DomainError(
+        `${by.value} is not a witness of request ${this.props.id.value}; ` +
+          `unwitness only removes the caller's own witness (use witness ` +
+          `to register first, or check the actor name).`,
+        'witnesses',
+      );
+    }
+    list.splice(idx, 1);
+    if (list.length === 0) {
+      // Drop the prop entirely so toJSON's "omit when empty" branch
+      // emits the same byte-stable YAML as a never-witnessed record.
+      delete this.props.witnesses;
+    } else {
+      this.props.witnesses = list;
+    }
+  }
+
+  /**
+   * Clear all witnesses. Called from `transition` on terminal states
+   * for the same reason claim auto-releases — once the request is
+   * completed/failed/denied, the live observation channel is moot,
+   * and leaving stale witness names on a closed record is just noise.
+   */
+  private resetWitnesses(): void {
+    if (this.props.witnesses === undefined) return;
+    delete this.props.witnesses;
+  }
+
   private transition(
     to: RequestState,
     by: MemberName,
@@ -586,6 +700,10 @@ export class Request {
     // surviving across that boundary as a "still mine" marker.
     if (to === 'completed' || to === 'failed' || to === 'denied') {
       this.releaseClaim();
+      // Witnesses (issue #244) auto-reset on the same terminal frontier
+      // as claim. Same rationale: the verb mediates the live race
+      // window, and a terminal record carries no further race signal.
+      this.resetWitnesses();
     }
   }
 
@@ -652,6 +770,15 @@ export class Request {
     if (this.props.claimedBy !== undefined && this.props.claimedAt !== undefined) {
       out['claimed_by'] = this.props.claimedBy.value;
       out['claimed_at'] = this.props.claimedAt;
+    }
+    // Witnesses (issue #244). Surface only when non-empty — empty
+    // witnesses is the common case and an empty array would clutter
+    // every YAML record. Order is preserved (registration order, not
+    // sorted) so a reader sees "first observer first". Pre-#244
+    // records lack the field entirely and round-trip clean.
+    const witnessList = this.props.witnesses ?? [];
+    if (witnessList.length > 0) {
+      out['witnesses'] = witnessList.map((m) => m.value);
     }
     // Derive legacy closure keys from the last status_log entry so
     // external consumers (chain / voices / show --format text) keep

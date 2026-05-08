@@ -318,6 +318,46 @@ export class RequestUseCases {
     return { request: req, mutated };
   }
 
+  /**
+   * Register a non-exclusive observer (issue #244). Thin wrapper over
+   * `Request.witness`: validates `by` against the member directory,
+   * delegates the idempotency / state-guard logic to the aggregate.
+   * Save is skipped when the witness already exists (re-witness no-op)
+   * since the aggregate stays unchanged and persisting would only
+   * churn the file's version-lock.
+   */
+  async witness(input: {
+    id: string;
+    by: string;
+    dryRun?: boolean;
+  }): Promise<{ request: Request; mutated: boolean }> {
+    const req = await this.loadOrThrow(input.id);
+    const actor = await assertActor(input.by, '--by', this.deps.members);
+    const before = req.witnesses.length;
+    req.witness(actor);
+    const mutated = before !== req.witnesses.length;
+    if (mutated && !input.dryRun) await this.deps.requests.save(req);
+    return { request: req, mutated };
+  }
+
+  /**
+   * Remove the caller's witness (issue #244). Sibling of `witness`:
+   * domain throws when the actor is not a current witness, so the
+   * use case stays a thin pass-through. Always saves on success
+   * because unwitness is always a real mutation (length decreases).
+   */
+  async unwitness(input: {
+    id: string;
+    by: string;
+    dryRun?: boolean;
+  }): Promise<Request> {
+    const req = await this.loadOrThrow(input.id);
+    const actor = await assertActor(input.by, '--by', this.deps.members);
+    req.unwitness(actor);
+    if (!input.dryRun) await this.deps.requests.save(req);
+    return req;
+  }
+
   private async loadOrThrow(id: string): Promise<Request> {
     const req = await this.deps.requests.findById(RequestId.of(id));
     if (!req) throw new DomainError(`Request not found: ${id}`, 'id');

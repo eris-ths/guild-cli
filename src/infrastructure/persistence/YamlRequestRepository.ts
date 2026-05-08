@@ -542,6 +542,18 @@ function hydrate(
       props.claimedBy = MemberName.of(obj['claimed_by']);
       props.claimedAt = obj['claimed_at'] as string;
     }
+    // Witnesses (issue #244). Restore only well-typed string entries;
+    // anything else (objects, numbers) is dropped silently following
+    // the same conservative read pattern as `with`. Pre-#244 records
+    // lack the field entirely and hydrate as no witnesses (the empty-
+    // by-absence default), preserving byte-stable round-trip.
+    if (Array.isArray(obj['witnesses'])) {
+      const observers: MemberName[] = [];
+      for (const raw of obj['witnesses'] as unknown[]) {
+        if (typeof raw === 'string') observers.push(MemberName.of(raw));
+      }
+      if (observers.length > 0) props.witnesses = observers;
+    }
     // Legacy top-level closure keys (completion_note / deny_reason /
     // failure_reason) are no longer written separately — status_log[-1].note
     // is the single source of truth. Handle the three migration cases

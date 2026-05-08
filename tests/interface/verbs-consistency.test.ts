@@ -38,7 +38,8 @@ interface Case {
 const GATE_ALL = [
   'request', 'pending', 'board', 'list', 'show', 'voices', 'tail',
   'whoami', 'register', 'chain', 'approve', 'deny', 'execute',
-  'complete', 'fail', 'review', 'claim', 'thank', 'fast-track', 'issues',
+  'complete', 'fail', 'review', 'claim', 'witness', 'unwitness',
+  'thank', 'fast-track', 'issues',
   'message', 'broadcast', 'inbox', 'doctor', 'repair', 'status',
   'boot', 'suggest', 'transcript', 'summarize', 'why', 'resume',
   'schema', 'unresponded',
