@@ -192,12 +192,19 @@ export class DiagnosticUseCases {
     // sufficient — doctor plugins are filesystem paths under root,
     // verb plugins are too, and any path-shaped string is a path
     // for display purposes.
+    // Caller (`buildContainer` for the gate entry) prefixes the
+    // reason with the plugin kind ("verb plugin: ..." / "hook
+    // plugin: ...") before passing in, so this layer doesn't need
+    // to discriminate. Keeping the formatting at the wiring layer
+    // means future plugin kinds (transforms, etc.) only need to
+    // rename their own prefix without revisiting the diagnostic
+    // domain.
     for (const e of this.verbPlugins.errors) {
       findings.push({
         area: 'plugin',
         source: e.path,
         kind: 'unknown',
-        message: `verb plugin error: ${e.reason}`,
+        message: e.reason,
       });
     }
     const allPluginsLoaded: PluginLoadInfo[] = [

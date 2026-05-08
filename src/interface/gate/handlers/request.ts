@@ -8,6 +8,11 @@ import {
   rejectUnknownFlags,
 } from '../../shared/parseArgs.js';
 import { notFoundMessage } from '../../shared/notFoundHint.js';
+import {
+  fireBeforeHook,
+  fireAfterHook,
+  emitHookVeto,
+} from '../../../application/plugin/HookBus.js';
 
 // Known flags per write-verb. Silent-ignore of unknown flags (e.g.
 // `--executr noir` instead of `--executor noir`) would let a typo
@@ -922,7 +927,17 @@ export async function reqApprove(c: C, args: ParsedArgs): Promise<number> {
       return 1;
     }
   }
+  // Lifecycle hook fire point (#36 Phase 1 step 5). `before:approve`
+  // sees the pre-mutation request snapshot; a veto blocks the
+  // transition. Fired AFTER the built-in self-approve check because
+  // a hook policy that depends on actor identity should compose with
+  // (not duplicate) the hard-coded gate.
+  if (prior !== null) {
+    const veto = await fireBeforeHook(c.hookSubscriptions, 'approve', prior, by);
+    if (veto) return emitHookVeto('approve', id, veto);
+  }
   const r = await c.requestUC.approve(id, by, note, invokedBy);
+  await fireAfterHook(c.hookSubscriptions, 'approve', r, by);
   // Self-approval notice. Suppressed under `allowed` (deployments that
   // actively rely on self-approve and don't want the audit line).
   // Preserved under `warn` — the historical default — so the
@@ -960,7 +975,13 @@ export async function reqDeny(c: C, args: ParsedArgs): Promise<number> {
     emitDryRunPreview({ verb: 'deny', id, by, fromState, toState: r.state, after: r, format: parseFormat(args) });
     return 0;
   }
+  const priorDeny = await c.requestUC.show(id);
+  if (priorDeny !== null) {
+    const veto = await fireBeforeHook(c.hookSubscriptions, 'deny', priorDeny, by);
+    if (veto) return emitHookVeto('deny', id, veto);
+  }
   const r = await c.requestUC.deny(id, by, reason, invokedBy);
+  await fireAfterHook(c.hookSubscriptions, 'deny', r, by);
   emitWriteResponse(parseFormat(args), r, `✓ denied: ${id}`, c.config);
   return 0;
 }
@@ -1044,7 +1065,12 @@ export async function reqExecute(c: C, args: ParsedArgs): Promise<number> {
     emitDryRunPreview({ verb: 'execute', id, by, fromState, toState: r.state, after: r, format: parseFormat(args) });
     return 0;
   }
+  if (target !== null) {
+    const veto = await fireBeforeHook(c.hookSubscriptions, 'execute', target, by);
+    if (veto) return emitHookVeto('execute', id, veto);
+  }
   const r = await c.requestUC.execute(id, by, note, invokedBy, { cwd });
+  await fireAfterHook(c.hookSubscriptions, 'execute', r, by);
   // `--executor` / `--executors` is informational, not access
   // control: the substrate records both the assignment and the actual
   // actor, but does not refuse a mismatched execute. Surface a notice
@@ -1090,7 +1116,13 @@ export async function reqComplete(c: C, args: ParsedArgs): Promise<number> {
     emitDryRunPreview({ verb: 'complete', id, by, fromState, toState: r.state, after: r, format: parseFormat(args) });
     return 0;
   }
+  const priorComplete = await c.requestUC.show(id);
+  if (priorComplete !== null) {
+    const veto = await fireBeforeHook(c.hookSubscriptions, 'complete', priorComplete, by);
+    if (veto) return emitHookVeto('complete', id, veto);
+  }
   const r = await c.requestUC.complete(id, by, note, invokedBy);
+  await fireAfterHook(c.hookSubscriptions, 'complete', r, by);
   const extraLines: string[] = [];
   if (r.autoReview) {
     const reviewer = r.autoReview.value;
@@ -1126,7 +1158,13 @@ export async function reqFail(c: C, args: ParsedArgs): Promise<number> {
     emitDryRunPreview({ verb: 'fail', id, by, fromState, toState: r.state, after: r, format: parseFormat(args) });
     return 0;
   }
+  const priorFail = await c.requestUC.show(id);
+  if (priorFail !== null) {
+    const veto = await fireBeforeHook(c.hookSubscriptions, 'fail', priorFail, by);
+    if (veto) return emitHookVeto('fail', id, veto);
+  }
   const r = await c.requestUC.fail(id, by, reason, invokedBy);
+  await fireAfterHook(c.hookSubscriptions, 'fail', r, by);
   emitWriteResponse(parseFormat(args), r, `✓ failed: ${id}`, c.config);
   return 0;
 }

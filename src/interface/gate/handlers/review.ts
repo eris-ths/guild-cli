@@ -14,6 +14,11 @@ import {
   normalizeActor,
 } from './internal.js';
 import { emitWriteResponse, parseFormat } from './writeFormat.js';
+import {
+  fireBeforeHook,
+  fireAfterHook,
+  emitHookVeto,
+} from '../../../application/plugin/HookBus.js';
 
 // Friction bundle (#228 sub-task 1): `--note` is the canonical comment
 // flag across every write verb (approve / deny / execute / complete /
@@ -158,6 +163,14 @@ export async function reqReview(c: C, args: ParsedArgs): Promise<number> {
     emitDryRunPreview({ verb: 'review', id, by, after: updated, format: parseFormat(args) });
     return 0;
   }
+  // Lifecycle hook fire point (#36 Phase 1 step 5). `before:review`
+  // sees the pre-review request snapshot; a veto blocks the append.
+  // Useful for policy hooks like "this lense is reserved to hosts".
+  const priorReview = await c.requestUC.show(id);
+  if (priorReview !== null) {
+    const veto = await fireBeforeHook(c.hookSubscriptions, 'review', priorReview, by);
+    if (veto) return emitHookVeto('review', id, veto);
+  }
   const updated = await c.requestUC.review({
     id,
     by,
@@ -166,6 +179,7 @@ export async function reqReview(c: C, args: ParsedArgs): Promise<number> {
     comment,
     ...(invokedBy !== undefined ? { invokedBy } : {}),
   });
+  await fireAfterHook(c.hookSubscriptions, 'review', updated, by);
   // Self-review warning. The tool permits `--by` to equal the
   // request author (the YAML is just an append-only record and
   // doesn't know intent), but the Two-Persona Devil frame is
