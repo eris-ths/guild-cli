@@ -69,6 +69,16 @@ export class RequestUseCases {
      *  derived from an agora play's invitation/cliff. Persisted only
      *  when set (absence is the common case). */
     sourceAgoraPlay?: string;
+    /** Wave-brief template stamp (#235). Threads through from the
+     *  interface layer's `--template` flag. The trio (template name,
+     *  version, gate_required acknowledgement) moves together; if the
+     *  caller supplies `template`, the version defaults to 1 and
+     *  acknowledgement to true. Mutually exclusive with
+     *  `sourceAgoraPlay` at the interface layer (both supply
+     *  action/reason defaults). */
+    template?: string;
+    templateVersion?: number;
+    gateRequiredAcknowledged?: boolean;
   }): Promise<Request> {
     const { requests, members, clock } = this.deps;
     const from = await assertActor(input.from, '--from', members);
@@ -130,6 +140,13 @@ export class RequestUseCases {
       createArgs.requiresWorktreeIsolation = true;
     if (input.sourceAgoraPlay !== undefined)
       createArgs.sourceAgoraPlay = input.sourceAgoraPlay;
+    if (input.template !== undefined) {
+      createArgs.template = input.template;
+      if (input.templateVersion !== undefined)
+        createArgs.templateVersion = input.templateVersion;
+      if (input.gateRequiredAcknowledged !== undefined)
+        createArgs.gateRequiredAcknowledged = input.gateRequiredAcknowledged;
+    }
 
     for (let attempt = 0; attempt < 10; attempt++) {
       createArgs.id = RequestId.generate(now, seq);

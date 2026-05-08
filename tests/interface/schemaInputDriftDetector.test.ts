@@ -67,6 +67,11 @@ const GATE = resolve(here, '../../../bin/gate.mjs');
 const SUBCOMMAND_UMBRELLAS: ReadonlySet<string> = new Set([
   'issues',
   'inbox', // inbox umbrella has mark-read sub-handler with separate flags
+  // templates (#235): same shape as issues — `templates list` and
+  // `templates show` carry separate KNOWN_FLAGS sets, but the schema
+  // collapses them into a single `templates` entry with a `subcommand`
+  // discriminator. Skip in line with the policy comment above.
+  'templates',
 ]);
 
 // `gate help` and the very top-level positional verb dispatcher

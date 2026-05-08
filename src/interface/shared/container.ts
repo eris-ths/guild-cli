@@ -18,6 +18,8 @@ import { SafeFsQuarantineStore } from '../../infrastructure/persistence/SafeFsQu
 import { OnMalformed } from '../../application/ports/OnMalformed.js';
 import { YamlPlayRepository } from '../../passages/agora/infrastructure/YamlPlayRepository.js';
 import { PlayRepository } from '../../passages/agora/application/PlayRepository.js';
+import { FsTemplateRepository } from '../../infrastructure/template/TemplateRepository.js';
+import { TemplateUseCases } from '../../application/template/TemplateUseCases.js';
 
 export interface Container {
   config: GuildConfig;
@@ -38,6 +40,13 @@ export interface Container {
    * `agora` CLI verbs read/write.
    */
   playRepo: PlayRepository;
+  /**
+   * Wave-brief template registry adapter (#235). Wired so
+   * `gate templates list/show` and `gate request --template <name>`
+   * read from the per-instance template SOT under
+   * `<content_root>/data/guild/templates/wave-brief/`.
+   */
+  templateUC: TemplateUseCases;
 }
 
 export interface BuildContainerOpts {
@@ -84,5 +93,8 @@ export function buildContainer(opts: BuildContainerOpts = {}): Container {
     repairUC: new RepairUseCases(quarantine),
     unrespondedConcernsQ: new UnrespondedConcernsQuery(requests, issues),
     playRepo: new YamlPlayRepository(config),
+    templateUC: new TemplateUseCases(
+      new FsTemplateRepository(config.contentRoot, config.onMalformed),
+    ),
   };
 }

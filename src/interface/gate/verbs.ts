@@ -36,6 +36,7 @@ export const READ_VERBS: ReadonlySet<string> = new Set([
   'resume',
   'schema',
   'unresponded',
+  'templates',
 ]);
 
 export const WRITE_VERBS: ReadonlySet<string> = new Set([

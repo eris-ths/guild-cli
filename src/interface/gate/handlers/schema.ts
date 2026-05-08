@@ -807,22 +807,50 @@ const VERBS: readonly VerbSchema[] = [
             'without --from-agora.',
         ),
         format: formatField,
+        template: strOpt(
+          'wave-brief template name (#235). Expands a brief skeleton ' +
+            'into action/reason defaults; explicit --action / --reason ' +
+            "override. The template name + version are stamped onto the " +
+            'request record (template / template_version / ' +
+            'gate_required_acknowledged). Use `gate templates list` to ' +
+            'see the catalogue.',
+        ),
       },
-      // action/reason are conditionally required: required iff
-      // --from-agora is absent. `oneOf` expresses the two-shape
-      // contract for JSON Schema consumers (codegen, form-builders,
-      // AI tool-use schemas) so they don't read action as
-      // unconditionally optional. Either shape A (`action`+`reason`,
-      // no agora bridge) or shape B (`from-agora`, lifts both) is
-      // valid; the runtime handler enforces the same branch via
-      // `requireOption`.
+      // action/reason are conditionally required: required unless one
+      // of `--from-agora` (#232) or `--template` (#235) is supplied,
+      // each of which provides its own action/reason defaults. `oneOf`
+      // expresses the three-shape contract for JSON Schema consumers
+      // (codegen, form-builders, AI tool-use schemas) so they don't
+      // read action as unconditionally optional. The runtime handler
+      // enforces the same branches via `requireOption`, and rejects
+      // `--from-agora` + `--template` as mutually exclusive (both
+      // supply defaults; precedence would be ambiguous).
       required: [],
       oneOf: [
         { required: ['action', 'reason'] },
         { required: ['from-agora'] },
+        { required: ['template'] },
       ],
     },
     output: writeResponseSchema,
+  },
+  {
+    name: 'templates',
+    category: 'read',
+    summary:
+      'wave-brief template registry (#235). Subcommands: list (catalogue), show <name> (full body). The template SOT lives at <content_root>/data/guild/templates/wave-brief/; missing dir is the legitimate empty-registry case (public-repo / fresh-install).',
+    input: {
+      type: 'object',
+      properties: {
+        subcommand: {
+          type: 'string',
+          enum: ['list', 'show'],
+        },
+        name: strOpt('template name (positional, `show` only)'),
+        format: formatField,
+      },
+    },
+    output: { type: 'object' },
   },
   {
     name: 'approve',

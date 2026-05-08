@@ -121,6 +121,30 @@ export interface RequestProps {
    * record, including all pre-#231 history.
    */
   requiresWorktreeIsolation?: boolean;
+  /**
+   * Wave-brief template registry (#235). When the request was created
+   * via `gate request --template <name>`, the chosen template name is
+   * stamped here so downstream consumers can recover "which brief did
+   * this wave start from?" without re-parsing free-text fields.
+   *
+   * Persistence: `template` / `template_version` / `gate_required_acknowledged`
+   * are emitted only when `template` is set (the trio moves together —
+   * if you stamped a template, the version and gate-acknowledgement
+   * round-trip with it). Pre-#235 records lack all three fields and
+   * hydrate as undefined (template-less). Byte-stable round-trip for
+   * non-template records. */
+  template?: string;
+  /** Template version (#235). Currently always 1; bumps if a template's
+   *  intended_use or skeleton meaningfully changes. Paired with
+   *  `template`; if `template` is set, this is set too. */
+  templateVersion?: number;
+  /** Acknowledgement that the template's `gate_required: true` contract
+   *  was honoured at request-creation time (#235). Always recorded as
+   *  true on a templated request — phase-1 is "we shipped via the
+   *  template path". A future release may surface a `--no-gate` opt-out
+   *  for stub experiments; until then the field's presence is a
+   *  positive assertion, not a toggle. */
+  gateRequiredAcknowledged?: boolean;
   state: RequestState;
   createdAt: string;
   reviews: Review[];
@@ -265,6 +289,14 @@ export class Request {
      *  truthy; older / single-executor / standard-profile records
      *  carry no field at all (false-by-absence). Issue #231. */
     requiresWorktreeIsolation?: boolean;
+    /** Template stamp (#235). If `template` is set, `templateVersion`
+     *  must be a positive integer and `gateRequiredAcknowledged` is
+     *  recorded as true. The interface layer is the only legitimate
+     *  caller that supplies these; non-CLI callers may pass them too
+     *  if they're enforcing the same contract. */
+    template?: string;
+    templateVersion?: number;
+    gateRequiredAcknowledged?: boolean;
   }): Request {
     const from = MemberName.of(input.from);
     const action = sanitizeText(input.action, 'action');
@@ -371,6 +403,34 @@ export class Request {
     if (input.requiresWorktreeIsolation === true) {
       props.requiresWorktreeIsolation = true;
     }
+    // Template stamp (#235). Persist all three fields together when a
+    // template was chosen — version and gate-required acknowledgement
+    // are meaningless without the template name. Validation: name must
+    // be a non-empty string (the interface layer also pre-checks
+    // against the registry); version must be a positive integer.
+    if (input.template !== undefined) {
+      const name = String(input.template).trim();
+      if (name.length === 0) {
+        throw new DomainError(
+          'template name must be a non-empty string',
+          'template',
+        );
+      }
+      const version = input.templateVersion ?? 1;
+      if (!Number.isInteger(version) || version < 1) {
+        throw new DomainError(
+          `template_version must be a positive integer, got ${version}`,
+          'templateVersion',
+        );
+      }
+      props.template = name;
+      props.templateVersion = version;
+      // Phase 1: presence of `template` implies the gate-required
+      // contract was honoured — there is no opt-out yet. Record as
+      // true unconditionally so a hydrate-then-resave round-trip
+      // produces byte-stable YAML even if the input arg was omitted.
+      props.gateRequiredAcknowledged = input.gateRequiredAcknowledged ?? true;
+    }
     // New requests have no on-disk predecessor; loadedVersion=0 marks
     // "never seen" for the optimistic-lock check in save().
     return new Request(props, 0);
@@ -455,6 +515,17 @@ export class Request {
    *  the gate execute handler to gate the cwd-collision check. */
   get requiresWorktreeIsolation(): boolean {
     return this.props.requiresWorktreeIsolation === true;
+  }
+  /** Template registry stamp (#235). Undefined when the request was
+   *  created without `--template`; pre-#235 records always undefined. */
+  get template(): string | undefined {
+    return this.props.template;
+  }
+  get templateVersion(): number | undefined {
+    return this.props.templateVersion;
+  }
+  get gateRequiredAcknowledged(): boolean | undefined {
+    return this.props.gateRequiredAcknowledged;
   }
   /** Most recent `executing` status_log entry's cwd, or undefined
    *  when the request has never been executed (or when the on-disk
@@ -897,6 +968,17 @@ export class Request {
     // on round-trip (false-by-absence is the load tolerance).
     if (this.props.requiresWorktreeIsolation === true) {
       out['requires_worktree_isolation'] = true;
+    }
+    // Template registry stamp (#235). The trio (template,
+    // template_version, gate_required_acknowledged) moves together —
+    // all-set or all-absent. Pre-#235 records and template-less post-
+    // #235 records both emit byte-identical YAML on round-trip.
+    if (this.props.template !== undefined) {
+      out['template'] = this.props.template;
+      out['template_version'] = this.props.templateVersion ?? 1;
+      if (this.props.gateRequiredAcknowledged !== undefined) {
+        out['gate_required_acknowledged'] = this.props.gateRequiredAcknowledged;
+      }
     }
     // Cross-session claim (issue #226). Both fields move together —
     // present-when-set, omitted-when-clear — so YAML stays byte-stable
