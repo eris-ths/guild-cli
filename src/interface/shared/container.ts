@@ -16,6 +16,8 @@ import { RepairUseCases } from '../../application/repair/RepairUseCases.js';
 import { UnrespondedConcernsQuery } from '../../application/concern/UnrespondedConcernsQuery.js';
 import { SafeFsQuarantineStore } from '../../infrastructure/persistence/SafeFsQuarantineStore.js';
 import { OnMalformed } from '../../application/ports/OnMalformed.js';
+import { YamlPlayRepository } from '../../passages/agora/infrastructure/YamlPlayRepository.js';
+import { PlayRepository } from '../../passages/agora/application/PlayRepository.js';
 
 export interface Container {
   config: GuildConfig;
@@ -26,6 +28,16 @@ export interface Container {
   diagnosticUC: DiagnosticUseCases;
   repairUC: RepairUseCases;
   unrespondedConcernsQ: UnrespondedConcernsQuery;
+  /**
+   * Agora play storage adapter (#232). Wired into the gate container
+   * so the `--from-agora <play_id>` bridge in `gate request` can lift
+   * a play's cliff/invitation into the request action/reason without a
+   * second top-level container or a cross-process shell-out. Both
+   * passages share the same `content_root`, so re-using the gate's
+   * GuildConfig means the bridge sees the same agora directory the
+   * `agora` CLI verbs read/write.
+   */
+  playRepo: PlayRepository;
 }
 
 export interface BuildContainerOpts {
@@ -71,5 +83,6 @@ export function buildContainer(opts: BuildContainerOpts = {}): Container {
     ),
     repairUC: new RepairUseCases(quarantine),
     unrespondedConcernsQ: new UnrespondedConcernsQuery(requests, issues),
+    playRepo: new YamlPlayRepository(config),
   };
 }

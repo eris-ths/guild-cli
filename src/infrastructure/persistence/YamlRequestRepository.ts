@@ -538,6 +538,16 @@ function hydrate(
     if (typeof obj['promoted_from'] === 'string') {
       props.promotedFrom = obj['promoted_from'] as string;
     }
+    // source_agora_play (#232). Tolerated as a string only — anything
+    // else is dropped silently following the same conservative read
+    // pattern as `promoted_from`. Pre-#232 records simply lack the
+    // field; treated as absent. Records-outlive-writers (principle 04):
+    // we never reject, only ignore. The interface layer validates
+    // play-id shape on the write path, so a hydrated value is trusted
+    // as-is here.
+    if (typeof obj['source_agora_play'] === 'string') {
+      props.sourceAgoraPlay = obj['source_agora_play'] as string;
+    }
     // requires_worktree_isolation (#231). Tolerated as a strict boolean
     // only — anything else (string "true", number 1) is dropped silently
     // following the same conservative read pattern as `depth`. Pre-#231

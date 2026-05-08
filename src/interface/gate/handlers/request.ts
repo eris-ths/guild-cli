@@ -25,6 +25,19 @@ const REQUEST_CREATE_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'auto-review',
   'with',
   'format',
+  // from-agora <play_id> bridges an agora-play most-recent suspension
+  // cliff/invitation into action/reason (issue #232). The `game` flag
+  // disambiguates cross-game play-id collisions (each agora game uses
+  // its own per-day sequence, so two games can both produce a
+  // YYYY-MM-DD-001) — same shape as the agora cliff verb game flag.
+  // (Apostrophes and backticks intentionally avoided in this comment:
+  // the schema drift detector parses Set-body string literals via a
+  // quote-pair regex (single, double, OR backtick), so any quote
+  // character in a comment can pair with one further down and slurp
+  // the in-between text into a fake flag entry. See
+  // schemaInputDriftDetector.test.ts.)
+  'from-agora',
+  'game',
 ]);
 const APPROVE_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'by',
@@ -91,6 +104,8 @@ const SHOW_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'fields',
 ]);
 import { Request } from '../../../domain/request/Request.js';
+import { AgoraPlayBridge } from '../../../application/request/AgoraPlayBridge.js';
+import { PlayIdAmbiguous } from '../../../passages/agora/interface/handlers/resolvePlay.js';
 import { formatDelta, pushMultilineField } from '../voices.js';
 import {
   C,
@@ -109,17 +124,118 @@ export async function reqCreate(c: C, args: ParsedArgs): Promise<number> {
   const from = normalizeActor(
     requireOption(args, 'from', '<m>', 'GUILD_ACTOR'),
   );
-  const action = requireOption(args, 'action', '"..."');
-  let reason = requireOption(args, 'reason', '"..."');
+  // --from-agora <play_id> (#232): when present, lifts the play's
+  // most-recent cliff/invitation into action/reason. Either flag may
+  // still be supplied explicitly to override the corresponding lift
+  // (action override → invitation lift dropped; reason override →
+  // cliff lift dropped). Plain `gate request` (no --from-agora) keeps
+  // the historical require-both contract.
+  const fromAgoraRaw = optionalOption(args, 'from-agora');
+  const gameFilter = optionalOption(args, 'game');
+  // --game without --from-agora is meaningless on `gate request`
+  // (the gate request surface has no other use for a game qualifier).
+  // Refuse up front rather than silently ignoring — silent ignore is
+  // the same fail-open class rejectUnknownFlags exists to prevent.
+  if (gameFilter !== undefined && fromAgoraRaw === undefined) {
+    process.stderr.write(
+      `error: --game requires --from-agora <play_id> ` +
+        `(--game disambiguates cross-game play-id collisions; it has ` +
+        `no meaning on a plain gate request).\n`,
+    );
+    return 1;
+  }
+
+  const actionRaw = optionalOption(args, 'action');
+  let reasonRaw = optionalOption(args, 'reason');
   // `--reason -` reads from stdin — parity with `gate review --comment -`.
   // Trim because heredoc / echo append a trailing newline that clutters
   // the rendered status_log note.
-  if (reason === '-') reason = (await readStdin()).trim();
+  if (reasonRaw === '-') reasonRaw = (await readStdin()).trim();
+
+  let action: string;
+  let reason: string;
+  let sourceAgoraPlay: string | undefined;
+
+  if (fromAgoraRaw !== undefined) {
+    const bridge = new AgoraPlayBridge(c.playRepo, c.config);
+    let result;
+    try {
+      result = await bridge.resolve(fromAgoraRaw, gameFilter);
+    } catch (err) {
+      if (err instanceof PlayIdAmbiguous) {
+        // Surface the same shape `agora cliff` does on cross-game
+        // collision — let the caller's outer envelope catch it. Re-
+        // throwing keeps a single source of truth for the message.
+        throw err;
+      }
+      throw err;
+    }
+    if (!result.ok) {
+      const r = result.refusal;
+      switch (r.kind) {
+        case 'invalid_id':
+          process.stderr.write(
+            `error: --from-agora "${r.raw}": ${r.detail}\n` +
+              `  hint: play ids look like 2026-05-08-001 (YYYY-MM-DD-NNN).\n`,
+          );
+          return 1;
+        case 'not_found':
+          process.stderr.write(
+            `error: --from-agora ${r.playId}: play not found in ${r.agoraRoot}/agora.\n` +
+              `  next: list candidates with \`agora list\` or check the play id.\n`,
+          );
+          return 1;
+        case 'concluded':
+          process.stderr.write(
+            `error: --from-agora ${r.playId}: play is concluded (game=${r.game}); ` +
+              `cannot bridge a closed thread into a new request.\n` +
+              `  next: open a fresh play (\`agora play --game ${r.game}\`) or ` +
+              `file the request without --from-agora.\n`,
+          );
+          return 1;
+        case 'no_suspension':
+          process.stderr.write(
+            `error: --from-agora ${r.playId}: play has no suspension on record ` +
+              `(state=${r.state}, game=${r.game}); nothing to bridge.\n` +
+              `  next: \`agora suspend ${r.playId} --cliff "..." --invitation "..."\` ` +
+              `to record a cliff first, or file the request without --from-agora.\n`,
+          );
+          return 1;
+      }
+    }
+    const lift = result.value;
+    sourceAgoraPlay = lift.playId;
+    // Lift policy (#232):
+    //   action  ← invitation  (the "what to do next" half — matches
+    //                          gate request's action semantics)
+    //   reason  ← cliff       (the "why / what was happening" half —
+    //                          matches gate request's reason semantics)
+    // Either explicit flag overrides its corresponding lift; the lifted
+    // half on the other axis is preserved. The structural sourceAgoraPlay
+    // record is kept regardless of overrides because the link is the
+    // point of the bridge — a request derived from a play stays linked
+    // even when the operator rewrote both fields.
+    action = actionRaw !== undefined && actionRaw.trim().length > 0
+      ? actionRaw
+      : lift.invitation;
+    reason = reasonRaw !== undefined && reasonRaw.trim().length > 0
+      ? reasonRaw
+      : lift.cliff;
+  } else {
+    // Plain `gate request` — action/reason are both required, same
+    // contract as before #232. requireOption surfaces the usage hint
+    // when missing; we re-call it here so the error message stays
+    // identical to the historical one.
+    action = requireOption(args, 'action', '"..."');
+    reason = requireOption(args, 'reason', '"..."');
+    if (reason === '-') reason = (await readStdin()).trim();
+  }
   const input: Parameters<typeof c.requestUC.create>[0] = {
     from,
     action,
     reason,
   };
+  if (sourceAgoraPlay !== undefined) input.sourceAgoraPlay = sourceAgoraPlay;
   const executor = optionalOption(args, 'executor');
   const executorsRaw = optionalOption(args, 'executors');
   const target = optionalOption(args, 'target');
@@ -474,6 +590,13 @@ function formatRequestText(r: Request): string {
   }
   if (j['promoted_from']) {
     lines.push(`  promoted_from: ${j['promoted_from']}`);
+  }
+  // source_agora_play (#232) — agora play this request was bridged
+  // from via `gate request --from-agora`. Rendered next to
+  // promoted_from because both are tool-stamped backlinks ("this came
+  // out of <X>") and a reader scanning the header pairs them mentally.
+  if (j['source_agora_play']) {
+    lines.push(`  source_agora_play: ${j['source_agora_play']}`);
   }
   lines.push(`  created:  ${j['created_at']}`);
   lines.push('');

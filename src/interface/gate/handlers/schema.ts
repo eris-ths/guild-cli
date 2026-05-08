@@ -35,6 +35,7 @@ type JsonSchema = {
   enum?: string[];
   description?: string;
   items?: JsonSchema;
+  oneOf?: JsonSchema[];
 };
 
 interface VerbSchema {
@@ -754,8 +755,16 @@ const VERBS: readonly VerbSchema[] = [
       type: 'object',
       properties: {
         from: strOpt('author (defaults to $GUILD_ACTOR)'),
-        action: str,
-        reason: str,
+        action: strOpt(
+          'request action. Required UNLESS --from-agora is supplied; ' +
+            'with --from-agora the play\'s suspension `invitation` is ' +
+            'used as action (override by passing --action explicitly).',
+        ),
+        reason: strOpt(
+          'request reason. Required UNLESS --from-agora is supplied; ' +
+            'with --from-agora the play\'s suspension `cliff` is used ' +
+            'as reason (override by passing --reason explicitly).',
+        ),
         executor: strOpt('single executor (mutually exclusive with --executors)'),
         executors: strOpt(
           'comma-separated executor list, whitespace-trimmed per entry, ' +
@@ -781,9 +790,37 @@ const VERBS: readonly VerbSchema[] = [
         },
         'auto-review': strOpt('member assigned as critic'),
         with: strOpt('comma-separated dialogue partners (pair-mode)'),
+        'from-agora': strOpt(
+          'agora play id (YYYY-MM-DD-NNN) to bridge into this request ' +
+            '(#232). Lifts the play\'s most-recent suspension cliff into ' +
+            '--reason and invitation into --action; either flag may still ' +
+            'be passed explicitly to override the corresponding lift. ' +
+            'Stamps source_agora_play on the record so `gate chain`-style ' +
+            'walks see the agora→gate edge. Refuses on concluded plays ' +
+            'and on plays with no suspension on record (state=playing, ' +
+            'never suspended).',
+        ),
+        game: strOpt(
+          'agora game slug; only meaningful with --from-agora (#232). ' +
+            'Disambiguates cross-game play-id collisions (each game ' +
+            'sequences plays independently per day). Errors when passed ' +
+            'without --from-agora.',
+        ),
         format: formatField,
       },
-      required: ['action', 'reason'],
+      // action/reason are conditionally required: required iff
+      // --from-agora is absent. `oneOf` expresses the two-shape
+      // contract for JSON Schema consumers (codegen, form-builders,
+      // AI tool-use schemas) so they don't read action as
+      // unconditionally optional. Either shape A (`action`+`reason`,
+      // no agora bridge) or shape B (`from-agora`, lifts both) is
+      // valid; the runtime handler enforces the same branch via
+      // `requireOption`.
+      required: [],
+      oneOf: [
+        { required: ['action', 'reason'] },
+        { required: ['from-agora'] },
+      ],
     },
     output: writeResponseSchema,
   },
