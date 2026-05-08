@@ -790,7 +790,12 @@ const VERBS: readonly VerbSchema[] = [
   {
     name: 'approve',
     category: 'write',
-    summary: 'transition pending → approved',
+    summary:
+      'transition pending → approved. Self-approve (by === request.from) ' +
+      'is gated by `features.self_approve` { allowed | warn | forbidden } ' +
+      '(#233). Profile defaults: warn under standard (notice + pass), ' +
+      'forbidden under swarm (exit 1 + actionable error). fast-track is ' +
+      'unaffected — use it for legitimate single-step self-flow.',
     input: {
       type: 'object',
       properties: {

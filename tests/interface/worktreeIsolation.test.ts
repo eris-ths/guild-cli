@@ -55,9 +55,15 @@ interface Bootstrap {
 
 function bootstrap(profile: 'standard' | 'swarm'): Bootstrap {
   const root = mkdtempReal(join(tmpdir(), `guild-wti-${profile}-`));
+  // Pin self_approve: warn so this suite stays focused on worktree
+  // isolation. #233 makes swarm forbid self-approve by default; the
+  // helper `createApproved` below self-approves to set up the wave,
+  // and asserting that orthogonal policy here would muddy what these
+  // tests actually verify.
   writeFileSync(
     join(root, 'guild.config.yaml'),
-    `content_root: .\nhost_names: [eris]\nprofile: ${profile}\n`,
+    `content_root: .\nhost_names: [eris]\nprofile: ${profile}\n` +
+      `features:\n  self_approve: warn\n`,
   );
   mkdirSync(join(root, 'members'));
   return {
