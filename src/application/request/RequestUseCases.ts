@@ -64,6 +64,11 @@ export class RequestUseCases {
      *  when profile=swarm + executors.length > 1. Persisted only
      *  when true; absence reads as false. */
     requiresWorktreeIsolation?: boolean;
+    /** Source agora play id (#232). Set by the `--from-agora` bridge
+     *  in the interface layer when the request action/reason were
+     *  derived from an agora play's invitation/cliff. Persisted only
+     *  when set (absence is the common case). */
+    sourceAgoraPlay?: string;
   }): Promise<Request> {
     const { requests, members, clock } = this.deps;
     const from = await assertActor(input.from, '--from', members);
@@ -123,6 +128,8 @@ export class RequestUseCases {
       createArgs.promotedFrom = input.promotedFrom;
     if (input.requiresWorktreeIsolation === true)
       createArgs.requiresWorktreeIsolation = true;
+    if (input.sourceAgoraPlay !== undefined)
+      createArgs.sourceAgoraPlay = input.sourceAgoraPlay;
 
     for (let attempt = 0; attempt < 10; attempt++) {
       createArgs.id = RequestId.generate(now, seq);

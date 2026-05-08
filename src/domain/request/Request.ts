@@ -95,6 +95,21 @@ export interface RequestProps {
    */
   promotedFrom?: string;
   /**
+   * Tool-generated structured link to the agora play this request was
+   * derived from (via `gate request --from-agora <play_id>`). Populated
+   * by the `--from-agora` bridge orchestration in the interface layer;
+   * undefined for plain `gate request` calls. Distinct from text mentions
+   * of a play id in action/reason: `--from-agora` lifts the play's
+   * cliff/invitation prose into the action+reason fields, AND records
+   * the play id structurally here so `gate chain`-style walks can
+   * traverse the agora→gate edge without scanning free-form text.
+   *
+   * Same shape as `promotedFrom` (the issue→request equivalent). Issue
+   * #232 — surfaces "this request came out of <play>" without forcing
+   * the operator to remember to mention the id in prose.
+   */
+  sourceAgoraPlay?: string;
+  /**
    * Worktree-isolation requirement (issue #231). When true, parallel
    * `gate execute` invocations on the same target from the SAME
    * filesystem cwd are refused — the second `execute` errors out so
@@ -240,6 +255,10 @@ export class Request {
     /** See RequestProps.promotedFrom — issue id this request was
      *  promoted from. Populated by `gate issues promote` only. */
     promotedFrom?: string;
+    /** See RequestProps.sourceAgoraPlay — agora play id this request
+     *  was bridged from (via `gate request --from-agora <play_id>`).
+     *  Populated by the --from-agora orchestration only. Issue #232. */
+    sourceAgoraPlay?: string;
     /** See RequestProps.requiresWorktreeIsolation — set by the
      *  interface layer when profile=swarm + executors.length > 1.
      *  Persisted as `requires_worktree_isolation: true` only when
@@ -337,6 +356,14 @@ export class Request {
     if (input.promotedFrom !== undefined) {
       props.promotedFrom = input.promotedFrom;
     }
+    if (input.sourceAgoraPlay !== undefined) {
+      // sanitizeText guards length/charset the same way action/reason
+      // are guarded — a malformed play id smuggled into the field at
+      // a non-CLI entry point still gets normalized. The interface
+      // layer pre-validates with parsePlayId, so this is the second
+      // line of defence.
+      props.sourceAgoraPlay = sanitizeText(input.sourceAgoraPlay, 'sourceAgoraPlay');
+    }
     // Worktree-isolation: persist only when explicitly true. The
     // false case is represented by field absence on disk so the YAML
     // surface stays minimal (matches `depth`, `with`, `target` etc).
@@ -409,6 +436,14 @@ export class Request {
   }
   get promotedFrom(): string | undefined {
     return this.props.promotedFrom;
+  }
+  /** Issue #232 — agora play id this request was bridged from via
+   *  `gate request --from-agora <play_id>`. Undefined for plain
+   *  requests (the common case). Read surface used by `formatRequestText`
+   *  to render the source-play line and by JSON consumers reading
+   *  `source_agora_play` directly. */
+  get sourceAgoraPlay(): string | undefined {
+    return this.props.sourceAgoraPlay;
   }
   get with(): readonly MemberName[] {
     return this.props.with ?? [];
@@ -851,6 +886,12 @@ export class Request {
       out['with'] = this.props.with.map((m) => m.value);
     if (this.props.promotedFrom !== undefined)
       out['promoted_from'] = this.props.promotedFrom;
+    // source_agora_play (#232). Surface only when set — the field
+    // is absent on every plain `gate request` and on every pre-#232
+    // record. Byte-stable round-trip: omit-when-undefined matches the
+    // hydrate "absent ⇒ undefined" branch below.
+    if (this.props.sourceAgoraPlay !== undefined)
+      out['source_agora_play'] = this.props.sourceAgoraPlay;
     // Worktree isolation requirement (#231). Surface only when true —
     // the YAML stays minimal and pre-#231 records remain byte-stable
     // on round-trip (false-by-absence is the load tolerance).
