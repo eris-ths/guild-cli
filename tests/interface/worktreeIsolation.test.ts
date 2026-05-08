@@ -21,32 +21,19 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import {
-  mkdtempSync,
   writeFileSync,
   rmSync,
   mkdirSync,
   readFileSync,
   readdirSync,
-  realpathSync,
   symlinkSync,
 } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { makeTempRoot } from '../util/tempRoot.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const GATE = resolve(here, '../../../bin/gate.mjs');
-
-// Wrap mkdtempSync so every test directory is canonical. On darwin
-// `os.tmpdir()` returns `/var/folders/...` which is itself a symlink
-// to `/private/var/folders/...`; passing the symlink form into the
-// CLI and asserting against the realpath form (or vice-versa) is the
-// exact ambiguity #231 had to resolve — pin tests to canonical to
-// avoid co-mingling that with the actual collision logic. (Pattern
-// established in #238 for the same reason.)
-function mkdtempReal(prefix: string): string {
-  return realpathSync(mkdtempSync(prefix));
-}
 
 interface Bootstrap {
   root: string;
@@ -54,7 +41,7 @@ interface Bootstrap {
 }
 
 function bootstrap(profile: 'standard' | 'swarm'): Bootstrap {
-  const root = mkdtempReal(join(tmpdir(), `guild-wti-${profile}-`));
+  const root = makeTempRoot(`guild-wti-${profile}-`);
   // Pin self_approve: warn so this suite stays focused on worktree
   // isolation. #233 makes swarm forbid self-approve by default; the
   // helper `createApproved` below self-approves to set up the wave,
@@ -228,8 +215,8 @@ test('profile=swarm + parallel executors + DIFFERENT cwds: both execute', (t) =>
   // Simulate separate worktrees by passing different --cwd values.
   // The collision check compares the resolved absolute paths, so any
   // two distinct directories suffice.
-  const wt1 = mkdtempReal(join(tmpdir(), 'wti-wt1-'));
-  const wt2 = mkdtempReal(join(tmpdir(), 'wti-wt2-'));
+  const wt1 = makeTempRoot('wti-wt1-');
+  const wt2 = makeTempRoot('wti-wt2-');
   t.after(() => {
     rmSync(wt1, { recursive: true, force: true });
     rmSync(wt2, { recursive: true, force: true });
@@ -366,7 +353,7 @@ test('execute --cwd stamps executing_at_cwd into the status_log entry', (t) => {
   const id = (JSON.parse(r.stdout) as { id: string }).id;
   run(root, ['approve', id, '--by', 'alice']);
 
-  const wt = mkdtempReal(join(tmpdir(), 'wti-stamp-'));
+  const wt = makeTempRoot('wti-stamp-');
   t.after(() => rmSync(wt, { recursive: true, force: true }));
   const ex = run(root, ['execute', id, '--by', 'miki', '--cwd', wt]);
   assert.equal(ex.status, 0, ex.stderr);
@@ -409,8 +396,8 @@ test('Devil HIGH-1: symlink form of an already-executing cwd is canonicalised an
   // symlink form. With realpath canonicalisation, both flatten to
   // the same identity → refuse. Without it (pre-fix) the second
   // would have passed.
-  const realWt = mkdtempReal(join(tmpdir(), 'wti-real-'));
-  const linkParent = mkdtempReal(join(tmpdir(), 'wti-link-'));
+  const realWt = makeTempRoot('wti-real-');
+  const linkParent = makeTempRoot('wti-link-');
   const linkWt = join(linkParent, 'symlinked-worktree');
   symlinkSync(realWt, linkWt, 'dir');
   t.after(() => {
@@ -452,8 +439,8 @@ test('Devil HIGH-1: symmetric — first via symlink, second via realpath also re
     target: 'shared-target',
   });
 
-  const realWt = mkdtempReal(join(tmpdir(), 'wti-real2-'));
-  const linkParent = mkdtempReal(join(tmpdir(), 'wti-link2-'));
+  const realWt = makeTempRoot('wti-real2-');
+  const linkParent = makeTempRoot('wti-link2-');
   const linkWt = join(linkParent, 'symlinked-worktree');
   symlinkSync(realWt, linkWt, 'dir');
   t.after(() => {

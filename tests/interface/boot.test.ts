@@ -8,16 +8,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import {
-  mkdtempSync,
-  writeFileSync,
-  rmSync,
-  mkdirSync,
-  realpathSync,
-} from 'node:fs';
+import { mkdtempSync, writeFileSync, rmSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { makeTempRoot } from '../util/tempRoot.js';
 
 // At runtime this file lives under dist/tests/interface/, so we walk
 // three levels up (interface → tests → dist → repo root) to reach bin/.
@@ -25,10 +20,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const GATE = resolve(here, '../../../bin/gate.mjs');
 
 function bootstrap(): { root: string; cleanup: () => void } {
-  // realpathSync resolves macOS's /var → /private/var symlink so the
-  // root we use in regex assertions matches what subprocesses see when
-  // they resolve their own cwd. See darwin path-comparison fix (#238).
-  const root = realpathSync(mkdtempSync(join(tmpdir(), 'guild-boot-')));
+  const root = makeTempRoot('guild-boot-');
   writeFileSync(
     join(root, 'guild.config.yaml'),
     'content_root: .\nhost_names: [human]\n',
@@ -377,8 +369,7 @@ test('gate boot text: no-config-found case discloses cwd-as-fallback', () => {
   // fallback root)`. The misconfigured_cwd block (no-config + no-
   // data) keeps its bigger warning; this fires for the no-config
   // + has-data case (someone deliberately using cwd as root).
-  // realpathSync — see #238 / bootstrap() comment above.
-  const root = realpathSync(mkdtempSync(join(tmpdir(), 'guild-boot-nocfg-')));
+  const root = makeTempRoot('guild-boot-nocfg-');
   try {
     // Plant a member so we're past the misconfigured_cwd trigger.
     mkdirSync(join(root, 'members'));

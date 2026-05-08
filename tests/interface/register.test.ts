@@ -10,26 +10,21 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import {
-  mkdtempSync,
   writeFileSync,
   readFileSync,
   existsSync,
   rmSync,
   mkdirSync,
-  realpathSync,
 } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { makeTempRoot } from '../util/tempRoot.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const GATE = resolve(here, '../../../bin/gate.mjs');
 
 function bootstrap(): { root: string; cleanup: () => void } {
-  // realpathSync resolves macOS's /var → /private/var symlink so the
-  // root we use in regex assertions matches what subprocesses see when
-  // they resolve their own cwd. See darwin path-comparison fix (#238).
-  const root = realpathSync(mkdtempSync(join(tmpdir(), 'guild-register-')));
+  const root = makeTempRoot('guild-register-');
   writeFileSync(
     join(root, 'guild.config.yaml'),
     'content_root: .\nhost_names: [human]\n',
@@ -436,8 +431,7 @@ test('register: no-config fallback path surfaces "config: none" so the implicit-
   // used as content_root with no warning. Post-fix the notice
   // names it (`config: none — cwd used as fallback root`) so the
   // agent learns the implicit default exists.
-  // realpathSync — see #238 / bootstrap() comment above.
-  const root = realpathSync(mkdtempSync(join(tmpdir(), 'guild-register-nocfg-')));
+  const root = makeTempRoot('guild-register-nocfg-');
   try {
     const r = runGate(root, ['register', '--name', 'cwdsolo']);
     assert.equal(r.status, 0);
