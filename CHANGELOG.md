@@ -9,6 +9,18 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
 
 ### Fixed
 
+- **darwin path-comparison flakes in `tests/{interface,passages}/`
+  ([#238](https://github.com/eris-ths/guild-cli/issues/238)).** Twelve
+  tests across `boot`, `doctor`, `register`, and `agora new`/`play`
+  asserted on absolute paths derived from `mkdtempSync(os.tmpdir())`
+  via `new RegExp(escapeRegex(root))`. On macOS, `os.tmpdir()` returns
+  `/var/folders/...` but child processes resolve their cwd through the
+  `/var → /private/var` symlink, so subprocess output names the
+  `/private/var/...` form and the regex `^...$` anchors miss. Fix:
+  wrap `mkdtempSync(...)` results in `realpathSync` at the test
+  bootstrap so the root used in assertions matches what spawned
+  subprocesses emit. Test-infra only — no production code touched.
+
 - **`optionalOption` rejects bare flags (`--depth`, `--executor`,
   `--state`, ... with no value).** Pre-fix, an optional flag passed
   without a value silently fell through to the env fallback / undefined.

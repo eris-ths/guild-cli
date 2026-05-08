@@ -23,6 +23,7 @@ import {
   rmSync,
   mkdirSync,
   existsSync,
+  realpathSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
@@ -36,7 +37,10 @@ const here = dirname(fileURLToPath(import.meta.url));
 const AGORA = resolve(here, '../../../../bin/agora.mjs');
 
 function bootstrap(): { root: string; cleanup: () => void } {
-  const root = mkdtempSync(join(tmpdir(), 'agora-new-'));
+  // realpathSync resolves macOS's /var → /private/var symlink so the
+  // root we use in regex assertions matches what subprocesses see when
+  // they resolve their own cwd. See darwin path-comparison fix (#238).
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'agora-new-')));
   writeFileSync(
     join(root, 'guild.config.yaml'),
     'content_root: .\nhost_names: [human]\n',
