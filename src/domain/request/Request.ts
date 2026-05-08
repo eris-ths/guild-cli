@@ -350,7 +350,13 @@ export class Request {
    *  record predates #231). Returns the freshest entry so a request
    *  that re-entered `executing` (rare but possible after a `fail`-
    *  retry edit path) reflects the latest filesystem. Read by the
-   *  gate execute cwd-collision check. */
+   *  gate execute cwd-collision check.
+   *
+   *  TODO (Devil follow-up #231): same shape as the executor scalar
+   *  leak Devil flagged on #230 — a "latest-only" getter silently
+   *  drops history. Promote to `hasExecutingFromCwd(cwd)` predicate
+   *  in a follow-up issue once we settle whether older `executing`
+   *  entries should ever count for collision detection. */
   get lastExecutingCwd(): string | undefined {
     for (let i = this.props.statusLog.length - 1; i >= 0; i--) {
       const entry = this.props.statusLog[i]!;

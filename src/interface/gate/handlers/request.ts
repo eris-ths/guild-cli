@@ -1,4 +1,5 @@
 import { resolve as resolvePath } from 'node:path';
+import { realpathSync } from 'node:fs';
 import { resolveGuildActor } from '../../shared/resolveGuildActor.js';
 import {
   ParsedArgs,
@@ -656,7 +657,25 @@ export async function reqExecute(c: C, args: ParsedArgs): Promise<number> {
   // that proxy the verb without changing process directories.
   // Issue #231.
   const cwdFlag = optionalOption(args, 'cwd');
-  const cwd = cwdFlag !== undefined ? resolvePath(cwdFlag) : process.cwd();
+  // Canonicalize via realpath so symlink farms collapse to a single
+  // identity. Devil HIGH-1 (#231 follow-up): plain `path.resolve`
+  // leaves `/var/foo` and `/private/var/foo` distinct strings even
+  // though they name the same physical directory — on darwin the
+  // tmpdir is the canonical example. The collision check compares
+  // against `peer.lastExecutingCwd` which was ALSO realpath'd at
+  // write time below, so equality reflects "same physical worktree"
+  // and not "same string". Falls back to the resolved (un-canonical)
+  // path on EACCES / ENOENT so a missing parent doesn't crash a
+  // legitimate execute — the comparison is best-effort by design
+  // (race window noted in CHANGELOG; advisory lock is follow-up).
+  const cwdResolved =
+    cwdFlag !== undefined ? resolvePath(cwdFlag) : process.cwd();
+  let cwd: string;
+  try {
+    cwd = realpathSync(cwdResolved);
+  } catch {
+    cwd = cwdResolved;
+  }
   const invokedBy = resolveInvokedBy(by, 'execute', id);
 
   // Worktree-isolation collision check (#231). Runs only for

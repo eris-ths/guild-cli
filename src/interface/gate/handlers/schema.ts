@@ -762,7 +762,10 @@ const VERBS: readonly VerbSchema[] = [
             'e.g. "miki, leysia" or "miki,leysia" (issue #230, ' +
             'multi-executor; mutually exclusive with --executor). Each name ' +
             'must match /^[a-z][a-z0-9_-]{0,31}$/; duplicates and empty ' +
-            'entries rejected.',
+            'entries rejected. Under profile=swarm, supplying >1 executor ' +
+            'auto-stamps requires_worktree_isolation: true on the record so ' +
+            'a later `gate execute` from the same physical cwd is refused ' +
+            '(issue #231).',
         ),
         target: str,
         depth: {

@@ -17,14 +17,31 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
   `features.worktree_required_for_parallel`. Under `profile: swarm`,
   `gate request --executors a,b,...` stamps
   `requires_worktree_isolation: true` on the record, and `gate execute`
-  refuses a second invocation from the same filesystem cwd against the
+  refuses a second invocation from the same physical cwd against the
   same target — the operator must spawn the second executor in a
   separate git worktree. New `gate execute --cwd <path>` flag (defaults
   to `process.cwd()`) + `executing_at_cwd` stamp on the `executing`
-  status_log entry. Pre-#231 records hydrate as non-isolated (no
-  false-refuse). Under `profile: standard` the same input emits a
-  warning notice but does not refuse, preserving existing single-cwd
-  workflows.
+  status_log entry. Both the supplied cwd and the on-disk peer values
+  are canonicalised via `realpath` so symlink farms (`/var/X` vs
+  `/private/var/X` on darwin tmpdir, etc.) collapse to a single
+  identity for the comparison. Pre-#231 records hydrate as
+  non-isolated (no false-refuse). Under `profile: standard` the same
+  input emits a warning notice but does not refuse, preserving
+  existing single-cwd workflows.
+
+  **Best-effort race window (Devil HIGH-2 follow-up).** The collision
+  check is a peer scan → judgment → save sequence. The optimistic-lock
+  in `YamlRequestRepository.save` only guards same-request concurrent
+  writes; it does NOT serialize judgments across peer aggregates. Two
+  `gate execute` invocations against *different* request ids sharing a
+  `target` + cwd can both pass the scan before either lands. A
+  cross-process advisory lock (e.g. `<root>/requests/.execute.lock`)
+  is the structural fix and is scoped out of this wave — cross-platform
+  locking has its own design surface (Windows `LockFile`, NFS quirks,
+  stale-lock recovery) and belongs in a follow-up issue. Until then,
+  the record + agent-loop layers (#230) carry the actual safety; #231
+  closes the read-the-screen-and-recognise-the-collision class, not
+  the microsecond-window race.
 
 ### Fixed
 

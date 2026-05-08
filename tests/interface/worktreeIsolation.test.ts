@@ -27,6 +27,8 @@ import {
   mkdirSync,
   readFileSync,
   readdirSync,
+  realpathSync,
+  symlinkSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
@@ -35,13 +37,24 @@ import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
 const GATE = resolve(here, '../../../bin/gate.mjs');
 
+// Wrap mkdtempSync so every test directory is canonical. On darwin
+// `os.tmpdir()` returns `/var/folders/...` which is itself a symlink
+// to `/private/var/folders/...`; passing the symlink form into the
+// CLI and asserting against the realpath form (or vice-versa) is the
+// exact ambiguity #231 had to resolve — pin tests to canonical to
+// avoid co-mingling that with the actual collision logic. (Pattern
+// established in #238 for the same reason.)
+function mkdtempReal(prefix: string): string {
+  return realpathSync(mkdtempSync(prefix));
+}
+
 interface Bootstrap {
   root: string;
   cleanup: () => void;
 }
 
 function bootstrap(profile: 'standard' | 'swarm'): Bootstrap {
-  const root = mkdtempSync(join(tmpdir(), `guild-wti-${profile}-`));
+  const root = mkdtempReal(join(tmpdir(), `guild-wti-${profile}-`));
   writeFileSync(
     join(root, 'guild.config.yaml'),
     `content_root: .\nhost_names: [eris]\nprofile: ${profile}\n`,
@@ -209,8 +222,8 @@ test('profile=swarm + parallel executors + DIFFERENT cwds: both execute', (t) =>
   // Simulate separate worktrees by passing different --cwd values.
   // The collision check compares the resolved absolute paths, so any
   // two distinct directories suffice.
-  const wt1 = mkdtempSync(join(tmpdir(), 'wti-wt1-'));
-  const wt2 = mkdtempSync(join(tmpdir(), 'wti-wt2-'));
+  const wt1 = mkdtempReal(join(tmpdir(), 'wti-wt1-'));
+  const wt2 = mkdtempReal(join(tmpdir(), 'wti-wt2-'));
   t.after(() => {
     rmSync(wt1, { recursive: true, force: true });
     rmSync(wt2, { recursive: true, force: true });
@@ -347,7 +360,7 @@ test('execute --cwd stamps executing_at_cwd into the status_log entry', (t) => {
   const id = (JSON.parse(r.stdout) as { id: string }).id;
   run(root, ['approve', id, '--by', 'alice']);
 
-  const wt = mkdtempSync(join(tmpdir(), 'wti-stamp-'));
+  const wt = mkdtempReal(join(tmpdir(), 'wti-stamp-'));
   t.after(() => rmSync(wt, { recursive: true, force: true }));
   const ex = run(root, ['execute', id, '--by', 'miki', '--cwd', wt]);
   assert.equal(ex.status, 0, ex.stderr);
@@ -360,4 +373,96 @@ test('execute --cwd stamps executing_at_cwd into the status_log entry', (t) => {
   const text = readFileSync(join(executingDir, files[0]!), 'utf8');
   assert.match(text, /executing_at_cwd:/);
   assert.match(text, new RegExp(wt.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+});
+
+// Devil HIGH-1 (#231 follow-up): symlink-bypass regression. Pre-fix,
+// `path.resolve` was used on the supplied --cwd, which leaves
+// symlinks intact: `/var/X` and `/private/var/X` (or any local
+// symlink farm) name the same physical directory but compare
+// non-equal as strings, so the second execute would slip through
+// the collision check. Post-fix, both sides are realpath'd before
+// comparison, so the second invocation is refused.
+test('Devil HIGH-1: symlink form of an already-executing cwd is canonicalised and refused', (t) => {
+  const { root, cleanup } = bootstrap('swarm');
+  t.after(cleanup);
+  registerAll(root, ['alice', 'miki', 'leysia']);
+
+  const id1 = createApproved(root, {
+    from: 'alice',
+    executors: ['miki', 'leysia'],
+    target: 'shared-target',
+  });
+  const id2 = createApproved(root, {
+    from: 'alice',
+    executors: ['miki', 'leysia'],
+    target: 'shared-target',
+  });
+
+  // Build a real directory + a symlink pointing at it. We then run
+  // two executes: the first via the real path, the second via the
+  // symlink form. With realpath canonicalisation, both flatten to
+  // the same identity → refuse. Without it (pre-fix) the second
+  // would have passed.
+  const realWt = mkdtempReal(join(tmpdir(), 'wti-real-'));
+  const linkParent = mkdtempReal(join(tmpdir(), 'wti-link-'));
+  const linkWt = join(linkParent, 'symlinked-worktree');
+  symlinkSync(realWt, linkWt, 'dir');
+  t.after(() => {
+    rmSync(realWt, { recursive: true, force: true });
+    rmSync(linkParent, { recursive: true, force: true });
+  });
+
+  const e1 = run(root, ['execute', id1, '--by', 'miki', '--cwd', realWt]);
+  assert.equal(e1.status, 0, `real-path execute failed: ${e1.stderr}`);
+
+  const e2 = run(root, ['execute', id2, '--by', 'leysia', '--cwd', linkWt]);
+  assert.equal(
+    e2.status,
+    1,
+    `symlink-form execute should be refused (realpath canonicalisation), got ${e2.status}: ${e2.stderr}`,
+  );
+  assert.match(e2.stderr, /refusing to execute/);
+});
+
+// Sister test: the canonical form of the on-disk peer cwd is also
+// realpath'd at write time, so the comparison is symmetric — start
+// via the symlink, then attempt the real path. Both directions
+// must collapse identically, otherwise the order of arrival
+// determines safety which is exactly the kind of fail-open Devil
+// flagged.
+test('Devil HIGH-1: symmetric — first via symlink, second via realpath also refused', (t) => {
+  const { root, cleanup } = bootstrap('swarm');
+  t.after(cleanup);
+  registerAll(root, ['alice', 'miki', 'leysia']);
+
+  const id1 = createApproved(root, {
+    from: 'alice',
+    executors: ['miki', 'leysia'],
+    target: 'shared-target',
+  });
+  const id2 = createApproved(root, {
+    from: 'alice',
+    executors: ['miki', 'leysia'],
+    target: 'shared-target',
+  });
+
+  const realWt = mkdtempReal(join(tmpdir(), 'wti-real2-'));
+  const linkParent = mkdtempReal(join(tmpdir(), 'wti-link2-'));
+  const linkWt = join(linkParent, 'symlinked-worktree');
+  symlinkSync(realWt, linkWt, 'dir');
+  t.after(() => {
+    rmSync(realWt, { recursive: true, force: true });
+    rmSync(linkParent, { recursive: true, force: true });
+  });
+
+  const e1 = run(root, ['execute', id1, '--by', 'miki', '--cwd', linkWt]);
+  assert.equal(e1.status, 0, `symlink-form first execute failed: ${e1.stderr}`);
+
+  const e2 = run(root, ['execute', id2, '--by', 'leysia', '--cwd', realWt]);
+  assert.equal(
+    e2.status,
+    1,
+    `real-path second execute should be refused, got ${e2.status}: ${e2.stderr}`,
+  );
+  assert.match(e2.stderr, /refusing to execute/);
 });
