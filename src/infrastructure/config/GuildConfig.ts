@@ -33,6 +33,26 @@ export const defaultOnMalformed: OnMalformed = (source, msg) => {
  */
 export type GuildProfile = 'standard' | 'swarm';
 
+/**
+ * Tri-state policy for self-approval on `gate approve` (#233).
+ *
+ *   - `allowed`   : pass silently (no notice). For deployments that
+ *                   actively rely on self-approve as a primitive.
+ *   - `warn`      : pass, emit a stderr notice pointing at fast-track.
+ *                   The historical default — preserved under
+ *                   profile=standard so existing flows keep working.
+ *   - `forbidden` : refuse with an actionable error. Default under
+ *                   profile=swarm, where parallel waves and
+ *                   bias-checked approvals are the explicit point.
+ *
+ * Three states (not a boolean) because the failure modes differ:
+ * `allowed` removes the audit notice for callers who deliberately
+ * accept the risk, and `forbidden` is a hard stop with a recovery
+ * hint, not a softer noticed pass. Collapsing to two would either
+ * lose the silent-allow surface or muddle the swarm error path.
+ */
+export type SelfApprovePolicy = 'allowed' | 'warn' | 'forbidden';
+
 export interface GuildFeatures {
   /**
    * When true, parallel waves (multi-executor requests) carry a
@@ -43,6 +63,13 @@ export interface GuildFeatures {
    * in/out without flipping the whole profile.
    */
   worktreeRequiredForParallel: boolean;
+  /**
+   * Tri-state self-approve policy on `gate approve` (#233). Profile
+   * default: `warn` under standard, `forbidden` under swarm. An
+   * explicit `features.self_approve` always overrides the profile
+   * default — same opt-in/opt-out shape as worktree_required_for_parallel.
+   */
+  selfApprove: SelfApprovePolicy;
 }
 
 export interface GuildConfigProps {
@@ -161,9 +188,30 @@ export class GuildConfig implements GuildConfigProps {
       typeof featuresRaw.worktree_required_for_parallel === 'boolean'
         ? featuresRaw.worktree_required_for_parallel
         : undefined;
+    // self_approve (#233): tri-state with profile-derived default.
+    // Malformed values (non-string, or string outside the enum) fall
+    // back to the profile default with an onMalformed notice — same
+    // conservative read pattern other optional fields use.
+    const selfApproveDefault: SelfApprovePolicy =
+      profile === 'swarm' ? 'forbidden' : 'warn';
+    let selfApprove: SelfApprovePolicy = selfApproveDefault;
+    if (featuresRaw.self_approve !== undefined) {
+      const v = featuresRaw.self_approve;
+      if (v === 'allowed' || v === 'warn' || v === 'forbidden') {
+        selfApprove = v;
+      } else {
+        onMalformed(
+          configPath,
+          `unknown features.self_approve ${JSON.stringify(v)} — ` +
+            `falling back to profile default '${selfApproveDefault}'. ` +
+            `Valid: allowed | warn | forbidden.`,
+        );
+      }
+    }
     const features: GuildFeatures = {
       worktreeRequiredForParallel:
         explicitWorktreeRequired ?? (profile === 'swarm'),
+      selfApprove,
     };
     return new GuildConfig(root, contentRoot, paths, hostNames, lenses, doctorPlugins, profile, features, onMalformed, configPath);
   }
@@ -186,7 +234,7 @@ export class GuildConfig implements GuildConfigProps {
       [...DEFAULT_LENSES],
       [],
       'standard',
-      { worktreeRequiredForParallel: false },
+      { worktreeRequiredForParallel: false, selfApprove: 'warn' },
       onMalformed,
       null,
     );

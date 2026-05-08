@@ -9,6 +9,39 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
 
 ### Added
 
+- **`features.self_approve: { allowed | warn | forbidden }` —
+  profile-gated self-approve policy on `gate approve`**
+  ([#233](https://github.com/eris-ths/guild-cli/issues/233)).
+  Tri-state config gates the case where `--by` matches the request
+  author. Three states (not a boolean) because failure modes differ:
+  `allowed` passes silently for deployments that actively rely on
+  self-approve, `warn` passes with a stderr notice pointing at
+  fast-track (the historical default), `forbidden` refuses with exit
+  1 and an actionable error naming three recovery paths
+  (`gate fast-track`, another actor approving, or switching profile /
+  setting `self_approve: warn`). Profile defaults: `warn` under
+  `standard` (preserves current behaviour), `forbidden` under `swarm`
+  (parallel waves require bias-checked approvals — same shape as
+  `worktree_required_for_parallel`). An explicit
+  `features.self_approve` always overrides the profile default so a
+  deployment can opt in/out without flipping the whole profile.
+  Malformed values (non-string, or string outside the enum) surface
+  via `onMalformed` and fall back to the profile default rather than
+  rejecting the config — same conservative read pattern other
+  optional fields use. `fast-track` is unaffected (orthogonal verb,
+  never gated). Non-self approve is also unaffected regardless of
+  profile/policy — the gate is self-only.
+  + Self-detection is now performed on the canonical actor
+    representation (case-fold + trim, via `MemberName`) rather than
+    the raw CLI argument. Pre-fix, daily typing habits like `--by
+    ALICE` or `--by 'alice '` slipped past the swarm `forbidden`
+    gate even though the persisted record collapsed both to `alice`
+    — a critical bypass surfaced by Asteria during cross-review.
+    The same normalization is applied to all handler-side
+    self-detection sites (review's self-review warning, thank's
+    self-thank notice, message's self-message advisory) and to the
+    `# verb id: invoked by X on behalf of Y` surface line, so
+    whitespace no longer leaks into the audit trail.
 - **`gate witness <id> --by <actor>` / `gate unwitness <id> --by <actor>`
   for non-exclusive cross-session observation**
   ([#244](https://github.com/eris-ths/guild-cli/issues/244),

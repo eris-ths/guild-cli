@@ -3,6 +3,7 @@ import { resolve as resolvePath } from 'node:path';
 import { buildContainer } from '../../shared/container.js';
 import { optionalOption, ParsedArgs } from '../../shared/parseArgs.js';
 import { RequestJSON } from '../voices.js';
+import { MemberName } from '../../../domain/member/MemberName.js';
 
 /**
  * Shared private helpers for gate command handlers.
@@ -57,6 +58,31 @@ export async function readStdin(): Promise<string> {
  * record) and you need to pass the value into the use case before
  * emitting the user-facing delegation notice.
  */
+/**
+ * Normalize a raw CLI `--by` / `--from` actor string to its canonical
+ * form (case-fold + trim, matching `MemberName.of()`'s value rules).
+ *
+ * Why this exists separately from `MemberName.of`: handlers compare a
+ * raw CLI argument against the canonical `request.from.value`
+ * (already lowercased/trimmed by the domain VO at write time). A naive
+ * string compare lets `--by ALICE` or `--by 'alice '` slip past
+ * self-detection — a CRITICAL bypass on the swarm `forbidden` policy
+ * (#233 follow-up: Asteria-found bypass on 50c9af1). Reusing the VO
+ * keeps a single source of truth for what "same actor" means and
+ * surfaces invalid actors with the same domain error the rest of the
+ * stack already raises.
+ *
+ * Rejects invalid input (empty / regex-failing / reserved) by letting
+ * `MemberName.of` throw — the handler entry already trusts that
+ * validation has happened upstream OR will happen, so an early throw
+ * here is preferable to a silent fall-through that lands a bad actor
+ * in YAML. Use this anywhere a handler needs to compare or display
+ * `by` before the use case has had a chance to canonicalize.
+ */
+export function normalizeActor(raw: string): string {
+  return MemberName.of(raw).value;
+}
+
 export function deriveInvokedBy(by: string): string | undefined {
   const envActor = resolveGuildActor();
   if (!envActor || envActor.length === 0) return undefined;

@@ -11,6 +11,7 @@ import {
   resolveInvokedBy,
   isDryRun,
   emitDryRunPreview,
+  normalizeActor,
 } from './internal.js';
 import { emitWriteResponse, parseFormat } from './writeFormat.js';
 
@@ -32,7 +33,12 @@ export async function reqReview(c: C, args: ParsedArgs): Promise<number> {
         '[--comment <s> | --comment - | <comment>]',
     );
   }
-  const by = requireOption(args, 'by', '<m>', 'GUILD_ACTOR');
+  // Canonicalize before downstream compares (`updated.from.value === by`
+  // is the self-review trigger and was vulnerable to the same case-fold
+  // / trim bypass that #233's self_approve gate had).
+  const by = normalizeActor(
+    requireOption(args, 'by', '<m>', 'GUILD_ACTOR'),
+  );
   const lense = requireOption(args, 'lense', '<l>');
   const verdict = requireOption(args, 'verdict', '<ok|concern|reject>');
 
