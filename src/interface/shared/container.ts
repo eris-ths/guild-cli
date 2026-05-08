@@ -20,6 +20,8 @@ import { YamlPlayRepository } from '../../passages/agora/infrastructure/YamlPlay
 import { PlayRepository } from '../../passages/agora/application/PlayRepository.js';
 import { FsTemplateRepository } from '../../infrastructure/template/TemplateRepository.js';
 import { TemplateUseCases } from '../../application/template/TemplateUseCases.js';
+import { YamlSessionEventRepository } from '../../infrastructure/persistence/YamlSessionEventRepository.js';
+import { SessionEventUseCases } from '../../application/session/SessionEventUseCases.js';
 import {
   VerbPlugin,
   VerbPluginLoadError,
@@ -53,6 +55,14 @@ export interface Container {
    * `<content_root>/data/guild/templates/wave-brief/`.
    */
   templateUC: TemplateUseCases;
+  /**
+   * Session-boundary events (`gate rest` / `gate wake` /
+   * `gate farewell`, #36 Phase 2). Phase 2's first slice ships
+   * `gate rest` only; the use case accepts the full kind union so
+   * follow-up PRs add wake / farewell handlers without a domain
+   * change.
+   */
+  sessionEventUC: SessionEventUseCases;
   /**
    * Verb plugins loaded at CLI startup (issue #36 Phase 1 step 4).
    * Empty array when `plugins.trusted: true` is absent from
@@ -187,6 +197,11 @@ export function buildContainer(opts: BuildContainerOpts = {}): Container {
     templateUC: new TemplateUseCases(
       new FsTemplateRepository(config.contentRoot, config.onMalformed),
     ),
+    sessionEventUC: new SessionEventUseCases({
+      events: new YamlSessionEventRepository(config),
+      members,
+      clock,
+    }),
     verbPlugins: opts.verbPlugins ?? [],
     verbPluginErrors: opts.verbPluginErrors ?? [],
     hookSubscriptions: opts.hookSubscriptions ?? new Map(),

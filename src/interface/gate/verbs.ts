@@ -57,6 +57,7 @@ export const WRITE_VERBS: ReadonlySet<string> = new Set([
   'message',
   'broadcast',
   'inbox',
+  'rest',
 ]);
 
 export const LOCK_EXEMPT_VERBS: ReadonlySet<string> = new Set([
