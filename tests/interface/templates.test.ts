@@ -359,3 +359,36 @@ test('templated record: pre-#235 record (no template fields) round-trips clean',
   assert.equal(j['template_version'], undefined);
   assert.equal(j['gate_required_acknowledged'], undefined);
 });
+
+// ---------------- mutex with --from-agora (#232 ↔ #235) ----------------
+
+// `--template` (#235) and `--from-agora` (#232) both supply default
+// action/reason. Combining them would make precedence ambiguous (does
+// the play's invitation win, or the template's wave-brief stub?). The
+// interface layer rejects up-front rather than silently picking one —
+// same fail-open class rejectUnknownFlags is built to prevent. The
+// error mentions both flags so the operator sees which combination
+// tripped, and the request is NOT created (no record on disk).
+test('gate request --template + --from-agora: mutex, exits 1, no record written', (t) => {
+  const { root, templatesDir, cleanup } = bootstrap();
+  t.after(cleanup);
+  writeTemplate(templatesDir, 'parallel-impl', { intendedUse: 'parallel impl' });
+  registerAll(root, ['miki']);
+  const r = run(root, [
+    'request',
+    '--from', 'miki',
+    '--template', 'parallel-impl',
+    '--from-agora', '2026-05-08-001',
+  ]);
+  assert.notEqual(r.status, 0, `expected non-zero exit, got ${r.status}`);
+  assert.match(
+    r.stderr,
+    /--template and --from-agora are mutually exclusive/,
+    `expected mutex error, got: ${r.stderr}`,
+  );
+  // Confirm the request was not created (no .yaml under requests/).
+  const list = run(root, ['list', '--state', 'pending', '--format', 'json']);
+  assert.equal(list.status, 0);
+  const lj = JSON.parse(list.stdout) as { requests: unknown[] };
+  assert.equal(lj.requests.length, 0, 'mutex error must not create a record');
+});
