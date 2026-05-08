@@ -46,6 +46,7 @@ export const WRITE_VERBS: ReadonlySet<string> = new Set([
   'complete',
   'fail',
   'review',
+  'claim',
   'thank',
   'fast-track',
   'register',

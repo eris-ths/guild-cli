@@ -529,6 +529,19 @@ function hydrate(
     if (obj['requires_worktree_isolation'] === true) {
       props.requiresWorktreeIsolation = true;
     }
+    // Cross-session claim (issue #226). Restore only when BOTH fields
+    // are present and well-typed — a record with one of the two is
+    // structurally inconsistent (claim should never be half-set) and
+    // is dropped, so toJSON's pair invariant holds on round-trip. Old
+    // records (pre-#226) lack both fields and hydrate as unclaimed,
+    // which is the correct phase-1 default.
+    if (
+      typeof obj['claimed_by'] === 'string' &&
+      typeof obj['claimed_at'] === 'string'
+    ) {
+      props.claimedBy = MemberName.of(obj['claimed_by']);
+      props.claimedAt = obj['claimed_at'] as string;
+    }
     // Legacy top-level closure keys (completion_note / deny_reason /
     // failure_reason) are no longer written separately — status_log[-1].note
     // is the single source of truth. Handle the three migration cases

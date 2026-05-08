@@ -17,6 +17,7 @@ import {
   reqFastTrack,
 } from './handlers/request.js';
 import { reqReview } from './handlers/review.js';
+import { reqClaim } from './handlers/claim.js';
 import { reqThank } from './handlers/thank.js';
 import {
   reqVoices,
@@ -99,6 +100,14 @@ Requests:
   gate fail <id> --by <m> [--note <s> | --reason <s> | <reason>] [--dry-run]
   gate review <id> --by <m> --lense <l> --verdict <v>
                    [--comment <s> | --comment - | <comment>] [--dry-run]
+  gate claim <id> --by <m> [--dry-run]
+                       Stake a cross-session claim on a pending or
+                       approved request (issue #226 phase 1). Same-
+                       actor re-claim is a no-op; a different actor
+                       attempting to claim while one is already held
+                       is refused. The claim auto-releases when the
+                       request reaches a terminal state (completed /
+                       failed / denied).
                        --dry-run on any write verb above emits a
                        preview JSON envelope (dry_run/verb/would_
                        transition/preview) without persisting.
@@ -247,7 +256,7 @@ Meta:
 const KNOWN_COMMANDS = [
   'request', 'pending', 'board', 'list', 'show', 'voices', 'tail',
   'whoami', 'register', 'chain', 'approve', 'deny', 'execute',
-  'complete', 'fail', 'review', 'thank', 'fast-track', 'issues', 'message',
+  'complete', 'fail', 'review', 'claim', 'thank', 'fast-track', 'issues', 'message',
   'broadcast', 'inbox', 'doctor', 'repair', 'status', 'boot',
   'suggest', 'transcript', 'summarize', 'why', 'resume', 'schema',
   'unresponded',
@@ -356,6 +365,8 @@ async function dispatch(
       return await reqFail(c, args);
     case 'review':
       return await reqReview(c, args);
+    case 'claim':
+      return await reqClaim(c, args);
     case 'thank':
       return await reqThank(c, args);
     case 'fast-track':

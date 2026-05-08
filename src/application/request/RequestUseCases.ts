@@ -295,6 +295,29 @@ export class RequestUseCases {
     return req;
   }
 
+  /**
+   * Stake a cross-session claim on a request (issue #226 phase 1).
+   * Thin wrapper over the domain `Request.claim`: validates `by`
+   * against the member directory, then delegates the idempotency /
+   * conflict / state-guard logic to the aggregate. Save is skipped
+   * when the claim is a no-op (same-actor re-claim) — the aggregate
+   * doesn't mutate, so persisting would only churn the file's
+   * version-lock without changing content.
+   */
+  async claim(input: {
+    id: string;
+    by: string;
+    dryRun?: boolean;
+  }): Promise<{ request: Request; mutated: boolean }> {
+    const req = await this.loadOrThrow(input.id);
+    const actor = await assertActor(input.by, '--by', this.deps.members);
+    const before = req.claimedBy?.value;
+    req.claim(actor, this.deps.clock.now().toISOString());
+    const mutated = before !== req.claimedBy?.value;
+    if (mutated && !input.dryRun) await this.deps.requests.save(req);
+    return { request: req, mutated };
+  }
+
   private async loadOrThrow(id: string): Promise<Request> {
     const req = await this.deps.requests.findById(RequestId.of(id));
     if (!req) throw new DomainError(`Request not found: ${id}`, 'id');

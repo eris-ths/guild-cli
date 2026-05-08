@@ -117,6 +117,24 @@ export interface RequestProps {
    */
   thanks?: Thank[];
   statusLog: StatusLogEntry[];
+  /**
+   * Cross-session stake claim (issue #226 phase 1). When set, names the
+   * actor who has claimed responsibility for this request. Independent
+   * of `executors`: claim is a *session-level* "I'm working on this
+   * right now, do not double-stake" signal that another concurrent
+   * session can read before independently picking up the same id. The
+   * full witness/release flow is deferred to a follow-up issue —
+   * phase 1 ships claim only, with auto-release on terminal transitions
+   * (completed/failed/denied) so the field can never be left hanging
+   * on a closed record.
+   *
+   * Persistence: omitted from YAML when null (byte-stable round-trip
+   * with pre-#226 records). Old records hydrate as null.
+   */
+  claimedBy?: MemberName;
+  /** ISO 8601 timestamp of the claim, paired with `claimedBy`. Both
+   *  fields move together — set together, cleared together. */
+  claimedAt?: string;
 }
 
 /**
@@ -453,6 +471,74 @@ export class Request {
     return this.props.thanks ?? [];
   }
 
+  /** Current claimant, or undefined if unclaimed. Issue #226. */
+  get claimedBy(): MemberName | undefined {
+    return this.props.claimedBy;
+  }
+  /** ISO timestamp matched with `claimedBy`. Undefined when unclaimed. */
+  get claimedAt(): string | undefined {
+    return this.props.claimedAt;
+  }
+
+  /**
+   * Stake a cross-session claim (issue #226). Three outcomes:
+   *
+   *   1. Unclaimed → record `(by, at)` (the normal case).
+   *   2. Claimed by the same actor → no-op. Idempotent re-claim is
+   *      legal because a session that lost track of its own state
+   *      should be able to re-assert without surprise. We deliberately
+   *      do NOT bump `claimedAt` on re-claim — the field is a "since
+   *      when" stamp, not a heartbeat, and rewriting it would make
+   *      "this claim has been held for N minutes" unobservable from
+   *      outside. The YAML stays byte-identical on a re-claim, which
+   *      also keeps the version-lock from incrementing on a no-op.
+   *   3. Claimed by a different actor → throw. State must be
+   *      `pending` or `approved` for any claim to land — a request
+   *      already executing/completed/failed/denied has moved past the
+   *      cross-session race that claim exists to mediate.
+   *
+   * State guard is checked here (domain invariant) rather than only at
+   * the use case so non-CLI callers can't bypass it.
+   */
+  claim(by: MemberName, at: string): void {
+    if (this.props.state !== 'pending' && this.props.state !== 'approved') {
+      throw new DomainError(
+        `Cannot claim a request in state "${this.props.state}"; ` +
+          `claim only applies while pending or approved (the cross-session ` +
+          `race window).`,
+        'state',
+      );
+    }
+    const existing = this.props.claimedBy;
+    if (existing !== undefined) {
+      if (existing.value === by.value) {
+        // Idempotent re-claim — see method doc. No mutation, no log.
+        return;
+      }
+      throw new DomainError(
+        `Request ${this.props.id.value} is already claimed by ${existing.value}; ` +
+          `cannot claim as ${by.value}. The first claimant must release ` +
+          `(or transition the request to a terminal state) before a different ` +
+          `actor can stake.`,
+        'claimed_by',
+      );
+    }
+    this.props.claimedBy = by;
+    this.props.claimedAt = at;
+  }
+
+  /**
+   * Clear the claim. Phase 1 of #226 calls this only from `transition`
+   * on terminal states — there is no public release verb yet. Kept as
+   * a method (rather than inlined) because the future explicit-release
+   * verb will land here unchanged.
+   */
+  private releaseClaim(): void {
+    if (this.props.claimedBy === undefined) return;
+    delete this.props.claimedBy;
+    delete this.props.claimedAt;
+  }
+
   private transition(
     to: RequestState,
     by: MemberName,
@@ -490,6 +576,17 @@ export class Request {
       entry.executingAtCwd = cwd;
     }
     this.props.statusLog.push(entry);
+    // Auto-release the cross-session claim (issue #226) when the
+    // request reaches a terminal state. Rationale: claim mediates the
+    // pending/approved race window; once the work is recorded as
+    // completed/failed/denied, holding the claim adds no signal and
+    // would only block a future re-open or follow-up flow. We do NOT
+    // release on the executing transition because the same session
+    // typically does approve→execute and benefits from the claim
+    // surviving across that boundary as a "still mine" marker.
+    if (to === 'completed' || to === 'failed' || to === 'denied') {
+      this.releaseClaim();
+    }
   }
 
   toJSON(): Record<string, unknown> {
@@ -544,6 +641,17 @@ export class Request {
     // on round-trip (false-by-absence is the load tolerance).
     if (this.props.requiresWorktreeIsolation === true) {
       out['requires_worktree_isolation'] = true;
+    }
+    // Cross-session claim (issue #226). Both fields move together —
+    // present-when-set, omitted-when-clear — so YAML stays byte-stable
+    // for unclaimed records (the common case) and round-trips cleanly
+    // when set. The pair invariant is enforced at write (claim/release
+    // touch both) and on hydrate (we only restore when both are
+    // present-and-typed); a record with only one of the two is
+    // structurally inconsistent and dropped.
+    if (this.props.claimedBy !== undefined && this.props.claimedAt !== undefined) {
+      out['claimed_by'] = this.props.claimedBy.value;
+      out['claimed_at'] = this.props.claimedAt;
     }
     // Derive legacy closure keys from the last status_log entry so
     // external consumers (chain / voices / show --format text) keep

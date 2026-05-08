@@ -488,6 +488,14 @@ function formatRequestText(r: Request): string {
       );
       prevAt = at;
     }
+    // Cross-session claim (issue #226). Surfaced just below the state
+    // log because logically it sits on the same axis as transitions:
+    // "who has this right now". Only rendered when set — unclaimed is
+    // the common case and a `(no claim)` line would clutter every
+    // show. JSON consumers read the structured fields directly.
+    if (typeof j['claimed_by'] === 'string' && typeof j['claimed_at'] === 'string') {
+      lines.push(`    claimed by: ${j['claimed_by']} at ${j['claimed_at']}`);
+    }
   }
 
   const reviews = Array.isArray(j['reviews']) ? j['reviews'] : [];
