@@ -29,6 +29,17 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
   omitted when empty). `gate show` surfaces `witnesses: a, b, c` below
   the claim line in text mode, and exposes the structured `witnesses`
   array in JSON mode (omitted when empty in both surfaces).
+  + Hydrate dedup: hand-edited YAML with duplicate `witnesses` entries
+    is collapsed to first-occurrence on load (matching the domain's
+    set-by-first-registration semantic) and the migration surfaces via
+    `onMalformed` rather than passing silently — without this, a single
+    `unwitness` would leave duplicate names visible on `show`.
+    + Terminal-aware `unwitness` error: when invoked on a closed record
+    (completed/failed/denied) where auto-reset has already cleared the
+    list, the error message names the auto-release behavior and signals
+    "no action needed", distinguishing a benign cleanup pass from a
+    real misnamed `--by` typo (which keeps the original phrasing on
+    pending/approved/executing).
 
 - **`gate claim <id> --by <actor>` for cross-session stake**
   ([#226](https://github.com/eris-ths/guild-cli/issues/226) phase 1).

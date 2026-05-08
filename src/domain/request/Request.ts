@@ -617,20 +617,28 @@ export class Request {
    *
    * State guard intentionally absent: unwitness must work in any
    * state so an observer who joined a request which then progressed
-   * to a terminal state can still clean up. (In practice the auto-
-   * reset on terminal transition does this for them, but a manual
-   * unwitness on a closed record stays a clean no-mutation throw.)
+   * to a terminal state can still clean up. In practice the auto-
+   * reset on terminal transition does the cleanup first, so a manual
+   * unwitness on a closed record finds an empty list — we surface a
+   * terminal-aware "no action needed" message instead of the typo
+   * error, so an actor running a defensive cleanup pass can tell the
+   * benign case from a real misnamed --by.
    */
   unwitness(by: MemberName): void {
     const list = this.props.witnesses ?? [];
     const idx = list.findIndex((m) => m.value === by.value);
     if (idx < 0) {
-      throw new DomainError(
-        `${by.value} is not a witness of request ${this.props.id.value}; ` +
+      const state = this.props.state;
+      const isTerminal =
+        state === 'completed' || state === 'failed' || state === 'denied';
+      const msg = isTerminal
+        ? `${by.value} is not currently a witness of request ${this.props.id.value} ` +
+          `(state=${state}; witnesses are auto-released on terminal transitions, ` +
+          `so any prior witness has already been cleared. No action needed.)`
+        : `${by.value} is not a witness of request ${this.props.id.value}; ` +
           `unwitness only removes the caller's own witness (use witness ` +
-          `to register first, or check the actor name).`,
-        'witnesses',
-      );
+          `to register first, or check the actor name).`;
+      throw new DomainError(msg, 'witnesses');
     }
     list.splice(idx, 1);
     if (list.length === 0) {

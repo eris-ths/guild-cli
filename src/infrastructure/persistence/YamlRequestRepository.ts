@@ -547,10 +547,34 @@ function hydrate(
     // the same conservative read pattern as `with`. Pre-#244 records
     // lack the field entirely and hydrate as no witnesses (the empty-
     // by-absence default), preserving byte-stable round-trip.
+    //
+    // Dedup invariant: the domain `witness()` keeps the array as a set
+    // ordered by first registration (re-witness is a no-op), so the
+    // hydrated array must match — otherwise hand-edited YAML carrying
+    // `witnesses: [asteria, asteria]` would let `unwitness` consume
+    // entries one-at-a-time (findIndex + splice removes one), forcing
+    // the actor to invoke unwitness twice and see their name still on
+    // `show` between the two calls. We dedup here on first-occurrence
+    // (same order semantics as the domain) and warn via onMalformed so
+    // the migration is visible, not silent.
     if (Array.isArray(obj['witnesses'])) {
       const observers: MemberName[] = [];
+      const seen = new Set<string>();
+      let duplicates = 0;
       for (const raw of obj['witnesses'] as unknown[]) {
-        if (typeof raw === 'string') observers.push(MemberName.of(raw));
+        if (typeof raw !== 'string') continue;
+        if (seen.has(raw)) {
+          duplicates += 1;
+          continue;
+        }
+        seen.add(raw);
+        observers.push(MemberName.of(raw));
+      }
+      if (duplicates > 0) {
+        onMalformed(
+          source,
+          `witnesses array contained ${duplicates} duplicate entr${duplicates === 1 ? 'y' : 'ies'}; deduped on first occurrence (the domain treats witnesses as a set; the next save will emit the deduped form)`,
+        );
       }
       if (observers.length > 0) props.witnesses = observers;
     }

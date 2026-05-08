@@ -388,3 +388,132 @@ test('byte-stable: unwitnessed YAML omits the field (round-trip clean)', (t) => 
   const yaml = readFileSync(join(dir, `${id}.yaml`), 'utf8');
   assert.doesNotMatch(yaml, /witnesses/);
 });
+
+// Asteria finding A (#244 follow-up): hand-edited YAML with duplicate
+// witnesses entries must be deduped on hydrate (the domain treats the
+// array as a set ordered by first registration), and the migration
+// must surface via onMalformed so it isn't silent. Without this fix,
+// `unwitness` would have to be invoked twice to clear a duplicated
+// entry, with the actor's name still visible on `show` between calls.
+test('hydrate dedup: duplicate witnesses in YAML are collapsed and warned', (t) => {
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  registerAll(root, ['alice', 'asteria']);
+  const dir = join(root, 'requests', 'pending');
+  mkdirSync(dir, { recursive: true });
+  const forged = `id: 2026-01-02-001
+from: alice
+action: dup test
+reason: forged duplicates
+state: pending
+created_at: '2026-01-02T00:00:00.000Z'
+status_log:
+  - state: pending
+    by: alice
+    at: '2026-01-02T00:00:00.000Z'
+    note: created
+reviews: []
+witnesses:
+  - asteria
+  - asteria
+`;
+  writeFileSync(join(dir, '2026-01-02-001.yaml'), forged);
+
+  const r = run(root, ['show', '2026-01-02-001', '--format', 'json']);
+  assert.equal(r.status, 0, `show failed: ${r.stderr}`);
+  const j = JSON.parse(r.stdout) as Record<string, unknown>;
+  assert.deepEqual(
+    j['witnesses'],
+    ['asteria'],
+    'duplicate witnesses must be collapsed to first occurrence',
+  );
+  assert.match(
+    r.stderr,
+    /witnesses array contained 1 duplicate/,
+    'dedup migration must surface via onMalformed (warn: ...)',
+  );
+
+  // And one unwitness call (not two) suffices to clear it.
+  const u = run(root, ['unwitness', '2026-01-02-001', '--by', 'asteria']);
+  assert.equal(u.status, 0, `unwitness failed: ${u.stderr}`);
+  const j2 = readShowJson(root, '2026-01-02-001');
+  assert.equal(j2['witnesses'], undefined, 'single unwitness should clear');
+});
+
+// Asteria finding B (#244 follow-up): a former witness running a
+// defensive cleanup pass on a terminal record (where auto-reset has
+// already cleared the list) needs a distinguishable error from the
+// real typo case. The `is not a witness` text is reserved for the
+// live-window states; terminal records get a "no action needed"
+// explanation that names the auto-reset behavior.
+test('unwitness on terminal: error message is auto-reset-aware', (t) => {
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  registerAll(root, ['alice', 'leysia', 'miki']);
+  const id = newRequest(root, 'alice', 'leysia');
+
+  assert.equal(run(root, ['witness', id, '--by', 'miki']).status, 0);
+  assert.equal(run(root, ['approve', id, '--by', 'eris']).status, 0);
+  assert.equal(run(root, ['execute', id, '--by', 'leysia']).status, 0);
+  assert.equal(run(root, ['complete', id, '--by', 'leysia']).status, 0);
+
+  // miki, formerly a witness, runs cleanup on the (now completed)
+  // record. Auto-reset has already cleared the list, so this is the
+  // benign "nothing to do" path — message must say so.
+  const r = run(root, ['unwitness', id, '--by', 'miki']);
+  assert.equal(r.status, 1, 'unwitness on cleared list still throws');
+  assert.match(
+    r.stderr,
+    /state=completed/,
+    'terminal-aware error must name the state',
+  );
+  assert.match(
+    r.stderr,
+    /auto-released on terminal transitions/,
+    'terminal-aware error must explain why nothing remains',
+  );
+  assert.match(
+    r.stderr,
+    /No action needed/,
+    'terminal-aware error must signal the no-op intent',
+  );
+  // And it must NOT use the live-window typo phrasing.
+  assert.doesNotMatch(
+    r.stderr,
+    /unwitness only removes the caller's own witness/,
+    'live-window typo phrasing is reserved for non-terminal states',
+  );
+});
+
+// Companion to finding B: the live-window states (pending/approved/
+// executing) must still emit the original typo-oriented message — the
+// terminal branch is additive, not a rewrite.
+test('unwitness on live-window: error message is the typo-oriented form', (t) => {
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  registerAll(root, ['alice', 'leysia', 'miki']);
+
+  // pending
+  const idPending = newRequest(root, 'alice');
+  let r = run(root, ['unwitness', idPending, '--by', 'miki']);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /unwitness only removes the caller's own witness/);
+  assert.doesNotMatch(r.stderr, /auto-released on terminal/);
+
+  // approved
+  const idApproved = newRequest(root, 'alice', 'leysia');
+  assert.equal(run(root, ['approve', idApproved, '--by', 'eris']).status, 0);
+  r = run(root, ['unwitness', idApproved, '--by', 'miki']);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /unwitness only removes the caller's own witness/);
+  assert.doesNotMatch(r.stderr, /auto-released on terminal/);
+
+  // executing
+  const idExecuting = newRequest(root, 'alice', 'leysia');
+  assert.equal(run(root, ['approve', idExecuting, '--by', 'eris']).status, 0);
+  assert.equal(run(root, ['execute', idExecuting, '--by', 'leysia']).status, 0);
+  r = run(root, ['unwitness', idExecuting, '--by', 'miki']);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /unwitness only removes the caller's own witness/);
+  assert.doesNotMatch(r.stderr, /auto-released on terminal/);
+});
