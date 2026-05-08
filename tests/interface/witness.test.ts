@@ -3,7 +3,9 @@
 // (phase 1): claim is exclusive, witness is plural.
 //
 // Coverage:
-//   - first-time witness appends actor; multiple actors witness in parallel
+//   - first-time witness appends actor; multiple sequential witnesses
+//     preserve registration order (true-concurrency in
+//     witnessConcurrency.test.ts)
 //   - re-witness by same actor is a no-op (idempotent, no duplicate)
 //   - witness coexists with a claim (same actor or different actor)
 //   - claim coexists with witnesses by other actors (witness doesn't
@@ -119,7 +121,13 @@ test('gate witness: first-time stamps witnesses array', (t) => {
   assert.deepEqual(j['witnesses'], ['leysia']);
 });
 
-test('gate witness: multiple actors witness in parallel (registration order)', (t) => {
+// NOTE: this test was previously titled "in parallel" but the calls
+// are sequential (spawnSync is blocking). The misleading name was
+// flagged in the #244 Devil REJECT — true-concurrency coverage now
+// lives in `witnessConcurrency.test.ts`. This test stays as the
+// "registration order is preserved across multiple sequential
+// witnesses" canary.
+test('gate witness: multiple sequential witnesses preserve registration order', (t) => {
   const { root, cleanup } = bootstrap();
   t.after(cleanup);
   registerAll(root, ['alice', 'leysia', 'miki', 'yuki']);

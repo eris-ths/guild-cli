@@ -56,6 +56,32 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
 
 ### Fixed
 
+- **`witness` / `unwitness` / `claim` concurrency safety
+  ([#244](https://github.com/eris-ths/guild-cli/issues/244) Devil
+  REJECT root cause).** Pre-fix: these verbs mutated state without
+  appending to `status_log` / `reviews` / `thanks`, so the optimistic-
+  lock token (sum of those three array lengths) was non-monotonic
+  across them. Two concurrent `gate witness` calls both passed the
+  lock check on identical pre-state and last-writer-wins atomic
+  rename silently dropped one of the two writes — Devil's repro
+  showed 4 parallel witnesses landing exactly 1 entry, parallel
+  `unwitness` losing the loser, and `claim ⊥ witness` mixed races
+  destroying the #244 core promise that "witness coexists with any
+  claim". Fix: each `claim` / `witness` / `unwitness` mutation (and
+  every per-actor terminal auto-reset) bumps a new `mutation_seq`
+  counter on Request, and `computeVersion` includes it in the
+  optimistic-lock token; concurrent writers now throw
+  `RequestVersionConflict` and the use case
+  (`RequestUseCases.{claim,witness,unwitness}`) retries the load →
+  mutate → save loop on conflict (bounded, with stagger). Idempotent
+  re-claim / re-witness by the same actor does NOT bump (no-op, save
+  skipped). Per-actor accounting on terminal auto-reset means a
+  frontier collapsing "claim + 3 witnesses" contributes `+4` so the
+  seq delta remains a faithful "how many actors were mediating"
+  signal. YAML byte-stable: `mutation_seq` is omitted when 0, so
+  pre-#244 records and never-mediated post-fix records round-trip
+  identically.
+
 - **darwin path-comparison flakes in `tests/{interface,passages}/`
   ([#238](https://github.com/eris-ths/guild-cli/issues/238)).** Twelve
   tests across `boot`, `doctor`, `register`, and `agora new`/`play`

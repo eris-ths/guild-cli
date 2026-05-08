@@ -11,6 +11,7 @@ import { compareSequenceIds } from '../../domain/shared/compareSequenceIds.js';
 import {
   RequestRepository,
   RequestIdCollision,
+  RequestVersionConflict,
 } from '../ports/RequestRepository.js';
 import { MemberRepository } from '../ports/MemberRepository.js';
 import { NotificationPort } from '../ports/NotificationPort.js';
@@ -309,13 +310,22 @@ export class RequestUseCases {
     by: string;
     dryRun?: boolean;
   }): Promise<{ request: Request; mutated: boolean }> {
-    const req = await this.loadOrThrow(input.id);
     const actor = await assertActor(input.by, '--by', this.deps.members);
-    const before = req.claimedBy?.value;
-    req.claim(actor, this.deps.clock.now().toISOString());
-    const mutated = before !== req.claimedBy?.value;
-    if (mutated && !input.dryRun) await this.deps.requests.save(req);
-    return { request: req, mutated };
+    // Retry on RequestVersionConflict: claim/witness/unwitness mediate
+    // a live cross-session race window (#244 root cause), so a
+    // concurrent claim/witness landing between our load and save is
+    // expected, not exceptional. Re-load and re-apply — the domain
+    // verb is idempotent on no-op (same-actor re-claim) and refuses
+    // on conflict (different-actor claim already held), so retry is
+    // safe and bounded.
+    return retryOnVersionConflict('claim', input.id, async () => {
+      const req = await this.loadOrThrow(input.id);
+      const before = req.claimedBy?.value;
+      req.claim(actor, this.deps.clock.now().toISOString());
+      const mutated = before !== req.claimedBy?.value;
+      if (mutated && !input.dryRun) await this.deps.requests.save(req);
+      return { request: req, mutated };
+    });
   }
 
   /**
@@ -331,13 +341,15 @@ export class RequestUseCases {
     by: string;
     dryRun?: boolean;
   }): Promise<{ request: Request; mutated: boolean }> {
-    const req = await this.loadOrThrow(input.id);
     const actor = await assertActor(input.by, '--by', this.deps.members);
-    const before = req.witnesses.length;
-    req.witness(actor);
-    const mutated = before !== req.witnesses.length;
-    if (mutated && !input.dryRun) await this.deps.requests.save(req);
-    return { request: req, mutated };
+    return retryOnVersionConflict('witness', input.id, async () => {
+      const req = await this.loadOrThrow(input.id);
+      const before = req.witnesses.length;
+      req.witness(actor);
+      const mutated = before !== req.witnesses.length;
+      if (mutated && !input.dryRun) await this.deps.requests.save(req);
+      return { request: req, mutated };
+    });
   }
 
   /**
@@ -351,11 +363,13 @@ export class RequestUseCases {
     by: string;
     dryRun?: boolean;
   }): Promise<Request> {
-    const req = await this.loadOrThrow(input.id);
     const actor = await assertActor(input.by, '--by', this.deps.members);
-    req.unwitness(actor);
-    if (!input.dryRun) await this.deps.requests.save(req);
-    return req;
+    return retryOnVersionConflict('unwitness', input.id, async () => {
+      const req = await this.loadOrThrow(input.id);
+      req.unwitness(actor);
+      if (!input.dryRun) await this.deps.requests.save(req);
+      return req;
+    });
   }
 
   private async loadOrThrow(id: string): Promise<Request> {
@@ -369,4 +383,58 @@ function sortRequests(items: Request[]): Request[] {
   return [...items].sort((a, b) =>
     compareSequenceIds(a.id.value, b.id.value),
   );
+}
+
+/**
+ * Re-run a load → mutate → save pipeline up to N times on
+ * `RequestVersionConflict`, with a small staggered backoff to avoid
+ * livelock when many actors race on the same id.
+ *
+ * Why retry lives at the use case (not the repository): the
+ * repository's optimistic-lock check is the *signal*; deciding what
+ * to retry and how is a use-case-level policy. claim / witness /
+ * unwitness mediate a live cross-session race window (#244 Devil
+ * REJECT root cause: two concurrent witnesses both passing the lock
+ * because length-based version was non-monotonic, then last-writer-
+ * wins atomic rename silently dropping one). The mutation_seq fix
+ * makes the conflict observable; this helper makes it recoverable.
+ *
+ * Bounds: 8 attempts is generous for the realistic cases (4 parallel
+ * witnesses on the same id) while still terminating on a pathological
+ * thrash. The domain verbs are idempotent on no-op and refuse on
+ * genuine conflict (different-actor claim while one is held), so
+ * "retry until success" is safe semantically — it doesn't paper over
+ * legitimate refusals.
+ *
+ * Last attempt re-throws so the caller still sees the error if the
+ * race window genuinely never closes.
+ */
+async function retryOnVersionConflict<T>(
+  verb: string,
+  id: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const maxAttempts = 8;
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (e) {
+      if (!(e instanceof RequestVersionConflict)) throw e;
+      lastErr = e;
+      // Tiny staggered backoff — multiplicative on attempt to spread
+      // out hot-spot contention. The numbers are deliberately small:
+      // we're racing on a local file, not a remote service, and the
+      // contention window is sub-millisecond.
+      const delayMs = Math.min(2 * (attempt + 1), 16);
+      await new Promise((r) => setTimeout(r, delayMs));
+    }
+  }
+  // Out of attempts — annotate the error so the operator can tell a
+  // genuine pile-up from a single conflict, then re-throw the last
+  // one so the existing error envelope still surfaces.
+  if (lastErr instanceof Error) {
+    lastErr.message = `${verb}(${id}): ${lastErr.message} [exhausted ${maxAttempts} retries]`;
+  }
+  throw lastErr;
 }
