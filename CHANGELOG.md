@@ -1308,8 +1308,8 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
   error.** Pre-fix, when the user opened the editor (no
   `--comment`/positional/stdin) and saved without writing,
   `readCommentViaEditor` returned an empty string and the caller's
-  generic "review comment is required (use --comment <s>, …, or
-  run interactively so $EDITOR opens)" error fired — but the
+  generic `review comment is required (use --comment <s>, …, or
+  run interactively so $EDITOR opens)` error fired — but the
   "run interactively" hint was misleading because the user had
   just done so. Post-fix the editor flow throws its own message:
 
