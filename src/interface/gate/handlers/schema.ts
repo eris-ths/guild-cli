@@ -574,6 +574,21 @@ const VERBS: readonly VerbSchema[] = [
       properties: {
         actor: str,
         session_hint: str,
+        last_boundary: {
+          type: 'object',
+          description:
+            'Most recent session-boundary record stamped by this actor (#36 Phase 2). ' +
+            "Null when the actor has no `gate rest` / `gate wake` / `gate farewell` " +
+            'records on file. Distinct from `session_hint` (which is the actor\'s last ' +
+            'activity timestamp); a boundary record is an explicit "I am putting this ' +
+            'down" / "picking it back up" / "until next session" stamp.',
+          properties: {
+            kind: { type: 'string', enum: ['rest', 'wake', 'farewell'] },
+            at: str,
+            age_hint: str,
+            note: strOpt(),
+          },
+        },
         last_context: {
           type: 'object',
           properties: {

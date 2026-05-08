@@ -11,6 +11,24 @@ import { Request, StatusLogEntry } from '../../../domain/request/Request.js';
 import { collectUtterances, Utterance, RequestJSON } from '../voices.js';
 import { deriveSuggestedNext, SuggestedNext } from './writeFormat.js';
 import { UnrespondedConcernsEntry } from '../../../application/concern/UnrespondedConcernsQuery.js';
+import type { SessionEvent, SessionKind } from '../../../domain/session/SessionEvent.js';
+
+/**
+ * Most recent session boundary stamped by the resuming actor
+ * (#36 Phase 2 integration). Surfaced so a returning session sees
+ * "you said farewell N hours ago — welcome back" instead of
+ * inferring the gap from the last activity timestamp.
+ *
+ * Null when the actor has no boundary records (pre-Phase-2
+ * content_roots, or actors who never reach for `gate rest` /
+ * `gate wake` / `gate farewell`).
+ */
+interface SessionBoundaryHint {
+  readonly kind: SessionKind;
+  readonly at: string;
+  readonly age_hint: string;
+  readonly note?: string;
+}
 
 /**
  * gate resume [--format json|text]
@@ -85,6 +103,16 @@ interface TransitionJSON {
 interface ResumePayload {
   actor: string;
   session_hint: string | null;
+  /**
+   * Most recent session boundary stamped by THIS actor (#36
+   * Phase 2). Distinct from `session_hint` (which is the actor's
+   * last activity timestamp): a boundary record is an explicit
+   * "I am putting this down" / "I am picking it back up" /
+   * "until next session" stamp. Null when the actor has no
+   * boundary records — either pre-Phase-2 content_roots or
+   * actors who never reach for the boundary verbs.
+   */
+  last_boundary: SessionBoundaryHint | null;
   last_context: {
     summary: string;
     last_utterance: Utterance | null;
@@ -181,6 +209,16 @@ export async function resumeCmd(c: C, args: ParsedArgs): Promise<number> {
   // in the record. Null when the actor hasn't spoken yet.
   const sessionHint = lastUtterance?.at ?? lastTransition?.at ?? null;
 
+  // Most recent session boundary for this actor (#36 Phase 2
+  // integration). Loaded as a separate concern from the request
+  // listAll above — boundaries live under sessions/, requests under
+  // requests/, the two paths don't overlap. listAll throws an empty
+  // array on a missing sessions/ dir (the conservative read pattern
+  // the safe-fs helpers already use), so pre-Phase-2 content_roots
+  // simply land on null without needing a special branch here.
+  const allEvents = await c.sessionEventUC.listAll();
+  const lastBoundary = findLastBoundary(allEvents, actorLower);
+
   // Locale resolution: --locale takes precedence, then GUILD_LOCALE,
   // then default 'en'. Kept narrow (en / ja) because the templates
   // live in this file; adding a locale means writing the prose here.
@@ -199,12 +237,14 @@ export async function resumeCmd(c: C, args: ParsedArgs): Promise<number> {
     openLoops,
     unrespondedConcerns,
     suggested,
+    lastBoundary,
     locale,
   });
 
   const payload: ResumePayload = {
     actor,
     session_hint: sessionHint,
+    last_boundary: lastBoundary,
     last_context: {
       summary,
       last_utterance: lastUtterance,
@@ -237,6 +277,32 @@ function transitionToJSON(
   if (entry.note !== undefined) out.note = entry.note;
   if (entry.invokedBy !== undefined) out.invoked_by = entry.invokedBy;
   return out;
+}
+
+/**
+ * Most recent session-boundary record for the given actor, or null
+ * when the actor has no boundaries on file. Single-pass scan keyed
+ * on `event.by.value === actorLower`. The `at` field is an ISO-8601
+ * UTC timestamp so lexicographic comparison is exact (every boundary
+ * write goes through `Clock.now().toISOString()`).
+ */
+function findLastBoundary(
+  events: readonly SessionEvent[],
+  actorLower: string,
+): SessionBoundaryHint | null {
+  let latest: SessionEvent | null = null;
+  for (const e of events) {
+    if (e.by.value !== actorLower) continue;
+    if (latest === null || e.at > latest.at) latest = e;
+  }
+  if (latest === null) return null;
+  const hint: SessionBoundaryHint = {
+    kind: latest.kind,
+    at: latest.at,
+    age_hint: ageHint(latest.at, new Date().toISOString()),
+    ...(latest.note !== undefined ? { note: latest.note } : {}),
+  };
+  return hint;
 }
 
 function findLastTransition(
@@ -364,6 +430,7 @@ function composeRestorationProse(ctx: {
   openLoops: readonly OpenLoop[];
   unrespondedConcerns: ReadonlyArray<UnrespondedConcernsEntry>;
   suggested: SuggestedNext | null;
+  lastBoundary: SessionBoundaryHint | null;
   locale: 'en' | 'ja';
 }): string {
   if (ctx.locale === 'ja') return composeRestorationProseJa(ctx);
@@ -377,11 +444,37 @@ function composeRestorationProseEn(ctx: {
   openLoops: readonly OpenLoop[];
   unrespondedConcerns: ReadonlyArray<UnrespondedConcernsEntry>;
   suggested: SuggestedNext | null;
+  lastBoundary: SessionBoundaryHint | null;
 }): string {
-  const { actor, lastUtterance, lastTransition, openLoops, unrespondedConcerns, suggested } = ctx;
+  const { actor, lastUtterance, lastTransition, openLoops, unrespondedConcerns, suggested, lastBoundary } = ctx;
   const lines: string[] = [];
   lines.push(`# resuming as ${actor}`);
   lines.push('');
+
+  // Session boundary line (#36 Phase 2). Sits at the top of the
+  // prose because it's the single most useful piece of context for
+  // a returning agent: "you said farewell N hours ago" frames
+  // everything that follows. The line shapes per kind so the
+  // reader sees the right semantic at a glance.
+  if (lastBoundary !== null) {
+    const noteSuffix =
+      lastBoundary.note !== undefined ? ` — "${truncate(lastBoundary.note, 120)}"` : '';
+    if (lastBoundary.kind === 'farewell') {
+      lines.push(
+        `You said farewell at ${lastBoundary.at} (${lastBoundary.age_hint})${noteSuffix} — welcome back.`,
+      );
+    } else if (lastBoundary.kind === 'rest') {
+      lines.push(
+        `You rested at ${lastBoundary.at} (${lastBoundary.age_hint})${noteSuffix}.`,
+      );
+    } else {
+      // wake
+      lines.push(
+        `You woke at ${lastBoundary.at} (${lastBoundary.age_hint})${noteSuffix}.`,
+      );
+    }
+    lines.push('');
+  }
 
   // "Utterance" = a voice (authored / reviewed) — something you said
   // that now lives in the record as text others can read.
@@ -524,11 +617,33 @@ function composeRestorationProseJa(ctx: {
   openLoops: readonly OpenLoop[];
   unrespondedConcerns: ReadonlyArray<UnrespondedConcernsEntry>;
   suggested: SuggestedNext | null;
+  lastBoundary: SessionBoundaryHint | null;
 }): string {
-  const { actor, lastUtterance, lastTransition, openLoops, unrespondedConcerns, suggested } = ctx;
+  const { actor, lastUtterance, lastTransition, openLoops, unrespondedConcerns, suggested, lastBoundary } = ctx;
   const lines: string[] = [];
   lines.push(`# ${actor} として再開`);
   lines.push('');
+
+  // Session boundary line (ja). Same purpose as the en branch:
+  // top of the prose, frames everything that follows.
+  if (lastBoundary !== null) {
+    const noteSuffix =
+      lastBoundary.note !== undefined ? ` — 「${truncate(lastBoundary.note, 120)}」` : '';
+    if (lastBoundary.kind === 'farewell') {
+      lines.push(
+        `${lastBoundary.at} (${lastBoundary.age_hint}) に farewell していました${noteSuffix}。お帰りなさい。`,
+      );
+    } else if (lastBoundary.kind === 'rest') {
+      lines.push(
+        `${lastBoundary.at} (${lastBoundary.age_hint}) に rest しました${noteSuffix}。`,
+      );
+    } else {
+      lines.push(
+        `${lastBoundary.at} (${lastBoundary.age_hint}) に wake しました${noteSuffix}。`,
+      );
+    }
+    lines.push('');
+  }
 
   if (lastUtterance) {
     const age = ageHint(lastUtterance.at, new Date().toISOString());

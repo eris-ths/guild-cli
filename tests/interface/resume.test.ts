@@ -333,3 +333,130 @@ test('resume: empty-path prose points at gate boot (ja)', () => {
     cleanup();
   }
 });
+
+// --- #36 Phase 2 integration: rest / wake / farewell records ---
+
+test('gate resume: last_boundary is null when actor has no boundary records', () => {
+  const { root, cleanup } = bootstrap();
+  try {
+    runGuild(root, ['new', '--name', 'alice', '--category', 'professional']);
+    const { stdout, status } = runGate(root, ['resume', '--format', 'json'], {
+      GUILD_ACTOR: 'alice',
+    });
+    assert.equal(status, 0);
+    const payload = JSON.parse(stdout);
+    assert.equal(payload.last_boundary, null);
+  } finally {
+    cleanup();
+  }
+});
+
+test('gate resume: surfaces the most recent farewell with welcome-back framing', () => {
+  const { root, cleanup } = bootstrap();
+  try {
+    runGuild(root, ['new', '--name', 'alice', '--category', 'professional']);
+    const farewell = runGate(
+      root,
+      ['farewell', '--by', 'alice', '--note', 'shipping the wake/farewell PR', '--format', 'json'],
+      { GUILD_ACTOR: 'alice' },
+    );
+    assert.equal(farewell.status, 0);
+    const farewellAt = JSON.parse(farewell.stdout).at;
+
+    const r = runGate(root, ['resume', '--format', 'json'], { GUILD_ACTOR: 'alice' });
+    assert.equal(r.status, 0);
+    const payload = JSON.parse(r.stdout);
+    assert.equal(payload.last_boundary.kind, 'farewell');
+    assert.equal(payload.last_boundary.at, farewellAt);
+    assert.equal(payload.last_boundary.note, 'shipping the wake/farewell PR');
+    assert.match(payload.last_boundary.age_hint, /ago|just now/);
+    // Welcome-back framing in restoration prose.
+    assert.match(payload.restoration_prose, /welcome back/);
+    assert.match(payload.restoration_prose, /farewell at/);
+  } finally {
+    cleanup();
+  }
+});
+
+test('gate resume: rest boundary emits "you rested at" framing', () => {
+  const { root, cleanup } = bootstrap();
+  try {
+    runGuild(root, ['new', '--name', 'alice', '--category', 'professional']);
+    runGate(root, ['rest', '--by', 'alice'], { GUILD_ACTOR: 'alice' });
+
+    const r = runGate(root, ['resume', '--format', 'json'], { GUILD_ACTOR: 'alice' });
+    const payload = JSON.parse(r.stdout);
+    assert.equal(payload.last_boundary.kind, 'rest');
+    assert.match(payload.restoration_prose, /You rested at/);
+    assert.doesNotMatch(payload.restoration_prose, /welcome back/);
+  } finally {
+    cleanup();
+  }
+});
+
+test('gate resume: wake boundary emits "you woke at" framing', () => {
+  const { root, cleanup } = bootstrap();
+  try {
+    runGuild(root, ['new', '--name', 'alice', '--category', 'professional']);
+    runGate(root, ['wake', '--by', 'alice'], { GUILD_ACTOR: 'alice' });
+
+    const r = runGate(root, ['resume', '--format', 'json'], { GUILD_ACTOR: 'alice' });
+    const payload = JSON.parse(r.stdout);
+    assert.equal(payload.last_boundary.kind, 'wake');
+    assert.match(payload.restoration_prose, /You woke at/);
+  } finally {
+    cleanup();
+  }
+});
+
+test('gate resume: most recent boundary wins when multiple are stamped', () => {
+  // rest then wake then farewell — last_boundary names farewell.
+  const { root, cleanup } = bootstrap();
+  try {
+    runGuild(root, ['new', '--name', 'alice', '--category', 'professional']);
+    runGate(root, ['rest', '--by', 'alice'], { GUILD_ACTOR: 'alice' });
+    runGate(root, ['wake', '--by', 'alice'], { GUILD_ACTOR: 'alice' });
+    runGate(root, ['farewell', '--by', 'alice'], { GUILD_ACTOR: 'alice' });
+
+    const r = runGate(root, ['resume', '--format', 'json'], { GUILD_ACTOR: 'alice' });
+    const payload = JSON.parse(r.stdout);
+    assert.equal(payload.last_boundary.kind, 'farewell');
+  } finally {
+    cleanup();
+  }
+});
+
+test("gate resume: ignores other actors' boundaries", () => {
+  const { root, cleanup } = bootstrap();
+  try {
+    runGuild(root, ['new', '--name', 'alice', '--category', 'professional']);
+    runGuild(root, ['new', '--name', 'bob', '--category', 'professional']);
+    // bob farewelled, alice has no boundaries — alice's resume sees null.
+    runGate(root, ['farewell', '--by', 'bob'], { GUILD_ACTOR: 'bob' });
+
+    const r = runGate(root, ['resume', '--format', 'json'], { GUILD_ACTOR: 'alice' });
+    const payload = JSON.parse(r.stdout);
+    assert.equal(payload.last_boundary, null, "alice should not see bob's boundary");
+  } finally {
+    cleanup();
+  }
+});
+
+test('gate resume --locale ja: surfaces the boundary in Japanese prose', () => {
+  const { root, cleanup } = bootstrap();
+  try {
+    runGuild(root, ['new', '--name', 'alice', '--category', 'professional']);
+    runGate(root, ['farewell', '--by', 'alice'], { GUILD_ACTOR: 'alice' });
+
+    const r = runGate(
+      root,
+      ['resume', '--format', 'text', '--locale', 'ja'],
+      { GUILD_ACTOR: 'alice' },
+    );
+    assert.equal(r.status, 0);
+    assert.match(r.stdout, /farewell していました/);
+    assert.match(r.stdout, /お帰りなさい/);
+  } finally {
+    cleanup();
+  }
+});

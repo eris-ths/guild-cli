@@ -48,4 +48,16 @@ export class SessionEventUseCases {
     await this.deps.events.save(event);
     return event;
   }
+
+  /**
+   * Read every session-boundary record under content_root. Used by
+   * `gate resume` to surface the most recent boundary in the
+   * restoration prose ("you said farewell N hours ago — welcome
+   * back"). Pure read, no side effects. Empty when the
+   * `<content_root>/sessions/` directory is missing or empty —
+   * matches the conservative pattern other repository ports use.
+   */
+  async listAll(): Promise<readonly SessionEvent[]> {
+    return this.deps.events.listAll();
+  }
 }
