@@ -8,6 +8,7 @@ import {
   parseRequestState,
 } from '../../domain/request/RequestState.js';
 import { Review } from '../../domain/request/Review.js';
+import { isRequestDepth } from '../../domain/request/RequestDepth.js';
 import { Thank } from '../../domain/request/Thank.js';
 import { MemberName } from '../../domain/member/MemberName.js';
 import {
@@ -471,6 +472,16 @@ function hydrate(
     if (typeof obj['auto_review'] === 'string')
       props.autoReview = MemberName.of(obj['auto_review']);
     if (typeof obj['target'] === 'string') props.target = obj['target'] as string;
+    // depth (issue #221): hydrate only when the on-disk value matches
+    // the enum. Unknown values are *dropped silently* rather than
+    // throwing — older records with an unrecognised depth (e.g. an
+    // experimental value from a future minor) still load. This is the
+    // same conservative read pattern other optional fields use; a
+    // strict reader would refuse the whole record, but principle 04
+    // says records outlive writers.
+    if (typeof obj['depth'] === 'string' && isRequestDepth(obj['depth'])) {
+      props.depth = obj['depth'];
+    }
     if (Array.isArray(obj['with'])) {
       const partners: MemberName[] = [];
       for (const raw of obj['with'] as unknown[]) {

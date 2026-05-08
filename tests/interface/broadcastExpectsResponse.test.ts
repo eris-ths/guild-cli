@@ -330,3 +330,72 @@ test('schema declares --expects-response on broadcast input properties', (t) => 
   assert.ok(verb.input.properties['expects-response']);
   assert.equal(verb.input.properties['expects-response'].type, 'boolean');
 });
+
+// ---- inbox text-mode visibility (v0.5 dogfood follow-up) ----
+
+test('inbox text mode: unread expects_response broadcast renders "(unread, expects response)"', (t) => {
+  // Pre-fix (PR #222): JSON inbox carried the expects_response stamp
+  // but the text rendering only said "(unread)". A human scanning
+  // the inbox text couldn't tell a normal broadcast apart from one
+  // that wanted a substantive response — they'd have to re-run with
+  // --format json to see the stamp. Surface the signal inline on
+  // the text path so the principle-09 disclosure shape (visible at
+  // the surface that emits it) holds for both formats.
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  runGate(
+    root,
+    [
+      'broadcast',
+      '--from', 'alice',
+      '--text', 'audit needed',
+      '--expects-response',
+    ],
+  );
+  const r = runGate(root, ['inbox'], { GUILD_ACTOR: 'bob' });
+  assert.equal(r.status, 0);
+  assert.match(
+    r.stdout,
+    /broadcast from alice .*\(unread, expects response\)/,
+    `expected expects-response marker on unread; got:\n${r.stdout}`,
+  );
+});
+
+test('inbox text mode: unread without expects_response stays "(unread)" (no over-broadcasting)', (t) => {
+  // Sibling negative: the marker only appears when the sender
+  // opted in. A FYI broadcast must not be retro-flagged as
+  // expecting a response — that would defeat the opt-in design.
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  runGate(
+    root,
+    ['broadcast', '--from', 'alice', '--text', 'FYI only'],
+  );
+  const r = runGate(root, ['inbox'], { GUILD_ACTOR: 'bob' });
+  assert.equal(r.status, 0);
+  assert.match(r.stdout, /broadcast from alice .*\(unread\)/);
+  assert.doesNotMatch(r.stdout, /expects response/);
+});
+
+test('inbox text mode: read state suppresses the marker (Phase 1 ack proxy)', (t) => {
+  // Phase 1 contract: read = ack proxy. Once mark-read fires the
+  // expectation surface drains in boot too (see "mark-read drains
+  // the broadcast-pending-response surface" above). Mirror that on
+  // the inbox text — past read time the marker would just nag the
+  // reader instead of orienting them.
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  runGate(
+    root,
+    [
+      'broadcast', '--from', 'alice',
+      '--text', 'audit needed',
+      '--expects-response',
+    ],
+  );
+  runGate(root, ['inbox', 'mark-read'], { GUILD_ACTOR: 'bob' });
+  const r = runGate(root, ['inbox'], { GUILD_ACTOR: 'bob' });
+  assert.equal(r.status, 0);
+  assert.match(r.stdout, /broadcast from alice .*\(read/);
+  assert.doesNotMatch(r.stdout, /expects response/);
+});

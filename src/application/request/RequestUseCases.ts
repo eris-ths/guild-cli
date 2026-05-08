@@ -44,6 +44,10 @@ export class RequestUseCases {
     reason: string;
     executor?: string;
     target?: string;
+    /** Reviewer-depth advisory ('shallow' | 'standard' | 'deep').
+     *  Validated at the domain boundary in Request.create. See
+     *  RequestProps.depth and issue #221. */
+    depth?: string;
     autoReview?: string;
     with?: readonly string[];
     invokedBy?: string;
@@ -87,6 +91,7 @@ export class RequestUseCases {
     };
     if (input.executor !== undefined) createArgs.executor = input.executor;
     if (input.target !== undefined) createArgs.target = input.target;
+    if (input.depth !== undefined) createArgs.depth = input.depth;
     if (input.autoReview !== undefined)
       createArgs.autoReview = input.autoReview;
     if (input.with !== undefined && input.with.length > 0)

@@ -4,6 +4,7 @@ import {
   assertTransition,
   parseRequestState,
 } from './RequestState.js';
+import { RequestDepth, parseRequestDepth } from './RequestDepth.js';
 import { Review } from './Review.js';
 import { Thank } from './Thank.js';
 import { MemberName } from '../member/MemberName.js';
@@ -62,6 +63,15 @@ export interface RequestProps {
   reason: string;
   executor?: MemberName;
   target?: string;
+  /**
+   * Reviewer-depth advisory (issue #221). Optional; absence reads
+   * as 'standard' to honour the pre-#222 default. The substrate
+   * carries the signal — adjusting the reviewer's prompt to act
+   * on it lives in operator/agent setup, not here. Per principle
+   * 02 (advisory-not-directive), --depth shallow is an invitation
+   * to point-check; the reviewer can disagree.
+   */
+  depth?: RequestDepth;
   autoReview?: MemberName;
   /**
    * Dialogue partners during the formation of this request — who was
@@ -133,6 +143,10 @@ export class Request {
     reason: string;
     executor?: string;
     target?: string;
+    /** Reviewer-depth advisory; rejected at create time if not in
+     *  the RequestDepth enum. Absent = no field persisted ('standard'
+     *  default at read time). See RequestProps.depth. */
+    depth?: string;
     autoReview?: string;
     with?: readonly string[];
     createdAt?: string;
@@ -185,6 +199,13 @@ export class Request {
     }
     if (input.target !== undefined) {
       props.target = sanitizeText(input.target, 'target');
+    }
+    if (input.depth !== undefined) {
+      // parseRequestDepth throws DomainError on a non-enum value, so
+      // an explicit `--depth bogus` fails closed at the domain
+      // boundary (interface layer can also pre-check; both paths
+      // point at the same enum).
+      props.depth = parseRequestDepth(input.depth);
     }
     if (input.with !== undefined && input.with.length > 0) {
       // Deduplicate while preserving first-mention order — avoids
@@ -249,6 +270,12 @@ export class Request {
   }
   get executor(): MemberName | undefined {
     return this.props.executor;
+  }
+  get target(): string | undefined {
+    return this.props.target;
+  }
+  get depth(): RequestDepth | undefined {
+    return this.props.depth;
   }
   get autoReview(): MemberName | undefined {
     return this.props.autoReview;
@@ -395,6 +422,11 @@ export class Request {
     if (this.props.autoReview)
       out['auto_review'] = this.props.autoReview.value;
     if (this.props.target !== undefined) out['target'] = this.props.target;
+    // depth surfaces only when set — absence on read is 'standard'
+    // by convention (issue #221). Records pre-#221 have no depth
+    // field; toJSON honours that by omitting the key, keeping older
+    // YAML byte-stable on round-trip.
+    if (this.props.depth !== undefined) out['depth'] = this.props.depth;
     if (this.props.with && this.props.with.length > 0)
       out['with'] = this.props.with.map((m) => m.value);
     if (this.props.promotedFrom !== undefined)
