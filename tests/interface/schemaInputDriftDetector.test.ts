@@ -130,9 +130,13 @@ function parseHandler(source: string): ParsedHandler {
 
   // Match `rejectUnknownFlags(args, NAME_KNOWN_FLAGS, 'verb')` —
   // simple call with a literal verb name as the third argument.
-  // Allows multi-line whitespace between args.
+  // Allows multi-line whitespace between args. The optional fourth
+  // argument is the verb-help `extras` array (added in #228 sub-task
+  // 2 so `gate review --help` can list resolved lenses); we don't
+  // care about its contents here, only that the regex still finds
+  // the verb name when it's present.
   const callRe =
-    /rejectUnknownFlags\s*\(\s*args\s*,\s*(\w+_KNOWN_FLAGS)\s*,\s*['"]([^'"]+)['"]\s*\)/g;
+    /rejectUnknownFlags\s*\(\s*args\s*,\s*(\w+_KNOWN_FLAGS)\s*,\s*['"]([^'"]+)['"]\s*(?:,\s*[A-Za-z_][\w]*\s*)?\)/g;
   while ((m = callRe.exec(source)) !== null) {
     const constName = m[1]!;
     const verbName = m[2]!;

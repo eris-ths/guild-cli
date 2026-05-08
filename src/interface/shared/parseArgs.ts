@@ -221,12 +221,23 @@ function resolveEnvOrActorFile(envFallback: string): string | undefined {
  * renders to (different CLIs may want different prefixes).
  */
 export class HelpRequested extends Error {
+  /**
+   * Optional verb-specific extra lines appended after the flag list and
+   * before the `see ... --help` footer. Used to surface dynamic info
+   * the static help can't carry — e.g. the `gate review` lense set
+   * resolved from `guild.config.yaml` (#228 sub-task 2). Stays empty
+   * for verbs that have no extras to add, preserving the existing
+   * help-output shape.
+   */
+  public readonly extras: readonly string[];
   constructor(
     public readonly verb: string,
     public readonly knownFlags: readonly string[],
+    extras: readonly string[] = [],
   ) {
     super(`help requested for verb: ${verb}`);
     this.name = 'HelpRequested';
+    this.extras = extras;
   }
 }
 
@@ -254,9 +265,10 @@ export function rejectUnknownFlags(
   args: ParsedArgs,
   known: ReadonlySet<string>,
   verb: string,
+  extras: readonly string[] = [],
 ): void {
   if (args.options['help'] === true) {
-    throw new HelpRequested(verb, [...known].sort());
+    throw new HelpRequested(verb, [...known].sort(), extras);
   }
   const unknown: string[] = [];
   for (const key of Object.keys(args.options)) {

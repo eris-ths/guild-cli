@@ -199,11 +199,36 @@ export async function reqCreate(c: C, args: ParsedArgs): Promise<number> {
   if (invokedBy !== undefined) {
     emitInvokedByNotice(from, invokedBy, 'request', r.id.value);
   }
+  // Self-wave fast-track hint (#228 sub-task 3). When the author lists
+  // themselves as the (only) executor — "I'm filing AND running this"
+  // — surface `gate fast-track` as a one-shot shortcut alongside the
+  // normal approve. Discoverability lives at the *request* moment so
+  // the author sees it before the approve step, not just at the
+  // self-approve warning later. Only fires for the truly self-only
+  // shape (single executor, equal to from); pair waves and external
+  // executors keep the standard suggested_next without a fast-track
+  // nudge. Text mode only — JSON consumers read suggested_next, which
+  // already pre-fills approve with the host actor.
+  const executorList = r.executors.map((m) => m.value);
+  // executorList[0] is already MemberName.value (canonical: trim+lower).
+  // from is raw CLI input — normalize via trim+lower so whitespace
+  // padding (`--from 'alice '`) doesn't hide a true self-wave.
+  const isSelfWave =
+    executorList.length === 1 &&
+    executorList[0]! === from.trim().toLowerCase();
+  const extraLines: string[] = [];
+  if (isSelfWave) {
+    extraLines.push(
+      `  suggested_next: gate approve ${r.id.value} ` +
+        `(or gate fast-track for the self-flow shortcut)`,
+    );
+  }
   emitWriteResponse(
     parseFormat(args),
     r,
     `✓ created: ${r.id.value} (state=pending)`,
     c.config,
+    extraLines,
   );
   return 0;
 }

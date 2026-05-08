@@ -895,7 +895,13 @@ const VERBS: readonly VerbSchema[] = [
         by: str,
         lense: { type: 'string', description: 'one of the configured lenses (devil/layer/cognitive/user by default)' },
         verdict: { type: 'string', enum: ['ok', 'concern', 'reject'] },
-        comment: strOpt('review body; "-" for STDIN'),
+        // #228 sub-task 1: --note is the canonical comment flag (parity
+        // with approve/deny/execute/complete/fail/fast-track). --comment
+        // is preserved as a deprecated alias. Both shapes appear here so
+        // the schema/handler drift detector accepts either, and MCP
+        // wirings see both options surfaced.
+        note: strOpt('review body; "-" for STDIN (canonical, parity with the other write verbs)'),
+        comment: strOpt('DEPRECATED alias of --note; kept for back-compat. Pass only one.'),
         format: formatField,
         'dry-run': dryRunField,
       },

@@ -7,6 +7,35 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
 
 ## [Unreleased]
 
+### Fixed
+
+- **friction bundle — flag aliases / lense help / self-approve discoverability /
+  stderr warnings**
+  ([#228](https://github.com/eris-ths/guild-cli/issues/228)).
+  Four touch-feel improvements that descend to the standard profile
+  (sibling to #233 self_approve under swarm):
+  - `gate review` now accepts `--note` as the canonical comment flag
+    (parity with the six other write verbs — approve / deny / execute
+    / complete / fail / fast-track). `--comment` is preserved as a
+    deprecated alias for back-compat; passing both is rejected as
+    mutually exclusive, and using the alias surfaces a stderr
+    deprecation notice (stderr only, so JSON consumers stay clean).
+  - `gate review --help` dynamically lists the lenses resolved from
+    `guild.config.yaml` rather than the four domain defaults — so a
+    project that registered `security` / `perf` / `a11y` sees them
+    in help, not just in the post-error hint. Implemented via a new
+    optional `extras` field on `HelpRequested` so other verbs can
+    surface their own dynamic info without bespoke renderers.
+  - `gate request` emits a `suggested_next` line mentioning
+    `gate fast-track` whenever the author and the (sole) executor
+    coincide — the self-wave case where the standard
+    pending → approve → execute → complete dance is overkill. Cross-
+    actor waves keep the standard hint without the fast-track nudge.
+  - dist staleness warning is verified to ride stderr (was already
+    correct in `bin/_lib/checkDistFreshness.mjs` —
+    `process.stderr.write`, not `console.log`); the new test pins
+    the contract so a regression that flips to stdout is caught.
+
 ### Added
 
 - **`features.self_approve: { allowed | warn | forbidden }` —

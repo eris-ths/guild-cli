@@ -15,22 +15,44 @@ import {
 } from './internal.js';
 import { emitWriteResponse, parseFormat } from './writeFormat.js';
 
+// Friction bundle (#228 sub-task 1): `--note` is the canonical comment
+// flag across every write verb (approve / deny / execute / complete /
+// fail / fast-track). `gate review` historically took `--comment` only,
+// breaking muscle memory for agents that just learned `--note` from the
+// six other write verbs. Resolution: accept both, prefer `--note`,
+// keep `--comment` as a deprecated alias for back-compat. The rejected-
+// flag set names both so help still lists them and an explicit typo
+// (`--coment`) still errors.
 const REVIEW_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'by',
   'lense',
   'verdict',
+  'note',
   'comment',
   'dry-run',
   'format',
 ]);
 
 export async function reqReview(c: C, args: ParsedArgs): Promise<number> {
-  rejectUnknownFlags(args, REVIEW_KNOWN_FLAGS, 'review');
+  // Verb-specific help extras (#228 sub-task 2): surface the resolved
+  // `lenses:` set from guild.config.yaml so a fresh agent reading
+  // `gate review --help` sees the accepted enum without first having
+  // to fail with a bogus value. The error path already lists the same
+  // info; this brings the discoverability up one level.
+  const lenseList = c.config.lenses.length > 0
+    ? c.config.lenses.join(', ')
+    : 'devil, layer, cognitive, user';
+  const helpExtras: readonly string[] = [
+    `accepted lenses (resolved from guild.config.yaml): ${lenseList}`,
+    `note: --comment is a deprecated alias of --note (kept for back-compat)`,
+  ];
+  rejectUnknownFlags(args, REVIEW_KNOWN_FLAGS, 'review', helpExtras);
   const id = args.positional[0];
   if (!id) {
     throw new Error(
       'Usage: gate review <id> --by <m> --lense <l> --verdict <v> ' +
-        '[--comment <s> | --comment - | <comment>]',
+        '[--note <s> | --note - | <comment>] ' +
+        '(--comment is a deprecated alias of --note)',
     );
   }
   // Canonicalize before downstream compares (`updated.from.value === by`
@@ -43,20 +65,46 @@ export async function reqReview(c: C, args: ParsedArgs): Promise<number> {
   const verdict = requireOption(args, 'verdict', '<ok|concern|reject>');
 
   // Comment resolution order:
-  //   1. --comment <s>    option value (inline short comment)
-  //   2. --comment -      STDIN until EOF (for piped/heredoc input)
-  //   3. <positional>     legacy: everything after <id>
-  //   4. $EDITOR fallback when stdin is a TTY and none of the above
+  //   1. --note <s>       option value (canonical, parity with the other
+  //                       write verbs — approve/deny/execute/complete/fail)
+  //   2. --note -         STDIN until EOF (for piped/heredoc input)
+  //   3. --comment <s>    DEPRECATED alias of --note (#228 — kept so old
+  //                       scripts and muscle-memory keep working)
+  //   4. --comment -      DEPRECATED alias for STDIN
+  //   5. <positional>     legacy: everything after <id>
+  //   6. $EDITOR fallback when stdin is a TTY and none of the above
   //                       were given — matches `git commit` convention,
   //                       sidesteps the Windows git-bash pipe issues
   //                       that made (2) unreliable for some users.
+  // Mutual-exclusion: --note and --comment together is rejected with a
+  // flag-shaped error rather than a silent precedence rule. Same posture
+  // as --executor / --executors in `gate request`.
+  const noteOpt = optionalOption(args, 'note');
   const commentOpt = optionalOption(args, 'comment');
+  if (noteOpt !== undefined && commentOpt !== undefined) {
+    throw new Error(
+      'review: --note and --comment are mutually exclusive (got both). ' +
+        '--comment is a deprecated alias of --note; pass only one.',
+    );
+  }
+  // Surface a one-line deprecation hint when the legacy alias is used,
+  // so the migration path is visible in session transcripts. The hint
+  // goes to stderr (not stdout) so JSON callers stay clean — same
+  // discipline as the self-approve / self-review notices.
+  if (commentOpt !== undefined) {
+    process.stderr.write(
+      'notice: --comment is a deprecated alias of --note; please migrate ' +
+        '(both will continue to work for now).\n',
+    );
+  }
+  // Treat the canonical and deprecated flags identically downstream.
+  const effectiveOpt = noteOpt !== undefined ? noteOpt : commentOpt;
   const positional = args.positional.slice(1).join(' ');
   let comment: string;
-  if (commentOpt === '-') {
+  if (effectiveOpt === '-') {
     comment = await readStdin();
-  } else if (commentOpt !== undefined) {
-    comment = commentOpt;
+  } else if (effectiveOpt !== undefined) {
+    comment = effectiveOpt;
   } else if (positional === '-') {
     // Positional `-` gets the same stdin-sentinel treatment as
     // `--comment -`. Symmetry: users reach for `gate review <id> ...
@@ -71,14 +119,25 @@ export async function reqReview(c: C, args: ParsedArgs): Promise<number> {
     comment = '';
   }
   if (!comment.trim()) {
+    // The dashed-value hint applies to whichever of --note/--comment
+    // the user actually typed; pick the tripped one so the example
+    // matches their input shape and doesn't suggest a flag they didn't
+    // use.
+    const tripped =
+      args.options['note'] === true
+        ? 'note'
+        : args.options['comment'] === true
+          ? 'comment'
+          : null;
     const hint =
-      args.options['comment'] === true
-        ? '\n  (Your --comment value began with "--" and was not consumed. ' +
-          'Use --comment=<value> or put "-- <value>" after the other flags.)'
+      tripped !== null
+        ? `\n  (Your --${tripped} value began with "--" and was not consumed. ` +
+          `Use --${tripped}=<value> or put "-- <value>" after the other flags.)`
         : '';
     throw new Error(
-      'review comment is required (use --comment <s>, --comment - for STDIN, ' +
-        'a positional argument, or run interactively so $EDITOR opens)' +
+      'review comment is required (use --note <s>, --note - for STDIN, ' +
+        'a positional argument, or run interactively so $EDITOR opens; ' +
+        '--comment is a deprecated alias of --note)' +
         hint,
     );
   }
