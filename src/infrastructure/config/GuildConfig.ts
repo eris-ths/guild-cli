@@ -22,6 +22,29 @@ export const defaultOnMalformed: OnMalformed = (source, msg) => {
   process.stderr.write(`warn: ${source}: ${msg}\n`);
 };
 
+/**
+ * Guild profile (#231). `standard` is the default, single-machine /
+ * single-cwd workflow. `swarm` is a stricter mode that enforces per-
+ * cwd isolation for parallel waves — its primary effect is to default
+ * `features.worktree_required_for_parallel` to true. Profiles are
+ * intentionally coarse: a small set of named presets reads better in
+ * `guild.config.yaml` than a sprawl of per-feature booleans, and most
+ * deployments fall cleanly into one bucket or the other.
+ */
+export type GuildProfile = 'standard' | 'swarm';
+
+export interface GuildFeatures {
+  /**
+   * When true, parallel waves (multi-executor requests) carry a
+   * `requires_worktree_isolation: true` flag, and `gate execute`
+   * refuses a second concurrent invocation from the same filesystem
+   * cwd. Defaults to false under profile=standard, true under
+   * profile=swarm — the explicit feature key lets a deployment opt
+   * in/out without flipping the whole profile.
+   */
+  worktreeRequiredForParallel: boolean;
+}
+
 export interface GuildConfigProps {
   root: string;
   contentRoot: string;
@@ -34,6 +57,8 @@ export interface GuildConfigProps {
   hostNames: readonly string[];
   lenses: readonly string[];
   doctorPlugins: readonly string[];
+  profile: GuildProfile;
+  features: GuildFeatures;
   onMalformed: OnMalformed;
 }
 
@@ -53,6 +78,8 @@ export class GuildConfig implements GuildConfigProps {
     readonly hostNames: readonly string[],
     readonly lenses: readonly string[],
     readonly doctorPlugins: readonly string[],
+    readonly profile: GuildProfile,
+    readonly features: GuildFeatures,
     readonly onMalformed: OnMalformed,
     /**
      * Absolute path to the `guild.config.yaml` that produced this
@@ -110,7 +137,35 @@ export class GuildConfig implements GuildConfigProps {
           'Add `trusted: true` under `doctor:` in guild.config.yaml to enable.',
       );
     }
-    return new GuildConfig(root, contentRoot, paths, hostNames, lenses, doctorPlugins, onMalformed, configPath);
+    // Profile + features (#231). The two interact: `profile: swarm`
+    // flips the default of `features.worktree_required_for_parallel`
+    // to true, but an explicit `features:` block always wins so a
+    // deployment can opt in/out without changing profile. Unknown
+    // profile values fall back to 'standard' with an onMalformed
+    // notice — same conservative read pattern other optional fields
+    // use (per principle 04, records / configs outlive writers).
+    let profile: GuildProfile = 'standard';
+    if (typeof raw.profile === 'string') {
+      if (raw.profile === 'standard' || raw.profile === 'swarm') {
+        profile = raw.profile;
+      } else {
+        onMalformed(
+          configPath,
+          `unknown profile "${raw.profile}" — falling back to 'standard'. ` +
+            `Valid: standard | swarm.`,
+        );
+      }
+    }
+    const featuresRaw = raw.features ?? {};
+    const explicitWorktreeRequired =
+      typeof featuresRaw.worktree_required_for_parallel === 'boolean'
+        ? featuresRaw.worktree_required_for_parallel
+        : undefined;
+    const features: GuildFeatures = {
+      worktreeRequiredForParallel:
+        explicitWorktreeRequired ?? (profile === 'swarm'),
+    };
+    return new GuildConfig(root, contentRoot, paths, hostNames, lenses, doctorPlugins, profile, features, onMalformed, configPath);
   }
 
   static default(
@@ -130,6 +185,8 @@ export class GuildConfig implements GuildConfigProps {
       [...DEFAULT_HOSTS],
       [...DEFAULT_LENSES],
       [],
+      'standard',
+      { worktreeRequiredForParallel: false },
       onMalformed,
       null,
     );

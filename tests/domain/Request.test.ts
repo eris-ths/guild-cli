@@ -309,6 +309,67 @@ test('Request.toJSON: emits executors array (multi)', () => {
   assert.deepEqual(r.toJSON()['executors'], ['miki', 'leysia']);
 });
 
+// Issue #231 — worktree-isolation domain round-trip. The flag is set
+// at create time and surfaces only when truthy; the cwd lives on the
+// `executing` status_log entry. These tests pin both the persistence
+// shape (toJSON / statusLogEntry serialiser) and the read accessors
+// (`requiresWorktreeIsolation`, `lastExecutingCwd`) the interface layer
+// reads to gate the cwd-collision check.
+test('Request: requires_worktree_isolation round-trip (#231)', () => {
+  const r = Request.create({
+    id: RequestId.generate(d, 1),
+    from: 'alice',
+    action: 'a',
+    reason: 'r',
+    executors: ['miki', 'leysia'],
+    requiresWorktreeIsolation: true,
+  });
+  assert.equal(r.requiresWorktreeIsolation, true);
+  assert.equal(r.toJSON()['requires_worktree_isolation'], true);
+});
+
+test('Request: requires_worktree_isolation absent when not set (default false)', () => {
+  const r = Request.create({
+    id: RequestId.generate(d, 1),
+    from: 'alice',
+    action: 'a',
+    reason: 'r',
+    executors: ['miki'],
+  });
+  assert.equal(r.requiresWorktreeIsolation, false);
+  assert.equal(r.toJSON()['requires_worktree_isolation'], undefined);
+});
+
+test('Request.execute(cwd): stamps executing_at_cwd on the status_log entry', () => {
+  const r = Request.create({
+    id: RequestId.generate(d, 1),
+    from: 'alice',
+    action: 'a',
+    reason: 'r',
+    executor: 'miki',
+  });
+  r.approve(MemberName.of('alice'));
+  r.execute(MemberName.of('miki'), undefined, undefined, '/tmp/worktree-A');
+  assert.equal(r.lastExecutingCwd, '/tmp/worktree-A');
+  const last = r.toJSON()['status_log'] as Array<Record<string, unknown>>;
+  assert.equal(last[last.length - 1]!['executing_at_cwd'], '/tmp/worktree-A');
+});
+
+test('Request.execute(): no cwd → executing_at_cwd absent (back-compat)', () => {
+  const r = Request.create({
+    id: RequestId.generate(d, 1),
+    from: 'alice',
+    action: 'a',
+    reason: 'r',
+    executor: 'miki',
+  });
+  r.approve(MemberName.of('alice'));
+  r.execute(MemberName.of('miki'));
+  assert.equal(r.lastExecutingCwd, undefined);
+  const log = r.toJSON()['status_log'] as Array<Record<string, unknown>>;
+  assert.equal(log[log.length - 1]!['executing_at_cwd'], undefined);
+});
+
 test('Request.toJSON: omits executors key when none assigned', () => {
   const r = Request.create({
     id: RequestId.generate(d, 1),

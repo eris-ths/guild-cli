@@ -59,6 +59,10 @@ export class RequestUseCases {
      *  promote`). Tool-generated structured link surviving any
      *  --action / --reason overrides. */
     promotedFrom?: string;
+    /** Worktree-isolation flag (#231). Set by the interface layer
+     *  when profile=swarm + executors.length > 1. Persisted only
+     *  when true; absence reads as false. */
+    requiresWorktreeIsolation?: boolean;
   }): Promise<Request> {
     const { requests, members, clock } = this.deps;
     const from = await assertActor(input.from, '--from', members);
@@ -116,6 +120,8 @@ export class RequestUseCases {
     if (input.invokedBy !== undefined) createArgs.invokedBy = input.invokedBy;
     if (input.promotedFrom !== undefined)
       createArgs.promotedFrom = input.promotedFrom;
+    if (input.requiresWorktreeIsolation === true)
+      createArgs.requiresWorktreeIsolation = true;
 
     for (let attempt = 0; attempt < 10; attempt++) {
       createArgs.id = RequestId.generate(now, seq);
@@ -192,11 +198,16 @@ export class RequestUseCases {
     by: string,
     note?: string,
     invokedBy?: string,
-    opts?: { dryRun?: boolean },
+    opts?: { dryRun?: boolean; cwd?: string },
   ): Promise<Request> {
     const req = await this.loadOrThrow(id);
     const actor = await assertActor(by, '--by', this.deps.members);
-    req.execute(actor, note, invokedBy);
+    // cwd lands on the status_log entry only when supplied. The
+    // worktree-isolation collision check (#231) lives in the
+    // interface layer (it needs to read peer requests across
+    // states); the use case is the persistence path for the cwd
+    // stamp itself.
+    req.execute(actor, note, invokedBy, opts?.cwd);
     if (!opts?.dryRun) await this.deps.requests.save(req);
     return req;
   }

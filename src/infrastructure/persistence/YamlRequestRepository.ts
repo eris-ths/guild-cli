@@ -410,6 +410,10 @@ function hydrate(
         if (typeof so['note'] === 'string') entry.note = so['note'] as string;
         if (typeof so['invoked_by'] === 'string')
           entry.invokedBy = so['invoked_by'] as string;
+        // executing_at_cwd (#231): hydrated only when present and a
+        // non-empty string. Pre-#231 entries simply lack the field.
+        if (typeof so['executing_at_cwd'] === 'string' && so['executing_at_cwd'].length > 0)
+          entry.executingAtCwd = so['executing_at_cwd'] as string;
         statusLog.push(entry);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -516,6 +520,14 @@ function hydrate(
     }
     if (typeof obj['promoted_from'] === 'string') {
       props.promotedFrom = obj['promoted_from'] as string;
+    }
+    // requires_worktree_isolation (#231). Tolerated as a strict boolean
+    // only — anything else (string "true", number 1) is dropped silently
+    // following the same conservative read pattern as `depth`. Pre-#231
+    // records simply lack the field; treated as false. Records-outlive-
+    // writers (principle 04): we never reject, only ignore.
+    if (obj['requires_worktree_isolation'] === true) {
+      props.requiresWorktreeIsolation = true;
     }
     // Legacy top-level closure keys (completion_note / deny_reason /
     // failure_reason) are no longer written separately — status_log[-1].note

@@ -829,6 +829,11 @@ const VERBS: readonly VerbSchema[] = [
         id: idStr,
         by: str,
         note: str,
+        cwd: {
+          type: 'string',
+          description:
+            'filesystem cwd at which this execute is issued; defaults to process.cwd(). Stamped on the status_log entry as executing_at_cwd, and used by the worktree-isolation check (issue #231) when the request was created with requires_worktree_isolation=true. Same-cwd peer in `executing` → refused.',
+        },
         format: formatField,
         'dry-run': dryRunField,
       },

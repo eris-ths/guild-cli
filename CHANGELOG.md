@@ -7,6 +7,25 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
 
 ## [Unreleased]
 
+### Added
+
+- **Worktree isolation enforcement for parallel waves under
+  `profile: swarm` ([#231](https://github.com/eris-ths/guild-cli/issues/231)).**
+  Filesystem-layer guard for the substrate-experiment-6 race that sits
+  one layer below the multi-executor record fix (#230). New
+  `guild.config.yaml` keys: `profile: standard | swarm` and
+  `features.worktree_required_for_parallel`. Under `profile: swarm`,
+  `gate request --executors a,b,...` stamps
+  `requires_worktree_isolation: true` on the record, and `gate execute`
+  refuses a second invocation from the same filesystem cwd against the
+  same target — the operator must spawn the second executor in a
+  separate git worktree. New `gate execute --cwd <path>` flag (defaults
+  to `process.cwd()`) + `executing_at_cwd` stamp on the `executing`
+  status_log entry. Pre-#231 records hydrate as non-isolated (no
+  false-refuse). Under `profile: standard` the same input emits a
+  warning notice but does not refuse, preserving existing single-cwd
+  workflows.
+
 ### Fixed
 
 - **darwin path-comparison flakes in `tests/{interface,passages}/`
