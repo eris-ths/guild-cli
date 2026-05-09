@@ -345,8 +345,34 @@ const VERBS: readonly VerbSchema[] = [
                     },
                     executors: { type: 'array', items: { type: 'string' } },
                     claimed_by: { type: 'string' },
+                    opened_by_session: {
+                      type: 'string',
+                      description:
+                        'session_id this request was authored under ' +
+                        '(#249 slice 4). Carried verbatim from the ' +
+                        "record's opened_by_session field. Omitted when " +
+                        'the record has no session stamp (pre-#249 or ' +
+                        'unstamped post-#249 writes).',
+                    },
                   },
                 },
+              },
+              parallel_session_authors: {
+                type: 'object',
+                description:
+                  'Members in this overlap group who authored ≥2 ' +
+                  'requests from ≥2 distinct sessions (#249 slice 4). ' +
+                  'Map keys are member names (lowercase, canonical); ' +
+                  'values are the distinct session_ids the member ' +
+                  'authored from inside this group, in first-mention ' +
+                  'order. Omitted when no member self-races. The boot ' +
+                  'text rendering surfaces a per-actor warning ' +
+                  '(`⚠ same-actor parallel sessions: ...`) for each ' +
+                  'entry; JSON consumers branch on the field directly. ' +
+                  'Detection requires ≥2 of the actor\'s records in ' +
+                  "the group to carry an opened_by_session AND those " +
+                  'values to diverge — pre-#249 / unstamped records do ' +
+                  'NOT count toward divergence (provenance unknown).',
               },
             },
           },
