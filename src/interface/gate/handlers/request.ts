@@ -338,7 +338,16 @@ export async function reqCreate(c: C, args: ParsedArgs): Promise<number> {
     }
     if (parsed.list.length > 0) input.executors = parsed.list;
   }
-  if (executor !== undefined) input.executor = executor;
+  if (executor !== undefined) {
+    // Deprecation: `--executor` (singular) was kept for back-compat
+    // through the v0.6 cycle (#230). Removal scheduled for v0.7.0
+    // (#239). Surface a notice so explicit callers migrate to
+    // `--executors` ahead of the cut.
+    process.stderr.write(
+      `notice: --executor (singular) is deprecated and will be removed in v0.7.0; use --executors <name> instead. (issue #239)\n`,
+    );
+    input.executor = executor;
+  }
   if (target !== undefined) input.target = target;
   // Worktree-isolation gating (#231). Two effects, both keyed on
   // "is this a parallel wave?" (executors.length > 1):
@@ -1336,6 +1345,13 @@ export async function reqFastTrack(c: C, args: ParsedArgs): Promise<number> {
   }
   // Single-executor surface: explicit --executor wins, else default
   // to the author for the self-execute happy path.
+  if (executorOpt !== undefined) {
+    // Deprecation notice — same policy as reqCreate (#239). Only warn
+    // on explicit user input, not the implicit `from` fallback.
+    process.stderr.write(
+      `notice: --executor (singular) is deprecated and will be removed in v0.7.0; use --executors <name> instead. (issue #239)\n`,
+    );
+  }
   const executor = executorsList === undefined
     ? (executorOpt ?? from)
     : undefined;
