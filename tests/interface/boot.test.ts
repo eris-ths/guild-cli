@@ -1055,3 +1055,163 @@ test('gate boot: active_overlapping_targets text section is omitted when no over
     cleanup();
   }
 });
+
+// ---- Slice 4 (#249): same-actor parallel-session detection ---------
+
+function makeRequestSessioned(
+  root: string,
+  from: string,
+  action: string,
+  target: string,
+  sessionId: string,
+): string {
+  const r = spawnSync(
+    process.execPath,
+    [
+      GATE,
+      'request',
+      '--from', from,
+      '--action', action,
+      '--reason', 'overlap test',
+      '--target', target,
+      '--format', 'json',
+    ],
+    {
+      cwd: root,
+      env: { ...process.env, GUILD_SESSION_ID: sessionId },
+      encoding: 'utf8',
+    },
+  );
+  if (r.status !== 0) {
+    throw new Error(`gate request failed: ${r.stderr}`);
+  }
+  return JSON.parse(r.stdout).id as string;
+}
+
+test('gate boot: overlap requests carry opened_by_session when stamped (#249 slice 4)', () => {
+  const { root, cleanup } = bootstrap();
+  try {
+    makeRequestSessioned(root, 'alice', 'work A', 'src/foo', 'alice-tmux-1');
+    makeRequestSessioned(root, 'alice', 'work B', 'src/foo', 'alice-tmux-1');
+
+    const { stdout } = runGate(root, ['boot']);
+    const payload = JSON.parse(stdout);
+    const entry = payload.active_overlapping_targets[0];
+    assert.equal(entry.requests.length, 2);
+    for (const r of entry.requests) {
+      assert.equal(r.opened_by_session, 'alice-tmux-1');
+    }
+  } finally {
+    cleanup();
+  }
+});
+
+test('gate boot: parallel_session_authors flags actor with two sessions on same target (#249 slice 4)', () => {
+  const { root, cleanup } = bootstrap();
+  try {
+    // Same author (alice), same target, two distinct sessions — the
+    // self-race shape the slice exists to surface.
+    makeRequestSessioned(root, 'alice', 'work A', 'src/foo', 'alice-tmux-1');
+    makeRequestSessioned(root, 'alice', 'work B', 'src/foo', 'alice-tmux-2');
+
+    const { stdout } = runGate(root, ['boot']);
+    const payload = JSON.parse(stdout);
+    const entry = payload.active_overlapping_targets[0];
+    assert.deepEqual(entry.parallel_session_authors, {
+      alice: ['alice-tmux-1', 'alice-tmux-2'],
+    });
+  } finally {
+    cleanup();
+  }
+});
+
+test('gate boot: parallel_session_authors omitted when sessions match (#249 slice 4)', () => {
+  // Same author, same target, IDENTICAL session — that's not a
+  // self-race (the actor knows about both records). The map must
+  // stay absent so the "warn-on-divergence" contract holds.
+  const { root, cleanup } = bootstrap();
+  try {
+    makeRequestSessioned(root, 'alice', 'work A', 'src/foo', 'alice-tmux-1');
+    makeRequestSessioned(root, 'alice', 'work B', 'src/foo', 'alice-tmux-1');
+
+    const { stdout } = runGate(root, ['boot']);
+    const payload = JSON.parse(stdout);
+    const entry = payload.active_overlapping_targets[0];
+    assert.equal(
+      'parallel_session_authors' in entry,
+      false,
+      'identical sessions are not a self-race',
+    );
+  } finally {
+    cleanup();
+  }
+});
+
+test('gate boot: parallel_session_authors omitted when only one record stamped (#249 slice 4)', () => {
+  // One stamped, one unstamped — provenance unknown for the second
+  // record. Detection requires ≥2 of the actor's records to BOTH
+  // carry sessions AND those values to diverge. Mixed pre/post-#249
+  // groups should not falsely flag.
+  const { root, cleanup } = bootstrap();
+  try {
+    makeRequestSessioned(root, 'alice', 'work A', 'src/foo', 'alice-tmux-1');
+    makeRequestWithTarget(root, 'alice', 'work B', 'src/foo'); // no GUILD_SESSION_ID
+
+    const { stdout } = runGate(root, ['boot']);
+    const payload = JSON.parse(stdout);
+    const entry = payload.active_overlapping_targets[0];
+    assert.equal(
+      'parallel_session_authors' in entry,
+      false,
+      'one stamped + one unstamped is not enough to prove divergence',
+    );
+  } finally {
+    cleanup();
+  }
+});
+
+test('gate boot: different actors with different sessions do NOT flag (#249 slice 4)', () => {
+  // alice from session A, leysia from session B → genuine cross-
+  // session overlap (the original #234 surface), but NOT a
+  // SAME-actor parallel-session race. Only flag when a single
+  // actor's authorship splits.
+  const { root, cleanup } = bootstrap();
+  try {
+    registerMember(root, 'leysia');
+    makeRequestSessioned(root, 'alice', 'work A', 'src/foo', 'alice-tmux-1');
+    makeRequestSessioned(root, 'leysia', 'work B', 'src/foo', 'leysia-tmux-1');
+
+    const { stdout } = runGate(root, ['boot']);
+    const payload = JSON.parse(stdout);
+    const entry = payload.active_overlapping_targets[0];
+    assert.equal(
+      'parallel_session_authors' in entry,
+      false,
+      'different actors authoring is not a self-race',
+    );
+  } finally {
+    cleanup();
+  }
+});
+
+test('gate boot text: parallel-session warning lands under overlap section (#249 slice 4)', () => {
+  const { root, cleanup } = bootstrap();
+  try {
+    makeRequestSessioned(root, 'alice', 'work A', 'src/foo', 'alice-tmux-1');
+    makeRequestSessioned(root, 'alice', 'work B', 'src/foo', 'alice-tmux-2');
+
+    const t = runGate(root, ['boot', '--format', 'text']);
+    assert.equal(t.status, 0);
+    assert.match(t.stdout, /active waves with overlapping target:/);
+    // The per-request line carries the bracket-tagged session.
+    assert.match(t.stdout, /\[session=alice-tmux-1\]/);
+    assert.match(t.stdout, /\[session=alice-tmux-2\]/);
+    // The dedicated warning line names the actor and both sessions.
+    assert.match(
+      t.stdout,
+      /⚠ same-actor parallel sessions: alice on target "src\/foo" \(sessions: alice-tmux-1, alice-tmux-2\)/,
+    );
+  } finally {
+    cleanup();
+  }
+});

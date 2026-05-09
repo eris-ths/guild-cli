@@ -134,7 +134,43 @@ export interface BootActiveOverlap {
      * the wave at a glance.
      */
     claimed_by?: string;
+    /**
+     * The session_id under which this request was authored (#249
+     * slice 4). Carried verbatim from the record's
+     * `opened_by_session` field. Surfaced inside the overlap
+     * payload so the reader can spot the self-race shape: one
+     * member with multiple overlapping records authored from
+     * different sessions. Omitted when the record has no session
+     * stamp — pre-#249 records and unstamped post-#249 writes both
+     * present absence as the signal-free case.
+     */
+    opened_by_session?: string;
   }>;
+  /**
+   * Members in this overlap group who authored ≥2 requests from
+   * ≥2 distinct sessions (#249 slice 4). Map keys are member names
+   * (lowercase, canonical); values are the distinct session_ids
+   * the member authored from inside this group, in first-mention
+   * order. Empty / omitted when no member's authorship splits
+   * across sessions.
+   *
+   * The "self-race" surface: an actor running two shells (or two
+   * AI agents on the same machine) may legitimately not realize
+   * they have overlapping work in flight under their own name.
+   * This map names exactly that case so the boot text rendering
+   * can prompt: "you have parallel sessions on the same target —
+   * was the second one intended?".
+   *
+   * Detection requires that ≥2 of the actor's records in the
+   * group carry an `opened_by_session` AND those values diverge.
+   * A pre-#249 record with no session stamp does NOT count toward
+   * the divergence (we cannot know what session it came from); a
+   * post-#249 unstamped record (caller didn't `export
+   * GUILD_SESSION_ID`) similarly does not. Detection is best-
+   * effort: it surfaces the case the substrate can prove, not
+   * every possible parallel-shell scenario.
+   */
+  parallel_session_authors?: Record<string, readonly string[]>;
 }
 
 /**
@@ -1056,6 +1092,34 @@ export function computeActiveOverlappingTargets(
     const sorted = [...reqs].sort((a, b) =>
       a.id.value < b.id.value ? -1 : a.id.value > b.id.value ? 1 : 0,
     );
+    // Same-actor parallel-session detection (#249 slice 4). For each
+    // author in the group, collect distinct session_ids in first-
+    // mention order. A record without `opened_by_session` does NOT
+    // count toward divergence — its provenance is unknown, and
+    // counting absence as a separate "session" would falsely flag
+    // every mixed pre-#249 / post-#249 group. The map only includes
+    // authors with ≥2 distinct sessions; empty when no author races
+    // themselves.
+    const sessionsByAuthor = new Map<string, string[]>();
+    for (const r of sorted) {
+      const author = r.from.value;
+      const sess = r.openedBySession;
+      if (sess === undefined || sess.length === 0) continue;
+      const list = sessionsByAuthor.get(author);
+      if (list === undefined) {
+        sessionsByAuthor.set(author, [sess]);
+      } else if (!list.includes(sess)) {
+        list.push(sess);
+      }
+    }
+    const parallelSessionAuthors: Record<string, readonly string[]> = {};
+    let hasParallel = false;
+    for (const [author, sessions] of sessionsByAuthor) {
+      if (sessions.length >= 2) {
+        parallelSessionAuthors[author] = sessions;
+        hasParallel = true;
+      }
+    }
     overlaps.push({
       target,
       requests: sorted.map((r) => ({
@@ -1063,7 +1127,11 @@ export function computeActiveOverlappingTargets(
         state: r.state as 'pending' | 'approved' | 'executing',
         executors: r.executors.map((e) => e.value),
         ...(r.claimedBy !== undefined ? { claimed_by: r.claimedBy.value } : {}),
+        ...(r.openedBySession !== undefined
+          ? { opened_by_session: r.openedBySession }
+          : {}),
       })),
+      ...(hasParallel ? { parallel_session_authors: parallelSessionAuthors } : {}),
     });
   }
   overlaps.sort((a, b) =>
@@ -1373,14 +1441,41 @@ function renderBootText(p: BootPayload): string {
         const exec =
           r.executors.length > 0 ? r.executors.join(',') : '(no executor)';
         const claim = r.claimed_by !== undefined ? ', claim_held' : '';
+        // Session tag (#249 slice 4) — bracket-shaped, mirroring
+        // the `gate show` stake-block convention so the two
+        // surfaces share one annotation grammar.
+        const session =
+          r.opened_by_session !== undefined
+            ? ` [session=${r.opened_by_session}]`
+            : '';
         lines.push(
-          `  - ${r.id} (${exec}, ${r.state}${claim}) — target: ${o.target}`,
+          `  - ${r.id} (${exec}, ${r.state}${claim})${session} — target: ${o.target}`,
         );
       }
     }
     lines.push(
       '  ⚠ overlap detected. coordinate via `gate witness <id>` or `gate claim <id>`.',
     );
+    // Same-actor parallel-session warning (#249 slice 4). One line
+    // per actor whose authorship splits across sessions in any
+    // overlap group. The hint deliberately frames it as a question
+    // ("was the second session intended?") rather than an
+    // accusation — there are legitimate parallel-session shapes
+    // (e.g. the same human deliberately running two waves), and
+    // the substrate's job is to surface the case, not adjudicate it.
+    const parallelLines: string[] = [];
+    for (const o of p.active_overlapping_targets) {
+      const map = o.parallel_session_authors;
+      if (map === undefined) continue;
+      for (const [author, sessions] of Object.entries(map)) {
+        parallelLines.push(
+          `  ⚠ same-actor parallel sessions: ${author} on target "${o.target}" ` +
+            `(sessions: ${sessions.join(', ')}). check whether the second ` +
+            `session was intended.`,
+        );
+      }
+    }
+    for (const line of parallelLines) lines.push(line);
   }
 
   if (p.tail.length > 0) {
