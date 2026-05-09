@@ -9,4 +9,5 @@ data/sync/
 examples/dogfood-session/data/
 
 # Local gate dogfood records (actor names + session content — do not publish)
-requests/
+# Root-anchored so examples/*/requests/ fixtures stay tracked.
+/requests/

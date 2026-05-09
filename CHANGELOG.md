@@ -18,6 +18,7 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
   values trigger the notice. Behavior is otherwise unchanged through
   the v0.6 cycle; the deprecated surface is removed at v0.7.0 cut
   along with the `executor` JSON alias on rendering.
+  Notice introduced for v0.6.0; removal scheduled for v0.7.0.
 
 ### Fixed
 

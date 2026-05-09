@@ -25,7 +25,8 @@ Domain → Application → Infrastructure → Interface の Clean Architecture (
 
 ```bash
 # 起票 (eris は default host、members/ に登録済み actor を --executor に指定)
-gate request --action "ship #N <feature>" --reason "<why>" --executor <actor> --from eris --target "<files>"
+gate request --action "ship #N <feature>" --reason "<why>" --executors <actor> --from eris --target "<files>"
+# (Note: --executor (singular) is deprecated as of v0.6 — use --executors. See #239.)
 # → 2026-MM-DD-NNNN (state=pending)
 
 gate approve <id> --by eris        # self-approve は notice 出るが通る (現行)
