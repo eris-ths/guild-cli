@@ -700,6 +700,15 @@ function formatRequestText(r: Request): string {
   if (j['source_agora_play']) {
     lines.push(`  source_agora_play: ${j['source_agora_play']}`);
   }
+  // opened_by_session (#249 slice 3) — the request author's boot
+  // session at create time. Sits with the other tool-stamped
+  // backlinks (promoted_from / source_agora_play) for the same
+  // "where did this come from" mental cluster. Absence is the
+  // common case (pre-#249 records, unstamped post-#249 writes); the
+  // line drops out entirely so byte-stable text rendering survives.
+  if (typeof j['opened_by_session'] === 'string' && j['opened_by_session'].length > 0) {
+    lines.push(`  opened_by_session: ${j['opened_by_session']}`);
+  }
   lines.push(`  created:  ${j['created_at']}`);
   lines.push('');
   pushMultilineField(lines, '  action:   ', String(j['action']));
@@ -764,7 +773,18 @@ function formatRequestText(r: Request): string {
         typeof j['claim_note'] === 'string' && j['claim_note'].length > 0
           ? ` — ${j['claim_note']}`
           : '';
-      lines.push(`    claimed by: ${j['claimed_by']} at ${j['claimed_at']}${claimNote}`);
+      // claimed_by_session (#249 slice 3): inline `[session=<id>]`
+      // tag between actor and timestamp. Bracket form (rather than
+      // parens) keeps it visually distinct from claim_note's em-dash
+      // suffix so a reader scanning the line sees three independent
+      // axes: who, when, attribution.
+      const claimSession =
+        typeof j['claimed_by_session'] === 'string' && j['claimed_by_session'].length > 0
+          ? ` [session=${j['claimed_by_session']}]`
+          : '';
+      lines.push(
+        `    claimed by: ${j['claimed_by']}${claimSession} at ${j['claimed_at']}${claimNote}`,
+      );
     }
     if (hasWitnesses) {
       // Per-witness notes (issue #246) emitted inline as
@@ -774,12 +794,25 @@ function formatRequestText(r: Request): string {
         j['witness_notes'] && typeof j['witness_notes'] === 'object' && !Array.isArray(j['witness_notes'])
           ? (j['witness_notes'] as Record<string, string>)
           : {};
+      // Per-witness session_id (#249 slice 3) surfaces as a
+      // bracket-tagged `[session=<id>]` suffix on the actor name.
+      // Mirrors the claim line's tagging shape so a reader sees one
+      // consistent annotation grammar across both stake variants.
+      const witnessSessions =
+        j['witness_sessions'] && typeof j['witness_sessions'] === 'object' && !Array.isArray(j['witness_sessions'])
+          ? (j['witness_sessions'] as Record<string, string>)
+          : {};
       const names = (j['witnesses'] as unknown[]).map((w) => {
         const name = String(w);
         const note = witnessNotes[name];
-        return typeof note === 'string' && note.length > 0
-          ? `${name} (${note})`
-          : name;
+        const session = witnessSessions[name];
+        const noteSuffix =
+          typeof note === 'string' && note.length > 0 ? ` (${note})` : '';
+        const sessionSuffix =
+          typeof session === 'string' && session.length > 0
+            ? ` [session=${session}]`
+            : '';
+        return `${name}${noteSuffix}${sessionSuffix}`;
       }).join(', ');
       lines.push(`    witnesses: ${names}`);
     }
