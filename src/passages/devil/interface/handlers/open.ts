@@ -18,7 +18,7 @@ const OPEN_KNOWN_FLAGS: ReadonlySet<string> = new Set([
  * devil open — start a new review session against a target.
  *
  * Usage:
- *   devil open <target-ref> --type <pr|file|function|commit>
+ *   devil open <target-ref> --type <pr|file|function|commit|system>
  *                           [--by <m>] [--format json|text]
  *
  * Produces: <content_root>/devil/reviews/<rev-id>.yaml where
@@ -32,6 +32,11 @@ const OPEN_KNOWN_FLAGS: ReadonlySet<string> = new Set([
  *   file      — a path under the repo
  *   function  — a symbol identifier (informal; for narrow reviews)
  *   commit    — a commit sha
+ *   system    — bird's-eye review scope: free-form ref naming the
+ *               module / release / passage being audited as a whole
+ *               (e.g. "guild-cli@v0.4.0", "the devil-review passage").
+ *               Pairs naturally with the `coherence` lense; see #134
+ *               item J for the design rationale.
  *
  * AI-first per principle 11: --by attribution is required (or
  * GUILD_ACTOR), the same shape gate / agora use.
@@ -48,12 +53,12 @@ export async function openReview(deps: OpenDeps, args: ParsedArgs): Promise<numb
   if (!ref) {
     process.stderr.write(
       'error: positional <target-ref> required.\n' +
-        '  Usage: devil open <target-ref> --type <pr|file|function|commit> [--by <m>]\n',
+        '  Usage: devil open <target-ref> --type <pr|file|function|commit|system> [--by <m>]\n',
     );
     return 1;
   }
 
-  const typeRaw = requireOption(args, 'type', '<pr|file|function|commit>');
+  const typeRaw = requireOption(args, 'type', '<pr|file|function|commit|system>');
   // parseTargetType throws DomainError on invalid input — let it
   // bubble to the dispatcher's catch (turns into stderr error: ...).
   const type = parseTargetType(typeRaw);
