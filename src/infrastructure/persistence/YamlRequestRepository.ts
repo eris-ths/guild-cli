@@ -548,6 +548,16 @@ function hydrate(
     if (typeof obj['source_agora_play'] === 'string') {
       props.sourceAgoraPlay = obj['source_agora_play'] as string;
     }
+    // opened_by_session (#249). Tolerated as a non-empty string. Same
+    // permissive read pattern as source_agora_play / claim_note —
+    // we never reject, only ignore malformed values. Format
+    // validation lives at the write boundary (slice 2's `gate boot
+    // --session-id`); on read we trust whatever a future writer
+    // stamped. Pre-#249 records lack the field and hydrate as
+    // undefined.
+    if (typeof obj['opened_by_session'] === 'string' && obj['opened_by_session'].length > 0) {
+      props.openedBySession = obj['opened_by_session'];
+    }
     // requires_worktree_isolation (#231). Tolerated as a strict boolean
     // only — anything else (string "true", number 1) is dropped silently
     // following the same conservative read pattern as `depth`. Pre-#231
@@ -612,6 +622,14 @@ function hydrate(
       ) {
         props.claimNote = obj['claim_note'];
       }
+      // claimed_by_session (issue #249). Same permissive read as
+      // opened_by_session — non-empty string only, otherwise drop.
+      if (
+        typeof obj['claimed_by_session'] === 'string' &&
+        obj['claimed_by_session'].length > 0
+      ) {
+        props.claimedBySession = obj['claimed_by_session'];
+      }
     }
     // Witnesses (issue #244). Restore only well-typed string entries;
     // anything else (objects, numbers) is dropped silently following
@@ -675,6 +693,29 @@ function hydrate(
         notes.set(actor, raw);
       }
       if (notes.size > 0) props.witnessNotes = notes;
+    }
+    // witness_sessions (issue #249). Same shape as witness_notes —
+    // map keyed by lowercase actor name, values are non-empty strings,
+    // entries for actors NOT in witnesses[] are dropped (no anchor).
+    // Pre-#249 records and same-body witness records both lack the
+    // field and hydrate as undefined.
+    if (
+      obj['witness_sessions'] !== null &&
+      typeof obj['witness_sessions'] === 'object' &&
+      !Array.isArray(obj['witness_sessions'])
+    ) {
+      const validActors = new Set(
+        (props.witnesses ?? []).map((m) => m.value),
+      );
+      const sessions = new Map<string, string>();
+      for (const [actor, raw] of Object.entries(
+        obj['witness_sessions'] as Record<string, unknown>,
+      )) {
+        if (typeof raw !== 'string' || raw.length === 0) continue;
+        if (!validActors.has(actor)) continue;
+        sessions.set(actor, raw);
+      }
+      if (sessions.size > 0) props.witnessSessions = sessions;
     }
     // mutation_seq (issue #244 follow-up; Devil REJECT root cause).
     // Counter for cross-session-mutating verbs (claim/witness/
