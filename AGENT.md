@@ -28,11 +28,17 @@ gate register --name <you>              # category defaults to "professional"
 
 # Every session after:
 gate boot                # identity + status + tail + your_recent + inbox_unread (1 JSON)
+gate boot --session-id <id>             # opt-in: stamps a session label on subsequent writes
 gate resume              # picking up where the last session ended (needs GUILD_ACTOR)
 # (old 3-command recipe — use boot above if you can consume JSON)
 gate status              # pending/approved/executing/issues/inbox
 gate whoami              # your identity + recent utterances (needs GUILD_ACTOR)
 gate tail 10             # last 10 events across all actors
+
+# Mid-session boundaries (#36 Phase 2 — append-only timestamp records):
+gate rest                # "putting this down for now" — boundary record only
+gate wake                # "picking it back up"        — pairs with rest, decoupled
+gate farewell            # "until next session"        — pairs with `gate resume` next session
 ```
 
 ## Agent-first knobs
@@ -51,13 +57,18 @@ pending ─ approve ─▶ approved ─ execute ─▶ executing ─ complete �
 ```
 
 ```bash
-gate request --from <m> --action "..." --reason "..." [--executor <m>] [--auto-review <m>] [--with <m>[,<m>...]]
+gate request --from <m> --action "..." --reason "..." \
+             [--executor <m> | --executors a,b,c] \
+             [--auto-review <m>] [--with <m>[,<m>...]] \
+             [--target <s>] [--depth shallow|standard|deep] \
+             [--from-agora <play_id>] [--template <name>]
 gate approve <id> --by <m> [--note "..."]
 gate deny <id> --by <m> --reason "..."
-gate execute <id> --by <m>
+gate execute <id> --by <m> [--cwd <path>]                  # cwd stamped on the status_log entry
 gate complete <id> --by <m> [--note "..."]
 gate fail <id> --by <m> --reason "..."
-gate fast-track --from <m> --action "..." --reason "..."   # one-shot create→complete
+gate fast-track --from <m> --action "..." --reason "..." \
+                [--executor <m> | --executors a,b,c] [--with ...]
 gate thank <to> --for <id> [--by <m>] [--reason <s>]       # gratitude (no verdict, no calibration)
 ```
 
@@ -67,6 +78,26 @@ the substrate captures both, and `gate execute` emits a `notice:` so
 the mismatch is visible at the surface that did it. See
 [issue #168](https://github.com/eris-ths/guild-cli/issues/168) for the
 design rationale.
+
+`--executors a,b,c` records **multiple executors** for parallel waves
+(#230). Mutually exclusive with `--executor`. Under `profile: swarm`,
+parallel waves additionally require worktree isolation (`gate execute`
+refuses same-cwd collisions, #231).
+
+`--depth shallow|standard|deep` is an **advisory** that the substrate
+carries to reviewer agents (#221). Default = `standard` (current
+behaviour); `shallow` invites point-checks; `deep` invites
+arch / threat-model scrutiny. Per principle 02 the reviewer can
+disagree.
+
+`--from-agora <play_id>` lifts the play's most recent
+cliff/invitation into `--reason` / `--action` (#232). The link is
+recorded as `source_agora_play: <play_id>` in YAML so a later reader
+can walk back to the discussion.
+
+`--template <name>` expands a wave-brief skeleton from the
+template registry (#235); discover available names with
+`gate templates list` (see below).
 
 ## Review (Two-Persona Devil)
 
@@ -96,7 +127,48 @@ gate tail [N]                           # recent activity stream (default 20)
 gate chain <id>                         # cross-reference walk (one hop)
 gate transcript <id>                    # narrative prose arc of a request
 gate suggest [--format json|text]       # suggested_next only (hot-loop sibling of boot)
+gate why <id>                           # decision walk: why is this request in this state?
+gate summarize <id> [--limit <N>]       # narrative summary
+gate unresponded [--for <m>]            # concerns recorded but not yet responded to
 ```
+
+## Coordination & stake (#226 / #244 / #246)
+
+Cross-session race mediation for waves where multiple actors might
+silently overlap. `claim` is exclusive ("I'm working on this"),
+`witness` is non-exclusive ("I'm watching this"); both cooperate with
+`gate boot`'s overlap surface (#234).
+
+```bash
+gate claim <id> --by <m> [--note "..."]        # exclusive stake; refuses on conflict
+gate witness <id> --by <m> [--note "..."]      # non-exclusive observer; never refuses
+gate unwitness <id> --by <m>                   # remove your own witness
+```
+
+- `claim` allowed on `pending` / `approved`; refuses if a different
+  actor already holds the claim. Same-actor re-claim is a no-op.
+- `witness` allowed on `pending` / `approved` / `executing`;
+  multiple actors can witness the same wave simultaneously.
+- Both auto-release on terminal transitions (completed / failed / denied).
+- `--note` is short metadata for the stake event (≤ 80 chars), not
+  commentary. Wider discussion belongs in agora plays.
+
+## Templates (#235)
+
+Wave-brief skeletons under `data/guild/templates/wave-brief/`. The
+registry surfaces them through `gate` so agents discover what
+templates are available without scanning the filesystem.
+
+```bash
+gate templates list                            # available template names
+gate templates show <name>                     # full template body
+gate request --template <name> [--action ...]  # expand skeleton on create
+```
+
+Under `profile: swarm`, parallel-shaped waves
+(`--executors a,b`) emit a notice when filed without a `--template`
+so the brief is on record (Phase 1 — warning only; enforcement is
+follow-up).
 
 ## Issues
 
@@ -120,10 +192,39 @@ the actor; falls back to `GUILD_ACTOR` when unset.
 
 ```bash
 gate message --from <m> --to <m> --text "..." [--type <s>]
-gate broadcast --from <m> --text "..." [--type <s>]
+gate broadcast --from <m> --text "..." [--type <s>] [--expects-response]
 gate inbox --for <m> [--unread]
 gate inbox mark-read [N] --for <m>
 ```
+
+`--expects-response` (#220) on a broadcast opts the sender into the
+`broadcast-pending-response` surface. `gate boot` then leads with
+that suggestion when no higher-priority lifecycle work is open;
+the surface clears when the recipient marks the entry read.
+
+## Sessions (#249)
+
+Optional **session_id** dimension on top of the member axis so
+multi-body coordination (one member running multiple shells, or a
+member coexisting with their AI agent counterpart) keeps an
+attributable trail.
+
+```bash
+gate boot --session-id eris-local-2026-05-08-evening   # validates + echoes payload
+export GUILD_SESSION_ID=eris-local-2026-05-08-evening  # whole-shell carrier
+gate request ...           # stamps `opened_by_session: <id>`
+gate claim <id> --by <m>   # stamps `claimed_by_session: <id>`
+gate witness <id> --by <m> # stamps `witness_sessions[<actor>]: <id>`
+```
+
+- Format: free-form ASCII, regex `^[a-z0-9][a-z0-9_:.-]{0,63}$`.
+- Opt-in: nothing is required; pre-#249 records and unstamped
+  post-#249 writes round-trip byte-identical YAML.
+- Discovery: `gate boot` surfaces `hints.session_id_unset: true`
+  when an actor resolved but no session is configured.
+- Self-race detection: `gate boot.active_overlapping_targets[].parallel_session_authors`
+  flags an actor authoring ≥2 overlapping requests from ≥2 distinct
+  sessions; text mode prints `⚠ same-actor parallel sessions: <m>`.
 
 ## Members
 
@@ -370,14 +471,40 @@ gate repair [--from-doctor <path>] [--apply] [--format json|text]
 content_root: .
 host_names: [alice, bob]
 lenses: [devil, layer, cognitive, user]   # optional, these are defaults
+
+profile: standard                          # 'standard' (default) | 'swarm'
+features:
+  self_approve: warn                       # 'allowed' | 'warn' (default) | 'forbidden'
+  worktree_required_for_parallel: false    # swarm-default true; refuses same-cwd parallel waves
+
 doctor:
   plugins: [./plugins/doc-check.mjs]      # optional, ES module paths
+
+# #36 Phase 1 — verb plugins + lifecycle hooks (require explicit trust opt-in)
+plugins:
+  trusted: false                           # MUST be true to load verbs/hooks
+  verbs:    [./plugins/verbs/my-verb.mjs]
+  hooks:    [./plugins/hooks/my-policy.mjs]
+
 paths:
   members: members
   requests: requests
   issues: issues
   inbox: inbox
 ```
+
+`profile: swarm` (#227) is the niche multi-SubAgent orchestration
+profile. It tightens defaults (`self_approve: forbidden`,
+`worktree_required_for_parallel: true`) and surfaces extra warnings
+in `gate boot` for cross-session race risks. `profile: standard`
+default behaviour is unchanged.
+
+`plugins.trusted: true` is required to load any verb / hook plugin
+(#36 Phase 1). Without it, the loader logs the path but skips
+execution. Trust model is explicit because plugins run as
+in-process Node modules with full filesystem access — see
+[`SECURITY.md`](./SECURITY.md) and [`examples/plugins/`](./examples/plugins/)
+for the end-to-end shape.
 
 ## File layout
 
@@ -415,6 +542,17 @@ walked, the same shape as `guild.config.yaml`.
 
 `GUILD_LOCALE=<en|ja>` — prose language for `gate resume`
 `restoration_prose`. Defaults to `en`. Also settable via `--locale`.
+
+`GUILD_SESSION_ID=<id>` — session_id stamp for write verbs (#249).
+Validated against `^[a-z0-9][a-z0-9_:.-]{0,63}$`. When set,
+`gate request` / `gate fast-track` stamp `opened_by_session`;
+`gate claim` stamps `claimed_by_session`; `gate witness` stamps
+`witness_sessions[<actor>]`. Invalid values emit a one-time
+notice and the resolver treats them as unset (no silent stamping
+of malformed ids). Unlike `GUILD_ACTOR`, there is no
+`.guild-session-id` file fallback by design — the session is a
+per-shell concept, and committing one would re-export a single
+name across collaborators.
 
 ## Output format
 
@@ -485,7 +623,12 @@ cue carries cross-verb without re-reading.
 ## Deep dives
 
 - [`docs/verbs.md`](./docs/verbs.md) — per-verb examples and design notes
+- [`docs/playbook.md`](./docs/playbook.md) — combo recipes (gate × agora × devil flows)
+- [`docs/storage-format.md`](./docs/storage-format.md) — full per-record YAML schema
+- [`docs/POLICY.md`](./docs/POLICY.md) — versioning + plugin-stability contract
+- [`SECURITY.md`](./SECURITY.md) — plugin trust model + threat surface
 - [`examples/dogfood-session/`](./examples/dogfood-session/) — real multi-actor session
+- [`examples/plugins/`](./examples/plugins/) — verb + hook plugin walkthrough (#36 Phase 1)
 - [`README.md`](./README.md) — full documentation with design rationale
 
 ---
