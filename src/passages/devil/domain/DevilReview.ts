@@ -59,13 +59,14 @@ export function parseReviewId(raw: unknown): string {
   return raw;
 }
 
-export type TargetType = 'pr' | 'file' | 'function' | 'commit';
+export type TargetType = 'pr' | 'file' | 'function' | 'commit' | 'system';
 
 const VALID_TARGET_TYPES: ReadonlySet<TargetType> = new Set([
   'pr',
   'file',
   'function',
   'commit',
+  'system',
 ]);
 
 export function parseTargetType(raw: unknown): TargetType {
@@ -80,7 +81,10 @@ export function parseTargetType(raw: unknown): TargetType {
 
 export interface Target {
   readonly type: TargetType;
-  readonly ref: string; // github-pr-url, file path, function symbol, or commit sha
+  // pr → github-pr-url; file → path; function → symbol; commit → sha;
+  // system → free-form scope label for bird's-eye reviews (e.g.
+  // "guild-cli@v0.4.0", "the devil-review passage"). Issue #134 J1.
+  readonly ref: string;
 }
 
 function parseTarget(raw: unknown): Target {

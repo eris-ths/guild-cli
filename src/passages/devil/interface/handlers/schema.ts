@@ -86,11 +86,13 @@ const VERBS: readonly VerbSchema[] = [
         target_ref: {
           type: 'string',
           description:
-            'positional; the target reference (PR URL, file path, function symbol, or commit sha)',
+            'positional; the target reference (PR URL, file path, function symbol, commit sha, or — for type=system — a free-form scope label)',
         },
         type: {
           type: 'string',
-          enum: ['pr', 'file', 'function', 'commit'],
+          enum: ['pr', 'file', 'function', 'commit', 'system'],
+          description:
+            "system = bird's-eye review scope (e.g. \"guild-cli@v0.4.0\", \"the devil-review passage\"). Pairs with the coherence lense. Per #134 J1.",
         },
         by: strOpt('actor (defaults to GUILD_ACTOR)'),
         format: formatField,
@@ -102,7 +104,7 @@ const VERBS: readonly VerbSchema[] = [
       target: {
         type: 'object',
         properties: {
-          type: { type: 'string', enum: ['pr', 'file', 'function', 'commit'] },
+          type: { type: 'string', enum: ['pr', 'file', 'function', 'commit', 'system'] },
           ref: str,
         },
         required: ['type', 'ref'],
@@ -174,7 +176,7 @@ const VERBS: readonly VerbSchema[] = [
     summary:
       'enumerate review sessions in the content_root. Filters: --state narrows by ' +
       'open|concluded, or `all` for every state (no filter); --target-type ' +
-      'narrows by pr|file|function|commit. Read-only.',
+      'narrows by pr|file|function|commit|system. Read-only.',
     input: {
       type: 'object',
       properties: {
@@ -184,7 +186,7 @@ const VERBS: readonly VerbSchema[] = [
         },
         'target-type': {
           type: 'string',
-          enum: ['pr', 'file', 'function', 'commit'],
+          enum: ['pr', 'file', 'function', 'commit', 'system'],
         },
         format: formatField,
       },
@@ -202,7 +204,7 @@ const VERBS: readonly VerbSchema[] = [
               target: {
                 type: 'object',
                 properties: {
-                  type: { type: 'string', enum: ['pr', 'file', 'function', 'commit'] },
+                  type: { type: 'string', enum: ['pr', 'file', 'function', 'commit', 'system'] },
                   ref: str,
                 },
                 required: ['type', 'ref'],

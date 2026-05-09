@@ -318,13 +318,13 @@ reviewers can be working simultaneously; the cliff/invitation just
 records re-entry context.
 
 ```bash
-devil open <target-ref> --type <pr|file|function|commit> [--by <m>]
+devil open <target-ref> --type <pr|file|function|commit|system> [--by <m>]
 devil entry <rev-id> --persona <p> --lense <l> --kind <k> --text "<prose>"
                      [--severity <c|h|m|l|info>]
                      [--severity-rationale "<prose>"]   # required when kind=finding
                      [--addresses <e-NNN>]
                      [--by <m>]
-devil list [--state <open|concluded>] [--target-type <pr|file|function|commit>]
+devil list [--state <open|concluded>] [--target-type <pr|file|function|commit|system>]
 devil show <rev-id>
 devil conclude <rev-id> --synthesis "<prose>" [--unresolved e-001,e-002,...] [--by <m>]
 devil dismiss <rev-id> <entry-id> --reason <r> [--note "..."] [--by <m>]

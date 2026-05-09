@@ -41,7 +41,27 @@ test('parseTargetType rejects unknown types', () => {
   assert.equal(parseTargetType('file'), 'file');
   assert.equal(parseTargetType('function'), 'function');
   assert.equal(parseTargetType('commit'), 'commit');
+  assert.equal(parseTargetType('system'), 'system');
   assert.throws(() => parseTargetType('feature'), /must be one of/);
+});
+
+test('DevilReview.open accepts target.type=system with free-form ref', () => {
+  // #134 J1: bird's-eye review scope. The ref carries a free-form
+  // module / release / passage label; only the non-empty rule applies.
+  const review = DevilReview.open({
+    id: 'rev-2026-05-09-001',
+    target: { type: 'system', ref: 'guild-cli@v0.4.0' },
+    opened_by: 'alice',
+  });
+  assert.equal(review.target.type, 'system');
+  assert.equal(review.target.ref, 'guild-cli@v0.4.0');
+  // Round-trip: the YAML payload preserves the new type as-is.
+  const json = review.toJSON();
+  assert.equal((json as Record<string, unknown>).target instanceof Object, true);
+  assert.deepEqual(
+    (json as { target: { type: string; ref: string } }).target,
+    { type: 'system', ref: 'guild-cli@v0.4.0' },
+  );
 });
 
 test('parseReviewState rejects unknown states (no suspended in v0)', () => {

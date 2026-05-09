@@ -41,12 +41,15 @@ import { READ_VERBS, WRITE_VERBS, LOCK_EXEMPT_VERBS } from './verbs.js';
 const HELP = `devil-review — security-backstop review passage (alpha, 11 verbs)
 
 Usage:
-  devil open <target-ref> --type <pr|file|function|commit>
+  devil open <target-ref> --type <pr|file|function|commit|system>
                           [--by <m>] [--format json|text]
                               Open a review session against a target.
                               Lands at <content_root>/devil/reviews/<rev-id>.yaml.
                               Initial state: open. Allocates a fresh
                               rev-YYYY-MM-DD-NNN id per the runtime clock.
+                              type=system marks a bird's-eye scope
+                              (free-form ref, e.g. "guild-cli@v0.4.0");
+                              pairs naturally with the coherence lense.
 
   devil entry <rev-id> --persona <p> --lense <l> --kind <k>
                        --text "<prose>"
@@ -62,7 +65,7 @@ Usage:
                               author-defender / mirror); ingest-only
                               personas are rejected here.
 
-  devil list [--state open|concluded|all] [--target-type pr|file|function|commit]
+  devil list [--state open|concluded|all] [--target-type pr|file|function|commit|system]
              [--format json|text]
                               Enumerate review sessions. Read-only,
                               one-line-per-review summary; --state and
