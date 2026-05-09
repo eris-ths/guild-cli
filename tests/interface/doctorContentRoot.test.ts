@@ -28,20 +28,17 @@ import {
   writeFileSync,
   rmSync,
   mkdirSync,
-  realpathSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { makeTempRoot } from '../util/tempRoot.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const GATE = resolve(here, '../../../bin/gate.mjs');
 
 function bootstrap(): { root: string; cleanup: () => void } {
-  // realpathSync resolves macOS's /var → /private/var symlink so the
-  // root we use in regex assertions matches what subprocesses see when
-  // they resolve their own cwd. See darwin path-comparison fix (#238).
-  const root = realpathSync(mkdtempSync(join(tmpdir(), 'guild-doc-cr-')));
+  const root = makeTempRoot('guild-doc-cr-');
   writeFileSync(
     join(root, 'guild.config.yaml'),
     'content_root: .\nhost_names: [human]\n',
@@ -112,8 +109,7 @@ test('doctor text: no-config-found case discloses cwd-as-fallback (totals > 0)',
   // cwd as implicit content_root (no parent config) gets the
   // `(config: none — cwd used as fallback root)` segment naming
   // the implicit default.
-  // realpathSync — see #238 / bootstrap() comment above.
-  const root = realpathSync(mkdtempSync(join(tmpdir(), 'guild-doc-cr-nocfg-')));
+  const root = makeTempRoot('guild-doc-cr-nocfg-');
   try {
     mkdirSync(join(root, 'members'));
     writeFileSync(

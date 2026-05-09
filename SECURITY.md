@@ -141,13 +141,64 @@ For full details: `src/passages/devil/README.md`,
   editor command is **not validated** — the tool trusts the local
   environment. In multi-user or container environments, restrict
   environment variable mutation or avoid interactive review.
-- **Doctor plugins.** Plugins listed in `guild.config.yaml`
-  `doctor.plugins` are ES modules executed **in the main process**
-  with full Node.js capabilities. Only load plugins from trusted
-  sources. There is no sandboxing.
+- **Plugin trust model.** See "Plugin trust model" below for the
+  full surface (currently doctor plugins; verb / hook / transform
+  plugins planned under [#36](https://github.com/eris-ths/guild-cli/issues/36)).
 - **MCP server (gate_mcp.py).** Spawns `gate` as a subprocess via
   `asyncio.create_subprocess_exec` (array form, no shell expansion).
   Project name validation blocks path traversal (`/`, `\`, `.`, `..`).
+
+## Plugin trust model
+
+`guild-cli` allows operators to extend the CLI through plugins listed
+in `guild.config.yaml`. Today only **doctor plugins** are loaded; the
+**verb / lifecycle-hook / content-transform** plugins specified in
+[#36](https://github.com/eris-ths/guild-cli/issues/36) Phase 1 will
+share the same trust model when they ship.
+
+**Execution context.** Every plugin is loaded as an ES module via
+Node's `import()` and runs **in the main process** with full
+Node.js capabilities — file system, network, child processes,
+environment access. There is **no sandboxing**. A malicious plugin
+has the same authority as the user running `gate` / `guild` /
+`agora` / `devil` / `ctx`.
+
+**Consent surface — `trusted: true` guard.** `guild.config.yaml`
+must declare `doctor.trusted: true` (and, when the broader
+plugin-loader ships, the equivalent `plugins.trusted: true`) before
+plugin paths under that section are loaded. Without the trust
+declaration, the loader **warns and skips** every plugin path
+listed under it — the YAML alone is not consent. This is the same
+guard added in [#90](https://github.com/eris-ths/guild-cli/issues/90)
+for doctor plugins (`src/infrastructure/config/GuildConfig.ts`).
+Rationale: a teammate's `git pull` should not silently start
+running new code on your machine just because a `plugins:` entry
+landed in the config.
+
+**Origin discipline.** Load plugins only from sources you would
+type credentials for. The model is "whitelist by author", not
+"vet by review" — code review of plugin diffs at PR time is a
+useful *backstop*, not a *substitute*, for knowing the author.
+
+**Plugin loader failure is non-fatal.** A plugin path that fails to
+load (missing file, syntax error, throw on import) surfaces as a
+`gate doctor` finding rather than crashing the CLI. The same
+behaviour will apply to verb / hook / transform plugins when their
+loader ships — read verbs (`gate boot`, `gate show`, etc.) must
+remain available even when an extension is broken.
+
+**Source discrimination via `gate schema`.** Every verb in the
+`gate schema` output carries `source: 'core' | 'plugin'` so an MCP
+wiring or LLM tool layer can filter built-in verbs from extensions.
+The discriminator is part of the schema contract (see
+[`docs/POLICY.md`](docs/POLICY.md) § "Plugin stability") — a
+consumer that whitelists `source: 'core'` is guaranteed to get the
+built-in surface only.
+
+**What this is NOT.** Trusted-plugin loading is not a security
+boundary against the plugin author; it is a deliberate handoff of
+authority from the operator to the plugin code. Untrusted code
+should not be run as a plugin under any configuration.
 
 ## Known hardening items (not yet addressed)
 

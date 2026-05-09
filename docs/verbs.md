@@ -954,17 +954,170 @@ narrative a cold reader needs to understand what happened without
 parsing YAML. If agents render this better themselves, the verb
 can be dropped — the data path isn't disturbed (read-only).
 
-**Plugins.** `gate doctor` supports plugins via `guild.config.yaml`:
+**Plugins.** Three plugin surfaces today, all loaded via
+`guild.config.yaml`:
 
 ```yaml
+# Doctor plugins — append additional findings to gate doctor output.
 doctor:
   plugins:
     - ./plugins/doc-check.mjs
+
+# Verb + hook plugins (#36 Phase 1) — require explicit trust opt-in.
+plugins:
+  trusted: false                 # MUST be true to load verbs/hooks
+  verbs:    [./plugins/verbs/my-verb.mjs]
+  hooks:    [./plugins/hooks/my-policy.mjs]
 ```
 
-A plugin is an ES module exporting a function that returns additional
-findings. Plugin errors become findings (never crash doctor). See
-`DoctorPluginFn` in `DiagnosticUseCases.ts` for the interface.
+- **Doctor plugins**: ES module exporting a function that returns
+  additional findings. Errors become findings (never crash doctor).
+  See `DoctorPluginFn` in `DiagnosticUseCases.ts`.
+- **Verb plugins**: register new `gate <verb>` names into the dispatch
+  table. The verb appears in `gate schema` with `source: 'plugin'`.
+- **Lifecycle hooks**: `before:` / `after:` listeners on `request` /
+  `claim` / `witness` mutations. `before:` may veto by returning
+  `{ allow: false, reason }` (turns into exit non-zero).
+
+`plugins.trusted: true` is required because verb / hook plugins run
+as in-process Node modules with full filesystem access. The full
+walkthrough — including the `examples/plugins/policy-veto-on-self-approve`
+sample — lives in [`examples/plugins/README.md`](../examples/plugins/README.md)
+and the trust model is documented in [`SECURITY.md`](../SECURITY.md).
+
+### Time-aware verbs (#36 Phase 2)
+
+A session-boundary primitive: append-only timestamp records that
+mark "putting things down" / "picking back up" / "until next
+session". Decoupled from the request lifecycle — they record the
+passage of time itself as substrate.
+
+```bash
+gate rest                # boundary record: "putting this down for now"
+gate wake                # pairing verb: "picking it back up"
+gate farewell            # ceremonial close: "until next session"
+gate resume              # restoration prose; surfaces the latest boundary
+```
+
+- `gate rest` is **not** a lifecycle toggle. It just stamps "I am
+  putting this down now"; the length of the break is itself
+  information, the way a commit timestamp is information. There is
+  no mandatory wake note (that would turn it into reflect).
+- `gate wake` is decoupled from `rest` — they don't have to be
+  used together. wake records "picking it back up" cleanly even if
+  no preceding `rest` exists.
+- `gate farewell` is the **session-end** record meant to be paired
+  with `gate resume` at the next session start. Different from
+  `rest` because it's "until next session," not "until later today."
+- `gate resume` reads the latest boundary record (rest / wake /
+  farewell) and surfaces it in the restoration prose so a fresh
+  session sees how the prior one ended.
+
+Records live under `<content_root>/sessions/<actor>/<id>.yaml`.
+Per-actor, per-day sequence ids; never deleted.
+
+### Coordination & stake (#226 / #244 / #246)
+
+Cross-session race mediation. `gate claim` is the **exclusive**
+stake ("I'm working on this"); `gate witness` is the **non-exclusive**
+observer ("I'm watching this"). Both compose with `gate boot`'s
+overlap surface (#234) so a fresh agent sees who already has hands
+on a wave.
+
+```bash
+gate claim <id> --by <m> [--note "..."]        # exclusive; refuses on conflict
+gate witness <id> --by <m> [--note "..."]      # non-exclusive
+gate unwitness <id> --by <m>                   # remove your own witness
+```
+
+State guards:
+
+- `claim` allowed on `pending` / `approved` (the cross-session
+  race window). A different actor's claim → refuse with the
+  current claimant's name. Same-actor re-claim → no-op (idempotent).
+- `witness` allowed on `pending` / `approved` / `executing`. Multiple
+  actors witness simultaneously; the witness list doubles as a set
+  ordered by first registration.
+- Both auto-release on terminal transitions (`completed` / `failed`
+  / `denied`); the witness list resets, the claim clears.
+
+Notes are tight-scope: ≤ 80 chars, single line, metadata for the
+stake event itself. **Not** discussion — that belongs in agora plays.
+Notes overwrite-on-divergence (re-claim with a different note
+updates it; re-claim with no note leaves it).
+
+`gate show <id>` text mode lifts both into a dedicated `stake:`
+section under `status_log` so they don't read as transition entries:
+
+```
+  stake:
+    claimed by: leysia at 2026-05-08T14:23:04Z — held while debugging
+    witnesses: alice (watching dedup), bob, carol (perf)
+```
+
+### Templates (#235)
+
+`gate templates list` / `show` discover wave-brief skeletons
+shipped under `data/guild/templates/wave-brief/`. The registry
+surfaces them so agents pick a brief shape without scanning the
+filesystem; `gate request --template <name>` expands the chosen
+skeleton into action / reason while preserving caller overrides.
+
+```bash
+gate templates list                     # available template names
+gate templates show parallel-impl       # full template body
+gate request --template parallel-impl --executors a,b
+# action defaults to "wave-brief: parallel-impl"; reason defaults to
+# the template's `intended_use`. Both can be overridden with explicit
+# --action / --reason.
+```
+
+Records carry `template`, `template_version`, and
+`gate_required_acknowledged` so audits can tell template-shaped waves
+apart. Under `profile: swarm`, parallel-shaped waves
+(`--executors a,b`) emit a notice when filed without `--template`
+(Phase 1 — warning only; enforcement is follow-up).
+
+### Sessions (#249)
+
+Optional **session_id** dimension for multi-body coordination — one
+member running multiple shells, or a member coexisting with their
+AI agent counterpart. Without it, claim/witness records say "alice
+claimed wave 230" but can't disambiguate *which* alice.
+
+```bash
+gate boot --session-id eris-local-2026-05-08-evening
+# JSON payload echoes:
+#   "session_id": "eris-local-2026-05-08-evening"
+#   "session_id_source": "flag"
+
+export GUILD_SESSION_ID=eris-local-2026-05-08-evening
+gate request ...                # stamps `opened_by_session: <id>`
+gate claim 230 --by eris        # stamps `claimed_by_session: <id>`
+gate witness 230 --by erismind  # stamps `witness_sessions[erismind]: <id>`
+```
+
+- Format: free-form ASCII, regex `^[a-z0-9][a-z0-9_:.-]{0,63}$`.
+  Convention emerges per team (e.g. `eris-local-2026-05-08-evening`,
+  `terminal-A`, `claude-opus-4-7-run42`, `ci-build-12345`).
+- **Opt-in everywhere** — pre-#249 records and unstamped post-#249
+  writes round-trip byte-identical YAML (records-outlive-writers,
+  principle 04).
+- Discovery: `gate boot.hints.session_id_unset: true` when an actor
+  is resolved but no session is configured. Text mode prints a
+  one-shot notice with the env / flag fix.
+- Self-race detection: `gate boot.active_overlapping_targets[].parallel_session_authors`
+  flags an actor authoring ≥2 overlapping requests from ≥2 distinct
+  sessions on the same target. Text mode warns:
+  `⚠ same-actor parallel sessions: alice on target "src/foo" (sessions: A, B)`.
+- `gate show <id>` text mode threads session attribution through
+  `opened_by_session:` (header line, alongside other tool-stamped
+  backlinks) and `[session=<id>]` bracket tags in the `stake:` block.
+
+Session_id is **immutable in the trail**. There is no timeout, no
+heartbeat, no explicit lifecycle — `gate farewell` records the end
+as a write event; the session_id itself lives forever in whatever it
+claimed / witnessed / authored. A new session is just a new id.
 
 ---
 

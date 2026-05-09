@@ -23,17 +23,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync, rmSync, mkdirSync, realpathSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { writeFileSync, rmSync, mkdirSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { makeTempRoot } from '../util/tempRoot.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const GATE = resolve(here, '../../../bin/gate.mjs');
-
-function mkdtempReal(prefix: string): string {
-  return realpathSync(mkdtempSync(prefix));
-}
 
 interface Bootstrap {
   root: string;
@@ -41,7 +37,7 @@ interface Bootstrap {
 }
 
 function bootstrap(yaml: string): Bootstrap {
-  const root = mkdtempReal(join(tmpdir(), 'guild-selfapprove-'));
+  const root = makeTempRoot('guild-selfapprove-');
   writeFileSync(join(root, 'guild.config.yaml'), yaml);
   mkdirSync(join(root, 'members'));
   return { root, cleanup: () => rmSync(root, { recursive: true, force: true }) };

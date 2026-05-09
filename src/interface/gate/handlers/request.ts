@@ -1,6 +1,7 @@
 import { resolve as resolvePath } from 'node:path';
 import { realpathSync } from 'node:fs';
 import { resolveGuildActor } from '../../shared/resolveGuildActor.js';
+import { resolveGuildSessionId } from '../../shared/resolveGuildSessionId.js';
 import {
   ParsedArgs,
   requireOption,
@@ -8,6 +9,11 @@ import {
   rejectUnknownFlags,
 } from '../../shared/parseArgs.js';
 import { notFoundMessage } from '../../shared/notFoundHint.js';
+import {
+  fireBeforeHook,
+  fireAfterHook,
+  emitHookVeto,
+} from '../../../application/plugin/HookBus.js';
 
 // Known flags per write-verb. Silent-ignore of unknown flags (e.g.
 // `--executr noir` instead of `--executor noir`) would let a typo
@@ -25,6 +31,24 @@ const REQUEST_CREATE_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'auto-review',
   'with',
   'format',
+  // from-agora <play_id> bridges an agora-play most-recent suspension
+  // cliff/invitation into action/reason (issue #232). The `game` flag
+  // disambiguates cross-game play-id collisions (each agora game uses
+  // its own per-day sequence, so two games can both produce a
+  // YYYY-MM-DD-001) — same shape as the agora cliff verb game flag.
+  // (Apostrophes and backticks intentionally avoided in this comment:
+  // the schema drift detector parses Set-body string literals via a
+  // quote-pair regex (single, double, OR backtick), so any quote
+  // character in a comment can pair with one further down and slurp
+  // the in-between text into a fake flag entry. See
+  // schemaInputDriftDetector.test.ts.)
+  'from-agora',
+  'game',
+  // #235 wave-brief template registry: --template name expands a brief
+  // skeleton; explicit --action and --reason override the defaults.
+  // Mutually exclusive with --from-agora (both supply action/reason
+  // defaults; combining them would make precedence ambiguous).
+  'template',
 ]);
 const APPROVE_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'by',
@@ -91,6 +115,8 @@ const SHOW_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'fields',
 ]);
 import { Request } from '../../../domain/request/Request.js';
+import { AgoraPlayBridge } from '../../../application/request/AgoraPlayBridge.js';
+import { PlayIdAmbiguous } from '../../../passages/agora/interface/handlers/resolvePlay.js';
 import { formatDelta, pushMultilineField } from '../voices.js';
 import {
   C,
@@ -109,17 +135,183 @@ export async function reqCreate(c: C, args: ParsedArgs): Promise<number> {
   const from = normalizeActor(
     requireOption(args, 'from', '<m>', 'GUILD_ACTOR'),
   );
-  const action = requireOption(args, 'action', '"..."');
-  let reason = requireOption(args, 'reason', '"..."');
+  // --from-agora <play_id> (#232): when present, lifts the play's
+  // most-recent cliff/invitation into action/reason. Either flag may
+  // still be supplied explicitly to override the corresponding lift
+  // (action override → invitation lift dropped; reason override →
+  // cliff lift dropped). Plain `gate request` (no --from-agora) keeps
+  // the historical require-both contract.
+  const fromAgoraRaw = optionalOption(args, 'from-agora');
+  const gameFilter = optionalOption(args, 'game');
+  // --game without --from-agora is meaningless on `gate request`
+  // (the gate request surface has no other use for a game qualifier).
+  // Refuse up front rather than silently ignoring — silent ignore is
+  // the same fail-open class rejectUnknownFlags exists to prevent.
+  if (gameFilter !== undefined && fromAgoraRaw === undefined) {
+    process.stderr.write(
+      `error: --game requires --from-agora <play_id> ` +
+        `(--game disambiguates cross-game play-id collisions; it has ` +
+        `no meaning on a plain gate request).\n`,
+    );
+    return 1;
+  }
+
+  // #235 — wave-brief template skeleton expansion.
+  // When `--template <name>` is supplied, the template's `intended_use`
+  // becomes the default `--reason`, and a `wave-brief: <name>` summary
+  // becomes the default `--action`. Explicit `--action` / `--reason`
+  // override the skeleton; the template stamp itself (template name,
+  // version, gate-required acknowledgement) survives caller overrides.
+  //
+  // Mutex with --from-agora: both supply action/reason defaults, so
+  // combining them would make precedence ambiguous (does the play's
+  // invitation win, or the template's wave-brief stub?). Refuse up
+  // front rather than silently picking one — same fail-open class
+  // rejectUnknownFlags is built to prevent.
+  const templateName = optionalOption(args, 'template');
+  if (templateName !== undefined && fromAgoraRaw !== undefined) {
+    process.stderr.write(
+      `error: --template and --from-agora are mutually exclusive ` +
+        `(both supply default --action / --reason; precedence would be ` +
+        `ambiguous). Pick one: use --template <name> for a wave-brief ` +
+        `skeleton, or --from-agora <play_id> to bridge an agora play.\n`,
+    );
+    return 1;
+  }
+  let templateMeta:
+    | { name: string; version: number; intendedUse: string; gateRequired: boolean }
+    | undefined;
+  if (templateName !== undefined) {
+    const t = c.templateUC.show(templateName);
+    if (!t) {
+      const available = c.templateUC.list().map((s) => s.name);
+      const hint =
+        available.length === 0
+          ? `  (registry empty at ${c.templateUC.registryDir()})`
+          : `  available: ${available.join(', ')}`;
+      process.stderr.write(`error: unknown template "${templateName}"\n${hint}\n`);
+      return 1;
+    }
+    templateMeta = {
+      name: t.name,
+      version: t.version,
+      intendedUse: t.intendedUse,
+      gateRequired: t.gateRequired,
+    };
+  }
+
+  const actionRaw = optionalOption(args, 'action');
+  let reasonRaw = optionalOption(args, 'reason');
   // `--reason -` reads from stdin — parity with `gate review --comment -`.
   // Trim because heredoc / echo append a trailing newline that clutters
   // the rendered status_log note.
-  if (reason === '-') reason = (await readStdin()).trim();
+  if (reasonRaw === '-') reasonRaw = (await readStdin()).trim();
+
+  let action: string;
+  let reason: string;
+  let sourceAgoraPlay: string | undefined;
+
+  if (fromAgoraRaw !== undefined) {
+    const bridge = new AgoraPlayBridge(c.playRepo, c.config);
+    let result;
+    try {
+      result = await bridge.resolve(fromAgoraRaw, gameFilter);
+    } catch (err) {
+      if (err instanceof PlayIdAmbiguous) {
+        // Surface the same shape `agora cliff` does on cross-game
+        // collision — let the caller's outer envelope catch it. Re-
+        // throwing keeps a single source of truth for the message.
+        throw err;
+      }
+      throw err;
+    }
+    if (!result.ok) {
+      const r = result.refusal;
+      switch (r.kind) {
+        case 'invalid_id':
+          process.stderr.write(
+            `error: --from-agora "${r.raw}": ${r.detail}\n` +
+              `  hint: play ids look like 2026-05-08-001 (YYYY-MM-DD-NNN).\n`,
+          );
+          return 1;
+        case 'not_found':
+          process.stderr.write(
+            `error: --from-agora ${r.playId}: play not found in ${r.agoraRoot}/agora.\n` +
+              `  next: list candidates with \`agora list\` or check the play id.\n`,
+          );
+          return 1;
+        case 'concluded':
+          process.stderr.write(
+            `error: --from-agora ${r.playId}: play is concluded (game=${r.game}); ` +
+              `cannot bridge a closed thread into a new request.\n` +
+              `  next: open a fresh play (\`agora play --game ${r.game}\`) or ` +
+              `file the request without --from-agora.\n`,
+          );
+          return 1;
+        case 'no_suspension':
+          process.stderr.write(
+            `error: --from-agora ${r.playId}: play has no suspension on record ` +
+              `(state=${r.state}, game=${r.game}); nothing to bridge.\n` +
+              `  next: \`agora suspend ${r.playId} --cliff "..." --invitation "..."\` ` +
+              `to record a cliff first, or file the request without --from-agora.\n`,
+          );
+          return 1;
+      }
+    }
+    const lift = result.value;
+    sourceAgoraPlay = lift.playId;
+    // Lift policy (#232):
+    //   action  ← invitation  (the "what to do next" half — matches
+    //                          gate request's action semantics)
+    //   reason  ← cliff       (the "why / what was happening" half —
+    //                          matches gate request's reason semantics)
+    // Either explicit flag overrides its corresponding lift; the lifted
+    // half on the other axis is preserved. The structural sourceAgoraPlay
+    // record is kept regardless of overrides because the link is the
+    // point of the bridge — a request derived from a play stays linked
+    // even when the operator rewrote both fields.
+    action = actionRaw !== undefined && actionRaw.trim().length > 0
+      ? actionRaw
+      : lift.invitation;
+    reason = reasonRaw !== undefined && reasonRaw.trim().length > 0
+      ? reasonRaw
+      : lift.cliff;
+  } else if (templateMeta !== undefined) {
+    // #235 — template skeleton path. Defaults derive from the template;
+    // explicit --action / --reason override. The template stamp itself
+    // (name + version + gate_required ack) is set further below and
+    // survives any caller override of action/reason.
+    action =
+      actionRaw !== undefined && actionRaw.trim().length > 0
+        ? actionRaw
+        : `wave-brief: ${templateMeta.name}`;
+    if (reasonRaw !== undefined && reasonRaw.trim().length > 0) {
+      reason = reasonRaw;
+    } else if (templateMeta.intendedUse.length > 0) {
+      reason = templateMeta.intendedUse;
+    } else {
+      reason = `wave-brief template ${templateMeta.name} (v${templateMeta.version})`;
+    }
+  } else {
+    // Plain `gate request` — action/reason are both required, same
+    // contract as before #232. requireOption surfaces the usage hint
+    // when missing; we re-call it here so the error message stays
+    // identical to the historical one.
+    action = requireOption(args, 'action', '"..."');
+    reason = requireOption(args, 'reason', '"..."');
+    if (reason === '-') reason = (await readStdin()).trim();
+  }
   const input: Parameters<typeof c.requestUC.create>[0] = {
     from,
     action,
     reason,
   };
+  if (sourceAgoraPlay !== undefined) input.sourceAgoraPlay = sourceAgoraPlay;
+  if (templateMeta !== undefined) {
+    input.template = templateMeta.name;
+    input.templateVersion = templateMeta.version;
+    input.gateRequiredAcknowledged = true;
+  }
   const executor = optionalOption(args, 'executor');
   const executorsRaw = optionalOption(args, 'executors');
   const target = optionalOption(args, 'target');
@@ -170,6 +362,25 @@ export async function reqCreate(c: C, args: ParsedArgs): Promise<number> {
       );
     }
   }
+  // #235 — profile=swarm gating for parallel-shaped templates. Stub:
+  // the brief catalogue carries `template_name` like `parallel-impl`
+  // / `compare-and-ratify` that imply >1 executor; under swarm we
+  // *should* require `--template` for parallel-executor waves so the
+  // brief is on record. Phase 1 emits a warning notice only;
+  // enforcement (refuse without --template) is the follow-up. Single-
+  // executor and standard-profile callers are silent.
+  if (
+    c.config.profile === 'swarm' &&
+    parallelExecutors &&
+    templateMeta === undefined
+  ) {
+    process.stderr.write(
+      `notice: parallel executors under profile=swarm without --template ` +
+        `(#235 phase 1: warning only; enforcement is follow-up). ` +
+        `Consider \`gate templates list\` to find a wave-brief template, ` +
+        `or pass --template <name> when filing this request.\n`,
+    );
+  }
   // depth (issue #221): pre-check at the interface boundary so the
   // caller sees a flag-shaped error before the domain layer fires.
   // The advisory framing — 'shallow ⇒ surface point-check, deep ⇒
@@ -195,6 +406,13 @@ export async function reqCreate(c: C, args: ParsedArgs): Promise<number> {
   // id is allocated.
   const invokedBy = deriveInvokedBy(from);
   if (invokedBy !== undefined) input.invokedBy = invokedBy;
+  // Boot-context session_id (#249 slice 2). Read GUILD_SESSION_ID via
+  // the shared resolver — invalid values are treated as unset (the
+  // resolver emits a one-time stderr notice). Absence stays absent on
+  // disk so pre-#249 records and same-body unstamped writes both
+  // round-trip byte-identical YAML.
+  const sessionId = resolveGuildSessionId();
+  if (sessionId !== undefined) input.openedBySession = sessionId;
   const r = await c.requestUC.create(input);
   if (invokedBy !== undefined) {
     emitInvokedByNotice(from, invokedBy, 'request', r.id.value);
@@ -475,6 +693,22 @@ function formatRequestText(r: Request): string {
   if (j['promoted_from']) {
     lines.push(`  promoted_from: ${j['promoted_from']}`);
   }
+  // source_agora_play (#232) — agora play this request was bridged
+  // from via `gate request --from-agora`. Rendered next to
+  // promoted_from because both are tool-stamped backlinks ("this came
+  // out of <X>") and a reader scanning the header pairs them mentally.
+  if (j['source_agora_play']) {
+    lines.push(`  source_agora_play: ${j['source_agora_play']}`);
+  }
+  // opened_by_session (#249 slice 3) — the request author's boot
+  // session at create time. Sits with the other tool-stamped
+  // backlinks (promoted_from / source_agora_play) for the same
+  // "where did this come from" mental cluster. Absence is the
+  // common case (pre-#249 records, unstamped post-#249 writes); the
+  // line drops out entirely so byte-stable text rendering survives.
+  if (typeof j['opened_by_session'] === 'string' && j['opened_by_session'].length > 0) {
+    lines.push(`  opened_by_session: ${j['opened_by_session']}`);
+  }
   lines.push(`  created:  ${j['created_at']}`);
   lines.push('');
   pushMultilineField(lines, '  action:   ', String(j['action']));
@@ -516,22 +750,83 @@ function formatRequestText(r: Request): string {
       );
       prevAt = at;
     }
-    // Cross-session claim (issue #226). Surfaced just below the state
-    // log because logically it sits on the same axis as transitions:
-    // "who has this right now". Only rendered when set — unclaimed is
-    // the common case and a `(no claim)` line would clutter every
-    // show. JSON consumers read the structured fields directly.
-    if (typeof j['claimed_by'] === 'string' && typeof j['claimed_at'] === 'string') {
-      lines.push(`    claimed by: ${j['claimed_by']} at ${j['claimed_at']}`);
+  }
+
+  // Stake markers (issues #226 / #244): claim and witnesses sit on
+  // the "who has this right now / who has eyes on it" axis. Rendered
+  // as their own sub-section below status_log so they don't read as
+  // a transition entry — same indentation under the same header was
+  // misleading scanners (#245). Only emitted when at least one is
+  // set; an unstaked record produces no `stake:` block.
+  const hasClaim =
+    typeof j['claimed_by'] === 'string' && typeof j['claimed_at'] === 'string';
+  const hasWitnesses =
+    Array.isArray(j['witnesses']) && (j['witnesses'] as unknown[]).length > 0;
+  if (hasClaim || hasWitnesses) {
+    lines.push('');
+    lines.push('  stake:');
+    if (hasClaim) {
+      // Optional claim_note (issue #246) appended after an em-dash
+      // separator. Stays on one line so the stake block scans
+      // compactly even with several witnesses.
+      const claimNote =
+        typeof j['claim_note'] === 'string' && j['claim_note'].length > 0
+          ? ` — ${j['claim_note']}`
+          : '';
+      // claimed_by_session (#249 slice 3): inline `[session=<id>]`
+      // tag between actor and timestamp. Bracket form (rather than
+      // parens) keeps it visually distinct from claim_note's em-dash
+      // suffix so a reader scanning the line sees three independent
+      // axes: who, when, attribution.
+      const claimSession =
+        typeof j['claimed_by_session'] === 'string' && j['claimed_by_session'].length > 0
+          ? ` [session=${j['claimed_by_session']}]`
+          : '';
+      lines.push(
+        `    claimed by: ${j['claimed_by']}${claimSession} at ${j['claimed_at']}${claimNote}`,
+      );
     }
-    // Witnesses (issue #244). Surfaced just below the claim line —
-    // both share the "who has eyes on this right now" axis. Only
-    // rendered when non-empty; an unwitnessed record is the common
-    // case and an empty `witnesses:` line would clutter every show.
-    if (Array.isArray(j['witnesses']) && j['witnesses'].length > 0) {
-      const names = (j['witnesses'] as unknown[]).map((w) => String(w)).join(', ');
+    if (hasWitnesses) {
+      // Per-witness notes (issue #246) emitted inline as
+      // `name (note)` so a 5-witness wave with mixed annotations
+      // reads naturally:  `witnesses: alice (watching dedup), bob, carol (perf)`.
+      const witnessNotes =
+        j['witness_notes'] && typeof j['witness_notes'] === 'object' && !Array.isArray(j['witness_notes'])
+          ? (j['witness_notes'] as Record<string, string>)
+          : {};
+      // Per-witness session_id (#249 slice 3) surfaces as a
+      // bracket-tagged `[session=<id>]` suffix on the actor name.
+      // Mirrors the claim line's tagging shape so a reader sees one
+      // consistent annotation grammar across both stake variants.
+      const witnessSessions =
+        j['witness_sessions'] && typeof j['witness_sessions'] === 'object' && !Array.isArray(j['witness_sessions'])
+          ? (j['witness_sessions'] as Record<string, string>)
+          : {};
+      const names = (j['witnesses'] as unknown[]).map((w) => {
+        const name = String(w);
+        const note = witnessNotes[name];
+        const session = witnessSessions[name];
+        const noteSuffix =
+          typeof note === 'string' && note.length > 0 ? ` (${note})` : '';
+        const sessionSuffix =
+          typeof session === 'string' && session.length > 0
+            ? ` [session=${session}]`
+            : '';
+        return `${name}${noteSuffix}${sessionSuffix}`;
+      }).join(', ');
       lines.push(`    witnesses: ${names}`);
     }
+  }
+
+  // Template stamp (issue #235): wave-brief provenance. Lifted out
+  // of status_log alongside the stake markers (#245) — the same
+  // "looks like a log entry" anti-pattern applied here.
+  if (typeof j['template'] === 'string') {
+    const v =
+      typeof j['template_version'] === 'number' ? ` (v${j['template_version']})` : '';
+    const ack = j['gate_required_acknowledged'] === true ? ' [gate-ack]' : '';
+    lines.push('');
+    lines.push(`  template: ${j['template']}${v}${ack}`);
   }
 
   const reviews = Array.isArray(j['reviews']) ? j['reviews'] : [];
@@ -673,7 +968,17 @@ export async function reqApprove(c: C, args: ParsedArgs): Promise<number> {
       return 1;
     }
   }
+  // Lifecycle hook fire point (#36 Phase 1 step 5). `before:approve`
+  // sees the pre-mutation request snapshot; a veto blocks the
+  // transition. Fired AFTER the built-in self-approve check because
+  // a hook policy that depends on actor identity should compose with
+  // (not duplicate) the hard-coded gate.
+  if (prior !== null) {
+    const veto = await fireBeforeHook(c.hookSubscriptions, 'approve', prior, by);
+    if (veto) return emitHookVeto('approve', id, veto);
+  }
   const r = await c.requestUC.approve(id, by, note, invokedBy);
+  await fireAfterHook(c.hookSubscriptions, 'approve', r, by);
   // Self-approval notice. Suppressed under `allowed` (deployments that
   // actively rely on self-approve and don't want the audit line).
   // Preserved under `warn` — the historical default — so the
@@ -711,7 +1016,13 @@ export async function reqDeny(c: C, args: ParsedArgs): Promise<number> {
     emitDryRunPreview({ verb: 'deny', id, by, fromState, toState: r.state, after: r, format: parseFormat(args) });
     return 0;
   }
+  const priorDeny = await c.requestUC.show(id);
+  if (priorDeny !== null) {
+    const veto = await fireBeforeHook(c.hookSubscriptions, 'deny', priorDeny, by);
+    if (veto) return emitHookVeto('deny', id, veto);
+  }
   const r = await c.requestUC.deny(id, by, reason, invokedBy);
+  await fireAfterHook(c.hookSubscriptions, 'deny', r, by);
   emitWriteResponse(parseFormat(args), r, `✓ denied: ${id}`, c.config);
   return 0;
 }
@@ -795,7 +1106,12 @@ export async function reqExecute(c: C, args: ParsedArgs): Promise<number> {
     emitDryRunPreview({ verb: 'execute', id, by, fromState, toState: r.state, after: r, format: parseFormat(args) });
     return 0;
   }
+  if (target !== null) {
+    const veto = await fireBeforeHook(c.hookSubscriptions, 'execute', target, by);
+    if (veto) return emitHookVeto('execute', id, veto);
+  }
   const r = await c.requestUC.execute(id, by, note, invokedBy, { cwd });
+  await fireAfterHook(c.hookSubscriptions, 'execute', r, by);
   // `--executor` / `--executors` is informational, not access
   // control: the substrate records both the assignment and the actual
   // actor, but does not refuse a mismatched execute. Surface a notice
@@ -841,7 +1157,13 @@ export async function reqComplete(c: C, args: ParsedArgs): Promise<number> {
     emitDryRunPreview({ verb: 'complete', id, by, fromState, toState: r.state, after: r, format: parseFormat(args) });
     return 0;
   }
+  const priorComplete = await c.requestUC.show(id);
+  if (priorComplete !== null) {
+    const veto = await fireBeforeHook(c.hookSubscriptions, 'complete', priorComplete, by);
+    if (veto) return emitHookVeto('complete', id, veto);
+  }
   const r = await c.requestUC.complete(id, by, note, invokedBy);
+  await fireAfterHook(c.hookSubscriptions, 'complete', r, by);
   const extraLines: string[] = [];
   if (r.autoReview) {
     const reviewer = r.autoReview.value;
@@ -877,7 +1199,13 @@ export async function reqFail(c: C, args: ParsedArgs): Promise<number> {
     emitDryRunPreview({ verb: 'fail', id, by, fromState, toState: r.state, after: r, format: parseFormat(args) });
     return 0;
   }
+  const priorFail = await c.requestUC.show(id);
+  if (priorFail !== null) {
+    const veto = await fireBeforeHook(c.hookSubscriptions, 'fail', priorFail, by);
+    if (veto) return emitHookVeto('fail', id, veto);
+  }
   const r = await c.requestUC.fail(id, by, reason, invokedBy);
+  await fireAfterHook(c.hookSubscriptions, 'fail', r, by);
   emitWriteResponse(parseFormat(args), r, `✓ failed: ${id}`, c.config);
   return 0;
 }
@@ -1021,6 +1349,13 @@ export async function reqFastTrack(c: C, args: ParsedArgs): Promise<number> {
   if (executorsList !== undefined) createInput.executors = executorsList;
   if (autoReview !== undefined) createInput.autoReview = autoReview;
   if (withPartners.length > 0) createInput.with = withPartners;
+  // Same env-driven session stamp as `gate request` — fast-track is a
+  // single user-facing verb that compresses request → approve →
+  // execute → complete, but the create step is the legitimate carrier
+  // of `opened_by_session`.
+  const fastTrackSessionId = resolveGuildSessionId();
+  if (fastTrackSessionId !== undefined)
+    createInput.openedBySession = fastTrackSessionId;
   const created = await c.requestUC.create(createInput);
   const id = created.id.value;
 

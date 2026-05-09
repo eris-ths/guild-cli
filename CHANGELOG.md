@@ -38,6 +38,69 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
 
 ### Added
 
+- **`gate request --from-agora <play_id>` bridges agora play
+  cliff/invitation into request action/reason**
+  ([#232](https://github.com/eris-ths/guild-cli/issues/232)).
+  Surfaces the substrate-side link from agora (suspended-conversation
+  passage) into gate (request passage) without forcing the operator
+  to copy/paste prose between two CLIs. Lift policy: `action ←
+  invitation` (the "what to do next" half of the cliff), `reason ←
+  cliff` (the "what was happening" half); either flag may still be
+  passed explicitly to override its corresponding lift while the other
+  axis stays bridged. The play id is stamped structurally on
+  `Request.sourceAgoraPlay` (YAML key `source_agora_play`) so
+  `gate chain`-style walks see the agora→gate edge without scanning
+  free-form text. `--game <slug>` disambiguates cross-game play-id
+  collisions (each agora game sequences plays independently per day);
+  passing `--game` without `--from-agora` is refused as a flag-shaped
+  error rather than silently ignored. Refusal cases each carry an
+  actionable `next:` hint: concluded plays (terminal — open a fresh
+  play or file without `--from-agora`); playing-but-never-suspended
+  plays (no cliff to bridge — `agora suspend` first); not-found play
+  ids (surfaces the agora content_root the bridge consulted, so a
+  multi-root operator sees which tree rejected the lookup); invalid
+  id shape (names the YYYY-MM-DD-NNN format). Profile-agnostic — works
+  identically under `standard` and `swarm`. Byte-stable persistence:
+  `source_agora_play` is omitted from YAML when unset (every plain
+  `gate request` and every pre-#232 record); hydrate tolerates the
+  absence by leaving the field undefined. `gate show` renders
+  `source_agora_play: <id>` in text mode (next to `created:`) and
+  exposes the same key under the JSON payload. Mutually exclusive
+  with `--template` (#235) at the interface layer — both supply
+  action/reason defaults, so combining them is rejected with a
+  flag-shaped error rather than silently picking one.
+- **`feat(gate templates): wave-brief template registry — list / show /
+  --template skeleton expansion
+  ([#235](https://github.com/eris-ths/guild-cli/issues/235))**.
+  Adds two read subverbs (`gate templates list` / `gate templates show
+  <name>`) over a per-instance template SOT at
+  `<content_root>/data/guild/templates/wave-brief/`, and threads
+  `gate request --template <name>` through to stamp three new fields
+  on the request record (`template`, `template_version`,
+  `gate_required_acknowledged`). The skeleton expansion populates
+  `--action` / `--reason` from the template's frontmatter when the
+  caller omits them; explicit overrides win and the template stamp
+  survives. Templates are markdown files with YAML frontmatter
+  (`template_name` / `template_version` / `intended_use` /
+  `gate_required`); malformed frontmatter routes through the
+  conventional `onMalformed` warn-and-skip path so one bad file
+  doesn't take the registry offline. The public `guild-cli` repo does
+  NOT ship templates — each guild instance keeps its own brief
+  catalogue under `content_root`, and a missing dir is the legitimate
+  empty-registry case (the `list` surface emits a single-line advisory
+  rather than failing). Profile=swarm gating for parallel-executor
+  waves is in stub form for this phase: when `executors.length > 1`
+  is supplied without `--template`, a stderr notice points at the
+  registry and `gate templates list`, but the request still lands.
+  Enforcement (refuse without `--template` for parallel waves) is the
+  follow-up issue. Pre-#235 records lack all three template fields
+  and round-trip clean (records-outlive-writers, principle 04). Schema
+  declares the new `templates` verb under category `read` with a
+  `subcommand` discriminator; the schema-drift detector treats it as
+  a subcommand umbrella alongside `issues` and `inbox`. Mutually
+  exclusive with `--from-agora` (#232) at the interface layer (both
+  supply action/reason defaults).
+
 - **`features.self_approve: { allowed | warn | forbidden }` —
   profile-gated self-approve policy on `gate approve`**
   ([#233](https://github.com/eris-ths/guild-cli/issues/233)).

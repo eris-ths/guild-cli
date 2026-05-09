@@ -97,7 +97,10 @@ devil-specific records live under `<content_root>/devil/`:
 ## Verbs (v1, complete — 11 verbs)
 
 - `devil open <ref>` — start a review session against a target
-  (`--type pr|file|function|commit`)
+  (`--type pr|file|function|commit|system`). `system` is the
+  bird's-eye scope: free-form `<ref>` like `"guild-cli@v0.4.0"` or
+  `"the devil-review passage"`, pairing naturally with the
+  `coherence` lense. See #134 J1 for the design rationale.
 - `devil entry <rev-id>` — append a hand-rolled entry. `kind=finding`
   requires `--severity` AND `--severity-rationale` (the friction
   forces exploitability-context reasoning). Persona must be

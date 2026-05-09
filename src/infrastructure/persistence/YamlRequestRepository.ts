@@ -538,6 +538,26 @@ function hydrate(
     if (typeof obj['promoted_from'] === 'string') {
       props.promotedFrom = obj['promoted_from'] as string;
     }
+    // source_agora_play (#232). Tolerated as a string only — anything
+    // else is dropped silently following the same conservative read
+    // pattern as `promoted_from`. Pre-#232 records simply lack the
+    // field; treated as absent. Records-outlive-writers (principle 04):
+    // we never reject, only ignore. The interface layer validates
+    // play-id shape on the write path, so a hydrated value is trusted
+    // as-is here.
+    if (typeof obj['source_agora_play'] === 'string') {
+      props.sourceAgoraPlay = obj['source_agora_play'] as string;
+    }
+    // opened_by_session (#249). Tolerated as a non-empty string. Same
+    // permissive read pattern as source_agora_play / claim_note —
+    // we never reject, only ignore malformed values. Format
+    // validation lives at the write boundary (slice 2's `gate boot
+    // --session-id`); on read we trust whatever a future writer
+    // stamped. Pre-#249 records lack the field and hydrate as
+    // undefined.
+    if (typeof obj['opened_by_session'] === 'string' && obj['opened_by_session'].length > 0) {
+      props.openedBySession = obj['opened_by_session'];
+    }
     // requires_worktree_isolation (#231). Tolerated as a strict boolean
     // only — anything else (string "true", number 1) is dropped silently
     // following the same conservative read pattern as `depth`. Pre-#231
@@ -545,6 +565,36 @@ function hydrate(
     // writers (principle 04): we never reject, only ignore.
     if (obj['requires_worktree_isolation'] === true) {
       props.requiresWorktreeIsolation = true;
+    }
+    // Template stamp (#235). Hydrate when `template` is present and a
+    // non-empty string. `template_version` is tolerated as a positive
+    // integer (default 1 if absent / malformed); `gate_required_acknowledged`
+    // is tolerated as boolean (default true since presence of `template`
+    // is the positive assertion in phase 1). Pre-#235 records lack all
+    // three fields and round-trip clean. Records-outlive-writers
+    // (principle 04): malformed values degrade to defaults rather than
+    // dropping the whole record.
+    if (typeof obj['template'] === 'string' && (obj['template'] as string).length > 0) {
+      props.template = obj['template'] as string;
+      const rawVer = obj['template_version'];
+      if (typeof rawVer === 'number' && Number.isFinite(rawVer) && rawVer >= 1) {
+        props.templateVersion = Math.floor(rawVer);
+      } else {
+        if (rawVer !== undefined) {
+          onMalformed(
+            source,
+            `template_version is not a positive integer (got ${typeof rawVer === 'number' ? String(rawVer) : typeof rawVer}); defaulting to 1`,
+          );
+        }
+        props.templateVersion = 1;
+      }
+      const rawAck = obj['gate_required_acknowledged'];
+      if (typeof rawAck === 'boolean') {
+        props.gateRequiredAcknowledged = rawAck;
+      } else {
+        // presence of `template` implies acknowledgement in phase 1
+        props.gateRequiredAcknowledged = true;
+      }
     }
     // Cross-session claim (issue #226). Restore only when BOTH fields
     // are present and well-typed — a record with one of the two is
@@ -558,6 +608,28 @@ function hydrate(
     ) {
       props.claimedBy = MemberName.of(obj['claimed_by']);
       props.claimedAt = obj['claimed_at'] as string;
+      // claim_note (issue #246). Tolerated only as a non-empty
+      // string — empty / non-string values fall through to "no
+      // note", matching the domain rule that whitespace-only input
+      // collapses to undefined. Length cap is enforced on the next
+      // save; a hand-edited YAML carrying an over-long note hydrates
+      // verbatim so reads stay non-destructive (Devil-style "the
+      // record always wins on read"), and the next mutation that
+      // touches the note path goes through sanitizeText.
+      if (
+        typeof obj['claim_note'] === 'string' &&
+        obj['claim_note'].length > 0
+      ) {
+        props.claimNote = obj['claim_note'];
+      }
+      // claimed_by_session (issue #249). Same permissive read as
+      // opened_by_session — non-empty string only, otherwise drop.
+      if (
+        typeof obj['claimed_by_session'] === 'string' &&
+        obj['claimed_by_session'].length > 0
+      ) {
+        props.claimedBySession = obj['claimed_by_session'];
+      }
     }
     // Witnesses (issue #244). Restore only well-typed string entries;
     // anything else (objects, numbers) is dropped silently following
@@ -594,6 +666,56 @@ function hydrate(
         );
       }
       if (observers.length > 0) props.witnesses = observers;
+    }
+    // witness_notes (issue #246). Map keyed by lowercase actor name.
+    // Restored only when the field is a plain object whose values are
+    // non-empty strings; entries pointing at non-string or empty
+    // values are dropped silently (same tolerance as the witnesses
+    // array). Notes for actors NOT in `witnesses[]` are also dropped
+    // — a stray note has no anchor to attach to, and silently keeping
+    // it would muddy the next save's byte-stability. Pre-#246
+    // records and post-#246 records with no notes both lack the
+    // field and hydrate as undefined.
+    if (
+      obj['witness_notes'] !== null &&
+      typeof obj['witness_notes'] === 'object' &&
+      !Array.isArray(obj['witness_notes'])
+    ) {
+      const validActors = new Set(
+        (props.witnesses ?? []).map((m) => m.value),
+      );
+      const notes = new Map<string, string>();
+      for (const [actor, raw] of Object.entries(
+        obj['witness_notes'] as Record<string, unknown>,
+      )) {
+        if (typeof raw !== 'string' || raw.length === 0) continue;
+        if (!validActors.has(actor)) continue;
+        notes.set(actor, raw);
+      }
+      if (notes.size > 0) props.witnessNotes = notes;
+    }
+    // witness_sessions (issue #249). Same shape as witness_notes —
+    // map keyed by lowercase actor name, values are non-empty strings,
+    // entries for actors NOT in witnesses[] are dropped (no anchor).
+    // Pre-#249 records and same-body witness records both lack the
+    // field and hydrate as undefined.
+    if (
+      obj['witness_sessions'] !== null &&
+      typeof obj['witness_sessions'] === 'object' &&
+      !Array.isArray(obj['witness_sessions'])
+    ) {
+      const validActors = new Set(
+        (props.witnesses ?? []).map((m) => m.value),
+      );
+      const sessions = new Map<string, string>();
+      for (const [actor, raw] of Object.entries(
+        obj['witness_sessions'] as Record<string, unknown>,
+      )) {
+        if (typeof raw !== 'string' || raw.length === 0) continue;
+        if (!validActors.has(actor)) continue;
+        sessions.set(actor, raw);
+      }
+      if (sessions.size > 0) props.witnessSessions = sessions;
     }
     // mutation_seq (issue #244 follow-up; Devil REJECT root cause).
     // Counter for cross-session-mutating verbs (claim/witness/

@@ -144,6 +144,41 @@ When a stable surface element is scheduled for removal:
 2. The deprecation is announced in `CHANGELOG.md` under the minor release that introduces the warning.
 3. The element is removed **no earlier than one minor release later** in the 0.x line (or one major in 1.x).
 
+## Plugin stability
+
+`guild-cli` exposes extension surfaces — currently **doctor plugins**
+(implemented; see `src/application/diagnostic/DiagnosticUseCases.ts`)
+and the planned **verb / lifecycle-hook / content-transform** surfaces
+tracked under [#36](https://github.com/eris-ths/guild-cli/issues/36)
+Phase 1. The same versioning contract applies to all of them:
+
+- **Plugin contracts are additive within a 0.x line.** Hook signatures
+  (the parameter shape passed to a plugin) and verb-plugin export
+  shapes (`{ name, category, summary, input, output, run(c, args) }`)
+  MAY gain optional fields in any minor release. They MUST NOT be
+  renamed or removed without a minor bump and a `BREAKING` entry in
+  `CHANGELOG.md`.
+- **Hook firing order is part of the contract.** "Fire `before:approve`
+  before the state mutation" is a guarantee a plugin can rely on.
+  Reordering existing hooks (e.g. moving a hook to fire after a
+  different stage of the transition) is a breaking change.
+- **`gate schema` exposes the `source` discriminator.** Every verb in
+  the schema payload carries `source: 'core' | 'plugin'` so an MCP
+  wiring or LLM tool layer can tell built-in verbs from extensions.
+  Built-in verbs are `source: 'core'`; verb plugins (when the loader
+  ships) emit `source: 'plugin'`. The discriminator is a stability
+  guarantee, not a hint — consumers may filter on it without
+  cross-checking some other source of truth.
+- **Plugin failures are non-fatal.** `gate doctor` reports plugin
+  load errors as findings (the existing pattern for doctor plugins,
+  to be carried forward to verb / hook / transform plugins). A
+  broken plugin must not break the CLI's read verbs.
+
+The trust model for plugins is documented in
+[`SECURITY.md`](../SECURITY.md) § "Plugin trust model" — plugins run
+in-process with full Node.js capabilities, and the `trusted: true`
+guard on `guild.config.yaml` is the consent surface.
+
 ## Security fixes
 
 Security patches may ship in any release type (patch, minor, major).

@@ -15,6 +15,30 @@ const MAX_TEXT = 4096;
 const MAX_REVIEWS = 50;
 const MAX_THANKS = 50;
 const MAX_STATUS_LOG = 100;
+/**
+ * Stake-note ceiling (issue #246). Single short string per claim or
+ * per witness — terminal-friendly, fits one line in `gate show` and
+ * resists the "let's discuss it here" drift that motivated the
+ * silent-stake principle in the first place. Wider context belongs
+ * in agora plays; the note is metadata for the stake event, not
+ * commentary on lifecycle.
+ */
+const MAX_STAKE_NOTE = 80;
+
+/**
+ * Session-id format (issue #249). Free-form ASCII string —
+ * convention emerges per team. Validation intentionally permissive:
+ * lowercase alphanumeric + `_-.:` separators, length-capped to keep
+ * YAML readable and grep-friendly. Empty / control / whitespace-mixed
+ * strings are rejected at the boundary.
+ *
+ * Examples that pass:
+ *   eris-local-2026-05-08-evening
+ *   terminal-a
+ *   claude-opus-4-7-run42
+ *   ci-build-12345
+ */
+export const SESSION_ID_RE = /^[a-z0-9][a-z0-9_:.-]{0,63}$/;
 
 export interface StatusLogEntry {
   state: RequestState;
@@ -95,6 +119,21 @@ export interface RequestProps {
    */
   promotedFrom?: string;
   /**
+   * Tool-generated structured link to the agora play this request was
+   * derived from (via `gate request --from-agora <play_id>`). Populated
+   * by the `--from-agora` bridge orchestration in the interface layer;
+   * undefined for plain `gate request` calls. Distinct from text mentions
+   * of a play id in action/reason: `--from-agora` lifts the play's
+   * cliff/invitation prose into the action+reason fields, AND records
+   * the play id structurally here so `gate chain`-style walks can
+   * traverse the agora→gate edge without scanning free-form text.
+   *
+   * Same shape as `promotedFrom` (the issue→request equivalent). Issue
+   * #232 — surfaces "this request came out of <play>" without forcing
+   * the operator to remember to mention the id in prose.
+   */
+  sourceAgoraPlay?: string;
+  /**
    * Worktree-isolation requirement (issue #231). When true, parallel
    * `gate execute` invocations on the same target from the SAME
    * filesystem cwd are refused — the second `execute` errors out so
@@ -106,6 +145,30 @@ export interface RequestProps {
    * record, including all pre-#231 history.
    */
   requiresWorktreeIsolation?: boolean;
+  /**
+   * Wave-brief template registry (#235). When the request was created
+   * via `gate request --template <name>`, the chosen template name is
+   * stamped here so downstream consumers can recover "which brief did
+   * this wave start from?" without re-parsing free-text fields.
+   *
+   * Persistence: `template` / `template_version` / `gate_required_acknowledged`
+   * are emitted only when `template` is set (the trio moves together —
+   * if you stamped a template, the version and gate-acknowledgement
+   * round-trip with it). Pre-#235 records lack all three fields and
+   * hydrate as undefined (template-less). Byte-stable round-trip for
+   * non-template records. */
+  template?: string;
+  /** Template version (#235). Currently always 1; bumps if a template's
+   *  intended_use or skeleton meaningfully changes. Paired with
+   *  `template`; if `template` is set, this is set too. */
+  templateVersion?: number;
+  /** Acknowledgement that the template's `gate_required: true` contract
+   *  was honoured at request-creation time (#235). Always recorded as
+   *  true on a templated request — phase-1 is "we shipped via the
+   *  template path". A future release may surface a `--no-gate` opt-out
+   *  for stub experiments; until then the field's presence is a
+   *  positive assertion, not a toggle. */
+  gateRequiredAcknowledged?: boolean;
   state: RequestState;
   createdAt: string;
   reviews: Review[];
@@ -136,6 +199,29 @@ export interface RequestProps {
    *  fields move together — set together, cleared together. */
   claimedAt?: string;
   /**
+   * Optional short metadata attached to the claim (issue #246).
+   *
+   * Tight-scope: a single string up to MAX_STAKE_NOTE chars,
+   * overwritten on re-claim by the same actor. Sanitized via the
+   * shared text path (control chars stripped, trim, length capped),
+   * so empty / whitespace-only input lands as undefined. Cleared
+   * with the rest of the claim on terminal auto-reset and on
+   * different-actor refusal (the latter doesn't reach the field
+   * because the throw happens first — but the rule is symmetric
+   * with `claimedBy` for the future explicit-release verb).
+   *
+   * NOT a discussion forum: the schema description names this
+   * "metadata, not commentary" so the surface stays thin. Cross-
+   * actor talk belongs in agora plays; the elements that warrant
+   * a stake note are things like "watching for the dedup fix" or
+   * "blocked on review #233" — single-line context that scoped to
+   * the current stake event.
+   *
+   * Persistence: omitted from YAML when undefined (byte-stable
+   * round-trip with pre-#246 records).
+   */
+  claimNote?: string;
+  /**
    * Cross-session non-exclusive observers (issue #226 phase 2 / #244).
    * Sibling primitive to `claimedBy`: where claim is "I'm working on
    * this right now, do not double-stake" (exclusive, refuses on
@@ -151,6 +237,55 @@ export interface RequestProps {
    * terminal record carries no further race signal.
    */
   witnesses?: MemberName[];
+  /**
+   * Per-witness short metadata (issue #246). Map keyed by lowercase
+   * actor name, mirroring `witnesses[]`. Same tight-scope rules as
+   * `claimNote`: single string ≤ MAX_STAKE_NOTE chars, overwrite-on-
+   * re-witness, sanitized empty → omitted. Witnesses without notes
+   * are simply absent from the map; an unannotated witness list with
+   * no notes round-trips as the field being undefined. unwitness
+   * removes both the witness entry and (if present) its note.
+   *
+   * NOT a discussion forum — same caveat as `claimNote`. The map
+   * shape was chosen over a parallel-array-of-objects so byte-stable
+   * round-trip stays trivial: pre-#246 records have neither field;
+   * post-#246 records that nobody noted on still have neither field.
+   */
+  witnessNotes?: Map<string, string>;
+  /**
+   * Cross-session actor identity (issue #249 — multi-body
+   * coordination, slice 1: schema only).
+   *
+   * `gate claim 230 --by eris` cannot distinguish *which* eris —
+   * terminal A, the ErisMind agent, or yesterday's session. The
+   * three optional `*_by_session` fields below let each session
+   * stamp a session_id alongside the member identifier so the
+   * trail answers "which eris" instead of "an eris".
+   *
+   * Schema-only slice (this commit): the fields can be hydrated
+   * from disk (a future writer's record reaches an older reader)
+   * and round-trip clean, but no code path SETS them yet.
+   * Slice 2 wires `gate boot --session-id` / `GUILD_SESSION_ID`
+   * so write verbs stamp the value at the entry layer.
+   *
+   * Format: free-form ASCII `^[a-z0-9][a-z0-9_:.-]{0,63}$` —
+   * convention emerges per team (`eris-local-2026-05-08-evening`,
+   * `terminal-A`, `claude-opus-4-7-runX`, `ci-build-12345`). The
+   * substrate's job is to record what actors named themselves;
+   * resolving "is X the same body as Y" is a reader's problem.
+   *
+   * Persistence: omit-when-undefined, mirroring `claim_note` /
+   * `witness_notes` / `depth`. Pre-#249 records lack the fields
+   * entirely and round-trip byte-identically.
+   */
+  openedBySession?: string;
+  claimedBySession?: string;
+  /**
+   * Per-witness session_id, keyed by lowercase actor name (mirrors
+   * `witnessNotes`'s shape). Same omit-when-empty rule: if no
+   * witness has stamped a session, the field is absent on disk.
+   */
+  witnessSessions?: Map<string, string>;
   /**
    * Monotonic mutation counter for cross-session-mutating verbs that
    * are NOT append-only on a recorded array (issue #244 follow-up;
@@ -240,12 +375,29 @@ export class Request {
     /** See RequestProps.promotedFrom — issue id this request was
      *  promoted from. Populated by `gate issues promote` only. */
     promotedFrom?: string;
+    /** See RequestProps.sourceAgoraPlay — agora play id this request
+     *  was bridged from (via `gate request --from-agora <play_id>`).
+     *  Populated by the --from-agora orchestration only. Issue #232. */
+    sourceAgoraPlay?: string;
     /** See RequestProps.requiresWorktreeIsolation — set by the
      *  interface layer when profile=swarm + executors.length > 1.
      *  Persisted as `requires_worktree_isolation: true` only when
      *  truthy; older / single-executor / standard-profile records
      *  carry no field at all (false-by-absence). Issue #231. */
     requiresWorktreeIsolation?: boolean;
+    /** Template stamp (#235). If `template` is set, `templateVersion`
+     *  must be a positive integer and `gateRequiredAcknowledged` is
+     *  recorded as true. The interface layer is the only legitimate
+     *  caller that supplies these; non-CLI callers may pass them too
+     *  if they're enforcing the same contract. */
+    template?: string;
+    templateVersion?: number;
+    gateRequiredAcknowledged?: boolean;
+    /** Session_id for the boot context that opened this request (issue
+     *  #249 slice 2). Validated against `SESSION_ID_RE`; an invalid
+     *  value throws so the interface layer's pre-validation never
+     *  silently no-ops at the domain boundary. */
+    openedBySession?: string;
   }): Request {
     const from = MemberName.of(input.from);
     const action = sanitizeText(input.action, 'action');
@@ -337,12 +489,61 @@ export class Request {
     if (input.promotedFrom !== undefined) {
       props.promotedFrom = input.promotedFrom;
     }
+    if (input.sourceAgoraPlay !== undefined) {
+      // sanitizeText guards length/charset the same way action/reason
+      // are guarded — a malformed play id smuggled into the field at
+      // a non-CLI entry point still gets normalized. The interface
+      // layer pre-validates with parsePlayId, so this is the second
+      // line of defence.
+      props.sourceAgoraPlay = sanitizeText(input.sourceAgoraPlay, 'sourceAgoraPlay');
+    }
     // Worktree-isolation: persist only when explicitly true. The
     // false case is represented by field absence on disk so the YAML
     // surface stays minimal (matches `depth`, `with`, `target` etc).
     // Issue #231.
     if (input.requiresWorktreeIsolation === true) {
       props.requiresWorktreeIsolation = true;
+    }
+    // Template stamp (#235). Persist all three fields together when a
+    // template was chosen — version and gate-required acknowledgement
+    // are meaningless without the template name. Validation: name must
+    // be a non-empty string (the interface layer also pre-checks
+    // against the registry); version must be a positive integer.
+    if (input.template !== undefined) {
+      const name = String(input.template).trim();
+      if (name.length === 0) {
+        throw new DomainError(
+          'template name must be a non-empty string',
+          'template',
+        );
+      }
+      const version = input.templateVersion ?? 1;
+      if (!Number.isInteger(version) || version < 1) {
+        throw new DomainError(
+          `template_version must be a positive integer, got ${version}`,
+          'templateVersion',
+        );
+      }
+      props.template = name;
+      props.templateVersion = version;
+      // Phase 1: presence of `template` implies the gate-required
+      // contract was honoured — there is no opt-out yet. Record as
+      // true unconditionally so a hydrate-then-resave round-trip
+      // produces byte-stable YAML even if the input arg was omitted.
+      props.gateRequiredAcknowledged = input.gateRequiredAcknowledged ?? true;
+    }
+    // Session_id (#249 slice 2). Validated at the domain boundary so
+    // non-CLI callers can't smuggle in a malformed value. Empty strings
+    // skip persistence — same convention as `target` / `with`.
+    if (input.openedBySession !== undefined && input.openedBySession.length > 0) {
+      if (!SESSION_ID_RE.test(input.openedBySession)) {
+        throw new DomainError(
+          `openedBySession "${input.openedBySession}" does not match the ` +
+            `session_id format (lowercase alphanumeric + _-.: separators, ≤64 chars).`,
+          'openedBySession',
+        );
+      }
+      props.openedBySession = input.openedBySession;
     }
     // New requests have no on-disk predecessor; loadedVersion=0 marks
     // "never seen" for the optimistic-lock check in save().
@@ -410,6 +611,14 @@ export class Request {
   get promotedFrom(): string | undefined {
     return this.props.promotedFrom;
   }
+  /** Issue #232 — agora play id this request was bridged from via
+   *  `gate request --from-agora <play_id>`. Undefined for plain
+   *  requests (the common case). Read surface used by `formatRequestText`
+   *  to render the source-play line and by JSON consumers reading
+   *  `source_agora_play` directly. */
+  get sourceAgoraPlay(): string | undefined {
+    return this.props.sourceAgoraPlay;
+  }
   get with(): readonly MemberName[] {
     return this.props.with ?? [];
   }
@@ -420,6 +629,17 @@ export class Request {
    *  the gate execute handler to gate the cwd-collision check. */
   get requiresWorktreeIsolation(): boolean {
     return this.props.requiresWorktreeIsolation === true;
+  }
+  /** Template registry stamp (#235). Undefined when the request was
+   *  created without `--template`; pre-#235 records always undefined. */
+  get template(): string | undefined {
+    return this.props.template;
+  }
+  get templateVersion(): number | undefined {
+    return this.props.templateVersion;
+  }
+  get gateRequiredAcknowledged(): boolean | undefined {
+    return this.props.gateRequiredAcknowledged;
   }
   /** Most recent `executing` status_log entry's cwd, or undefined
    *  when the request has never been executed (or when the on-disk
@@ -555,9 +775,37 @@ export class Request {
   get claimedBy(): MemberName | undefined {
     return this.props.claimedBy;
   }
+  /** Optional metadata attached to the current claim. Undefined when
+   *  unclaimed or when the claimer didn't supply a --note. Issue #246. */
+  get claimNote(): string | undefined {
+    return this.props.claimNote;
+  }
+  /**
+   * Per-witness notes keyed by lowercase actor name. Empty map when
+   * no witness has noted; absent witnesses simply have no entry.
+   * Returned as a read-only view. Issue #246.
+   */
+  get witnessNotes(): ReadonlyMap<string, string> {
+    return this.props.witnessNotes ?? new Map();
+  }
   /** ISO timestamp matched with `claimedBy`. Undefined when unclaimed. */
   get claimedAt(): string | undefined {
     return this.props.claimedAt;
+  }
+  /** Session_id stamped at request creation (#249). Undefined when
+   *  the author didn't declare a session. */
+  get openedBySession(): string | undefined {
+    return this.props.openedBySession;
+  }
+  /** Session_id paired with `claimedBy` (#249). Undefined when
+   *  unclaimed or when the claimer didn't declare a session. */
+  get claimedBySession(): string | undefined {
+    return this.props.claimedBySession;
+  }
+  /** Per-witness session_id, keyed by lowercase actor name (#249).
+   *  Empty map when no witness has stamped a session. */
+  get witnessSessions(): ReadonlyMap<string, string> {
+    return this.props.witnessSessions ?? new Map();
   }
 
   /**
@@ -580,7 +828,7 @@ export class Request {
    * State guard is checked here (domain invariant) rather than only at
    * the use case so non-CLI callers can't bypass it.
    */
-  claim(by: MemberName, at: string): void {
+  claim(by: MemberName, at: string, note?: string, bySession?: string): void {
     if (this.props.state !== 'pending' && this.props.state !== 'approved') {
       throw new DomainError(
         `Cannot claim a request in state "${this.props.state}"; ` +
@@ -589,10 +837,61 @@ export class Request {
         'state',
       );
     }
+    // Optional stake-note (issue #246). Sanitize at the boundary so
+    // empty / whitespace-only input lands as undefined, the cap
+    // throws if exceeded, and the value stored is identical to what
+    // round-trip emits. Per the tight-scope rule the note is metadata
+    // for THIS stake event — re-claim by the same actor with a new
+    // note overwrites; absence on re-claim leaves the prior note in
+    // place (doesn't clear it — clearing requires a release/terminal).
+    let cleanedNote: string | undefined;
+    if (note !== undefined) {
+      cleanedNote = sharedSanitizeText(note, 'claim_note', {
+        maxLen: MAX_STAKE_NOTE,
+        requireNonEmpty: false,
+      });
+      if (cleanedNote.length === 0) cleanedNote = undefined;
+    }
+    // Optional session_id (#249 slice 2). Validated against the same
+    // SESSION_ID_RE the create path uses; an invalid value throws so
+    // a malformed env value never lands silently.
+    let cleanedSession: string | undefined;
+    if (bySession !== undefined && bySession.length > 0) {
+      if (!SESSION_ID_RE.test(bySession)) {
+        throw new DomainError(
+          `claimedBySession "${bySession}" does not match the session_id format`,
+          'claimedBySession',
+        );
+      }
+      cleanedSession = bySession;
+    }
     const existing = this.props.claimedBy;
     if (existing !== undefined) {
       if (existing.value === by.value) {
-        // Idempotent re-claim — see method doc. No mutation, no log.
+        // Same-actor re-claim. Idempotent on the (claim, claimedBy,
+        // claimedAt) pair — re-stamping the timestamp would muddy
+        // "when did this stake first land". The note is the only
+        // field that may genuinely differ session-to-session, so it
+        // updates if and only if the caller supplied one and it
+        // diverges from what's stored. Empty/whitespace --note is
+        // already collapsed to undefined above, so a bare re-claim
+        // (no flag) is a true no-op.
+        let mutated = false;
+        if (cleanedNote !== undefined && cleanedNote !== this.props.claimNote) {
+          this.props.claimNote = cleanedNote;
+          mutated = true;
+        }
+        // Session id may legitimately differ across re-claims by the
+        // same actor (different shells / orchestrator runs share an
+        // identity). Overwrite-only-on-divergence mirrors the note rule.
+        if (
+          cleanedSession !== undefined &&
+          cleanedSession !== this.props.claimedBySession
+        ) {
+          this.props.claimedBySession = cleanedSession;
+          mutated = true;
+        }
+        if (mutated) this.bumpMutationSeq();
         return;
       }
       throw new DomainError(
@@ -605,6 +904,8 @@ export class Request {
     }
     this.props.claimedBy = by;
     this.props.claimedAt = at;
+    if (cleanedNote !== undefined) this.props.claimNote = cleanedNote;
+    if (cleanedSession !== undefined) this.props.claimedBySession = cleanedSession;
     // Real mutation — bump so the optimistic-lock token moves and a
     // concurrent claim by another actor (which would race past the
     // status_log+reviews+thanks length check, since claim doesn't
@@ -622,6 +923,14 @@ export class Request {
     if (this.props.claimedBy === undefined) return;
     delete this.props.claimedBy;
     delete this.props.claimedAt;
+    // claim_note (issue #246) moves with the claim — terminal
+    // auto-reset clears it alongside, so a closed record never
+    // carries a stale stake note.
+    delete this.props.claimNote;
+    // Same rationale for claimed_by_session (#249) — the session is
+    // metadata for the stake itself; once the stake clears, the
+    // session attribution has nothing to attach to.
+    delete this.props.claimedBySession;
     // Per-actor accounting: a terminal frontier that clears one claim
     // counts as one mutation. See `RequestProps.mutationSeq` for the
     // rationale (observability of how many actors were mediating at
@@ -654,7 +963,7 @@ export class Request {
    * this" signal, whereas claim on `executing` would be too late to
    * mediate the cross-session race claim is designed for.
    */
-  witness(by: MemberName): void {
+  witness(by: MemberName, note?: string, bySession?: string): void {
     if (
       this.props.state !== 'pending' &&
       this.props.state !== 'approved' &&
@@ -667,13 +976,70 @@ export class Request {
         'state',
       );
     }
+    // Optional stake-note (issue #246) — same tight-scope rules as
+    // claim's. Sanitized empty → undefined; whitespace-only --note is
+    // a true no-op on the note dimension (re-witness with bare flag
+    // doesn't fire a mutation just to clear an absent note).
+    let cleanedNote: string | undefined;
+    if (note !== undefined) {
+      cleanedNote = sharedSanitizeText(note, 'witness_note', {
+        maxLen: MAX_STAKE_NOTE,
+        requireNonEmpty: false,
+      });
+      if (cleanedNote.length === 0) cleanedNote = undefined;
+    }
+    // Optional session_id (#249 slice 2). Same SESSION_ID_RE gate as
+    // claim's; throws on a malformed value so a typo can never silently
+    // overwrite a previously-stamped session.
+    let cleanedSession: string | undefined;
+    if (bySession !== undefined && bySession.length > 0) {
+      if (!SESSION_ID_RE.test(bySession)) {
+        throw new DomainError(
+          `witnessSession "${bySession}" does not match the session_id format`,
+          'witnessSession',
+        );
+      }
+      cleanedSession = bySession;
+    }
     const list = this.props.witnesses ?? [];
-    if (list.some((m) => m.value === by.value)) {
-      // Idempotent re-witness — already observing, no mutation.
+    const actorKey = by.value;
+    if (list.some((m) => m.value === actorKey)) {
+      // Same-actor re-witness. Update the note if and only if the
+      // caller supplied one and it diverges from what's stored —
+      // mirrors claim's overwrite-only-on-divergence rule. A bare
+      // `gate witness <id>` re-run stays a true no-op.
+      const notes = this.props.witnessNotes;
+      const current = notes?.get(actorKey);
+      let mutated = false;
+      if (cleanedNote !== undefined && cleanedNote !== current) {
+        const map = notes ?? new Map<string, string>();
+        map.set(actorKey, cleanedNote);
+        this.props.witnessNotes = map;
+        mutated = true;
+      }
+      const sessions = this.props.witnessSessions;
+      const currentSession = sessions?.get(actorKey);
+      if (cleanedSession !== undefined && cleanedSession !== currentSession) {
+        const map = sessions ?? new Map<string, string>();
+        map.set(actorKey, cleanedSession);
+        this.props.witnessSessions = map;
+        mutated = true;
+      }
+      if (mutated) this.bumpMutationSeq();
       return;
     }
     list.push(by);
     this.props.witnesses = list;
+    if (cleanedNote !== undefined) {
+      const map = this.props.witnessNotes ?? new Map<string, string>();
+      map.set(actorKey, cleanedNote);
+      this.props.witnessNotes = map;
+    }
+    if (cleanedSession !== undefined) {
+      const map = this.props.witnessSessions ?? new Map<string, string>();
+      map.set(actorKey, cleanedSession);
+      this.props.witnessSessions = map;
+    }
     // Real mutation — bump for the same reason claim does. See
     // `bumpMutationSeq` doc and `RequestProps.mutationSeq`.
     this.bumpMutationSeq();
@@ -725,6 +1091,25 @@ export class Request {
     } else {
       this.props.witnesses = list;
     }
+    // Drop the per-actor note (issue #246) alongside the witness
+    // entry. unwitness is a removal of the stake; the note is
+    // metadata for that stake and has no meaning once the actor is
+    // gone from the list. If this leaves the map empty, drop the
+    // map prop entirely so YAML round-trips byte-identically to a
+    // record that never had any witness notes.
+    const notes = this.props.witnessNotes;
+    if (notes !== undefined) {
+      notes.delete(by.value);
+      if (notes.size === 0) delete this.props.witnessNotes;
+    }
+    // witness_sessions (#249) tracks per-actor session attribution —
+    // same lifecycle as the witness entry it annotates. Drop alongside
+    // the note so an empty-after-removal map collapses to absence.
+    const sessions = this.props.witnessSessions;
+    if (sessions !== undefined) {
+      sessions.delete(by.value);
+      if (sessions.size === 0) delete this.props.witnessSessions;
+    }
     // Real mutation — bump so two concurrent unwitness calls by
     // different actors don't both pass the optimistic-lock check
     // (which sees identical pre-mutation length on both sides) and
@@ -743,6 +1128,14 @@ export class Request {
     if (list === undefined || list.length === 0) return;
     const cleared = list.length;
     delete this.props.witnesses;
+    // Per-witness notes (issue #246) move with the witnesses on
+    // terminal auto-reset, same rationale as claim_note: closed
+    // records carry no stake metadata.
+    delete this.props.witnessNotes;
+    // Per-witness session attribution (#249) lives on the same
+    // lifecycle — terminal records carry no live observation context,
+    // so the session map clears alongside the witnesses.
+    delete this.props.witnessSessions;
     // Per-actor accounting: bump once per cleared witness so a
     // terminal frontier collapsing N witnesses contributes +N to the
     // version token. Keeps "how many actors were observing at close"
@@ -851,11 +1244,35 @@ export class Request {
       out['with'] = this.props.with.map((m) => m.value);
     if (this.props.promotedFrom !== undefined)
       out['promoted_from'] = this.props.promotedFrom;
+    // source_agora_play (#232). Surface only when set — the field
+    // is absent on every plain `gate request` and on every pre-#232
+    // record. Byte-stable round-trip: omit-when-undefined matches the
+    // hydrate "absent ⇒ undefined" branch below.
+    if (this.props.sourceAgoraPlay !== undefined)
+      out['source_agora_play'] = this.props.sourceAgoraPlay;
+    // Session_id stamped at request creation (issue #249). Surface
+    // only when set — pre-#249 records and same-body single-session
+    // requests both emit byte-identical YAML on round-trip. Slice 1
+    // hydrates this on read but no code path SETS it yet; slice 2
+    // wires `gate boot --session-id` so authoring stamps the value.
+    if (this.props.openedBySession !== undefined)
+      out['opened_by_session'] = this.props.openedBySession;
     // Worktree isolation requirement (#231). Surface only when true —
     // the YAML stays minimal and pre-#231 records remain byte-stable
     // on round-trip (false-by-absence is the load tolerance).
     if (this.props.requiresWorktreeIsolation === true) {
       out['requires_worktree_isolation'] = true;
+    }
+    // Template registry stamp (#235). The trio (template,
+    // template_version, gate_required_acknowledged) moves together —
+    // all-set or all-absent. Pre-#235 records and template-less post-
+    // #235 records both emit byte-identical YAML on round-trip.
+    if (this.props.template !== undefined) {
+      out['template'] = this.props.template;
+      out['template_version'] = this.props.templateVersion ?? 1;
+      if (this.props.gateRequiredAcknowledged !== undefined) {
+        out['gate_required_acknowledged'] = this.props.gateRequiredAcknowledged;
+      }
     }
     // Cross-session claim (issue #226). Both fields move together —
     // present-when-set, omitted-when-clear — so YAML stays byte-stable
@@ -867,6 +1284,18 @@ export class Request {
     if (this.props.claimedBy !== undefined && this.props.claimedAt !== undefined) {
       out['claimed_by'] = this.props.claimedBy.value;
       out['claimed_at'] = this.props.claimedAt;
+      // Optional metadata for the claim (issue #246). Surface only
+      // when set so pre-#246 records and noteless claims both emit
+      // byte-identical YAML on round-trip.
+      if (this.props.claimNote !== undefined) {
+        out['claim_note'] = this.props.claimNote;
+      }
+      // Session_id paired with the claim (issue #249). Same omit-
+      // when-undefined rule. Pre-#249 records and same-body claims
+      // (no session declared) both round-trip byte-identically.
+      if (this.props.claimedBySession !== undefined) {
+        out['claimed_by_session'] = this.props.claimedBySession;
+      }
     }
     // Witnesses (issue #244). Surface only when non-empty — empty
     // witnesses is the common case and an empty array would clutter
@@ -876,6 +1305,30 @@ export class Request {
     const witnessList = this.props.witnesses ?? [];
     if (witnessList.length > 0) {
       out['witnesses'] = witnessList.map((m) => m.value);
+    }
+    // Per-witness metadata (issue #246). Map keyed by lowercase
+    // actor name. Surfaced as a plain object for YAML — ordered
+    // implicitly by Map insertion (mirroring witness registration
+    // order). Omitted entirely when no witness has noted, so a
+    // post-#246 record with no notes round-trips byte-identically
+    // to a pre-#246 record.
+    if (this.props.witnessNotes !== undefined && this.props.witnessNotes.size > 0) {
+      const notes: Record<string, string> = {};
+      for (const [actor, note] of this.props.witnessNotes) {
+        notes[actor] = note;
+      }
+      out['witness_notes'] = notes;
+    }
+    // Per-witness session_id (issue #249). Same shape as
+    // witness_notes — map keyed by lowercase actor name, omitted
+    // entirely when empty. Pre-#249 and same-body witness records
+    // both round-trip without the field.
+    if (this.props.witnessSessions !== undefined && this.props.witnessSessions.size > 0) {
+      const sessions: Record<string, string> = {};
+      for (const [actor, session] of this.props.witnessSessions) {
+        sessions[actor] = session;
+      }
+      out['witness_sessions'] = sessions;
     }
     // mutation_seq (issue #244 follow-up). Surface only when > 0 so
     // pre-#244 records and never-mediated post-#244 records both emit

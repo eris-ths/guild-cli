@@ -28,21 +28,32 @@ const SCHEMA_KNOWN_FLAGS: ReadonlySet<string> = new Set(['format', 'verb']);
  *    consumable by any schema-aware LLM.
  */
 
-type JsonSchema = {
+export type JsonSchema = {
   type?: string;
   properties?: Record<string, JsonSchema>;
   required?: string[];
   enum?: string[];
   description?: string;
   items?: JsonSchema;
+  oneOf?: JsonSchema[];
 };
 
-interface VerbSchema {
+export interface VerbSchema {
   readonly name: string;
   readonly summary: string;
   readonly category: 'read' | 'write' | 'admin' | 'meta';
   readonly input: JsonSchema;
   readonly output: JsonSchema;
+  /**
+   * Origin discriminator (issue #36 Phase 1 groundwork). Built-in
+   * verbs declared in this file omit the field and are emitted as
+   * `source: 'core'` by `schemaCmd`'s default. The forthcoming
+   * verb-plugin loader will register schemas with `source: 'plugin'`
+   * so MCP wirings and LLM tool layers can filter built-in surface
+   * from extensions without cross-checking another source of truth.
+   * Stability contract: `docs/POLICY.md` § "Plugin stability".
+   */
+  readonly source?: 'core' | 'plugin';
 }
 
 const str: JsonSchema = { type: 'string' };
@@ -245,6 +256,22 @@ const VERBS: readonly VerbSchema[] = [
         format: formatField,
         tail: { type: 'string', description: 'utterances to include in tail (default 10)' },
         utterances: { type: 'string', description: 'your-recent utterance count (default 5)' },
+        'session-id': {
+          type: 'string',
+          description:
+            'Boot-context session_id (#249 slice 2). When set, validated ' +
+            'against the SESSION_ID_RE format (lowercase alphanumeric + ' +
+            '_-.: separators, ≤64 chars) and echoed in the payload as ' +
+            '`session_id` so an orchestrator can confirm what value will ' +
+            'be stamped on subsequent write verbs (request / claim / ' +
+            'witness). Does NOT export the value; the caller is expected ' +
+            'to `export GUILD_SESSION_ID=<id>` to make it available to ' +
+            'downstream invocations. Resolution priority: --session-id ' +
+            '(this flag) > GUILD_SESSION_ID env > none. Per the issue ' +
+            '#249 opt-in policy, an actor-resolved boot with no session ' +
+            'surfaces `hints.session_id_unset: true` so the feature is ' +
+            'discoverable without forcing a value.',
+        },
       },
     },
     output: {
@@ -252,6 +279,25 @@ const VERBS: readonly VerbSchema[] = [
       properties: {
         actor: str,
         role: { type: 'string', enum: ['member', 'host', 'unknown'] },
+        session_id: {
+          type: 'string',
+          description:
+            'Boot-context session_id (#249 slice 2). Echoes the value ' +
+            'resolved from --session-id (this invocation) or ' +
+            'GUILD_SESSION_ID env (whole shell). null when neither is ' +
+            'set. Subsequent gate request / claim / witness calls in ' +
+            'the same shell with GUILD_SESSION_ID exported will stamp ' +
+            'this id into opened_by_session / claimed_by_session / ' +
+            'witness_sessions[<actor>].',
+        },
+        session_id_source: {
+          type: 'string',
+          enum: ['flag', 'env'],
+          description:
+            'Names which input populated `session_id`: "flag" when ' +
+            '--session-id was supplied on this invocation, "env" when ' +
+            'GUILD_SESSION_ID was the source, null when neither.',
+        },
         status: { type: 'object' },
         tail: { type: 'array' },
         your_recent: { type: 'array' },
@@ -269,6 +315,67 @@ const VERBS: readonly VerbSchema[] = [
             "entry point — closes the substrate-side Zeigarnik continuity " +
             'across session boundaries (records-outlive-writers requires ' +
             'records also be findable on re-entry).',
+        },
+        active_overlapping_targets: {
+          type: 'array',
+          description:
+            'Cross-session race detection (issue #234). Active ' +
+            "(pending|approved|executing) requests sharing a `target` " +
+            'string, grouped by target, surfaced when any group has ' +
+            'size ≥ 2. Exact-match grouping; fuzzy variants are out of ' +
+            'scope per the issue. Empty array in the no-overlap common ' +
+            'case. Per-entry: { target, requests: [{ id, state, ' +
+            'executors[], claimed_by | null }] }; per-target requests ' +
+            'are sorted by id ascending. Phase 1 surfaces the warning ' +
+            'on every profile (the swarm-side refuse-on-create lives ' +
+            "with the parent epic #227, not in this slot).",
+          items: {
+            type: 'object',
+            properties: {
+              target: { type: 'string' },
+              requests: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    id: { type: 'string' },
+                    state: {
+                      type: 'string',
+                      enum: ['pending', 'approved', 'executing'],
+                    },
+                    executors: { type: 'array', items: { type: 'string' } },
+                    claimed_by: { type: 'string' },
+                    opened_by_session: {
+                      type: 'string',
+                      description:
+                        'session_id this request was authored under ' +
+                        '(#249 slice 4). Carried verbatim from the ' +
+                        "record's opened_by_session field. Omitted when " +
+                        'the record has no session stamp (pre-#249 or ' +
+                        'unstamped post-#249 writes).',
+                    },
+                  },
+                },
+              },
+              parallel_session_authors: {
+                type: 'object',
+                description:
+                  'Members in this overlap group who authored ≥2 ' +
+                  'requests from ≥2 distinct sessions (#249 slice 4). ' +
+                  'Map keys are member names (lowercase, canonical); ' +
+                  'values are the distinct session_ids the member ' +
+                  'authored from inside this group, in first-mention ' +
+                  'order. Omitted when no member self-races. The boot ' +
+                  'text rendering surfaces a per-actor warning ' +
+                  '(`⚠ same-actor parallel sessions: ...`) for each ' +
+                  'entry; JSON consumers branch on the field directly. ' +
+                  'Detection requires ≥2 of the actor\'s records in ' +
+                  "the group to carry an opened_by_session AND those " +
+                  'values to diverge — pre-#249 / unstamped records do ' +
+                  'NOT count toward divergence (provenance unknown).',
+              },
+            },
+          },
         },
         suggested_next: {
           type: 'object',
@@ -528,6 +635,21 @@ const VERBS: readonly VerbSchema[] = [
       properties: {
         actor: str,
         session_hint: str,
+        last_boundary: {
+          type: 'object',
+          description:
+            'Most recent session-boundary record stamped by this actor (#36 Phase 2). ' +
+            "Null when the actor has no `gate rest` / `gate wake` / `gate farewell` " +
+            'records on file. Distinct from `session_hint` (which is the actor\'s last ' +
+            'activity timestamp); a boundary record is an explicit "I am putting this ' +
+            'down" / "picking it back up" / "until next session" stamp.',
+          properties: {
+            kind: { type: 'string', enum: ['rest', 'wake', 'farewell'] },
+            at: str,
+            age_hint: str,
+            note: strOpt(),
+          },
+        },
         last_context: {
           type: 'object',
           properties: {
@@ -539,6 +661,87 @@ const VERBS: readonly VerbSchema[] = [
         },
         suggested_next: { type: 'object' },
         restoration_prose: str,
+      },
+    },
+  },
+  {
+    name: 'rest',
+    category: 'write',
+    summary:
+      'boundary record (#36 Phase 2): stamps a "putting this down now" timestamp; not a lifecycle toggle. Optional --note. Pairs with `gate wake` — both verbs are independent, the relationship is observed by readers.',
+    input: {
+      type: 'object',
+      properties: {
+        by: strOpt('actor (defaults to $GUILD_ACTOR)'),
+        note: strOpt('optional free-form context (≤ 240 chars)'),
+        format: formatField,
+      },
+    },
+    output: {
+      type: 'object',
+      properties: {
+        ok: { type: 'boolean' },
+        id: { type: 'string', description: 'YYYY-MM-DD-NNN per-day sequence' },
+        kind: { type: 'string', enum: ['rest', 'wake', 'farewell'] },
+        by: str,
+        at: str,
+        note: strOpt(),
+        message: str,
+        suggested_next: { type: 'object' },
+      },
+    },
+  },
+  {
+    name: 'wake',
+    category: 'write',
+    summary:
+      'boundary record (#36 Phase 2): stamps a "picking this back up" timestamp. Pairs with `gate rest` but does NOT require a prior rest record. Suggests `gate boot` next so a returning agent re-orients.',
+    input: {
+      type: 'object',
+      properties: {
+        by: strOpt('actor (defaults to $GUILD_ACTOR)'),
+        note: strOpt('optional free-form context (≤ 240 chars)'),
+        format: formatField,
+      },
+    },
+    output: {
+      type: 'object',
+      properties: {
+        ok: { type: 'boolean' },
+        id: { type: 'string', description: 'YYYY-MM-DD-NNN per-day sequence' },
+        kind: { type: 'string', enum: ['rest', 'wake', 'farewell'] },
+        by: str,
+        at: str,
+        note: strOpt(),
+        message: str,
+        suggested_next: { type: 'object' },
+      },
+    },
+  },
+  {
+    name: 'farewell',
+    category: 'write',
+    summary:
+      'ceremonial close (#36 Phase 2): stamps an "until next session" timestamp. Distinct from `gate rest` — farewell ends the session, rest is a mid-session break. Pairs with `gate resume` at the next session start. suggested_next is null (terminal in the session sense).',
+    input: {
+      type: 'object',
+      properties: {
+        by: strOpt('actor (defaults to $GUILD_ACTOR)'),
+        note: strOpt('optional free-form context (≤ 240 chars)'),
+        format: formatField,
+      },
+    },
+    output: {
+      type: 'object',
+      properties: {
+        ok: { type: 'boolean' },
+        id: { type: 'string', description: 'YYYY-MM-DD-NNN per-day sequence' },
+        kind: { type: 'string', enum: ['rest', 'wake', 'farewell'] },
+        by: str,
+        at: str,
+        note: strOpt(),
+        message: str,
+        suggested_next: { type: 'object' },
       },
     },
   },
@@ -754,8 +957,16 @@ const VERBS: readonly VerbSchema[] = [
       type: 'object',
       properties: {
         from: strOpt('author (defaults to $GUILD_ACTOR)'),
-        action: str,
-        reason: str,
+        action: strOpt(
+          'request action. Required UNLESS --from-agora is supplied; ' +
+            'with --from-agora the play\'s suspension `invitation` is ' +
+            'used as action (override by passing --action explicitly).',
+        ),
+        reason: strOpt(
+          'request reason. Required UNLESS --from-agora is supplied; ' +
+            'with --from-agora the play\'s suspension `cliff` is used ' +
+            'as reason (override by passing --reason explicitly).',
+        ),
         executor: strOpt('single executor (mutually exclusive with --executors)'),
         executors: strOpt(
           'comma-separated executor list, whitespace-trimmed per entry, ' +
@@ -781,11 +992,67 @@ const VERBS: readonly VerbSchema[] = [
         },
         'auto-review': strOpt('member assigned as critic'),
         with: strOpt('comma-separated dialogue partners (pair-mode)'),
+        'from-agora': strOpt(
+          'agora play id (YYYY-MM-DD-NNN) to bridge into this request ' +
+            '(#232). Lifts the play\'s most-recent suspension cliff into ' +
+            '--reason and invitation into --action; either flag may still ' +
+            'be passed explicitly to override the corresponding lift. ' +
+            'Stamps source_agora_play on the record so `gate chain`-style ' +
+            'walks see the agora→gate edge. Refuses on concluded plays ' +
+            'and on plays with no suspension on record (state=playing, ' +
+            'never suspended).',
+        ),
+        game: strOpt(
+          'agora game slug; only meaningful with --from-agora (#232). ' +
+            'Disambiguates cross-game play-id collisions (each game ' +
+            'sequences plays independently per day). Errors when passed ' +
+            'without --from-agora.',
+        ),
         format: formatField,
+        template: strOpt(
+          'wave-brief template name (#235). Expands a brief skeleton ' +
+            'into action/reason defaults; explicit --action / --reason ' +
+            "override. The template name + version are stamped onto the " +
+            'request record (template / template_version / ' +
+            'gate_required_acknowledged). Use `gate templates list` to ' +
+            'see the catalogue.',
+        ),
       },
-      required: ['action', 'reason'],
+      // action/reason are conditionally required: required unless one
+      // of `--from-agora` (#232) or `--template` (#235) is supplied,
+      // each of which provides its own action/reason defaults. `oneOf`
+      // expresses the three-shape contract for JSON Schema consumers
+      // (codegen, form-builders, AI tool-use schemas) so they don't
+      // read action as unconditionally optional. The runtime handler
+      // enforces the same branches via `requireOption`, and rejects
+      // `--from-agora` + `--template` as mutually exclusive (both
+      // supply defaults; precedence would be ambiguous).
+      required: [],
+      oneOf: [
+        { required: ['action', 'reason'] },
+        { required: ['from-agora'] },
+        { required: ['template'] },
+      ],
     },
     output: writeResponseSchema,
+  },
+  {
+    name: 'templates',
+    category: 'read',
+    summary:
+      'wave-brief template registry (#235). Subcommands: list (catalogue), show <name> (full body). The template SOT lives at <content_root>/data/guild/templates/wave-brief/; missing dir is the legitimate empty-registry case (public-repo / fresh-install).',
+    input: {
+      type: 'object',
+      properties: {
+        subcommand: {
+          type: 'string',
+          enum: ['list', 'show'],
+        },
+        name: strOpt('template name (positional, `show` only)'),
+        format: formatField,
+      },
+    },
+    output: { type: 'object' },
   },
   {
     name: 'approve',
@@ -923,6 +1190,15 @@ const VERBS: readonly VerbSchema[] = [
       properties: {
         id: idStr,
         by: strOpt('claimant (defaults to $GUILD_ACTOR)'),
+        note: strOpt(
+          'optional stake metadata (issue #246). Single short string ' +
+            '≤ 80 chars — metadata for THIS stake event, not commentary. ' +
+            'Cross-actor discussion belongs in agora plays; the note is ' +
+            'for context like "watching the dedup fix" or "blocked on ' +
+            'review #233". Same-actor re-claim with a divergent --note ' +
+            'overwrites the previous note (single value per claim). ' +
+            'Auto-cleared on terminal transitions and on release.',
+        ),
         format: formatField,
         'dry-run': dryRunField,
       },
@@ -944,6 +1220,14 @@ const VERBS: readonly VerbSchema[] = [
       properties: {
         id: idStr,
         by: strOpt('observer (defaults to $GUILD_ACTOR)'),
+        note: strOpt(
+          'optional per-witness metadata (issue #246). Single short string ' +
+            '≤ 80 chars — metadata for THIS stake event, not commentary. ' +
+            'Cross-actor discussion belongs in agora plays. Same-actor ' +
+            're-witness with a divergent --note overwrites the previous ' +
+            'note (single value per witness). Auto-cleared on terminal ' +
+            'transitions and on unwitness.',
+        ),
         format: formatField,
         'dry-run': dryRunField,
       },
@@ -1187,16 +1471,31 @@ const VERBS: readonly VerbSchema[] = [
   },
 ];
 
-export async function schemaCmd(_c: C, args: ParsedArgs): Promise<number> {
+export async function schemaCmd(c: C, args: ParsedArgs): Promise<number> {
   rejectUnknownFlags(args, SCHEMA_KNOWN_FLAGS, 'schema');
   const format = optionalOption(args, 'format') ?? 'json';
   if (format !== 'json' && format !== 'text') {
     throw new Error(`--format must be 'json' or 'text', got: ${format}`);
   }
   const verbFilter = optionalOption(args, 'verb');
+  // Plugin verbs (#36 Phase 1 step 4) are spliced into the schema
+  // payload as siblings of built-ins. They carry `source: 'plugin'`
+  // so a consumer can filter on origin without a name lookup. Built-
+  // ins always come first — `gate schema --format text` reads
+  // top-down, and burying core surface under plugins would push the
+  // most-used verbs off-screen on small terminals.
+  const pluginVerbs: VerbSchema[] = c.verbPlugins.map((p) => ({
+    name: p.name,
+    category: p.category,
+    summary: p.summary,
+    input: p.input,
+    output: p.output,
+    source: 'plugin',
+  }));
+  const allVerbs: VerbSchema[] = [...VERBS, ...pluginVerbs];
   const verbs = verbFilter
-    ? VERBS.filter((v) => v.name === verbFilter)
-    : VERBS;
+    ? allVerbs.filter((v) => v.name === verbFilter)
+    : allVerbs;
   if (verbFilter && verbs.length === 0) {
     throw new Error(`unknown verb: ${verbFilter}`);
   }
@@ -1209,6 +1508,13 @@ export async function schemaCmd(_c: C, args: ParsedArgs): Promise<number> {
     verbs: verbs.map((v) => ({
       name: v.name,
       category: v.category,
+      // `source` defaults to 'core' when the VerbSchema entry omits
+      // it — the built-in VERBS table never sets it explicitly so a
+      // future loader landing 'plugin' is the only signal worth
+      // emitting verbatim. Always emitted on the wire so consumers
+      // never see undefined and can filter unconditionally. See
+      // VerbSchema interface comment for the discrimination contract.
+      source: v.source ?? 'core',
       summary: v.summary,
       input: v.input,
       output: v.output,
@@ -1220,7 +1526,13 @@ export async function schemaCmd(_c: C, args: ParsedArgs): Promise<number> {
     const lines: string[] = [];
     for (const v of verbs) {
       const req = v.input.required?.join(', ') ?? '';
-      lines.push(`${v.name} [${v.category}] — ${v.summary}`);
+      // `source` is rendered only for plugin verbs — every built-in
+      // verb is `core` and a `[core]` tag on every line would just
+      // be noise (voice budget). The plugin marker calls attention
+      // to extensions because filtering by it is the typical reason
+      // a reader would consult `gate schema --format text`.
+      const src = v.source === 'plugin' ? ' [plugin]' : '';
+      lines.push(`${v.name} [${v.category}]${src} — ${v.summary}`);
       if (req) lines.push(`  required: ${req}`);
     }
     process.stdout.write(lines.join('\n') + '\n');

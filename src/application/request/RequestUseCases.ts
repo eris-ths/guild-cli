@@ -64,6 +64,25 @@ export class RequestUseCases {
      *  when profile=swarm + executors.length > 1. Persisted only
      *  when true; absence reads as false. */
     requiresWorktreeIsolation?: boolean;
+    /** Source agora play id (#232). Set by the `--from-agora` bridge
+     *  in the interface layer when the request action/reason were
+     *  derived from an agora play's invitation/cliff. Persisted only
+     *  when set (absence is the common case). */
+    sourceAgoraPlay?: string;
+    /** Wave-brief template stamp (#235). Threads through from the
+     *  interface layer's `--template` flag. The trio (template name,
+     *  version, gate_required acknowledgement) moves together; if the
+     *  caller supplies `template`, the version defaults to 1 and
+     *  acknowledgement to true. Mutually exclusive with
+     *  `sourceAgoraPlay` at the interface layer (both supply
+     *  action/reason defaults). */
+    template?: string;
+    templateVersion?: number;
+    gateRequiredAcknowledged?: boolean;
+    /** Boot-context session_id (#249 slice 2). Passed through verbatim
+     *  to `Request.create`, which validates against `SESSION_ID_RE`.
+     *  Empty / undefined skips persistence. */
+    openedBySession?: string;
   }): Promise<Request> {
     const { requests, members, clock } = this.deps;
     const from = await assertActor(input.from, '--from', members);
@@ -123,6 +142,18 @@ export class RequestUseCases {
       createArgs.promotedFrom = input.promotedFrom;
     if (input.requiresWorktreeIsolation === true)
       createArgs.requiresWorktreeIsolation = true;
+    if (input.sourceAgoraPlay !== undefined)
+      createArgs.sourceAgoraPlay = input.sourceAgoraPlay;
+    if (input.template !== undefined) {
+      createArgs.template = input.template;
+      if (input.templateVersion !== undefined)
+        createArgs.templateVersion = input.templateVersion;
+      if (input.gateRequiredAcknowledged !== undefined)
+        createArgs.gateRequiredAcknowledged = input.gateRequiredAcknowledged;
+    }
+    if (input.openedBySession !== undefined && input.openedBySession.length > 0) {
+      createArgs.openedBySession = input.openedBySession;
+    }
 
     for (let attempt = 0; attempt < 10; attempt++) {
       createArgs.id = RequestId.generate(now, seq);
@@ -308,6 +339,12 @@ export class RequestUseCases {
   async claim(input: {
     id: string;
     by: string;
+    note?: string;
+    /** Boot-context session_id (#249 slice 2). When set, paired with
+     *  the claim as `claimed_by_session` for cross-session
+     *  attribution. Validated against `SESSION_ID_RE` at the domain
+     *  boundary. */
+    bySession?: string;
     dryRun?: boolean;
   }): Promise<{ request: Request; mutated: boolean }> {
     const actor = await assertActor(input.by, '--by', this.deps.members);
@@ -320,9 +357,19 @@ export class RequestUseCases {
     // safe and bounded.
     return retryOnVersionConflict('claim', input.id, async () => {
       const req = await this.loadOrThrow(input.id);
-      const before = req.claimedBy?.value;
-      req.claim(actor, this.deps.clock.now().toISOString());
-      const mutated = before !== req.claimedBy?.value;
+      // mutationSeq is the canonical "real change happened" witness —
+      // covers the (#246) case where a same-actor re-claim with a
+      // divergent --note is a real mutation even though claimedBy
+      // didn't change. Pre-#246 the claimedBy delta sufficed; under
+      // notes, it doesn't.
+      const before = req.mutationSeq;
+      req.claim(
+        actor,
+        this.deps.clock.now().toISOString(),
+        input.note,
+        input.bySession,
+      );
+      const mutated = req.mutationSeq !== before;
       if (mutated && !input.dryRun) await this.deps.requests.save(req);
       return { request: req, mutated };
     });
@@ -339,14 +386,22 @@ export class RequestUseCases {
   async witness(input: {
     id: string;
     by: string;
+    note?: string;
+    /** Boot-context session_id (#249 slice 2). When set, stamped into
+     *  `witness_sessions[<actor>]` so a parallel-session run shows
+     *  per-witness attribution. Validated at the domain boundary. */
+    bySession?: string;
     dryRun?: boolean;
   }): Promise<{ request: Request; mutated: boolean }> {
     const actor = await assertActor(input.by, '--by', this.deps.members);
     return retryOnVersionConflict('witness', input.id, async () => {
       const req = await this.loadOrThrow(input.id);
-      const before = req.witnesses.length;
-      req.witness(actor);
-      const mutated = before !== req.witnesses.length;
+      // mutationSeq tracks both first-time witness and same-actor
+      // re-witness with a divergent note (#246) — the latter doesn't
+      // change witnesses.length but is a real mutation.
+      const before = req.mutationSeq;
+      req.witness(actor, input.note, input.bySession);
+      const mutated = req.mutationSeq !== before;
       if (mutated && !input.dryRun) await this.deps.requests.save(req);
       return { request: req, mutated };
     });

@@ -1,4 +1,5 @@
 import { resolveGuildActor } from '../../shared/resolveGuildActor.js';
+import { resolveGuildSessionId } from '../../shared/resolveGuildSessionId.js';
 import { resolve } from 'node:path';
 import {
   ParsedArgs,
@@ -6,11 +7,13 @@ import {
   rejectUnknownFlags,
 } from '../../shared/parseArgs.js';
 import { C, loadAllRequestsAsJson, parseOptionalIntOption } from './internal.js';
+import { SESSION_ID_RE } from '../../../domain/request/Request.js';
 
 const BOOT_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'format',
   'tail',
   'utterances',
+  'session-id',
 ]);
 import { collectStatus, StatusSummary } from './status.js';
 import { collectUtterances } from '../voices.js';
@@ -86,6 +89,91 @@ export type BootSuggestedNextOrPendingResponse =
   | BootBroadcastPendingResponse;
 
 /**
+ * Surface for active (non-terminal) requests sharing a target.
+ *
+ * Two or more `pending` / `approved` / `executing` requests pointing
+ * at the same `target` string indicate cross-session race risk:
+ * substrate-experiment 5 saw an independent session pre-empt our
+ * #221 implementation because nobody booted into "someone else is
+ * already working on that target".
+ *
+ * Detection is exact-match on the freeform `target` field. Fuzzy
+ * grouping (startsWith / contains) would false-positive on common
+ * path prefixes (`src/`, `data/guild/templates`) and is deferred —
+ * see issue #234 "overlap 検知ロジック".
+ *
+ * Profile gating: phase 1 surfaces overlaps as a notice on every
+ * profile. The harder enforcement (`profile: swarm` refuses
+ * unclaimed overlapping requests at create time) is the parent
+ * epic's territory (#227) and not in this slot.
+ *
+ * Empty array when no active group has size ≥ 2; readers should
+ * gate text rendering on `length > 0` to avoid emitting a noise
+ * section in the common "no overlap" case.
+ */
+export interface BootActiveOverlap {
+  /** The shared target string, verbatim. */
+  target: string;
+  /**
+   * The active requests sharing the target, in id ascending order
+   * (deterministic across runs so an agent doing diff reasoning
+   * over successive boots sees stable membership).
+   */
+  requests: ReadonlyArray<{
+    id: string;
+    state: 'pending' | 'approved' | 'executing';
+    /** Recorded executors. May be empty (none assigned yet). */
+    executors: readonly string[];
+    /**
+     * Member who staked an exclusive claim via `gate claim` (#226
+     * phase 1). Omitted when nobody has claimed — absence on read
+     * is the unclaimed signal, mirroring the omit-when-undefined
+     * convention used elsewhere on this payload (e.g.
+     * `inbox_unread[].expects_response`). Renders as `claim_held`
+     * in text mode so a coordinating actor sees who currently owns
+     * the wave at a glance.
+     */
+    claimed_by?: string;
+    /**
+     * The session_id under which this request was authored (#249
+     * slice 4). Carried verbatim from the record's
+     * `opened_by_session` field. Surfaced inside the overlap
+     * payload so the reader can spot the self-race shape: one
+     * member with multiple overlapping records authored from
+     * different sessions. Omitted when the record has no session
+     * stamp — pre-#249 records and unstamped post-#249 writes both
+     * present absence as the signal-free case.
+     */
+    opened_by_session?: string;
+  }>;
+  /**
+   * Members in this overlap group who authored ≥2 requests from
+   * ≥2 distinct sessions (#249 slice 4). Map keys are member names
+   * (lowercase, canonical); values are the distinct session_ids
+   * the member authored from inside this group, in first-mention
+   * order. Empty / omitted when no member's authorship splits
+   * across sessions.
+   *
+   * The "self-race" surface: an actor running two shells (or two
+   * AI agents on the same machine) may legitimately not realize
+   * they have overlapping work in flight under their own name.
+   * This map names exactly that case so the boot text rendering
+   * can prompt: "you have parallel sessions on the same target —
+   * was the second one intended?".
+   *
+   * Detection requires that ≥2 of the actor's records in the
+   * group carry an `opened_by_session` AND those values diverge.
+   * A pre-#249 record with no session stamp does NOT count toward
+   * the divergence (we cannot know what session it came from); a
+   * post-#249 unstamped record (caller didn't `export
+   * GUILD_SESSION_ID`) similarly does not. Detection is best-
+   * effort: it surfaces the case the substrate can prove, not
+   * every possible parallel-shell scenario.
+   */
+  parallel_session_authors?: Record<string, readonly string[]>;
+}
+
+/**
  * gate boot [--format json|text] [--tail <N>] [--utterances <N>]
  *
  * Single-command session orientation for agents. Composes the
@@ -114,6 +202,25 @@ export type BootSuggestedNextOrPendingResponse =
 interface BootPayload {
   actor: string | null;
   role: 'member' | 'host' | 'unknown' | null;
+  /**
+   * Boot-context session_id (#249 slice 2). Resolution priority:
+   *   1. `--session-id <id>` flag on this invocation.
+   *   2. `GUILD_SESSION_ID` env var.
+   *   3. null — unstamped session.
+   *
+   * `source` names which input won; null when neither was provided.
+   * Surfaces here so an orchestrator that calls `gate boot` to
+   * acquire the orientation payload can also discover what session
+   * id will be stamped on subsequent write verbs (request / claim /
+   * witness). `--session-id` does NOT persist or export the value
+   * itself — the caller is expected to `export GUILD_SESSION_ID=<id>`
+   * to make it available to downstream invocations. Per the issue
+   * #249 opt-in policy, an actor-resolved boot with no session
+   * surfaces a hint inside `hints.session_id_unset` so the feature
+   * is discoverable without forcing a value.
+   */
+  session_id: string | null;
+  session_id_source: 'flag' | 'env' | null;
   status: StatusSummary;
   tail: ReturnType<typeof collectUtterances>;
   your_recent: ReturnType<typeof collectUtterances> | null;
@@ -153,6 +260,17 @@ interface BootPayload {
    * (quarantine) — the onboarding unlock is named in `fix_hint`.
    */
   hints: {
+    /**
+     * `session_id_unset` (#249 slice 2): true iff GUILD_ACTOR resolved
+     * (so we have a real session to talk about) AND no session_id was
+     * supplied via flag or env. Surface fires the discovery hint so
+     * an actor running `gate boot` for the first time post-#249 sees
+     * the new opt-in without having to read the changelog. Suppressed
+     * for unauthenticated boots (actor=null) — there is no session to
+     * stamp anyway, and emitting the hint there would be noise on
+     * every fresh-start orientation.
+     */
+    session_id_unset: boolean;
     misconfigured_cwd: boolean;
     /**
      * `cwd_outside_content_root`: true iff the caller's cwd is NOT
@@ -194,6 +312,15 @@ interface BootPayload {
    * findable on re-entry, not just present on disk.
    */
   cross_passage: Record<string, PassageOrientationSummary>;
+  /**
+   * Active (non-terminal) requests sharing a target, surfaced for
+   * cross-session race detection (issue #234). Empty array when no
+   * group has size ≥ 2. Each entry's `requests` list carries enough
+   * for an agent to decide whether to coordinate via `gate claim` /
+   * `gate witness` (#226) or proceed in parallel. See
+   * BootActiveOverlap for the per-entry contract.
+   */
+  active_overlapping_targets: ReadonlyArray<BootActiveOverlap>;
   /**
    * Discoverability hint: what verbs are applicable right now?
    *
@@ -270,6 +397,30 @@ export async function bootCmd(c: C, args: ParsedArgs): Promise<number> {
 
   const envActor = resolveGuildActor();
   const actor = envActor && envActor.length > 0 ? envActor : null;
+
+  // Boot-context session_id (#249 slice 2). Flag wins over env so an
+  // orchestrator's explicit override is honoured even when the shell
+  // exported a stale value. Validation matches resolveGuildSessionId
+  // (the env-side helper) so the two resolution paths use one regex.
+  const sessionIdFlag = optionalOption(args, 'session-id');
+  let sessionId: string | null = null;
+  let sessionIdSource: 'flag' | 'env' | null = null;
+  if (sessionIdFlag !== undefined && sessionIdFlag.length > 0) {
+    if (!SESSION_ID_RE.test(sessionIdFlag)) {
+      throw new Error(
+        `--session-id "${sessionIdFlag}" does not match the session_id format ` +
+          `(lowercase alphanumeric + _-.: separators, ≤64 chars).`,
+      );
+    }
+    sessionId = sessionIdFlag;
+    sessionIdSource = 'flag';
+  } else {
+    const envSession = resolveGuildSessionId();
+    if (envSession !== undefined) {
+      sessionId = envSession;
+      sessionIdSource = 'env';
+    }
+  }
 
   // Resolve role without rejecting when GUILD_ACTOR is unset — boot
   // must always succeed, even without identity, so unknown-identity
@@ -452,16 +603,22 @@ export async function bootCmd(c: C, args: ParsedArgs): Promise<number> {
   }
 
   const crossPassage = await collectCrossPassage(c.config);
+  const activeOverlappingTargets = computeActiveOverlappingTargets(allRequests);
+
+  const sessionIdUnset = actor !== null && sessionId === null;
 
   const payload: BootPayload = {
     actor,
     role,
+    session_id: sessionId,
+    session_id_source: sessionIdSource,
     status,
     tail,
     your_recent: yourRecent,
     inbox_unread: inboxUnread,
     last_activity: status.last_activity,
     hints: {
+      session_id_unset: sessionIdUnset,
       misconfigured_cwd: misconfiguredCwd,
       cwd_outside_content_root: cwdOutsideContentRoot,
       config_file: c.config.configFile,
@@ -469,6 +626,7 @@ export async function bootCmd(c: C, args: ParsedArgs): Promise<number> {
       content_root_health: contentRootHealth,
     },
     cross_passage: crossPassage,
+    active_overlapping_targets: activeOverlappingTargets,
     suggested_next: suggestedNext,
     verbs_available_now: verbsAvailableNow,
   };
@@ -891,6 +1049,97 @@ function actionableTransitions(
  * UTC-Z formatted (the only shape Request.ts emits, see Thank.ts:43,
  * Review.ts and StatusLog entry.at).
  */
+/**
+ * Group active (non-terminal) requests by their `target` and surface
+ * groups with size ≥ 2 as overlap warnings. See BootActiveOverlap
+ * for the surface contract and issue #234 for the parent context
+ * (substrate-experiment 5: independent sessions silently raced on
+ * the same wave because the substrate had no "someone else is on
+ * it" surface at boot).
+ *
+ * Active = `pending` | `approved` | `executing`. Terminal states
+ * (`completed` | `failed` | `denied`) are skipped — a completed
+ * wave on the same target is not a race; it is history.
+ *
+ * Targets that are unset, empty, or whitespace-only are skipped:
+ * "two requests with no target" is not a coordination signal.
+ *
+ * Per-group output is sorted by id ascending so consecutive boots
+ * agree on member order (an agent diff-reasoning over the field
+ * across runs sees stable composition); the overall list is sorted
+ * by target so the same property holds across multiple groups.
+ */
+export function computeActiveOverlappingTargets(
+  allRequests: ReadonlyArray<Request>,
+): BootActiveOverlap[] {
+  const ACTIVE: ReadonlySet<string> = new Set([
+    'pending',
+    'approved',
+    'executing',
+  ]);
+  const groups = new Map<string, Request[]>();
+  for (const r of allRequests) {
+    if (!ACTIVE.has(r.state)) continue;
+    const target = r.target;
+    if (target === undefined || target.trim() === '') continue;
+    const arr = groups.get(target);
+    if (arr) arr.push(r);
+    else groups.set(target, [r]);
+  }
+  const overlaps: BootActiveOverlap[] = [];
+  for (const [target, reqs] of groups) {
+    if (reqs.length < 2) continue;
+    const sorted = [...reqs].sort((a, b) =>
+      a.id.value < b.id.value ? -1 : a.id.value > b.id.value ? 1 : 0,
+    );
+    // Same-actor parallel-session detection (#249 slice 4). For each
+    // author in the group, collect distinct session_ids in first-
+    // mention order. A record without `opened_by_session` does NOT
+    // count toward divergence — its provenance is unknown, and
+    // counting absence as a separate "session" would falsely flag
+    // every mixed pre-#249 / post-#249 group. The map only includes
+    // authors with ≥2 distinct sessions; empty when no author races
+    // themselves.
+    const sessionsByAuthor = new Map<string, string[]>();
+    for (const r of sorted) {
+      const author = r.from.value;
+      const sess = r.openedBySession;
+      if (sess === undefined || sess.length === 0) continue;
+      const list = sessionsByAuthor.get(author);
+      if (list === undefined) {
+        sessionsByAuthor.set(author, [sess]);
+      } else if (!list.includes(sess)) {
+        list.push(sess);
+      }
+    }
+    const parallelSessionAuthors: Record<string, readonly string[]> = {};
+    let hasParallel = false;
+    for (const [author, sessions] of sessionsByAuthor) {
+      if (sessions.length >= 2) {
+        parallelSessionAuthors[author] = sessions;
+        hasParallel = true;
+      }
+    }
+    overlaps.push({
+      target,
+      requests: sorted.map((r) => ({
+        id: r.id.value,
+        state: r.state as 'pending' | 'approved' | 'executing',
+        executors: r.executors.map((e) => e.value),
+        ...(r.claimedBy !== undefined ? { claimed_by: r.claimedBy.value } : {}),
+        ...(r.openedBySession !== undefined
+          ? { opened_by_session: r.openedBySession }
+          : {}),
+      })),
+      ...(hasParallel ? { parallel_session_authors: parallelSessionAuthors } : {}),
+    });
+  }
+  overlaps.sort((a, b) =>
+    a.target < b.target ? -1 : a.target > b.target ? 1 : 0,
+  );
+  return overlaps;
+}
+
 export function computeLastAuthoredWriteAt(
   actor: string,
   allRequests: ReadonlyArray<Request>,
@@ -1074,9 +1323,29 @@ function deriveVerbsAvailableNow(
 function renderBootText(p: BootPayload): string {
   const lines: string[] = [];
   if (p.actor) {
-    lines.push(`── you are ${p.actor} (${p.role}) ──`);
+    const sessionTag =
+      p.session_id !== null ? ` · session=${p.session_id}` : '';
+    lines.push(`── you are ${p.actor} (${p.role})${sessionTag} ──`);
   } else {
     lines.push('── boot (no GUILD_ACTOR; global view) ──');
+  }
+  if (p.hints.session_id_unset) {
+    lines.push('');
+    lines.push(
+      'notice: no session_id resolved (GUILD_SESSION_ID unset, no --session-id flag).',
+    );
+    lines.push(
+      '  request / claim / witness will not stamp a session on subsequent calls.',
+    );
+    lines.push(
+      '  fix: pick a name (e.g. eris-local-2026-05-08-evening) and either',
+    );
+    lines.push(
+      '    export GUILD_SESSION_ID=<id>            # whole shell',
+    );
+    lines.push(
+      '    gate boot --session-id <id>             # this orientation only',
+    );
   }
   if (p.hints.misconfigured_cwd) {
     lines.push('');
@@ -1157,6 +1426,56 @@ function renderBootText(p: BootPayload): string {
           : '';
       lines.push(`${s.passage}: ${s.open} open${suspendedNote}${lastNote}`);
     }
+  }
+
+  // Cross-session race surface (issue #234). Only rendered when at
+  // least one target has ≥ 2 active requests; the empty case stays
+  // silent so the common "no overlap" boot doesn't carry an empty
+  // header line. JSON consumers read `active_overlapping_targets`
+  // directly — text mode here is the human-readable projection.
+  if (p.active_overlapping_targets.length > 0) {
+    lines.push('');
+    lines.push('active waves with overlapping target:');
+    for (const o of p.active_overlapping_targets) {
+      for (const r of o.requests) {
+        const exec =
+          r.executors.length > 0 ? r.executors.join(',') : '(no executor)';
+        const claim = r.claimed_by !== undefined ? ', claim_held' : '';
+        // Session tag (#249 slice 4) — bracket-shaped, mirroring
+        // the `gate show` stake-block convention so the two
+        // surfaces share one annotation grammar.
+        const session =
+          r.opened_by_session !== undefined
+            ? ` [session=${r.opened_by_session}]`
+            : '';
+        lines.push(
+          `  - ${r.id} (${exec}, ${r.state}${claim})${session} — target: ${o.target}`,
+        );
+      }
+    }
+    lines.push(
+      '  ⚠ overlap detected. coordinate via `gate witness <id>` or `gate claim <id>`.',
+    );
+    // Same-actor parallel-session warning (#249 slice 4). One line
+    // per actor whose authorship splits across sessions in any
+    // overlap group. The hint deliberately frames it as a question
+    // ("was the second session intended?") rather than an
+    // accusation — there are legitimate parallel-session shapes
+    // (e.g. the same human deliberately running two waves), and
+    // the substrate's job is to surface the case, not adjudicate it.
+    const parallelLines: string[] = [];
+    for (const o of p.active_overlapping_targets) {
+      const map = o.parallel_session_authors;
+      if (map === undefined) continue;
+      for (const [author, sessions] of Object.entries(map)) {
+        parallelLines.push(
+          `  ⚠ same-actor parallel sessions: ${author} on target "${o.target}" ` +
+            `(sessions: ${sessions.join(', ')}). check whether the second ` +
+            `session was intended.`,
+        );
+      }
+    }
+    for (const line of parallelLines) lines.push(line);
   }
 
   if (p.tail.length > 0) {

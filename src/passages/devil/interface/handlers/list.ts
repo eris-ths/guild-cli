@@ -18,7 +18,7 @@ const LIST_KNOWN_FLAGS: ReadonlySet<string> = new Set([
  *
  * Usage:
  *   devil list [--state open|concluded|all]
- *              [--target-type pr|file|function|commit]
+ *              [--target-type pr|file|function|commit|system]
  *              [--format json|text]
  *
  * Reads only — no mutation. Returns a summary view of each review

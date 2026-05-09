@@ -7,12 +7,22 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { VERBS } from '../../src/interface/gate/handlers/schema.js';
+import { makeTempRoot } from '../util/tempRoot.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
+const GATE = resolve(here, '../../../bin/gate.mjs');
+
+function bootstrapMinimal(prefix: string): { root: string; cleanup: () => void } {
+  const root = makeTempRoot(prefix);
+  writeFileSync(join(root, 'guild.config.yaml'), 'content_root: .\nhost_names: [human]\n');
+  mkdirSync(join(root, 'members'), { recursive: true });
+  return { root, cleanup: () => rmSync(root, { recursive: true, force: true }) };
+}
 
 test('gate schema: every VERBS entry matches a case in index.ts dispatch', () => {
   const indexPath = join(here, '../../../src/interface/gate/index.ts');
@@ -84,4 +94,49 @@ test('gate schema: input required fields are a subset of declared properties', (
       );
     }
   }
+});
+
+// --- issue #36 Phase 1: source: 'core' | 'plugin' discriminator ---
+
+test('gate schema --format json: every verb carries source = "core" (built-in surface)', (t) => {
+  // The runtime payload must always emit `source` so consumers can
+  // filter built-in vs plugin verbs without cross-checking another
+  // source of truth. Built-in verbs default to 'core' regardless of
+  // whether the VerbSchema entry sets the field explicitly.
+  const { root, cleanup } = bootstrapMinimal('gate-schema-source-');
+  t.after(cleanup);
+
+  const r = spawnSync(process.execPath, [GATE, 'schema', '--format', 'json'], {
+    cwd: root,
+    env: { ...process.env },
+    encoding: 'utf8',
+  });
+  assert.equal(r.status, 0, r.stderr);
+  const payload = JSON.parse(r.stdout);
+  assert.ok(Array.isArray(payload.verbs), 'verbs array present');
+  assert.ok(payload.verbs.length > 0, 'verbs array non-empty');
+  for (const v of payload.verbs) {
+    assert.equal(
+      v.source,
+      'core',
+      `verb ${v.name}: built-in surface must report source="core" (got ${JSON.stringify(v.source)})`,
+    );
+  }
+});
+
+test('gate schema --format text: built-in verbs render without [plugin] tag', (t) => {
+  // Voice budget: a [core] tag on every line would be noise. The
+  // tag fires only for plugin verbs (none today), so the text
+  // output stays compact for the built-in surface.
+  const { root, cleanup } = bootstrapMinimal('gate-schema-source-text-');
+  t.after(cleanup);
+
+  const r = spawnSync(process.execPath, [GATE, 'schema', '--format', 'text'], {
+    cwd: root,
+    env: { ...process.env },
+    encoding: 'utf8',
+  });
+  assert.equal(r.status, 0, r.stderr);
+  assert.doesNotMatch(r.stdout, /\[plugin\]/, 'no built-in verb should render the [plugin] tag');
+  assert.doesNotMatch(r.stdout, /\[core\]/, 'voice budget: [core] tag is suppressed for built-ins');
 });

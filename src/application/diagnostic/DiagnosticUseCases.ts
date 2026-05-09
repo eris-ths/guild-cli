@@ -52,11 +52,36 @@ export type DoctorPluginFn = (
   ctx: DoctorPluginContext,
 ) => Promise<DiagnosticFinding[]>;
 
+/**
+ * Verb-plugin load info, mirrored from the gate-side loader so
+ * doctor can fold a verb plugin's per-path outcome into the same
+ * `pluginsLoaded` + `findings (area: 'plugin')` channels doctor
+ * plugins already use. Kept structural here (no import from the
+ * gate side) so the application layer doesn't depend on the
+ * interface layer.
+ */
+export interface VerbPluginDiagnostics {
+  readonly pluginsLoaded: ReadonlyArray<{
+    path: string;
+    status: 'loaded' | 'error';
+  }>;
+  readonly errors: ReadonlyArray<{ path: string; reason: string }>;
+}
+
 export class DiagnosticUseCases {
   constructor(
     private readonly buildRepos: DiagnosticRepoFactory,
     private readonly pluginPaths: readonly string[] = [],
     private readonly pluginContext?: DoctorPluginContext,
+    /**
+     * Verb plugin load outcome (issue #36 Phase 1 step 4). Gate's
+     * `main()` runs the verb-plugin loader at startup and feeds the
+     * result into the container; doctor reads the result here so
+     * verb plugin failures surface alongside doctor plugin failures
+     * in the same report. Empty default keeps tests / non-gate
+     * containers (agora / devil / ctx) unaffected.
+     */
+    private readonly verbPlugins: VerbPluginDiagnostics = { pluginsLoaded: [], errors: [] },
   ) {}
 
   async run(): Promise<DiagnosticReport> {
@@ -159,6 +184,33 @@ export class DiagnosticUseCases {
       }
     }
 
+    // Verb plugin diagnostics (#36 Phase 1 step 4). Loader-supplied
+    // errors become findings under area='plugin' (same kind as
+    // doctor plugin errors); per-path outcomes are appended to the
+    // pluginsLoaded list so a single plugins-loaded section in the
+    // doctor renderer covers both kinds. The path differentiator is
+    // sufficient — doctor plugins are filesystem paths under root,
+    // verb plugins are too, and any path-shaped string is a path
+    // for display purposes.
+    // Caller (`buildContainer` for the gate entry) prefixes the
+    // reason with the plugin kind ("verb plugin: ..." / "hook
+    // plugin: ...") before passing in, so this layer doesn't need
+    // to discriminate. Keeping the formatting at the wiring layer
+    // means future plugin kinds (transforms, etc.) only need to
+    // rename their own prefix without revisiting the diagnostic
+    // domain.
+    for (const e of this.verbPlugins.errors) {
+      findings.push({
+        area: 'plugin',
+        source: e.path,
+        kind: 'unknown',
+        message: e.reason,
+      });
+    }
+    const allPluginsLoaded: PluginLoadInfo[] = [
+      ...pluginsLoaded,
+      ...this.verbPlugins.pluginsLoaded,
+    ];
     return new DiagnosticReport(
       {
         members: { total: members.length, malformed: memberMalformed },
@@ -166,7 +218,7 @@ export class DiagnosticUseCases {
         issues: { total: issues.length, malformed: issueMalformed },
       },
       findings,
-      pluginsLoaded,
+      allPluginsLoaded,
     );
   }
 }

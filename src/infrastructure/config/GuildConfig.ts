@@ -80,10 +80,34 @@ export interface GuildConfigProps {
     requests: string;
     issues: string;
     inbox: string;
+    /**
+     * Per-event session-boundary records (`gate rest` /
+     * `gate wake` / `gate farewell`, #36 Phase 2). One YAML file
+     * per event under `<content_root>/sessions/<id>.yaml`.
+     */
+    sessions: string;
   };
   hostNames: readonly string[];
   lenses: readonly string[];
   doctorPlugins: readonly string[];
+  /**
+   * Absolute paths of verb plugins to load at CLI startup
+   * (issue #36 Phase 1 step 4). Populated only when `plugins.trusted:
+   * true` is set in `guild.config.yaml`; without that consent the
+   * loader skips every entry under `plugins.verbs` and emits an
+   * `onMalformed` notice. Same trust contract as `doctorPlugins` —
+   * see `SECURITY.md` § "Plugin trust model".
+   */
+  verbPluginPaths: readonly string[];
+  /**
+   * Absolute paths of hook plugins to load at CLI startup
+   * (issue #36 Phase 1 step 5). Same trust gate as verb plugins
+   * (`plugins.trusted: true`). Each plugin subscribes to one or
+   * more lifecycle events (`before:approve`, `after:complete`, etc.)
+   * and runs at the corresponding fire point. See `HookPlugin.ts`
+   * for the full event list and contract.
+   */
+  hookPluginPaths: readonly string[];
   profile: GuildProfile;
   features: GuildFeatures;
   onMalformed: OnMalformed;
@@ -105,6 +129,8 @@ export class GuildConfig implements GuildConfigProps {
     readonly hostNames: readonly string[],
     readonly lenses: readonly string[],
     readonly doctorPlugins: readonly string[],
+    readonly verbPluginPaths: readonly string[],
+    readonly hookPluginPaths: readonly string[],
     readonly profile: GuildProfile,
     readonly features: GuildFeatures,
     readonly onMalformed: OnMalformed,
@@ -139,6 +165,7 @@ export class GuildConfig implements GuildConfigProps {
       requests: resolveUnder(contentRoot, p.requests ?? 'requests'),
       issues: resolveUnder(contentRoot, p.issues ?? 'issues'),
       inbox: resolveUnder(contentRoot, p.inbox ?? 'inbox'),
+      sessions: resolveUnder(contentRoot, p.sessions ?? 'sessions'),
     };
     const hostNames = Array.isArray(raw.host_names)
       ? raw.host_names
@@ -162,6 +189,48 @@ export class GuildConfig implements GuildConfigProps {
         configPath,
         'doctor.plugins present but doctor.trusted is not true — plugins will NOT be loaded. ' +
           'Add `trusted: true` under `doctor:` in guild.config.yaml to enable.',
+      );
+    }
+    // Verb plugins (#36 Phase 1 step 4). Separate consent gate from
+    // doctor.trusted: `plugins.trusted: true` lights up the unified
+    // `plugins:` section that future hook / transform extensions will
+    // share. Without it, every entry under `plugins.verbs` is dropped
+    // with an onMalformed notice. The trust model is identical to
+    // doctor's — plugins run in-process with full Node capabilities,
+    // and the YAML alone is not consent. See `SECURITY.md` § "Plugin
+    // trust model".
+    const pluginsRaw = raw.plugins ?? {};
+    const verbPluginsTrusted = pluginsRaw.trusted === true;
+    const verbPluginPaths = Array.isArray(pluginsRaw.verbs) && verbPluginsTrusted
+      ? pluginsRaw.verbs
+          .filter((x: unknown): x is string => typeof x === 'string')
+          .map((x: string) => resolveUnder(root, x))
+      : [];
+    if (Array.isArray(pluginsRaw.verbs) && pluginsRaw.verbs.length > 0 && !verbPluginsTrusted) {
+      onMalformed(
+        configPath,
+        'plugins.verbs present but plugins.trusted is not true — verb plugins will NOT be loaded. ' +
+          'Add `trusted: true` under `plugins:` in guild.config.yaml to enable.',
+      );
+    }
+    // Hook plugins (#36 Phase 1 step 5). Shares the `plugins.trusted`
+    // consent gate with verb plugins — one declaration unlocks every
+    // plugin kind. The model is unified: the operator either trusts
+    // the source of every plugin in `plugins:` or trusts none of
+    // them. Per-kind trust would multiply the consent surface
+    // without adding meaningful precision (a hostile hook plugin
+    // can do everything a hostile verb plugin can — they're both
+    // arbitrary in-process code).
+    const hookPluginPaths = Array.isArray(pluginsRaw.hooks) && verbPluginsTrusted
+      ? pluginsRaw.hooks
+          .filter((x: unknown): x is string => typeof x === 'string')
+          .map((x: string) => resolveUnder(root, x))
+      : [];
+    if (Array.isArray(pluginsRaw.hooks) && pluginsRaw.hooks.length > 0 && !verbPluginsTrusted) {
+      onMalformed(
+        configPath,
+        'plugins.hooks present but plugins.trusted is not true — hook plugins will NOT be loaded. ' +
+          'Add `trusted: true` under `plugins:` in guild.config.yaml to enable.',
       );
     }
     // Profile + features (#231). The two interact: `profile: swarm`
@@ -213,7 +282,7 @@ export class GuildConfig implements GuildConfigProps {
         explicitWorktreeRequired ?? (profile === 'swarm'),
       selfApprove,
     };
-    return new GuildConfig(root, contentRoot, paths, hostNames, lenses, doctorPlugins, profile, features, onMalformed, configPath);
+    return new GuildConfig(root, contentRoot, paths, hostNames, lenses, doctorPlugins, verbPluginPaths, hookPluginPaths, profile, features, onMalformed, configPath);
   }
 
   static default(
@@ -229,9 +298,12 @@ export class GuildConfig implements GuildConfigProps {
         requests: join(abs, 'requests'),
         issues: join(abs, 'issues'),
         inbox: join(abs, 'inbox'),
+        sessions: join(abs, 'sessions'),
       },
       [...DEFAULT_HOSTS],
       [...DEFAULT_LENSES],
+      [],
+      [],
       [],
       'standard',
       { worktreeRequiredForParallel: false, selfApprove: 'warn' },

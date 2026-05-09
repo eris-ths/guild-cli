@@ -1,10 +1,12 @@
 import {
   ParsedArgs,
+  optionalOption,
   requireOption,
   rejectUnknownFlags,
 } from '../../shared/parseArgs.js';
 import { C, isDryRun, emitDryRunPreview } from './internal.js';
 import { emitWriteResponse, parseFormat } from './writeFormat.js';
+import { resolveGuildSessionId } from '../../shared/resolveGuildSessionId.js';
 
 // Issue #244 (#226 phase 2) — non-exclusive cross-session observer.
 //
@@ -33,7 +35,16 @@ import { emitWriteResponse, parseFormat } from './writeFormat.js';
 //   - Auto-reset to [] lives in `Request.transition` for completed/
 //     failed/denied — same terminal frontier as claim.
 
+// witness accepts --note for the per-witness stake metadata
+// (issue #246). unwitness does NOT — it removes a stake, and a
+// note has no anchor when the witness entry is gone.
 const WITNESS_KNOWN_FLAGS: ReadonlySet<string> = new Set([
+  'by',
+  'note',
+  'dry-run',
+  'format',
+]);
+const UNWITNESS_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'by',
   'dry-run',
   'format',
@@ -43,11 +54,24 @@ export async function reqWitness(c: C, args: ParsedArgs): Promise<number> {
   rejectUnknownFlags(args, WITNESS_KNOWN_FLAGS, 'witness');
   const id = args.positional[0];
   if (!id) {
-    throw new Error('Usage: gate witness <id> --by <m> [--dry-run]');
+    throw new Error('Usage: gate witness <id> --by <m> [--note <text>] [--dry-run]');
   }
   const by = requireOption(args, 'by', '<m>', 'GUILD_ACTOR');
+  // Optional stake-note (issue #246) — same tight-scope contract as
+  // claim's. Domain sanitizes empty / whitespace-only to undefined,
+  // so a bare `--note ""` is a true no-op on the note dimension.
+  const note = optionalOption(args, 'note');
+  // Boot-context session_id (#249 slice 2). Same env-only resolver as
+  // claim — see resolveGuildSessionId.ts for the rationale.
+  const bySession = resolveGuildSessionId();
   if (isDryRun(args)) {
-    const { request } = await c.requestUC.witness({ id, by, dryRun: true });
+    const { request } = await c.requestUC.witness({
+      id,
+      by,
+      ...(note !== undefined ? { note } : {}),
+      ...(bySession !== undefined ? { bySession } : {}),
+      dryRun: true,
+    });
     // Witness doesn't transition lifecycle state — orthogonal to
     // pending/approved/executing — so omit `would_transition`.
     emitDryRunPreview({
@@ -59,7 +83,12 @@ export async function reqWitness(c: C, args: ParsedArgs): Promise<number> {
     });
     return 0;
   }
-  const { request, mutated } = await c.requestUC.witness({ id, by });
+  const { request, mutated } = await c.requestUC.witness({
+    id,
+    by,
+    ...(note !== undefined ? { note } : {}),
+    ...(bySession !== undefined ? { bySession } : {}),
+  });
   // Re-witness message is distinct so the caller can tell whether
   // anything landed (idempotent re-run is legitimate; we just want
   // to make the no-op visible).
@@ -71,7 +100,7 @@ export async function reqWitness(c: C, args: ParsedArgs): Promise<number> {
 }
 
 export async function reqUnwitness(c: C, args: ParsedArgs): Promise<number> {
-  rejectUnknownFlags(args, WITNESS_KNOWN_FLAGS, 'unwitness');
+  rejectUnknownFlags(args, UNWITNESS_KNOWN_FLAGS, 'unwitness');
   const id = args.positional[0];
   if (!id) {
     throw new Error('Usage: gate unwitness <id> --by <m> [--dry-run]');
