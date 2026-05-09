@@ -25,6 +25,21 @@ const MAX_STATUS_LOG = 100;
  */
 const MAX_STAKE_NOTE = 80;
 
+/**
+ * Session-id format (issue #249). Free-form ASCII string —
+ * convention emerges per team. Validation intentionally permissive:
+ * lowercase alphanumeric + `_-.:` separators, length-capped to keep
+ * YAML readable and grep-friendly. Empty / control / whitespace-mixed
+ * strings are rejected at the boundary.
+ *
+ * Examples that pass:
+ *   eris-local-2026-05-08-evening
+ *   terminal-a
+ *   claude-opus-4-7-run42
+ *   ci-build-12345
+ */
+export const SESSION_ID_RE = /^[a-z0-9][a-z0-9_:.-]{0,63}$/;
+
 export interface StatusLogEntry {
   state: RequestState;
   by: string;
@@ -237,6 +252,40 @@ export interface RequestProps {
    * post-#246 records that nobody noted on still have neither field.
    */
   witnessNotes?: Map<string, string>;
+  /**
+   * Cross-session actor identity (issue #249 — multi-body
+   * coordination, slice 1: schema only).
+   *
+   * `gate claim 230 --by eris` cannot distinguish *which* eris —
+   * terminal A, the ErisMind agent, or yesterday's session. The
+   * three optional `*_by_session` fields below let each session
+   * stamp a session_id alongside the member identifier so the
+   * trail answers "which eris" instead of "an eris".
+   *
+   * Schema-only slice (this commit): the fields can be hydrated
+   * from disk (a future writer's record reaches an older reader)
+   * and round-trip clean, but no code path SETS them yet.
+   * Slice 2 wires `gate boot --session-id` / `GUILD_SESSION_ID`
+   * so write verbs stamp the value at the entry layer.
+   *
+   * Format: free-form ASCII `^[a-z0-9][a-z0-9_:.-]{0,63}$` —
+   * convention emerges per team (`eris-local-2026-05-08-evening`,
+   * `terminal-A`, `claude-opus-4-7-runX`, `ci-build-12345`). The
+   * substrate's job is to record what actors named themselves;
+   * resolving "is X the same body as Y" is a reader's problem.
+   *
+   * Persistence: omit-when-undefined, mirroring `claim_note` /
+   * `witness_notes` / `depth`. Pre-#249 records lack the fields
+   * entirely and round-trip byte-identically.
+   */
+  openedBySession?: string;
+  claimedBySession?: string;
+  /**
+   * Per-witness session_id, keyed by lowercase actor name (mirrors
+   * `witnessNotes`'s shape). Same omit-when-empty rule: if no
+   * witness has stamped a session, the field is absent on disk.
+   */
+  witnessSessions?: Map<string, string>;
   /**
    * Monotonic mutation counter for cross-session-mutating verbs that
    * are NOT append-only on a recorded array (issue #244 follow-up;
@@ -725,6 +774,21 @@ export class Request {
   get claimedAt(): string | undefined {
     return this.props.claimedAt;
   }
+  /** Session_id stamped at request creation (#249). Undefined when
+   *  the author didn't declare a session. */
+  get openedBySession(): string | undefined {
+    return this.props.openedBySession;
+  }
+  /** Session_id paired with `claimedBy` (#249). Undefined when
+   *  unclaimed or when the claimer didn't declare a session. */
+  get claimedBySession(): string | undefined {
+    return this.props.claimedBySession;
+  }
+  /** Per-witness session_id, keyed by lowercase actor name (#249).
+   *  Empty map when no witness has stamped a session. */
+  get witnessSessions(): ReadonlyMap<string, string> {
+    return this.props.witnessSessions ?? new Map();
+  }
 
   /**
    * Stake a cross-session claim (issue #226). Three outcomes:
@@ -1098,6 +1162,13 @@ export class Request {
     // hydrate "absent ⇒ undefined" branch below.
     if (this.props.sourceAgoraPlay !== undefined)
       out['source_agora_play'] = this.props.sourceAgoraPlay;
+    // Session_id stamped at request creation (issue #249). Surface
+    // only when set — pre-#249 records and same-body single-session
+    // requests both emit byte-identical YAML on round-trip. Slice 1
+    // hydrates this on read but no code path SETS it yet; slice 2
+    // wires `gate boot --session-id` so authoring stamps the value.
+    if (this.props.openedBySession !== undefined)
+      out['opened_by_session'] = this.props.openedBySession;
     // Worktree isolation requirement (#231). Surface only when true —
     // the YAML stays minimal and pre-#231 records remain byte-stable
     // on round-trip (false-by-absence is the load tolerance).
@@ -1131,6 +1202,12 @@ export class Request {
       if (this.props.claimNote !== undefined) {
         out['claim_note'] = this.props.claimNote;
       }
+      // Session_id paired with the claim (issue #249). Same omit-
+      // when-undefined rule. Pre-#249 records and same-body claims
+      // (no session declared) both round-trip byte-identically.
+      if (this.props.claimedBySession !== undefined) {
+        out['claimed_by_session'] = this.props.claimedBySession;
+      }
     }
     // Witnesses (issue #244). Surface only when non-empty — empty
     // witnesses is the common case and an empty array would clutter
@@ -1153,6 +1230,17 @@ export class Request {
         notes[actor] = note;
       }
       out['witness_notes'] = notes;
+    }
+    // Per-witness session_id (issue #249). Same shape as
+    // witness_notes — map keyed by lowercase actor name, omitted
+    // entirely when empty. Pre-#249 and same-body witness records
+    // both round-trip without the field.
+    if (this.props.witnessSessions !== undefined && this.props.witnessSessions.size > 0) {
+      const sessions: Record<string, string> = {};
+      for (const [actor, session] of this.props.witnessSessions) {
+        sessions[actor] = session;
+      }
+      out['witness_sessions'] = sessions;
     }
     // mutation_seq (issue #244 follow-up). Surface only when > 0 so
     // pre-#244 records and never-mediated post-#244 records both emit
