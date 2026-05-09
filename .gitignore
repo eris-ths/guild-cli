@@ -7,3 +7,6 @@ __pycache__/
 # THS hook artifacts (accidental cwd)
 data/sync/
 examples/dogfood-session/data/
+
+# Local gate dogfood records (actor names + session content — do not publish)
+requests/
