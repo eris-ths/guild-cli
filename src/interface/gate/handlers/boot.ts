@@ -1,4 +1,5 @@
 import { resolveGuildActor } from '../../shared/resolveGuildActor.js';
+import { resolveGuildSessionId } from '../../shared/resolveGuildSessionId.js';
 import { resolve } from 'node:path';
 import {
   ParsedArgs,
@@ -6,11 +7,13 @@ import {
   rejectUnknownFlags,
 } from '../../shared/parseArgs.js';
 import { C, loadAllRequestsAsJson, parseOptionalIntOption } from './internal.js';
+import { SESSION_ID_RE } from '../../../domain/request/Request.js';
 
 const BOOT_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'format',
   'tail',
   'utterances',
+  'session-id',
 ]);
 import { collectStatus, StatusSummary } from './status.js';
 import { collectUtterances } from '../voices.js';
@@ -163,6 +166,25 @@ export interface BootActiveOverlap {
 interface BootPayload {
   actor: string | null;
   role: 'member' | 'host' | 'unknown' | null;
+  /**
+   * Boot-context session_id (#249 slice 2). Resolution priority:
+   *   1. `--session-id <id>` flag on this invocation.
+   *   2. `GUILD_SESSION_ID` env var.
+   *   3. null — unstamped session.
+   *
+   * `source` names which input won; null when neither was provided.
+   * Surfaces here so an orchestrator that calls `gate boot` to
+   * acquire the orientation payload can also discover what session
+   * id will be stamped on subsequent write verbs (request / claim /
+   * witness). `--session-id` does NOT persist or export the value
+   * itself — the caller is expected to `export GUILD_SESSION_ID=<id>`
+   * to make it available to downstream invocations. Per the issue
+   * #249 opt-in policy, an actor-resolved boot with no session
+   * surfaces a hint inside `hints.session_id_unset` so the feature
+   * is discoverable without forcing a value.
+   */
+  session_id: string | null;
+  session_id_source: 'flag' | 'env' | null;
   status: StatusSummary;
   tail: ReturnType<typeof collectUtterances>;
   your_recent: ReturnType<typeof collectUtterances> | null;
@@ -202,6 +224,17 @@ interface BootPayload {
    * (quarantine) — the onboarding unlock is named in `fix_hint`.
    */
   hints: {
+    /**
+     * `session_id_unset` (#249 slice 2): true iff GUILD_ACTOR resolved
+     * (so we have a real session to talk about) AND no session_id was
+     * supplied via flag or env. Surface fires the discovery hint so
+     * an actor running `gate boot` for the first time post-#249 sees
+     * the new opt-in without having to read the changelog. Suppressed
+     * for unauthenticated boots (actor=null) — there is no session to
+     * stamp anyway, and emitting the hint there would be noise on
+     * every fresh-start orientation.
+     */
+    session_id_unset: boolean;
     misconfigured_cwd: boolean;
     /**
      * `cwd_outside_content_root`: true iff the caller's cwd is NOT
@@ -328,6 +361,30 @@ export async function bootCmd(c: C, args: ParsedArgs): Promise<number> {
 
   const envActor = resolveGuildActor();
   const actor = envActor && envActor.length > 0 ? envActor : null;
+
+  // Boot-context session_id (#249 slice 2). Flag wins over env so an
+  // orchestrator's explicit override is honoured even when the shell
+  // exported a stale value. Validation matches resolveGuildSessionId
+  // (the env-side helper) so the two resolution paths use one regex.
+  const sessionIdFlag = optionalOption(args, 'session-id');
+  let sessionId: string | null = null;
+  let sessionIdSource: 'flag' | 'env' | null = null;
+  if (sessionIdFlag !== undefined && sessionIdFlag.length > 0) {
+    if (!SESSION_ID_RE.test(sessionIdFlag)) {
+      throw new Error(
+        `--session-id "${sessionIdFlag}" does not match the session_id format ` +
+          `(lowercase alphanumeric + _-.: separators, ≤64 chars).`,
+      );
+    }
+    sessionId = sessionIdFlag;
+    sessionIdSource = 'flag';
+  } else {
+    const envSession = resolveGuildSessionId();
+    if (envSession !== undefined) {
+      sessionId = envSession;
+      sessionIdSource = 'env';
+    }
+  }
 
   // Resolve role without rejecting when GUILD_ACTOR is unset — boot
   // must always succeed, even without identity, so unknown-identity
@@ -512,15 +569,20 @@ export async function bootCmd(c: C, args: ParsedArgs): Promise<number> {
   const crossPassage = await collectCrossPassage(c.config);
   const activeOverlappingTargets = computeActiveOverlappingTargets(allRequests);
 
+  const sessionIdUnset = actor !== null && sessionId === null;
+
   const payload: BootPayload = {
     actor,
     role,
+    session_id: sessionId,
+    session_id_source: sessionIdSource,
     status,
     tail,
     your_recent: yourRecent,
     inbox_unread: inboxUnread,
     last_activity: status.last_activity,
     hints: {
+      session_id_unset: sessionIdUnset,
       misconfigured_cwd: misconfiguredCwd,
       cwd_outside_content_root: cwdOutsideContentRoot,
       config_file: c.config.configFile,
@@ -1193,9 +1255,29 @@ function deriveVerbsAvailableNow(
 function renderBootText(p: BootPayload): string {
   const lines: string[] = [];
   if (p.actor) {
-    lines.push(`── you are ${p.actor} (${p.role}) ──`);
+    const sessionTag =
+      p.session_id !== null ? ` · session=${p.session_id}` : '';
+    lines.push(`── you are ${p.actor} (${p.role})${sessionTag} ──`);
   } else {
     lines.push('── boot (no GUILD_ACTOR; global view) ──');
+  }
+  if (p.hints.session_id_unset) {
+    lines.push('');
+    lines.push(
+      'notice: no session_id resolved (GUILD_SESSION_ID unset, no --session-id flag).',
+    );
+    lines.push(
+      '  request / claim / witness will not stamp a session on subsequent calls.',
+    );
+    lines.push(
+      '  fix: pick a name (e.g. eris-local-2026-05-08-evening) and either',
+    );
+    lines.push(
+      '    export GUILD_SESSION_ID=<id>            # whole shell',
+    );
+    lines.push(
+      '    gate boot --session-id <id>             # this orientation only',
+    );
   }
   if (p.hints.misconfigured_cwd) {
     lines.push('');

@@ -79,6 +79,10 @@ export class RequestUseCases {
     template?: string;
     templateVersion?: number;
     gateRequiredAcknowledged?: boolean;
+    /** Boot-context session_id (#249 slice 2). Passed through verbatim
+     *  to `Request.create`, which validates against `SESSION_ID_RE`.
+     *  Empty / undefined skips persistence. */
+    openedBySession?: string;
   }): Promise<Request> {
     const { requests, members, clock } = this.deps;
     const from = await assertActor(input.from, '--from', members);
@@ -146,6 +150,9 @@ export class RequestUseCases {
         createArgs.templateVersion = input.templateVersion;
       if (input.gateRequiredAcknowledged !== undefined)
         createArgs.gateRequiredAcknowledged = input.gateRequiredAcknowledged;
+    }
+    if (input.openedBySession !== undefined && input.openedBySession.length > 0) {
+      createArgs.openedBySession = input.openedBySession;
     }
 
     for (let attempt = 0; attempt < 10; attempt++) {
@@ -333,6 +340,11 @@ export class RequestUseCases {
     id: string;
     by: string;
     note?: string;
+    /** Boot-context session_id (#249 slice 2). When set, paired with
+     *  the claim as `claimed_by_session` for cross-session
+     *  attribution. Validated against `SESSION_ID_RE` at the domain
+     *  boundary. */
+    bySession?: string;
     dryRun?: boolean;
   }): Promise<{ request: Request; mutated: boolean }> {
     const actor = await assertActor(input.by, '--by', this.deps.members);
@@ -351,7 +363,12 @@ export class RequestUseCases {
       // didn't change. Pre-#246 the claimedBy delta sufficed; under
       // notes, it doesn't.
       const before = req.mutationSeq;
-      req.claim(actor, this.deps.clock.now().toISOString(), input.note);
+      req.claim(
+        actor,
+        this.deps.clock.now().toISOString(),
+        input.note,
+        input.bySession,
+      );
       const mutated = req.mutationSeq !== before;
       if (mutated && !input.dryRun) await this.deps.requests.save(req);
       return { request: req, mutated };
@@ -370,6 +387,10 @@ export class RequestUseCases {
     id: string;
     by: string;
     note?: string;
+    /** Boot-context session_id (#249 slice 2). When set, stamped into
+     *  `witness_sessions[<actor>]` so a parallel-session run shows
+     *  per-witness attribution. Validated at the domain boundary. */
+    bySession?: string;
     dryRun?: boolean;
   }): Promise<{ request: Request; mutated: boolean }> {
     const actor = await assertActor(input.by, '--by', this.deps.members);
@@ -379,7 +400,7 @@ export class RequestUseCases {
       // re-witness with a divergent note (#246) — the latter doesn't
       // change witnesses.length but is a real mutation.
       const before = req.mutationSeq;
-      req.witness(actor, input.note);
+      req.witness(actor, input.note, input.bySession);
       const mutated = req.mutationSeq !== before;
       if (mutated && !input.dryRun) await this.deps.requests.save(req);
       return { request: req, mutated };
