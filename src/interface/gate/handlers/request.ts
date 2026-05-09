@@ -1,6 +1,7 @@
 import { resolve as resolvePath } from 'node:path';
 import { realpathSync } from 'node:fs';
 import { resolveGuildActor } from '../../shared/resolveGuildActor.js';
+import { resolveGuildSessionId } from '../../shared/resolveGuildSessionId.js';
 import {
   ParsedArgs,
   requireOption,
@@ -405,6 +406,13 @@ export async function reqCreate(c: C, args: ParsedArgs): Promise<number> {
   // id is allocated.
   const invokedBy = deriveInvokedBy(from);
   if (invokedBy !== undefined) input.invokedBy = invokedBy;
+  // Boot-context session_id (#249 slice 2). Read GUILD_SESSION_ID via
+  // the shared resolver — invalid values are treated as unset (the
+  // resolver emits a one-time stderr notice). Absence stays absent on
+  // disk so pre-#249 records and same-body unstamped writes both
+  // round-trip byte-identical YAML.
+  const sessionId = resolveGuildSessionId();
+  if (sessionId !== undefined) input.openedBySession = sessionId;
   const r = await c.requestUC.create(input);
   if (invokedBy !== undefined) {
     emitInvokedByNotice(from, invokedBy, 'request', r.id.value);
@@ -1308,6 +1316,13 @@ export async function reqFastTrack(c: C, args: ParsedArgs): Promise<number> {
   if (executorsList !== undefined) createInput.executors = executorsList;
   if (autoReview !== undefined) createInput.autoReview = autoReview;
   if (withPartners.length > 0) createInput.with = withPartners;
+  // Same env-driven session stamp as `gate request` — fast-track is a
+  // single user-facing verb that compresses request → approve →
+  // execute → complete, but the create step is the legitimate carrier
+  // of `opened_by_session`.
+  const fastTrackSessionId = resolveGuildSessionId();
+  if (fastTrackSessionId !== undefined)
+    createInput.openedBySession = fastTrackSessionId;
   const created = await c.requestUC.create(createInput);
   const id = created.id.value;
 

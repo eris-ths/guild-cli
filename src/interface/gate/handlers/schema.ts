@@ -256,6 +256,22 @@ const VERBS: readonly VerbSchema[] = [
         format: formatField,
         tail: { type: 'string', description: 'utterances to include in tail (default 10)' },
         utterances: { type: 'string', description: 'your-recent utterance count (default 5)' },
+        'session-id': {
+          type: 'string',
+          description:
+            'Boot-context session_id (#249 slice 2). When set, validated ' +
+            'against the SESSION_ID_RE format (lowercase alphanumeric + ' +
+            '_-.: separators, ≤64 chars) and echoed in the payload as ' +
+            '`session_id` so an orchestrator can confirm what value will ' +
+            'be stamped on subsequent write verbs (request / claim / ' +
+            'witness). Does NOT export the value; the caller is expected ' +
+            'to `export GUILD_SESSION_ID=<id>` to make it available to ' +
+            'downstream invocations. Resolution priority: --session-id ' +
+            '(this flag) > GUILD_SESSION_ID env > none. Per the issue ' +
+            '#249 opt-in policy, an actor-resolved boot with no session ' +
+            'surfaces `hints.session_id_unset: true` so the feature is ' +
+            'discoverable without forcing a value.',
+        },
       },
     },
     output: {
@@ -263,6 +279,25 @@ const VERBS: readonly VerbSchema[] = [
       properties: {
         actor: str,
         role: { type: 'string', enum: ['member', 'host', 'unknown'] },
+        session_id: {
+          type: 'string',
+          description:
+            'Boot-context session_id (#249 slice 2). Echoes the value ' +
+            'resolved from --session-id (this invocation) or ' +
+            'GUILD_SESSION_ID env (whole shell). null when neither is ' +
+            'set. Subsequent gate request / claim / witness calls in ' +
+            'the same shell with GUILD_SESSION_ID exported will stamp ' +
+            'this id into opened_by_session / claimed_by_session / ' +
+            'witness_sessions[<actor>].',
+        },
+        session_id_source: {
+          type: 'string',
+          enum: ['flag', 'env'],
+          description:
+            'Names which input populated `session_id`: "flag" when ' +
+            '--session-id was supplied on this invocation, "env" when ' +
+            'GUILD_SESSION_ID was the source, null when neither.',
+        },
         status: { type: 'object' },
         tail: { type: 'array' },
         your_recent: { type: 'array' },

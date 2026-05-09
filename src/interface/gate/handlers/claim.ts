@@ -6,6 +6,7 @@ import {
 } from '../../shared/parseArgs.js';
 import { C, isDryRun, emitDryRunPreview } from './internal.js';
 import { emitWriteResponse, parseFormat } from './writeFormat.js';
+import { resolveGuildSessionId } from '../../shared/resolveGuildSessionId.js';
 
 // Issue #226 phase 1 — cross-session stake claim.
 //
@@ -55,11 +56,17 @@ export async function reqClaim(c: C, args: ParsedArgs): Promise<number> {
   // agora plays — the schema description names this "metadata,
   // not commentary".
   const note = optionalOption(args, 'note');
+  // Boot-context session_id (#249 slice 2). Read GUILD_SESSION_ID via
+  // the shared resolver — env-only by design (no `.guild-session-id`
+  // file: see resolveGuildSessionId.ts header). Absent stays absent
+  // on disk.
+  const bySession = resolveGuildSessionId();
   if (isDryRun(args)) {
     const { request } = await c.requestUC.claim({
       id,
       by,
       ...(note !== undefined ? { note } : {}),
+      ...(bySession !== undefined ? { bySession } : {}),
       dryRun: true,
     });
     // Claim doesn't transition lifecycle state — the verb is orthogonal
@@ -78,6 +85,7 @@ export async function reqClaim(c: C, args: ParsedArgs): Promise<number> {
     id,
     by,
     ...(note !== undefined ? { note } : {}),
+    ...(bySession !== undefined ? { bySession } : {}),
   });
   // Re-claim message is distinct so a caller that re-runs claim (e.g.
   // a session restart) sees that the call was idempotent rather than

@@ -393,6 +393,11 @@ export class Request {
     template?: string;
     templateVersion?: number;
     gateRequiredAcknowledged?: boolean;
+    /** Session_id for the boot context that opened this request (issue
+     *  #249 slice 2). Validated against `SESSION_ID_RE`; an invalid
+     *  value throws so the interface layer's pre-validation never
+     *  silently no-ops at the domain boundary. */
+    openedBySession?: string;
   }): Request {
     const from = MemberName.of(input.from);
     const action = sanitizeText(input.action, 'action');
@@ -526,6 +531,19 @@ export class Request {
       // true unconditionally so a hydrate-then-resave round-trip
       // produces byte-stable YAML even if the input arg was omitted.
       props.gateRequiredAcknowledged = input.gateRequiredAcknowledged ?? true;
+    }
+    // Session_id (#249 slice 2). Validated at the domain boundary so
+    // non-CLI callers can't smuggle in a malformed value. Empty strings
+    // skip persistence — same convention as `target` / `with`.
+    if (input.openedBySession !== undefined && input.openedBySession.length > 0) {
+      if (!SESSION_ID_RE.test(input.openedBySession)) {
+        throw new DomainError(
+          `openedBySession "${input.openedBySession}" does not match the ` +
+            `session_id format (lowercase alphanumeric + _-.: separators, ≤64 chars).`,
+          'openedBySession',
+        );
+      }
+      props.openedBySession = input.openedBySession;
     }
     // New requests have no on-disk predecessor; loadedVersion=0 marks
     // "never seen" for the optimistic-lock check in save().
@@ -810,7 +828,7 @@ export class Request {
    * State guard is checked here (domain invariant) rather than only at
    * the use case so non-CLI callers can't bypass it.
    */
-  claim(by: MemberName, at: string, note?: string): void {
+  claim(by: MemberName, at: string, note?: string, bySession?: string): void {
     if (this.props.state !== 'pending' && this.props.state !== 'approved') {
       throw new DomainError(
         `Cannot claim a request in state "${this.props.state}"; ` +
@@ -834,6 +852,19 @@ export class Request {
       });
       if (cleanedNote.length === 0) cleanedNote = undefined;
     }
+    // Optional session_id (#249 slice 2). Validated against the same
+    // SESSION_ID_RE the create path uses; an invalid value throws so
+    // a malformed env value never lands silently.
+    let cleanedSession: string | undefined;
+    if (bySession !== undefined && bySession.length > 0) {
+      if (!SESSION_ID_RE.test(bySession)) {
+        throw new DomainError(
+          `claimedBySession "${bySession}" does not match the session_id format`,
+          'claimedBySession',
+        );
+      }
+      cleanedSession = bySession;
+    }
     const existing = this.props.claimedBy;
     if (existing !== undefined) {
       if (existing.value === by.value) {
@@ -845,10 +876,22 @@ export class Request {
         // diverges from what's stored. Empty/whitespace --note is
         // already collapsed to undefined above, so a bare re-claim
         // (no flag) is a true no-op.
+        let mutated = false;
         if (cleanedNote !== undefined && cleanedNote !== this.props.claimNote) {
           this.props.claimNote = cleanedNote;
-          this.bumpMutationSeq();
+          mutated = true;
         }
+        // Session id may legitimately differ across re-claims by the
+        // same actor (different shells / orchestrator runs share an
+        // identity). Overwrite-only-on-divergence mirrors the note rule.
+        if (
+          cleanedSession !== undefined &&
+          cleanedSession !== this.props.claimedBySession
+        ) {
+          this.props.claimedBySession = cleanedSession;
+          mutated = true;
+        }
+        if (mutated) this.bumpMutationSeq();
         return;
       }
       throw new DomainError(
@@ -862,6 +905,7 @@ export class Request {
     this.props.claimedBy = by;
     this.props.claimedAt = at;
     if (cleanedNote !== undefined) this.props.claimNote = cleanedNote;
+    if (cleanedSession !== undefined) this.props.claimedBySession = cleanedSession;
     // Real mutation — bump so the optimistic-lock token moves and a
     // concurrent claim by another actor (which would race past the
     // status_log+reviews+thanks length check, since claim doesn't
@@ -883,6 +927,10 @@ export class Request {
     // auto-reset clears it alongside, so a closed record never
     // carries a stale stake note.
     delete this.props.claimNote;
+    // Same rationale for claimed_by_session (#249) — the session is
+    // metadata for the stake itself; once the stake clears, the
+    // session attribution has nothing to attach to.
+    delete this.props.claimedBySession;
     // Per-actor accounting: a terminal frontier that clears one claim
     // counts as one mutation. See `RequestProps.mutationSeq` for the
     // rationale (observability of how many actors were mediating at
@@ -915,7 +963,7 @@ export class Request {
    * this" signal, whereas claim on `executing` would be too late to
    * mediate the cross-session race claim is designed for.
    */
-  witness(by: MemberName, note?: string): void {
+  witness(by: MemberName, note?: string, bySession?: string): void {
     if (
       this.props.state !== 'pending' &&
       this.props.state !== 'approved' &&
@@ -940,6 +988,19 @@ export class Request {
       });
       if (cleanedNote.length === 0) cleanedNote = undefined;
     }
+    // Optional session_id (#249 slice 2). Same SESSION_ID_RE gate as
+    // claim's; throws on a malformed value so a typo can never silently
+    // overwrite a previously-stamped session.
+    let cleanedSession: string | undefined;
+    if (bySession !== undefined && bySession.length > 0) {
+      if (!SESSION_ID_RE.test(bySession)) {
+        throw new DomainError(
+          `witnessSession "${bySession}" does not match the session_id format`,
+          'witnessSession',
+        );
+      }
+      cleanedSession = bySession;
+    }
     const list = this.props.witnesses ?? [];
     const actorKey = by.value;
     if (list.some((m) => m.value === actorKey)) {
@@ -949,12 +1010,22 @@ export class Request {
       // `gate witness <id>` re-run stays a true no-op.
       const notes = this.props.witnessNotes;
       const current = notes?.get(actorKey);
+      let mutated = false;
       if (cleanedNote !== undefined && cleanedNote !== current) {
         const map = notes ?? new Map<string, string>();
         map.set(actorKey, cleanedNote);
         this.props.witnessNotes = map;
-        this.bumpMutationSeq();
+        mutated = true;
       }
+      const sessions = this.props.witnessSessions;
+      const currentSession = sessions?.get(actorKey);
+      if (cleanedSession !== undefined && cleanedSession !== currentSession) {
+        const map = sessions ?? new Map<string, string>();
+        map.set(actorKey, cleanedSession);
+        this.props.witnessSessions = map;
+        mutated = true;
+      }
+      if (mutated) this.bumpMutationSeq();
       return;
     }
     list.push(by);
@@ -963,6 +1034,11 @@ export class Request {
       const map = this.props.witnessNotes ?? new Map<string, string>();
       map.set(actorKey, cleanedNote);
       this.props.witnessNotes = map;
+    }
+    if (cleanedSession !== undefined) {
+      const map = this.props.witnessSessions ?? new Map<string, string>();
+      map.set(actorKey, cleanedSession);
+      this.props.witnessSessions = map;
     }
     // Real mutation — bump for the same reason claim does. See
     // `bumpMutationSeq` doc and `RequestProps.mutationSeq`.
@@ -1026,6 +1102,14 @@ export class Request {
       notes.delete(by.value);
       if (notes.size === 0) delete this.props.witnessNotes;
     }
+    // witness_sessions (#249) tracks per-actor session attribution —
+    // same lifecycle as the witness entry it annotates. Drop alongside
+    // the note so an empty-after-removal map collapses to absence.
+    const sessions = this.props.witnessSessions;
+    if (sessions !== undefined) {
+      sessions.delete(by.value);
+      if (sessions.size === 0) delete this.props.witnessSessions;
+    }
     // Real mutation — bump so two concurrent unwitness calls by
     // different actors don't both pass the optimistic-lock check
     // (which sees identical pre-mutation length on both sides) and
@@ -1048,6 +1132,10 @@ export class Request {
     // terminal auto-reset, same rationale as claim_note: closed
     // records carry no stake metadata.
     delete this.props.witnessNotes;
+    // Per-witness session attribution (#249) lives on the same
+    // lifecycle — terminal records carry no live observation context,
+    // so the session map clears alongside the witnesses.
+    delete this.props.witnessSessions;
     // Per-actor accounting: bump once per cleared witness so a
     // terminal frontier collapsing N witnesses contributes +N to the
     // version token. Keeps "how many actors were observing at close"

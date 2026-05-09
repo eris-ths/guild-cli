@@ -6,6 +6,7 @@ import {
 } from '../../shared/parseArgs.js';
 import { C, isDryRun, emitDryRunPreview } from './internal.js';
 import { emitWriteResponse, parseFormat } from './writeFormat.js';
+import { resolveGuildSessionId } from '../../shared/resolveGuildSessionId.js';
 
 // Issue #244 (#226 phase 2) — non-exclusive cross-session observer.
 //
@@ -60,11 +61,15 @@ export async function reqWitness(c: C, args: ParsedArgs): Promise<number> {
   // claim's. Domain sanitizes empty / whitespace-only to undefined,
   // so a bare `--note ""` is a true no-op on the note dimension.
   const note = optionalOption(args, 'note');
+  // Boot-context session_id (#249 slice 2). Same env-only resolver as
+  // claim — see resolveGuildSessionId.ts for the rationale.
+  const bySession = resolveGuildSessionId();
   if (isDryRun(args)) {
     const { request } = await c.requestUC.witness({
       id,
       by,
       ...(note !== undefined ? { note } : {}),
+      ...(bySession !== undefined ? { bySession } : {}),
       dryRun: true,
     });
     // Witness doesn't transition lifecycle state — orthogonal to
@@ -82,6 +87,7 @@ export async function reqWitness(c: C, args: ParsedArgs): Promise<number> {
     id,
     by,
     ...(note !== undefined ? { note } : {}),
+    ...(bySession !== undefined ? { bySession } : {}),
   });
   // Re-witness message is distinct so the caller can tell whether
   // anything landed (idempotent re-run is legitimate; we just want
