@@ -7,6 +7,19 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
 
 ## [Unreleased]
 
+### Deprecated
+
+- **`--executor` (singular) on `gate request` / `gate fast-track`**
+  ([#239](https://github.com/eris-ths/guild-cli/issues/239)).
+  Explicit `--executor <name>` now emits a stderr notice pointing at
+  `--executors <name>` and announcing v0.7.0 removal. The implicit
+  `--executor` fallback in `gate fast-track` (defaulting to `--from`
+  when neither flag is given) stays silent — only user-supplied
+  values trigger the notice. Behavior is otherwise unchanged through
+  the v0.6 cycle; the deprecated surface is removed at v0.7.0 cut
+  along with the `executor` JSON alias on rendering.
+  Notice introduced for v0.6.0; removal scheduled for v0.7.0.
+
 ### Fixed
 
 - **friction bundle — flag aliases / lense help / self-approve discoverability /
