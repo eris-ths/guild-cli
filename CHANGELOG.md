@@ -7,6 +7,21 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
 
 ## [Unreleased]
 
+### Fixed
+
+- **strict-mode review hydrate (#134 H2 hotfix)** — review records
+  written under `gate.strict_lenses: true` (using a bundled devil
+  catalog lense like `injection`) failed re-read by `gate show` /
+  `gate list` because the hydrate path only knew the (narrower)
+  `config.lenses` allowed-set. `Review.restore` now uses a permissive
+  lense parser (`parseLenseLoose`): the allowed-set check fires only
+  on fresh writes, not on re-reads. Records-outlive-writers — a
+  historical record's lense was already validated at write time, and
+  re-validating against a possibly-changed policy would erase the
+  audit trail. This also closes a pre-existing latent bug where
+  removing a lense from `config.lenses` would silently drop older
+  reviews from list output.
+
 ### Added
 
 - **opt-in strict lense vocabulary for `gate review` (#134 H2 — closes #134)**

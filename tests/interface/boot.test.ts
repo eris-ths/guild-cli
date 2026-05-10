@@ -176,10 +176,14 @@ test('gate boot: content_root_health reports clean when everything hydrates', ()
 });
 
 test('gate boot: content_root_health surfaces malformed records with a fix hint', () => {
-  // Seed a request with an invalid lense so hydration fails;
+  // Seed a request with an invalid verdict so hydration fails;
   // the ID pattern must match YamlRequestRepository's listAll filter
   // (YYYY-MM-DD-NNN[N]), otherwise the file is filtered out before
   // hydration even attempts it — a subtlety worth asserting against.
+  // (Lense was the original malformation vector, but #134 H2's
+  // hotfix made the lense restore path permissive — records-outlive-
+  // writers — so verdict is now the better corruption signal: it has
+  // a closed enum and no policy-drift use case.)
   const { root, cleanup } = bootstrap();
   try {
     mkdirSync(join(root, 'requests', 'completed'), { recursive: true });
@@ -204,8 +208,8 @@ test('gate boot: content_root_health surfaces malformed records with a fix hint'
         'reviews:',
         '  - by: alice',
         '    at: 2099-04-17T10:00:01.000Z',
-        '    lense: not_a_real_lense',
-        '    verdict: ok',
+        '    lense: devil',
+        '    verdict: not_a_real_verdict',
         '    comment: test',
         '',
       ].join('\n'),
