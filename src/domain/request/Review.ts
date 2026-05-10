@@ -1,4 +1,4 @@
-import { Lense, parseLense } from '../shared/Lense.js';
+import { Lense, parseLense, parseLenseLoose } from '../shared/Lense.js';
 import { Verdict, parseVerdict } from '../shared/Verdict.js';
 import { MemberName } from '../member/MemberName.js';
 import { DomainError } from '../shared/DomainError.js';
@@ -79,7 +79,16 @@ export class Review {
     strictComment: boolean,
   ): Review {
     const by = MemberName.of(input.by);
-    const lense = parseLense(input.lense, input.allowedLenses);
+    // Hydrate path uses the loose parser (records-outlive-writers): a
+    // historical record's lense was already validated at write time;
+    // re-checking it against a possibly-changed allowed-set (config
+    // edited, or #134 H2 strict mode toggled since the write) would
+    // erase the record from list/show output and break the audit
+    // trail. Strict path keeps the allowed-set check so a fresh write
+    // with a typo'd lense still fails closed.
+    const lense = strictComment
+      ? parseLense(input.lense, input.allowedLenses)
+      : parseLenseLoose(input.lense);
     const verdict = parseVerdict(input.verdict);
     const comment = sanitizeComment(input.comment, strictComment);
     // sanitize keeps inner/leading whitespace (`trim: false` so code

@@ -198,6 +198,64 @@ test('#134 H2: gate review --help (default) keeps the resolved-from-config wordi
   assert.match(r.stdout, /resolved from guild\.config\.yaml/);
 });
 
+// -------------------- read-after-write under strict mode --------------------
+
+test('#134 H2: write-then-read under strict mode survives hydrate (records-outlive-writers)', (t) => {
+  // Regression for the dogfood-found bug: strict mode wrote a review
+  // with a bundled-catalog lense (`injection`), then `gate show` /
+  // `gate list` failed hydrate because the read path only knew
+  // config.lenses (= DEFAULT_LENSES) — the strict-mode allowed set
+  // wasn't propagated to the hydrate path. Fix: Review.restore uses
+  // parseLenseLoose so the allowed-set check only fires on fresh
+  // writes, not on re-reads of historical records.
+  const { root, cleanup } = bootstrap('gate:\n  strict_lenses: true\n');
+  t.after(cleanup);
+  const id = makeReviewable(root);
+  const w = run(root, [
+    'review', id,
+    '--by', 'bob',
+    '--lense', 'injection',
+    '--verdict', 'ok',
+    '--note', 'no injection vectors',
+  ]);
+  assert.equal(w.status, 0, `strict-mode write must succeed: ${w.stderr}`);
+
+  // The bug surfaces on read, not write. show/list must round-trip.
+  const s = run(root, ['show', id, '--format', 'json']);
+  assert.equal(s.status, 0, `show must hydrate the strict-mode review: ${s.stderr}`);
+  const payload = JSON.parse(s.stdout);
+  assert.equal(payload.reviews.length, 1);
+  assert.equal(payload.reviews[0].lense, 'injection');
+});
+
+test('#134 H2: read tolerates a lense not in the CURRENT allowed-set (config drift)', (t) => {
+  // Config-drift variant: write under strict mode, then turn strict
+  // OFF and re-read. The historical record must survive even though
+  // `injection` is no longer in config.lenses. Same principle: the
+  // record was valid at write time; the read path doesn't re-litigate
+  // policy changes.
+  const { root, cleanup } = bootstrap('gate:\n  strict_lenses: true\n');
+  t.after(cleanup);
+  const id = makeReviewable(root);
+  run(root, [
+    'review', id,
+    '--by', 'bob',
+    '--lense', 'injection',
+    '--verdict', 'ok',
+    '--note', 'no inj',
+  ]);
+  // Flip strict OFF — now the allowed set is DEFAULT_LENSES which
+  // doesn't include `injection`. Read must still work.
+  writeFileSync(
+    join(root, 'guild.config.yaml'),
+    'content_root: .\nhost_names: [eris]\ngate:\n  strict_lenses: false\n',
+  );
+  const s = run(root, ['show', id, '--format', 'json']);
+  assert.equal(s.status, 0, `historical record must survive policy flip: ${s.stderr}`);
+  const payload = JSON.parse(s.stdout);
+  assert.equal(payload.reviews[0].lense, 'injection');
+});
+
 // -------------------- malformed config falls back to false --------------------
 
 test('#134 H2: malformed gate.strict_lenses falls back to false (no crash)', (t) => {
