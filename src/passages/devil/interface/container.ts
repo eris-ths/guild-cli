@@ -10,12 +10,14 @@
 import { GuildConfig } from '../../../infrastructure/config/GuildConfig.js';
 import { YamlDevilReviewRepository } from '../infrastructure/YamlDevilReviewRepository.js';
 import { BundledLenseCatalog } from '../infrastructure/BundledLenseCatalog.js';
+import { ComposedLenseCatalog } from '../infrastructure/ComposedLenseCatalog.js';
 import { BundledPersonaCatalog } from '../infrastructure/BundledPersonaCatalog.js';
+import { LenseCatalog } from '../application/LenseCatalog.js';
 
 export interface DevilContainer {
   config: GuildConfig;
   reviews: YamlDevilReviewRepository;
-  lenses: BundledLenseCatalog;
+  lenses: LenseCatalog;
   personas: BundledPersonaCatalog;
 }
 
@@ -28,7 +30,14 @@ export function buildDevilContainer(
 ): DevilContainer {
   const config = GuildConfig.load(opts.cwd);
   const reviews = new YamlDevilReviewRepository(config);
-  const lenses = new BundledLenseCatalog();
+  // #134 G: bundled defaults + content_root extensions under
+  // <contentRoot>/devil/lenses/*.yaml. Hard-errors at startup when an
+  // extension collides with a bundled name (records-outlive-writers).
+  const lenses = ComposedLenseCatalog.load(
+    new BundledLenseCatalog(),
+    config.contentRoot,
+    config.onMalformed,
+  );
   const personas = new BundledPersonaCatalog();
   return { config, reviews, lenses, personas };
 }

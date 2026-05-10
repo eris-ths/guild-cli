@@ -7,6 +7,36 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
 
 ## [Unreleased]
 
+### Added
+
+- **per-content_root lense extension loader for devil-review (#134 G)**
+  ([#134](https://github.com/eris-ths/guild-cli/issues/134)).
+  `<content_root>/devil/lenses/<name>.yaml` now extends the bundled
+  lense catalog. Each YAML file follows the same shape as `Lense.create`
+  input (`name` / `title` / `description` / `ingest_sources?` /
+  `delegate?` / `examples?`) and is loaded by `ComposedLenseCatalog`
+  on top of `BundledLenseCatalog`.
+  - **extend-only, hard-error on collision.** A name collision between
+    a content_root extension and a bundled lense raises `LenseCollision`
+    at startup. Silent override would make older review records
+    ambiguous to re-read (records-outlive-writers). The fix is to pick
+    a distinct extension name (e.g. `security-strict`).
+  - **provenance pinned at write time.** Every `Lense` carries
+    `source: 'bundled' | 'extension'`; entry records persist
+    `lense_source: extension` when the lense was loaded from
+    content_root (omitted for the bundled-default common case to keep
+    YAML terse). A future bundled v2 that adds the same name cannot
+    retroactively reinterpret a recorded entry — the record disambiguates
+    itself.
+  - **doctor-friendly failure modes.** Malformed YAML and schema
+    validation failures route through `onMalformed` rather than
+    crashing startup, so `gate doctor` can surface them.
+  - `devil schema --format json` now exposes `source` per lense so
+    consumers can distinguish bundled vs extension entries.
+  - H2 (gate-side `gate.strict_lenses` opt-in mode) is the next slice
+    and lands as a separate PR; this ship is loader + record
+    annotation only.
+
 ### Deprecated
 
 - **`--executor` (singular) on `gate request` / `gate fast-track`**

@@ -214,6 +214,9 @@ export async function entryOnReview(
     by,
     persona: persona.name,
     lense: lense.name,
+    // #134 G: pin extension provenance on the record. Bundled is the
+    // default and is omitted to keep the common-case YAML terse.
+    ...(lense.source === 'extension' ? { lense_source: 'extension' as const } : {}),
     kind,
     text,
     ...(severity !== undefined ? { severity } : {}),
