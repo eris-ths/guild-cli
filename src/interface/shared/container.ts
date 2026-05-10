@@ -16,6 +16,8 @@ import { RepairUseCases } from '../../application/repair/RepairUseCases.js';
 import { UnrespondedConcernsQuery } from '../../application/concern/UnrespondedConcernsQuery.js';
 import { SafeFsQuarantineStore } from '../../infrastructure/persistence/SafeFsQuarantineStore.js';
 import { OnMalformed } from '../../application/ports/OnMalformed.js';
+import { BundledLenseCatalog } from '../../passages/devil/infrastructure/BundledLenseCatalog.js';
+import { ComposedLenseCatalog } from '../../passages/devil/infrastructure/ComposedLenseCatalog.js';
 import { YamlPlayRepository } from '../../passages/agora/infrastructure/YamlPlayRepository.js';
 import { PlayRepository } from '../../passages/agora/application/PlayRepository.js';
 import { FsTemplateRepository } from '../../infrastructure/template/TemplateRepository.js';
@@ -162,7 +164,23 @@ export function buildContainer(opts: BuildContainerOpts = {}): Container {
   return {
     config,
     memberUC: new MemberUseCases(members),
-    requestUC: new RequestUseCases({ requests, members, notifier, clock, allowedLenses: config.lenses }),
+    requestUC: new RequestUseCases({
+      requests,
+      members,
+      notifier,
+      clock,
+      // #134 H2: when gate.strict_lenses is on, the allowed-lense set
+      // is the unified devil catalog (bundled + content_root extensions
+      // from G). Otherwise the historical config.lenses list keeps
+      // driving validation. Default is permanently opt-in.
+      allowedLenses: config.gate.strictLenses
+        ? ComposedLenseCatalog.load(
+            new BundledLenseCatalog(),
+            config.contentRoot,
+            config.onMalformed,
+          ).names()
+        : config.lenses,
+    }),
     issueUC: new IssueUseCases(issues, members, clock),
     messageUC: new MessageUseCases({ members, notifier, clock }),
     diagnosticUC: new DiagnosticUseCases(

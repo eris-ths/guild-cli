@@ -53,6 +53,35 @@ export type GuildProfile = 'standard' | 'swarm';
  */
 export type SelfApprovePolicy = 'allowed' | 'warn' | 'forbidden';
 
+/**
+ * Gate-scoped configuration (#134 H2). New top-level namespace for
+ * gate-specific knobs that don't fit cleanly under the cross-passage
+ * `features:` block.
+ */
+export interface GateConfig {
+  /**
+   * H2 strict lense vocabulary (#134 H2 / closes #134 with G):
+   *   false (default, **permanent**) — gate review's allowed-lense set
+   *     comes from `lenses:` in guild.config.yaml (current behavior,
+   *     byte-identical to pre-H2).
+   *   true — gate review's allowed-lense set is the devil
+   *     ComposedLenseCatalog (bundled defaults + content_root
+   *     extensions under `<content_root>/devil/lenses/*.yaml`). Unknown
+   *     lenses are rejected at the domain boundary with the same
+   *     error shape as today.
+   *
+   * Default is permanently opt-in: we do not flip to true at v1.0 or
+   * any future cut. The whole point of H2 is letting each team pick
+   * its own enforcement timing — auto-flipping defeats that.
+   *
+   * Coverage gating (devil's "conclude requires every catalog lense
+   * touched") is NOT propagated. Strict mode is vocabulary enforcement
+   * only; coverage discipline stays devil-side where the substrate-as-
+   * floor guarantee lives.
+   */
+  strictLenses: boolean;
+}
+
 export interface GuildFeatures {
   /**
    * When true, parallel waves (multi-executor requests) carry a
@@ -110,6 +139,7 @@ export interface GuildConfigProps {
   hookPluginPaths: readonly string[];
   profile: GuildProfile;
   features: GuildFeatures;
+  gate: GateConfig;
   onMalformed: OnMalformed;
 }
 
@@ -133,6 +163,7 @@ export class GuildConfig implements GuildConfigProps {
     readonly hookPluginPaths: readonly string[],
     readonly profile: GuildProfile,
     readonly features: GuildFeatures,
+    readonly gate: GateConfig,
     readonly onMalformed: OnMalformed,
     /**
      * Absolute path to the `guild.config.yaml` that produced this
@@ -282,7 +313,26 @@ export class GuildConfig implements GuildConfigProps {
         explicitWorktreeRequired ?? (profile === 'swarm'),
       selfApprove,
     };
-    return new GuildConfig(root, contentRoot, paths, hostNames, lenses, doctorPlugins, verbPluginPaths, hookPluginPaths, profile, features, onMalformed, configPath);
+    // gate.* (#134 H2). Top-level namespace, not nested under features:
+    // these knobs are gate-passage-scoped (no cross-passage interaction
+    // with profile/features). Default is permanently opt-in — we do
+    // not auto-flip at any future cut. Malformed values fall back to
+    // false with an onMalformed notice (same conservative read pattern).
+    const gateRaw = raw.gate ?? {};
+    let strictLenses = false;
+    if (gateRaw.strict_lenses !== undefined) {
+      if (typeof gateRaw.strict_lenses === 'boolean') {
+        strictLenses = gateRaw.strict_lenses;
+      } else {
+        onMalformed(
+          configPath,
+          `unknown gate.strict_lenses ${JSON.stringify(gateRaw.strict_lenses)} — ` +
+            `falling back to 'false'. Valid: true | false.`,
+        );
+      }
+    }
+    const gate: GateConfig = { strictLenses };
+    return new GuildConfig(root, contentRoot, paths, hostNames, lenses, doctorPlugins, verbPluginPaths, hookPluginPaths, profile, features, gate, onMalformed, configPath);
   }
 
   static default(
@@ -307,6 +357,7 @@ export class GuildConfig implements GuildConfigProps {
       [],
       'standard',
       { worktreeRequiredForParallel: false, selfApprove: 'warn' },
+      { strictLenses: false },
       onMalformed,
       null,
     );

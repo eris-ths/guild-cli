@@ -9,6 +9,23 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
 
 ### Added
 
+- **opt-in strict lense vocabulary for `gate review` (#134 H2 — closes #134)**
+  ([#274](https://github.com/eris-ths/guild-cli/issues/274)).
+  New top-level `gate.strict_lenses: bool` config (default `false`,
+  **permanently** opt-in). When `false`, gate review's allowed-lense
+  set comes from `lenses:` in `guild.config.yaml` — byte-identical to
+  pre-H2. When `true`, the allowed set is the unified devil
+  `ComposedLenseCatalog` (bundled defaults + content_root extensions
+  from G under `<content_root>/devil/lenses/*.yaml`). Composes with G:
+  teams that registered `team-perf.yaml` / `team-a11y.yaml` etc. get
+  gate-side vocabulary enforcement on the full custom catalog without
+  touching devil's coverage discipline. `gate review --help` reflects
+  whichever source is load-bearing for the run. Coverage gating
+  (devil's "conclude requires every catalog lense touched") is NOT
+  propagated — strict mode is vocabulary enforcement only. Default is
+  permanently opt-in: we do not flip to `true` at v1.0 or any future
+  cut.
+
 - **per-content_root lense extension loader for devil-review (#134 G)**
   ([#134](https://github.com/eris-ths/guild-cli/issues/134)).
   `<content_root>/devil/lenses/<name>.yaml` now extends the bundled

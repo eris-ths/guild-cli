@@ -44,13 +44,26 @@ export async function reqReview(c: C, args: ParsedArgs): Promise<number> {
   // `gate review --help` sees the accepted enum without first having
   // to fail with a bogus value. The error path already lists the same
   // info; this brings the discoverability up one level.
+  // #134 H2: when gate.strict_lenses is on, the allowed-lense set
+  // mirrors the devil ComposedLenseCatalog (bundled + content_root
+  // extensions). Otherwise the configured `lenses:` list governs.
+  // Help shows whichever source is actually load-bearing for this run
+  // so the reviewer doesn't have to discover the difference from a
+  // failing call.
   const lenseList = c.config.lenses.length > 0
     ? c.config.lenses.join(', ')
     : 'devil, layer, cognitive, user';
-  const helpExtras: readonly string[] = [
-    `accepted lenses (resolved from guild.config.yaml): ${lenseList}`,
-    `note: --comment is a deprecated alias of --note (kept for back-compat)`,
-  ];
+  const helpExtras: readonly string[] = c.config.gate.strictLenses
+    ? [
+        `accepted lenses (gate.strict_lenses=true → unified devil catalog, ` +
+          `bundled + <content_root>/devil/lenses/*.yaml extensions). ` +
+          `See \`devil schema --format json\` for the full list with provenance.`,
+        `note: --comment is a deprecated alias of --note (kept for back-compat)`,
+      ]
+    : [
+        `accepted lenses (resolved from guild.config.yaml): ${lenseList}`,
+        `note: --comment is a deprecated alias of --note (kept for back-compat)`,
+      ];
   rejectUnknownFlags(args, REVIEW_KNOWN_FLAGS, 'review', helpExtras);
   const id = args.positional[0];
   if (!id) {
