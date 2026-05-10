@@ -179,6 +179,12 @@ The trust model for plugins is documented in
 in-process with full Node.js capabilities, and the `trusted: true`
 guard on `guild.config.yaml` is the consent surface.
 
+The runtime field-by-field shape of `HookContext` and the verb-plugin
+context — value-object getters that need `.value`, plain primitives,
+the `toJSON()` escape hatch — is documented in
+[`docs/plugin-schema.md`](plugin-schema.md). Read it before writing
+your first hook; the alternative is reading `src/domain/`.
+
 ## Security fixes
 
 Security patches may ship in any release type (patch, minor, major).

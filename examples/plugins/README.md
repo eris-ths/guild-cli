@@ -8,6 +8,14 @@ End-to-end examples for the two extension surfaces shipped under
 - **Hook plugins** — observe / veto the request lifecycle with
   `before:` / `after:` callbacks
 
+> **Field-by-field schema reference**: see
+> [`docs/plugin-schema.md`](../../docs/plugin-schema.md) for the
+> runtime type of every `ctx.request.*` field hooks receive (which
+> are value objects needing `.value`, which are plain primitives,
+> and the `toJSON()` escape hatch). Read it before writing your
+> first hook — the value-object footgun (`ctx.request.from === 'alice'`
+> is always false) is the #1 source of silent policy bugs.
+
 Both surfaces share one consent gate (`plugins.trusted: true`) and
 one trust model (in-process, full Node capabilities, no sandbox).
 See `SECURITY.md` § "Plugin trust model" before loading any plugin
