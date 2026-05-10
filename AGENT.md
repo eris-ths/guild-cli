@@ -112,6 +112,13 @@ gate review <id> --by <m> --lense <l> --verdict <v> --comment "..."
   `lenses: [devil, layer, cognitive, user, security, perf, a11y]`
   — so reviews can carry `--lense security` verdicts in addition to
   the meta four.
+  - **Strict mode (#134 H2, opt-in).** Set `gate.strict_lenses: true`
+    to flip the allowed-lense set from the gate-side `lenses:` list
+    over to the unified devil catalog (bundled defaults +
+    `<content_root>/devil/lenses/*.yaml` extensions, #134 G).
+    Default is permanently `false` — never auto-flipped. Coverage
+    discipline stays devil-side; strict mode is vocabulary
+    enforcement only. See `docs/verbs.md` § Strict lense vocabulary.
 - Verdicts: `ok | concern | reject`
 - Reviews are append-only. Corrections are new entries, not edits.
 
@@ -372,8 +379,10 @@ verbs):
 - `author-defender` — articulate the author's framing + assumptions
 - `mirror` — read both, surface contradictions and shared blind spots
 
-Lenses (v1 catalog of 12; per-content_root override loader is
-out-of-scope for v1 with the catalog interface as the seam):
+Lenses (v1 catalog of 12 bundled defaults, plus per-content_root
+extensions under `<content_root>/devil/lenses/<name>.yaml` loaded by
+`ComposedLenseCatalog` — extend-only, name collisions with bundled
+fail loud at startup. See #134 G):
 
 - `injection` / `injection-parser` / `path-network` / `auth-access`
   / `memory-safety` / `crypto` / `deserialization`

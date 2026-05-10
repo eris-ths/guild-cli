@@ -421,8 +421,22 @@ a missing field signals real corruption).
 `src/passages/devil/domain/Entry.ts` and validated at the domain
 layer rather than the YAML hydrate. The repository passes arrays
 through as `unknown[]` — this lets new entry kinds (`mirror`,
-`synthesis`, `lense-coverage`) ship without storage churn. See devil
-issue #134 for the catalog/lense extension discussion.
+`synthesis`, `lense-coverage`) ship without storage churn.
+
+**`entries[*].lense_source`** (#134 G) — optional, only persisted
+when the entry's lense came from a `<content_root>/devil/lenses/*.yaml`
+extension (value: `extension`). Bundled-catalog lenses omit the field
+to keep the common-case YAML terse; readers treat absence as
+`bundled`. Pinning provenance at write time means a future bundled
+catalog that adds the same name cannot retroactively reinterpret an
+older entry — the record disambiguates itself.
+
+**Per-content_root lense extension files** live at
+`<content_root>/devil/lenses/<name>.yaml` (one lense per file). Same
+shape as `Lense.create` input — `name` / `title` / `description` /
+optional `ingest_sources` / `delegate` / `examples`. Loaded by
+`ComposedLenseCatalog` on top of the bundled defaults; name collisions
+fail loud at startup (extend-only — see #134 G).
 
 ---
 
