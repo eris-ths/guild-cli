@@ -7,6 +7,24 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
 
 ## [Unreleased]
 
+### Added
+
+- **plugin schema doc drift detection (#283 — closes #283)**
+  ([#283](https://github.com/eris-ths/guild-cli/issues/283)).
+  New CI test `tests/docs/pluginSchemaDocSync.test.ts` enforces sync
+  between `docs/plugin-schema.md` and the actual `Request` / `Review`
+  class surfaces. Adding a `Request` getter without updating the doc
+  fails CI with an actionable error pointing at the section to update;
+  removing or renaming a getter without updating the doc fails the
+  same way. Stale `r.X` references in the `extra.review` doc section
+  are also caught. The doc carries an `## Intentionally undocumented
+  Request getters` allowlist for internal-only getters
+  (`loadedVersion` / `currentVersion` / `mutationSeq`); new getters
+  must land in either the doc tables OR the allowlist — silently
+  skipping is not allowed. Implementation reads the `.d.ts` emitted
+  by `tsc` (no extra dependencies) and skips method calls (e.g.
+  `request.toJSON()`) since the v1 contract is getter-only.
+
 ### Fixed
 
 - **`gate fast-track` now fires lifecycle hooks (#279)**

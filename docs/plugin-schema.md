@@ -294,6 +294,23 @@ work is naturally idempotent on `(id, state)` pairs.
 
 ---
 
+## Intentionally undocumented Request getters
+
+These `Request` getters exist on the class but are deliberately **not**
+exposed to plugin authors. Adding a row here (vs adding a row to the
+field tables above) is the explicit choice when a new getter lands —
+the CI sync check (`tests/docs/pluginSchemaDocSync.test.ts`, #283)
+forces one or the other on every new `Request` getter.
+
+- `loadedVersion` — internal version-counter for optimistic CAS on
+  `requests.save()`. Plugins should not branch on this.
+- `currentVersion` — sibling of `loadedVersion`; same rationale.
+- `mutationSeq` — internal sequence number for in-memory mutation
+  ordering. Not stable across processes.
+
+If you reach for one of these inside a plugin, you almost certainly
+want a different field — open an issue describing the use case.
+
 ## Where to look next
 
 - [`SECURITY.md` § Plugin trust model](../SECURITY.md#plugin-trust-model) — what `plugins.trusted: true` actually grants
