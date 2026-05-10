@@ -724,6 +724,63 @@ can write `devil` and `security` reviews on the same request. The
 config makes the set of valid perspectives explicit for a given
 content root, which prevents lense drift across long-lived projects.
 
+### Strict lense vocabulary (`gate.strict_lenses`, opt-in)
+
+The `lenses:` list above is gate's free-form vocabulary — convenient,
+but disconnected from the substrate-side devil catalog. For teams
+that want gate review's allowed-lense set to track the unified devil
+catalog (bundled defaults + per-content_root extensions), opt in:
+
+```yaml
+gate:
+  strict_lenses: true   # default false — permanently opt-in
+```
+
+When on:
+
+- `gate review --lense X` rejects `X` unless it appears in the unified
+  devil catalog. The catalog is the bundled defaults
+  (`docs/verbs.md` § Lenses) merged with any
+  `<content_root>/devil/lenses/*.yaml` extensions (#134 G).
+- `gate review --help` advertises the source of the allowed-set
+  (`gate.strict_lenses=true → unified devil catalog ...`).
+- Coverage gating is **not** propagated. Strict mode is vocabulary
+  enforcement only; devil's "conclude requires every catalog lense
+  touched" stays devil-side, where the substrate-as-floor guarantee
+  lives.
+
+When off (default):
+
+- Behavior is byte-identical to pre-H2: the `lenses:` list governs.
+
+The default is permanently opt-in — we never auto-flip to `true` at
+v1.0 or any future cut. Each team picks its own enforcement timing
+(see #134 H2 / #274). Existing review records are read with a
+permissive parser (`records-outlive-writers`), so flipping the flag
+in either direction never breaks `gate show` / `gate list` on
+historical records.
+
+#### Per-content_root lense extensions (devil-side, #134 G)
+
+Drop one YAML file per custom lense under
+`<content_root>/devil/lenses/<name>.yaml`:
+
+```yaml
+# <content_root>/devil/lenses/team-perf.yaml
+name: team-perf
+title: Team Performance
+description: hot path budgets and N+1 detection.
+examples:
+  - "request handler exceeds 200ms p95"
+```
+
+Loaded automatically by `devil` (and by `gate review` when
+`gate.strict_lenses: true`). `devil schema --format json` exposes
+each lense's `source: bundled | extension` so you can tell at a
+glance which entries are local. **Extend-only**: a name collision
+with a bundled lense is a hard error at startup — pick a distinct
+name (e.g. `injection-strict`) instead of shadowing.
+
 ### Editor-based review comments
 
 When `gate review` is called without `--comment`, without a
