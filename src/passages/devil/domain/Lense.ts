@@ -37,6 +37,18 @@ export function parseLenseName(raw: unknown): string {
   return raw;
 }
 
+/**
+ * Provenance marker (#134 G): is this lense from the bundled catalog
+ * or from a content_root extension under `devil/lenses/*.yaml`?
+ *
+ * Pinning provenance lets entry records (and `devil schema`) name the
+ * source of every lense they touch. Without it, a future bundled v2
+ * that adds `security` would silently re-bind older entries that named
+ * a then-extension lense `security` — records-outlive-writers requires
+ * the record itself to disambiguate.
+ */
+export type LenseSource = 'bundled' | 'extension';
+
 export interface LenseProps {
   readonly name: string;
   readonly title: string;
@@ -60,6 +72,8 @@ export interface LenseProps {
    * scope without re-deriving from the title alone.
    */
   readonly examples?: readonly string[];
+  /** See LenseSource. Defaults to 'bundled' when omitted in create(). */
+  readonly source?: LenseSource;
 }
 
 export class Lense {
@@ -69,6 +83,7 @@ export class Lense {
   readonly ingest_sources: readonly string[];
   readonly delegate?: string;
   readonly examples?: readonly string[];
+  readonly source: LenseSource;
 
   private constructor(props: LenseProps) {
     this.name = props.name;
@@ -77,6 +92,7 @@ export class Lense {
     this.ingest_sources = props.ingest_sources;
     if (props.delegate !== undefined) this.delegate = props.delegate;
     if (props.examples !== undefined) this.examples = props.examples;
+    this.source = props.source ?? 'bundled';
   }
 
   /**
@@ -91,6 +107,7 @@ export class Lense {
     ingest_sources?: readonly string[];
     delegate?: string;
     examples?: readonly string[];
+    source?: LenseSource;
   }): Lense {
     const name = parseLenseName(input.name);
     if (typeof input.title !== 'string' || input.title.trim().length === 0) {
@@ -117,6 +134,12 @@ export class Lense {
         }
       }
     }
+    if (input.source !== undefined && input.source !== 'bundled' && input.source !== 'extension') {
+      throw new DomainError(
+        `source must be 'bundled' or 'extension', got: ${String(input.source)}`,
+        'source',
+      );
+    }
     const props: LenseProps = {
       name,
       title: input.title.trim(),
@@ -124,6 +147,7 @@ export class Lense {
       ingest_sources,
       ...(input.delegate !== undefined ? { delegate: input.delegate } : {}),
       ...(input.examples !== undefined ? { examples: input.examples } : {}),
+      ...(input.source !== undefined ? { source: input.source } : {}),
     };
     return new Lense(props);
   }
@@ -137,7 +161,33 @@ export class Lense {
     };
     if (this.delegate !== undefined) out['delegate'] = this.delegate;
     if (this.examples !== undefined) out['examples'] = this.examples;
+    // source is always present (default 'bundled') so the schema output
+    // is unambiguous; consumers don't have to infer the default.
+    out['source'] = this.source;
     return out;
+  }
+}
+
+export class LenseCollision extends Error {
+  /**
+   * Hard-error at catalog load time when a content_root extension
+   * names the same lense as a bundled default. records-outlive-writers:
+   * silently shadowing bundled meaning across content_roots makes a
+   * 2-year-old review record ambiguous to re-read. The fix is to pick
+   * a distinct extension name.
+   */
+  readonly bundledName: string;
+  readonly extensionPath: string;
+  constructor(bundledName: string, extensionPath: string) {
+    super(
+      `Lense "${bundledName}" defined by extension at ${extensionPath} ` +
+        `collides with a bundled lense of the same name. ` +
+        `next: rename the extension lense to a distinct name (e.g. "${bundledName}-strict") — ` +
+        `silent override would make older review records ambiguous to re-read.`,
+    );
+    this.name = 'LenseCollision';
+    this.bundledName = bundledName;
+    this.extensionPath = extensionPath;
   }
 }
 

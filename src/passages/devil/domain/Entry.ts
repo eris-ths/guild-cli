@@ -23,7 +23,7 @@
 //   - toJSON omits absent optionals so re-readers don't see noise
 
 import { DomainError } from '../../../domain/shared/DomainError.js';
-import { parseLenseName } from './Lense.js';
+import { parseLenseName, LenseSource } from './Lense.js';
 import { parsePersonaName } from './Persona.js';
 
 export type EntryKind =
@@ -177,6 +177,14 @@ export interface EntryProps {
   readonly by: string;
   readonly persona: string;
   readonly lense: string;
+  /**
+   * Provenance of `lense` at entry-write time (#134 G). Only persisted
+   * when the lense was an extension; bundled is the default and is
+   * omitted to keep records terse for the common case. records-outlive-
+   * writers: pinning the source here means a future bundled v2 that
+   * adds the same name cannot retroactively change what this record meant.
+   */
+  readonly lense_source?: LenseSource;
   readonly kind: EntryKind;
   readonly text: string;
   readonly addresses?: string; // optional cross-reference to earlier entry id
@@ -201,6 +209,7 @@ export class Entry {
   readonly by: string;
   readonly persona: string;
   readonly lense: string;
+  readonly lense_source?: LenseSource;
   readonly kind: EntryKind;
   readonly text: string;
   readonly addresses?: string;
@@ -220,6 +229,7 @@ export class Entry {
     this.lense = props.lense;
     this.kind = props.kind;
     this.text = props.text;
+    if (props.lense_source !== undefined) this.lense_source = props.lense_source;
     if (props.addresses !== undefined) this.addresses = props.addresses;
     if (props.severity !== undefined) this.severity = props.severity;
     if (props.severity_rationale !== undefined)
@@ -257,6 +267,16 @@ export class Entry {
     const persona = parsePersonaName(input.persona);
     const lense = parseLenseName(input.lense);
     const kind = parseEntryKind(input.kind);
+    if (
+      input.lense_source !== undefined &&
+      input.lense_source !== 'bundled' &&
+      input.lense_source !== 'extension'
+    ) {
+      throw new DomainError(
+        `lense_source must be 'bundled' or 'extension', got: ${String(input.lense_source)}`,
+        'lense_source',
+      );
+    }
     if (typeof input.text !== 'string' || input.text.trim().length === 0) {
       throw new DomainError('text required (non-empty string)', 'text');
     }
@@ -387,6 +407,7 @@ export class Entry {
         kind,
         text: input.text.trim(),
         stages,
+        ...(input.lense_source !== undefined ? { lense_source: input.lense_source } : {}),
         ...(input.severity_rationale !== undefined
           ? { severity_rationale: input.severity_rationale.trim() }
           : {}),
@@ -435,6 +456,9 @@ export class Entry {
       kind: r['kind'] as EntryKind,
       text: r['text'] as string,
       ...(r['addresses'] !== undefined ? { addresses: r['addresses'] as string } : {}),
+      ...(r['lense_source'] !== undefined
+        ? { lense_source: r['lense_source'] as LenseSource }
+        : {}),
       ...(r['severity'] !== undefined ? { severity: r['severity'] as Severity } : {}),
       ...(r['severity_rationale'] !== undefined
         ? { severity_rationale: r['severity_rationale'] as string }
@@ -465,6 +489,7 @@ export class Entry {
       kind: this.kind,
       text: this.text,
     };
+    if (this.lense_source !== undefined) out['lense_source'] = this.lense_source;
     if (this.addresses !== undefined) out['addresses'] = this.addresses;
     if (this.severity !== undefined) out['severity'] = this.severity;
     if (this.severity_rationale !== undefined)
