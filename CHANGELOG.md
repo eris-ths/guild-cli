@@ -9,6 +9,21 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
 
 ### Fixed
 
+- **`gate fast-track` now fires lifecycle hooks (#279)**
+  ([#279](https://github.com/eris-ths/guild-cli/issues/279)).
+  Pre-fix, `reqFastTrack` called the use cases directly (create →
+  approve → execute → complete) and skipped every handler-level hook
+  fire. Audit-log plugins (`after:approve`, `after:execute`,
+  `after:complete`) observed zero events for self-flow waves; policy
+  plugins (`before:approve`, ...) were silently bypassed — the exact
+  path those policies were designed to govern. Post-fix: each of the
+  three sub-transitions runs its before/after hooks identically to
+  the multi-step path. A before-hook veto aborts the chain and leaves
+  the substrate in the pre-veto state (no synthetic "fast-track
+  aborted" state — same contract as the multi-step path). Three new
+  regression tests pin the fires + veto semantics. Discovered via
+  dogfood walking `examples/plugins/`.
+
 - **strict-mode review hydrate (#134 H2 hotfix)** — review records
   written under `gate.strict_lenses: true` (using a bundled devil
   catalog lense like `injection`) failed re-read by `gate show` /

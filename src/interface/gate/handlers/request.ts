@@ -1394,9 +1394,35 @@ export async function reqFastTrack(c: C, args: ParsedArgs): Promise<number> {
     envActor && envActor.length > 0 && envActor !== execActor
       ? envActor
       : undefined;
-  await c.requestUC.approve(id, from, 'fast-track: self-approved', invokedByFrom);
-  await c.requestUC.execute(id, execActor, 'fast-track: self-executed', invokedByExec);
+  // Lifecycle hook fires (#279). Fast-track is a single user-facing
+  // verb that compresses three transitions; each transition is a
+  // first-class lifecycle event the substrate records, so each must
+  // run through the hook bus identically to the multi-step path.
+  // Without these fires, `after:approve` audit-log plugins miss every
+  // self-flow wave and `before:approve` policy plugins are silently
+  // bypassed — exactly the path those policies were designed to govern.
+  //
+  // veto on any before-hook aborts the chain and exits non-zero. The
+  // request stays in whatever state the chain reached before the veto
+  // (pending if before:approve vetoed, approved if before:execute, ...)
+  // — matching the multi-step path's contract that a vetoed transition
+  // leaves the substrate in the pre-transition state, not a synthetic
+  // "fast-track aborted" state. Re-running the user-side multi-step
+  // path is the recovery from a partial fast-track.
+  const beforeApproveVeto = await fireBeforeHook(c.hookSubscriptions, 'approve', created, from);
+  if (beforeApproveVeto) return emitHookVeto('approve', id, beforeApproveVeto);
+  const approved = await c.requestUC.approve(id, from, 'fast-track: self-approved', invokedByFrom);
+  await fireAfterHook(c.hookSubscriptions, 'approve', approved, from);
+
+  const beforeExecuteVeto = await fireBeforeHook(c.hookSubscriptions, 'execute', approved, execActor);
+  if (beforeExecuteVeto) return emitHookVeto('execute', id, beforeExecuteVeto);
+  const executing = await c.requestUC.execute(id, execActor, 'fast-track: self-executed', invokedByExec);
+  await fireAfterHook(c.hookSubscriptions, 'execute', executing, execActor);
+
+  const beforeCompleteVeto = await fireBeforeHook(c.hookSubscriptions, 'complete', executing, execActor);
+  if (beforeCompleteVeto) return emitHookVeto('complete', id, beforeCompleteVeto);
   const completed = await c.requestUC.complete(id, execActor, note, invokedByExec);
+  await fireAfterHook(c.hookSubscriptions, 'complete', completed, execActor);
 
   const extraLines: string[] = [];
   if (completed.autoReview) {

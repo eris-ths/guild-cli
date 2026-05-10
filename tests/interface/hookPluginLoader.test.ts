@@ -299,6 +299,107 @@ test('hook plugin: plugins.trusted absent → hooks skipped + onMalformed notice
   assert.match(status.stderr, /plugins\.hooks present but plugins\.trusted is not true/);
 });
 
+// -------------------- #279: fast-track lifecycle hooks --------------------
+
+test('#279: fast-track fires after:approve / after:execute / after:complete', (t) => {
+  // Pre-#279: fast-track called the use cases directly and skipped the
+  // handler-level hook fires entirely. An audit-log plugin subscribing
+  // to all three after-hooks would observe ZERO events for self-flow
+  // waves — the silent gap this test pins against.
+  const { root, pluginDir, cleanup } = bootstrap(
+    'plugins:\n  trusted: true\n  hooks:\n    - plugins/audit-multi.mjs\n',
+  );
+  t.after(cleanup);
+  const trace = join(root, 'trace.log');
+  writeFileSync(
+    join(pluginDir, 'audit-multi.mjs'),
+    `import { appendFileSync } from 'node:fs';
+     export default {
+       on: ['after:approve', 'after:execute', 'after:complete'],
+       run: async (ctx) => {
+         appendFileSync(${JSON.stringify(trace)}, ctx.event + ':' + ctx.request.state + '\\n');
+       },
+     };`,
+  );
+
+  const r = runGate(root, [
+    'fast-track',
+    '--from', 'alice',
+    '--action', 'self-flow',
+    '--reason', 'because',
+    '--note', 'done',
+  ]);
+  assert.equal(r.status, 0, `fast-track should succeed: ${r.stderr}`);
+
+  // All three after-hooks must fire, in order, with the correct
+  // post-transition state on each event.
+  assert.equal(
+    readFileSync(trace, 'utf8'),
+    'after:approve:approved\nafter:execute:executing\nafter:complete:completed\n',
+  );
+});
+
+test('#279: fast-track honors before:approve veto (chain aborts at approve)', (t) => {
+  const { root, pluginDir, cleanup } = bootstrap(
+    'plugins:\n  trusted: true\n  hooks:\n    - plugins/policy.mjs\n',
+  );
+  t.after(cleanup);
+  writeFileSync(
+    join(pluginDir, 'policy.mjs'),
+    `export default {
+       on: 'before:approve',
+       run: async () => ({ allow: false, reason: 'org policy: fast-track approve blocked' }),
+     };`,
+  );
+
+  const r = runGate(root, [
+    'fast-track',
+    '--from', 'alice',
+    '--action', 'self-flow',
+    '--reason', 'because',
+  ]);
+  // Veto on the first transition aborts the chain.
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /hook vetoed approve on .+org policy: fast-track approve blocked/);
+
+  // Substrate state: the request was created (pending) but the chain
+  // never advanced. Same contract as the multi-step path's vetoed
+  // approve — no synthetic "fast-track aborted" state.
+  const list = runGate(root, ['list', '--state', 'pending', '--format', 'json']);
+  const payload = JSON.parse(list.stdout);
+  assert.equal(payload.requests.length, 1, 'request should remain pending after veto');
+});
+
+test('#279: fast-track honors before:execute veto (chain aborts mid-flow, state=approved)', (t) => {
+  const { root, pluginDir, cleanup } = bootstrap(
+    'plugins:\n  trusted: true\n  hooks:\n    - plugins/policy.mjs\n',
+  );
+  t.after(cleanup);
+  writeFileSync(
+    join(pluginDir, 'policy.mjs'),
+    `export default {
+       on: 'before:execute',
+       run: async () => ({ allow: false, reason: 'org policy: execute requires worktree isolation' }),
+     };`,
+  );
+
+  const r = runGate(root, [
+    'fast-track',
+    '--from', 'alice',
+    '--action', 'self-flow',
+    '--reason', 'because',
+  ]);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /hook vetoed execute on .+execute requires worktree/);
+
+  // Substrate is in the in-between approved state — exactly what the
+  // multi-step path leaves behind when before:execute vetoes there.
+  // The user's recovery is `gate execute` (multi-step) once the policy
+  // condition is satisfied. We do not auto-rollback the approve.
+  const list = runGate(root, ['list', '--state', 'approved', '--format', 'json']);
+  assert.equal(JSON.parse(list.stdout).requests.length, 1);
+});
+
 test('hook plugin: before:review veto blocks review append', (t) => {
   const { root, pluginDir, cleanup } = bootstrap(
     'plugins:\n  trusted: true\n  hooks:\n    - plugins/review-policy.mjs\n',
