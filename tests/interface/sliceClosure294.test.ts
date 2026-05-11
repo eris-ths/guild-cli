@@ -349,3 +349,95 @@ test('#294: gate wave-status legacy executors hydrate as [?]', (t) => {
     assert.equal(e.slice_status, 'unknown', `expected unknown for ${e.name}`);
   }
 });
+
+// -------------------- security: note-line injection guard --------------------
+
+test('#294 / devil round-2 §Security 1: newline in slice note must not inject a fake per-executor line in wave-status text mode', (t) => {
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  registerAll(root, ['alice', 'miki', 'leysia']);
+  const id = bootstrapTwoExecWave(root, ['miki', 'leysia']);
+
+  // Close miki's slice with a note containing a newline that LOOKS
+  // LIKE a fake "leysia [completed]" follow-up row. The substrate's
+  // sanitizeText preserves \n for prose round-trip; the wave-status
+  // text renderer must flatten newlines so a malicious / careless
+  // note cannot spoof additional per-executor lines.
+  const malicious = 'ok\n  leysia  [completed]  injected note';
+  const closed = run(root, ['complete', id, '--by', 'miki', '--note', malicious]);
+  assert.equal(closed.status, 0, `complete failed: ${closed.stderr}`);
+
+  const ws = run(root, ['wave-status', id, '--format', 'text']);
+  assert.equal(ws.status, 0);
+
+  // Count lines that start with two-space + executor-name pattern.
+  // For a two-executor wave the per-executor section should produce
+  // exactly two lines whose `name` segment starts at column 3 — one
+  // for miki, one for leysia. A newline-injected note would create
+  // a THIRD such line containing "leysia [completed]" (twice over).
+  const perExecutorLines = ws.stdout.split('\n').filter((line) => {
+    // Lines like "  miki  [completed]" — two leading spaces + name + status
+    return /^ {2}(miki|leysia)\s+\[(pending|completed|failed|\?)\]/.test(line);
+  });
+  assert.equal(
+    perExecutorLines.length,
+    2,
+    `expected exactly 2 per-executor lines, got ${perExecutorLines.length}:\n${ws.stdout}`,
+  );
+
+  // And: leysia's recorded slice_status is unchanged (still pending,
+  // because the injection-shaped note ONLY landed on miki).
+  const wsJson = run(root, ['wave-status', id, '--format', 'json']);
+  assert.equal(wsJson.status, 0);
+  const j = JSON.parse(wsJson.stdout) as {
+    executors: Array<{ name: string; slice_status: string }>;
+  };
+  const leysia = j.executors.find((e) => e.name === 'leysia');
+  assert.equal(leysia!.slice_status, 'pending');
+});
+
+// -------------------- N1: concurrent slice-close retry --------------------
+
+test('#294 / devil round-2 N1: concurrent slice-close races retry instead of erroring on VersionConflict', async (t) => {
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  registerAll(root, ['alice', 'miki', 'leysia']);
+  const id = bootstrapTwoExecWave(root, ['miki', 'leysia']);
+
+  // Spawn miki's and leysia's `gate complete --by` concurrently. The
+  // file-backed substrate uses optimistic-lock + atomic-rename; without
+  // retry on complete/fail, the loser hits RequestVersionConflict and
+  // exits non-zero. With round-2 N1's retry wrap, both eventually
+  // succeed and the wave transitions to `completed`.
+  const env: NodeJS.ProcessEnv = { ...process.env };
+  const spawnComplete = (actor: string, note: string) => {
+    return new Promise<{ status: number; stderr: string }>((resolve) => {
+      const r = spawnSync(process.execPath, [GATE, 'complete', id, '--by', actor, '--note', note], {
+        cwd: root,
+        env,
+        encoding: 'utf8',
+      });
+      resolve({ status: r.status ?? -1, stderr: r.stderr ?? '' });
+    });
+  };
+
+  // True concurrency via Promise.all — both spawnSync calls block their
+  // event-loop tick, but the OS schedules the two child processes in
+  // parallel, and the writer that loses the optimistic-lock race exercises
+  // the retry helper.
+  const [a, b] = await Promise.all([
+    spawnComplete('miki', 'miki done'),
+    spawnComplete('leysia', 'leysia done'),
+  ]);
+  assert.equal(a.status, 0, `miki complete failed: ${a.stderr}`);
+  assert.equal(b.status, 0, `leysia complete failed: ${b.stderr}`);
+
+  // Wave reached completed terminal.
+  const ws = run(root, ['show', id, '--format', 'json']);
+  assert.equal(ws.status, 0);
+  const j = JSON.parse(ws.stdout) as { state: string; executors: Array<{ status: string }> };
+  assert.equal(j.state, 'completed');
+  for (const e of j.executors) {
+    assert.equal(e.status, 'completed');
+  }
+});

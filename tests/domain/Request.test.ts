@@ -1146,10 +1146,50 @@ test('#294 double-close refusal: fail-then-complete on same actor throws', () =>
   assert.equal(r.executorStatus('bob'), 'failed');
 });
 
-test('#294 terminal-wave early reject: completeSlice on already-terminal wave throws', () => {
-  // Devil review §Correctness 2: closing a slice on a terminal wave
-  // would mutate slice + log, then throw inside transition(). Domain
-  // refuses at entry to close the partial-mutation hazard.
+test('#294 terminal-wave early reject: completeSlice on multi-executor wave driven terminal by a non-slice path', () => {
+  // Devil review §Correctness 2 (round-2): the terminal-wave guard must
+  // fire even when the slice itself is still `pending` — proving the
+  // state-level guard is reached BEFORE the double-close guard. Build
+  // a multi-executor record via Request.restore where the wave is
+  // already terminal but one executor's slice remains `pending`. This
+  // shape only occurs in pathological / hand-edited records, but it's
+  // the exact scenario the terminal-state early reject was added for.
+  const r = Request.restore({
+    id: RequestId.generate(d, 1),
+    from: MemberName.of('alice'),
+    action: 'a',
+    reason: 'r',
+    state: 'completed',
+    createdAt: '2026-05-11T00:00:00.000Z',
+    executors: [
+      { name: MemberName.of('bob'), status: 'completed', completedAt: '2026-05-11T00:05:00.000Z' },
+      { name: MemberName.of('miki'), status: 'pending' },
+    ],
+    statusLog: [
+      { state: 'pending', by: 'alice', at: '2026-05-11T00:00:00.000Z' },
+      { state: 'approved', by: 'eris', at: '2026-05-11T00:01:00.000Z' },
+      { state: 'executing', by: 'bob', at: '2026-05-11T00:02:00.000Z' },
+      { state: 'completed', by: 'bob', at: '2026-05-11T00:05:00.000Z' },
+    ],
+    reviews: [],
+  });
+  // miki's slice is still 'pending' so the double-close guard would
+  // NOT fire. The terminal-state guard fires first, on `state` only.
+  assert.throws(
+    () => r.completeSlice(MemberName.of('miki'), 'too late'),
+    /request .+ is already completed; slice closure only applies on live waves/,
+  );
+  // Aggregate unmutated by the throw — miki still pending, log length
+  // unchanged.
+  assert.equal(r.executorStatus('miki'), 'pending');
+  assert.equal(r.statusLog.length, 4);
+});
+
+test('#294 terminal-wave early reject — single-actor terminal wave is also refused', () => {
+  // The simpler shape: wave terminal AND slice terminal. Both guards
+  // fire; the state guard fires first per the implementation order,
+  // so the discriminating regex from the test above applies here too.
+  // Kept for coverage of the common-case attempt-twice path.
   const r = Request.create({
     id: RequestId.generate(d, 1),
     from: 'alice',
@@ -1159,14 +1199,10 @@ test('#294 terminal-wave early reject: completeSlice on already-terminal wave th
   });
   r.approve(MemberName.of('eris'));
   r.execute(MemberName.of('bob'));
-  r.completeSlice(MemberName.of('bob'), 'done'); // wave → completed
+  r.completeSlice(MemberName.of('bob'), 'done');
   assert.equal(r.state, 'completed');
-  // Add a second executor by reconstructing — simulating a future
-  // record where one slice closed but a separate path re-added an
-  // executor. Easier path: just attempt slice close on the terminal
-  // wave directly with the existing actor and expect the same refusal.
   assert.throws(
     () => r.completeSlice(MemberName.of('bob'), 'after terminal'),
-    /already completed/,
+    /request .+ is already completed; slice closure only applies on live waves/,
   );
 });

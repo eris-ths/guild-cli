@@ -1229,14 +1229,12 @@ export async function reqComplete(c: C, args: ParsedArgs): Promise<number> {
   );
   const note = optionalOption(args, 'note');
   const invokedBy = resolveInvokedBy(by, 'complete', id);
-  if (isDryRun(args)) {
-    const prior = await c.requestUC.show(id);
-    if (!prior) throw new Error(`Request not found: ${id}`);
-    const fromState = prior.state;
-    const r = await c.requestUC.complete(id, by, note, invokedBy, { dryRun: true });
-    emitDryRunPreview({ verb: 'complete', id, by, fromState, toState: r.state, after: r, format: parseFormat(args) });
-    return 0;
-  }
+  // Load the wave once and run rejectIfNonMember + dry-run / live
+  // branches against the same snapshot. Round-2 N3: previously dry-run
+  // ran BEFORE rejectIfNonMember, so `gate complete <id> --by miik
+  // --dry-run` (typo) showed a misleading wave-terminal preview while
+  // the real run rejected. The preview must match what the real run
+  // would do.
   const priorComplete = await c.requestUC.show(id);
   if (priorComplete !== null) {
     // Issue #294 (miki concern #1): when the wave has assigned
@@ -1247,10 +1245,18 @@ export async function reqComplete(c: C, args: ParsedArgs): Promise<number> {
     // no-executor waves) but dangerous when executors is non-empty —
     // a typo (`--by miik`) would close the whole wave without ever
     // matching a slice. Reject at the handler boundary so the trail
-    // never records the false transition.
+    // never records the false transition. Applies to dry-run too.
     const sliceReject = rejectIfNonMember(priorComplete, by, 'complete');
     if (sliceReject !== null) return sliceReject;
-
+  }
+  if (isDryRun(args)) {
+    if (!priorComplete) throw new Error(`Request not found: ${id}`);
+    const fromState = priorComplete.state;
+    const r = await c.requestUC.complete(id, by, note, invokedBy, { dryRun: true });
+    emitDryRunPreview({ verb: 'complete', id, by, fromState, toState: r.state, after: r, format: parseFormat(args) });
+    return 0;
+  }
+  if (priorComplete !== null) {
     const veto = await fireBeforeHook(c.hookSubscriptions, 'complete', priorComplete, by);
     if (veto) return emitHookVeto('complete', id, veto);
   }
@@ -1297,23 +1303,27 @@ export async function reqFail(c: C, args: ParsedArgs): Promise<number> {
     requireOption(args, 'by', '<m>', 'GUILD_ACTOR'),
   );
   const invokedBy = resolveInvokedBy(by, 'fail', id);
-  if (isDryRun(args)) {
-    const prior = await c.requestUC.show(id);
-    if (!prior) throw new Error(`Request not found: ${id}`);
-    const fromState = prior.state;
-    const r = await c.requestUC.fail(id, by, reason, invokedBy, { dryRun: true });
-    emitDryRunPreview({ verb: 'fail', id, by, fromState, toState: r.state, after: r, format: parseFormat(args) });
-    return 0;
-  }
+  // Mirror of reqComplete (round-2 N3): run rejectIfNonMember BEFORE
+  // the dry-run branch so a typo'd --by produces a consistent refusal
+  // in both preview and live runs.
   const priorFail = await c.requestUC.show(id);
   if (priorFail !== null) {
     // See reqComplete: issue #294 / miki concern #1 — refuse fail
     // when wave has executors and `by` is not one of them. Same
     // typo-safety rationale as complete: a misspelt `--by` would
-    // otherwise close the wave without matching a slice.
+    // otherwise close the wave without matching a slice. Applies to
+    // dry-run too.
     const sliceReject = rejectIfNonMember(priorFail, by, 'fail');
     if (sliceReject !== null) return sliceReject;
-
+  }
+  if (isDryRun(args)) {
+    if (!priorFail) throw new Error(`Request not found: ${id}`);
+    const fromState = priorFail.state;
+    const r = await c.requestUC.fail(id, by, reason, invokedBy, { dryRun: true });
+    emitDryRunPreview({ verb: 'fail', id, by, fromState, toState: r.state, after: r, format: parseFormat(args) });
+    return 0;
+  }
+  if (priorFail !== null) {
     const veto = await fireBeforeHook(c.hookSubscriptions, 'fail', priorFail, by);
     if (veto) return emitHookVeto('fail', id, veto);
   }

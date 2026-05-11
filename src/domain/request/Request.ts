@@ -930,6 +930,18 @@ export class Request {
         'executors',
       );
     }
+    // Capacity check BEFORE mutating any state (#294 devil round-2 N2).
+    // Slice closure pushes a status_log entry; if the cap is hit, we
+    // throw — but executors must not be partially mutated by that throw.
+    // Moving the check above the executors-array replacement closes the
+    // partial-mutation hazard the round-1 terminal-wave reject was
+    // meant to cover end-to-end.
+    if (this.props.statusLog.length >= MAX_STATUS_LOG) {
+      throw new DomainError(
+        `Status log overflow (max ${MAX_STATUS_LOG})`,
+        'statusLog',
+      );
+    }
     // Replace the record immutably (the field is `readonly`-typed for
     // external readers but the underlying object is replaced in the
     // array, not mutated).
@@ -951,12 +963,6 @@ export class Request {
     // Append a status_log entry at the CURRENT wave state — this is
     // attribution, not transition. The slice closure is recorded
     // regardless of whether the wave itself moves on this call.
-    if (this.props.statusLog.length >= MAX_STATUS_LOG) {
-      throw new DomainError(
-        `Status log overflow (max ${MAX_STATUS_LOG})`,
-        'statusLog',
-      );
-    }
     const sliceEntry: StatusLogEntry = {
       state: this.props.state,
       by: by.value,
