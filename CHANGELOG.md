@@ -9,6 +9,14 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
 
 ### Added
 
+- **`gate lense-stats` verb — lense rotation diagnostic (closes #305)**
+  ([#305](https://github.com/eris-ths/guild-cli/issues/305)).
+  Counts review entries per lense over a window (`--since 7d` default),
+  highlights the most-frequent and least-frequent lense, and surfaces a
+  `next:` hint when one lense dominates 3× the bottom. Sources: gate
+  `Request.reviews[]` + devil-passage `DevilReview.entries[]`. Read-only,
+  text + json formats, optional `--for <actor>` author filter.
+
 - **Per-executor freshness for `gate wave-status` (closes #309)**
   ([#309](https://github.com/eris-ths/guild-cli/issues/309)).
   Stale judgment is now per-executor, derived from each executor's
@@ -19,20 +27,6 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
   footer now derives from "all executors stale" (`wave_stale_effective`),
   separating "how long has this been open?" (`age_band`) from
   "is anyone still working?" (`wave_stale_effective`).
-
-  Schema additive: new `witness_updated_at: Map<actor, ISO>` field on
-  `Request`, mirroring `witness_notes` / `witness_sessions`. Stamped
-  on first witness and on any re-witness mutation; cleared on
-  unwitness and terminal auto-reset. Omit-when-empty so pre-#309
-  records round-trip byte-identically. Hydrate-tolerant (ISO-parse
-  failures drop the entry via `onMalformed`).
-
-  Wire-format additions to `gate wave-status --format json` output:
-  - `executors[].witness_updated_at: string | null`
-  - `wave_stale_effective: boolean`
-  - `executors[].activity_band` enum unchanged but `'active'` is now
-    deprecated (never emitted by post-#309 builds; readers that
-    decoded it from legacy snapshots should treat as `'fresh'`).
 
 ### ⚠ BREAKING (JSON shape)
 

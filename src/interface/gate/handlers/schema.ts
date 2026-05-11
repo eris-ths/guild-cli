@@ -617,6 +617,72 @@ const VERBS: readonly VerbSchema[] = [
     },
   },
   {
+    name: 'lense-stats',
+    category: 'read',
+    summary:
+      "lense rotation diagnostic (#305): count review entries per lense over a window, highlight the most-frequent and least-frequent lense so bias surfaces. Sources gate `Request.reviews[]` + devil-passage `DevilReview.entries[]`. Read-only; default window 7d.",
+    input: {
+      type: 'object',
+      properties: {
+        for: { type: 'string', description: 'filter by author of the review/entry (review.by / entry.by)' },
+        since: {
+          type: 'string',
+          description: 'window size as <int><s|m|h|d>; default 7d',
+        },
+        format: {
+          type: 'string',
+          enum: ['text', 'json'],
+          description: 'output format (default: text)',
+        },
+      },
+    },
+    output: {
+      type: 'object',
+      properties: {
+        window: {
+          type: 'object',
+          properties: {
+            since: { type: 'string', description: 'ISO cutoff (now - duration)' },
+            duration: { type: 'string', description: 'echoed --since value, e.g. "7d"' },
+          },
+        },
+        filter: {
+          type: 'object',
+          properties: {
+            actor: { type: 'string', description: 'echoed --for value; null when omitted' },
+          },
+        },
+        totals: {
+          type: 'object',
+          properties: {
+            entries_counted: { type: 'integer' },
+            lenses_with_use: { type: 'integer' },
+          },
+        },
+        most: { type: 'string', description: 'most-frequent lense; null when totals.entries_counted=0' },
+        least: { type: 'string', description: 'least-frequent lense among those with ≥1 use; null when totals=0' },
+        stats: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              lense: str,
+              count: { type: 'integer' },
+              last_at: { type: 'string', description: 'most recent ISO timestamp seen for this lense; null when count=0' },
+              sources: {
+                type: 'object',
+                properties: {
+                  gate_reviews: { type: 'integer' },
+                  devil_entries: { type: 'integer' },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+  {
     name: 'summarize',
     category: 'read',
     summary:
