@@ -6,6 +6,12 @@ import {
 } from '../../shared/parseArgs.js';
 import { C } from './internal.js';
 import { parseFormat } from './writeFormat.js';
+import {
+  fireBeforeSessionHook,
+  fireAfterSessionHook,
+  emitHookVeto,
+} from '../../../application/plugin/HookBus.js';
+import { SessionEventVetoed } from '../../../application/session/SessionEventUseCases.js';
 
 /**
  * gate farewell [--by <m>] [--note <s>] [--format json|text]
@@ -47,11 +53,37 @@ export async function farewellCmd(c: C, args: ParsedArgs): Promise<number> {
   const note = optionalOption(args, 'note');
   const format = parseFormat(args);
 
-  const event = await c.sessionEventUC.record({
-    kind: 'farewell',
-    by,
-    ...(note !== undefined ? { note } : {}),
-  });
+  // #290: same before:/after: hook fire shape as `gate rest`. See
+  // rest.ts for the rationale; the only difference here is the verb.
+  let event;
+  try {
+    event = await c.sessionEventUC.record(
+      {
+        kind: 'farewell',
+        by,
+        ...(note !== undefined ? { note } : {}),
+      },
+      {
+        beforeSave: async (e) => {
+          const veto = await fireBeforeSessionHook(
+            c.hookSubscriptions, 'farewell', e, by,
+          );
+          return { veto: veto ? { reason: veto.reason } : null };
+        },
+        afterSave: async (e) => {
+          await fireAfterSessionHook(c.hookSubscriptions, 'farewell', e, by);
+        },
+      },
+    );
+  } catch (e) {
+    if (e instanceof SessionEventVetoed) {
+      return emitHookVeto('farewell', '(unsaved)', {
+        allow: false,
+        reason: e.reason,
+      });
+    }
+    throw e;
+  }
 
   const message = `✓ farewell: ${event.id} by ${event.by.value}`;
   if (format === 'json') {

@@ -40,12 +40,21 @@ export default {
 
 ### `HookContext` shape (passed to `run`)
 
-| field          | runtime type                  | notes |
-|----------------|-------------------------------|-------|
-| `ctx.event`    | `string`                      | Discriminator like `'before:approve'`. Useful when one plugin subscribes to many events. |
-| `ctx.request`  | `Request` instance            | Pre-mutation snapshot for `before:`; post-mutation for `after:`. **Has value-object fields** — see § Request reference below. |
-| `ctx.actor`    | `string`                      | The canonicalised `--by` / `--from` invoker. Already trimmed and lowercased. |
-| `ctx.extra`    | `{ review?: ... }` \| undefined | Event-specific. Only `before:review` / `after:review` set `extra.review` (the appended review record). |
+| field             | runtime type                            | notes |
+|-------------------|-----------------------------------------|-------|
+| `ctx.event`       | `string`                                | Discriminator like `'before:approve'`. Useful when one plugin subscribes to many events. |
+| `ctx.request`     | `Request` instance \| `undefined`       | Populated for **request-lifecycle** events (approve/deny/execute/complete/fail/review). Pre-mutation snapshot for `before:`; post-mutation for `after:`. Undefined for session-boundary events (#290). **Has value-object fields** — see § Request reference below. |
+| `ctx.sessionEvent`| `SessionEvent` instance \| `undefined`  | Populated for **session-boundary** events (`before:`/`after:rest`, `wake`, `farewell` — #290). Pre-save aggregate for `before:`; post-save for `after:`. Undefined for request-lifecycle events. See § SessionEvent reference below. |
+| `ctx.actor`       | `string`                                | The canonicalised `--by` / `--from` invoker. Already trimmed and lowercased. |
+| `ctx.extra`       | `{ review?: ... }` \| undefined         | Event-specific. Only `before:review` / `after:review` set `extra.review` (the appended review record). |
+
+**EXACTLY ONE** of `ctx.request` / `ctx.sessionEvent` is set on any
+single hook invocation — picked by the event's verb axis. A plugin
+that subscribes to events from both axes (e.g. an audit log spanning
+`after:approve` and `after:rest`) must branch on which field is
+populated. A plugin that only handles one axis can null-check the
+field it reads and return early when absent — this keeps the plugin
+forward-compatible if a future major rolls in a third subject kind.
 
 ### Veto shape (`before:` hooks)
 
@@ -67,7 +76,10 @@ return undefined;                                    // pass
 
 ### Lifecycle events
 
-Phase 1 covers six request-lifecycle verbs plus review:
+Phase 1 (#259) covers six request-lifecycle verbs plus review.
+Phase 2 (#290) extends the bus with the three session-boundary verbs.
+
+Request-lifecycle (`ctx.request` populated):
 
 | event | fires when | `ctx.request.state` (post for `after:`) |
 |-------|------------|------------------------------------------|
@@ -78,15 +90,29 @@ Phase 1 covers six request-lifecycle verbs plus review:
 | `before:fail`    / `after:fail`    | `gate fail`                        | `failed` (terminal) |
 | `before:review`  / `after:review`  | `gate review`                      | unchanged (review is non-mutating on state) |
 
+Session-boundary (`ctx.sessionEvent` populated, #290):
+
+| event | fires when | `ctx.sessionEvent.kind` |
+|-------|------------|--------------------------|
+| `before:rest`     / `after:rest`     | `gate rest`     | `rest` |
+| `before:wake`     / `after:wake`     | `gate wake`     | `wake` |
+| `before:farewell` / `after:farewell` | `gate farewell` | `farewell` |
+
+For session-boundary events, the `before:` veto fires *after* the
+SessionEvent aggregate is built and validated, *before* the YAML
+write. A vetoed `gate rest` / `gate wake` / `gate farewell` therefore
+leaves no record on disk — the substrate is untouched. The `after:`
+fires post-save so the id (allocated by the per-day sequence) is
+final and the YAML is readable.
+
 `fast-track` runs three sub-transitions (approve → execute → complete)
 and fires the corresponding before/after hooks at each step (#279). A
 veto at any step aborts the chain and leaves the substrate in the
 pre-veto state.
 
-Verbs **not** covered by phase 1: `request` (creation has no
-`before:create` / `after:create` event yet), `claim` / `witness` /
-`unwitness` (stake-axis verbs, not lifecycle), `thank` (annotation,
-not transition).
+Verbs **not** covered: `request` (creation has no `before:create` /
+`after:create` event yet), `claim` / `witness` / `unwitness` (stake-
+axis verbs, not lifecycle), `thank` (annotation, not transition).
 
 ---
 
@@ -142,6 +168,50 @@ primitives. The table below tells you which.
 | `request.thanks`    | `readonly Thank[]`  | `t.by.value` / `t.to.value`; `t.note` / `t.at` are strings |
 | `request.witnessNotes`    | `ReadonlyMap<string, string>` | iterate with `for (const [actor, note] of map)` |
 | `request.witnessSessions` | `ReadonlyMap<string, string>` | same shape |
+
+---
+
+## SessionEvent reference (#290 — session-boundary events)
+
+`ctx.sessionEvent` is a `SessionEvent` **class instance**, populated
+on session-boundary events (`before:`/`after:rest`, `wake`,
+`farewell`). Smaller surface than `Request` — five readable getters
+plus `toJSON()`.
+
+### Value-object field — needs `.value`
+
+| getter | runtime type | unwrap |
+|--------|--------------|--------|
+| `sessionEvent.by` | `MemberName` | `sessionEvent.by.value` → e.g. `'alice'` |
+
+### Plain primitives — no unwrap needed
+
+| getter | runtime type | example value |
+|--------|--------------|---------------|
+| `sessionEvent.id`   | `string` | `'2026-05-11-001'` (per-day sequence, distinct from request id format) |
+| `sessionEvent.kind` | `'rest' \| 'wake' \| 'farewell'` | `'rest'` |
+| `sessionEvent.at`   | `string` | ISO 8601 timestamp |
+| `sessionEvent.note` | `string \| undefined` | optional free-form, capped at 240 chars |
+
+Like `Request`, `SessionEvent` exposes a `toJSON()` escape hatch —
+returns the snake_case wire shape (`{ id, kind, by, at, note? }`)
+matching the on-disk YAML.
+
+```js
+export default {
+  on: 'after:rest',
+  run: async (ctx) => {
+    if (!ctx.sessionEvent) return;
+    const e = ctx.sessionEvent;
+    appendFileSync('rests.log', `${e.at} ${e.by.value} rested${e.note ? ': ' + e.note : ''}\n`);
+  },
+};
+```
+
+A `before:rest` / `before:wake` / `before:farewell` veto blocks the
+record before it is persisted — the standard `hook vetoed <verb>`
+stderr surface and exit code 1, with `(unsaved)` in the id slot since
+no id is allocated to a vetoed record.
 
 ---
 
@@ -278,6 +348,11 @@ work is naturally idempotent on `(id, state)` pairs.
    it. (Only `ctx.request.*` member fields are value objects.)
 3. **`ctx.extra` may be undefined.** Always optional-chain:
    `ctx.extra?.review`.
+3a. **`ctx.request` may be undefined (#290).** A hook subscribed to
+   a session-boundary event (`before:rest`, `after:wake`, etc.) gets
+   `ctx.sessionEvent` populated and `ctx.request` undefined. Plugins
+   that span both axes should branch; plugins that only handle one
+   should null-check the field they read and return early when absent.
 4. **`before:` hook errors fail-closed.** A typo that throws will
    block the transition. Test your hook — or use `try/catch` inside
    to convert unexpected errors to explicit vetoes with a useful

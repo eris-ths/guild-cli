@@ -9,6 +9,28 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
 
 ### Added
 
+- **hook bus extended for session-boundary events (#290 — closes #290)**
+  ([#290](https://github.com/eris-ths/guild-cli/issues/290)).
+  The Phase 1 hook bus (#259) was request-shaped only — `HookContext.request`
+  was a non-optional `Request` and the event union covered only the six
+  request-lifecycle verbs plus review. Phase 2 verbs (`gate rest` /
+  `gate wake` / `gate farewell`, #261-#263) now fire `before:` / `after:`
+  hooks via a new `ctx.sessionEvent: SessionEvent | undefined` field
+  alongside the existing `ctx.request: Request | undefined`. Exactly one
+  of the two is populated per invocation — picked by which verb fired
+  the hook. The event union grew six entries (`before:`/`after:rest`,
+  `wake`, `farewell`). A `before:` veto on a session-boundary event
+  blocks the YAML write, so a vetoed `gate rest` leaves no record on
+  disk (substrate untouched). The `after:` fires post-save with the
+  final id allocated. Existing plugins that read `ctx.request.X`
+  directly continue to work for their subscribed events; multi-axis
+  plugins discriminate on which subject is populated. Migration
+  guidance in `docs/POLICY.md` § "Hook subject migration"; updated
+  `examples/plugins/hooks/audit-log.mjs` shows the branching pattern;
+  `policy-no-self-approve.mjs` got a defensive null-check for
+  forward-compat. Plugin schema doc updated with a `SessionEvent`
+  reference section.
+
 - **plugin schema doc drift detection (#283 — closes #283)**
   ([#283](https://github.com/eris-ths/guild-cli/issues/283)).
   New CI test `tests/docs/pluginSchemaDocSync.test.ts` enforces sync
