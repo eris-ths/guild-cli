@@ -42,7 +42,13 @@ const ISSUES_NOTE_KNOWN_FLAGS: ReadonlySet<string> = new Set(['by', 'text']);
 // `gate issues resolve/defer/start/reopen` take `--by <m>` (or fall
 // back to GUILD_ACTOR) so the state_log audit entry can record who
 // ran the transition. See Sec H3 (state_log per transition).
-const ISSUES_TRANSITION_KNOWN_FLAGS: ReadonlySet<string> = new Set(['by']);
+// `--note <s>` is optional free-form rationale (#289 hunk 1) persisted
+// onto the state_log entry; omitted from the YAML when absent so
+// pre-#289 records round-trip byte-identical.
+const ISSUES_TRANSITION_KNOWN_FLAGS: ReadonlySet<string> = new Set([
+  'by',
+  'note',
+]);
 
 export async function issuesCmd(c: C, args: ParsedArgs): Promise<number> {
   const sub = args.positional[0];
@@ -207,10 +213,13 @@ export async function issuesCmd(c: C, args: ParsedArgs): Promise<number> {
   if (nextState !== undefined) {
     rejectUnknownFlags(args, ISSUES_TRANSITION_KNOWN_FLAGS, `issues ${sub}`);
     const id = args.positional[1];
-    if (!id) throw new Error(`Usage: gate issues ${sub} <id> --by <m>`);
+    if (!id) {
+      throw new Error(`Usage: gate issues ${sub} <id> --by <m> [--note <s>]`);
+    }
     const by = requireOption(args, 'by', '<m>', 'GUILD_ACTOR');
     const invokedBy = resolveInvokedBy(by, `issues ${sub}`, id);
-    const issue = await c.issueUC.setState(id, nextState, by, invokedBy);
+    const note = optionalOption(args, 'note');
+    const issue = await c.issueUC.setState(id, nextState, by, invokedBy, note);
     process.stdout.write(`✓ issue ${issue.id.value}: → ${nextState} by ${by}\n`);
     return 0;
   }

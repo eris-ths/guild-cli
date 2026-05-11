@@ -88,12 +88,13 @@ export class IssueUseCases {
     state: string,
     by: string,
     invokedBy?: string,
+    note?: string,
   ): Promise<Issue> {
     await assertActor(by, '--by', this.members);
     const issueId = IssueId.of(id);
     const issue = await this.issues.findById(issueId);
     if (!issue) throw new DomainError(`Issue not found: ${id}`, 'id');
-    issue.setState(parseIssueState(state) as IssueState, by, invokedBy);
+    issue.setState(parseIssueState(state) as IssueState, by, invokedBy, note);
     await this.issues.save(issue);
     return issue;
   }
