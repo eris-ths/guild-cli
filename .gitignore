@@ -7,3 +7,7 @@ __pycache__/
 # THS hook artifacts (accidental cwd)
 data/sync/
 examples/dogfood-session/data/
+
+# Local AI tooling state — never publish (Claude Code per-agent
+# settings, scheduled-task locks, ephemeral session files).
+.claude/
