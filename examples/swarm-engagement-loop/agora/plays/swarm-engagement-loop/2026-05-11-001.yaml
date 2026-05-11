@@ -1,0 +1,108 @@
+id: 2026-05-11-001
+game: swarm-engagement-loop
+state: concluded
+started_at: 2026-05-10T01:00:00.000Z
+started_by: eris
+moves:
+  - id: "001"
+    at: 2026-05-10T01:00:00.000Z
+    by: eris
+    text: "Step 1 — combo C3 surfaces (dogfood, 2026-05-10 朝).
+      examples/agent-first-session/ と examples/three-passages-framing/ を
+      触り、8 observations を agora play (eris-dogfood-0510) に move 化。
+      synthesis で 4 combos 抽出、うち **combo C3 — silent-fallback-loses-signal**
+      がパターン名指し: fallback 経路が自分のエラーを silent に catch すると、
+      authoritative に見える inaccurate output が出る (boot enrichment catches /
+      agora new が ./agora/ を黙って作る / devil concern2 on PR #105
+      2026-04-16)。"
+  - id: "002"
+    at: 2026-05-10T05:00:00.000Z
+    by: eris
+    text: "Step 2 — combo C3 部分 ship + memo pin.
+      Instance 2 (boot warnings[]) を PR #292 で ship: BootPayload に
+      warnings: string[] field、4 つの silent-catch site が記述的 entry を
+      push する形に。Instance 1 (cwd-fallback next: hint) は単一観察 evidence
+      のため deferred。devil-side の local memo (trap_silent_fallback_loses_signal.md)
+      を pin して、pattern が future の fallback-path PR review に route される
+      ようにした。memo file は off-substrate (各 contributor の AI tooling memory
+      内、repo には乗らない)。"
+  - id: "003"
+    at: 2026-05-11T01:10:00.000Z
+    by: eris
+    text: "Step 3 — 別 Claude instance が PR #291 を ship (overnight).
+      独立に、別 Claude が swarm-coordinated 2-slice wave (issues.ts hardening
+      #289 + hook bus SessionEvent 拡張 #290) を profile: swarm で ship。
+      最初の試行は Claude SubAgent worktree isolation 単独で gate substrate を
+      使ってなかったため rolled back、再走で proper engagement。PR #291 を
+      8-point retrospective で締めて、point 8 (closing line) で
+      『並列 ≠ swarm. substrate engagement = context cost reduction』を
+      命名。multi-executor + 1 lifecycle awkwardness (→ #294)、in-flight
+      slice status invisible (→ #295)、session_id boilerplate、Claude worktree
+      ⟷ gate swarm concept clash、judgment-as-flow gap など flag。"
+  - id: "004"
+    at: 2026-05-11T02:15:00.000Z
+    by: eris
+    text: "Step 4 — triage + memo pin (2026-05-11 朝).
+      eris が 8 観察を devil review と合わせて triage。出力先:
+      2 PRs (#292 combo C3 + #293 docs/playbook swarm × SubAgent harness)、
+      2 issues (#294 slice-closure design + #295 wave-status spec)、
+      3 local devil-side memo files (off-substrate、まだ ship shape にならない
+      pattern 用)、1 PR comment back to other Claude on PR #291 closing the
+      loop。insight ('substrate engagement = context cost reduction') は
+      まず trap memo (trap_swarm_engagement_vs_parallel.md) として pin —
+      lore promotion の bar は『felt, not just read』なので、自分の手で
+      dogfood するまで保留。"
+  - id: "005"
+    at: 2026-05-11T02:50:00.000Z
+    by: eris
+    text: "Step 5 — eris が自分の swarm を dogfood.
+      insight を first-hand 検証するため、real 2-slice profile: swarm wave を
+      substrate/swarm-experiments/2026-05-11-eris-swarm-test/ で実走。
+      Slice A: pluginSchemaDocSync.test.ts の SessionEvent 拡張。Slice B:
+      formatContentRootDisclosure() の next: hint (combo C3 instance 1)。
+      Claude SubAgent 2 体 (agent-driftext, agent-fallbackhint) を worktree
+      isolation、各々が独自 GUILD_SESSION_ID で wave に witness、slice を
+      cherry-pick して PR #296。**orchestrator の context window は flat の
+      まま** — substrate が who-is-doing-what を保持。原 PR #291
+      retrospective が明示してなかった 2 distinction が surface:
+      (1) 'Agent reports are testimony; substrate is record. When they
+      diverge, substrate wins.' (2) 'features.self_approve: forbidden は
+      substrate engagement が felt になる瞬間'。"
+  - id: "006"
+    at: 2026-05-11T03:15:00.000Z
+    by: eris
+    text: "Step 6 — principle 14 を lore に promote.
+      2 つの独立観察が dogfood-trigger bar クリア: PR #291 別 Claude の
+      retrospective insight (2026-05-11) と eris 自身の 2-slice swarm 体験
+      (同日)。PR #297 で
+      lore/principles/14-substrate-engagement-reduces-coordination-context-cost.md
+      (132 行) を ship、lore/README.md と docs/playbook.md § Swarm × Claude
+      SubAgent harness から cross-link。trap memo が lore に昇格した
+      mechanism — felt-not-just-read という昇格 bar が機能した一例。"
+  - id: "007"
+    at: 2026-05-11T03:45:00.000Z
+    by: eris
+    text: "Step 7 — PR #291 thread で loop closure.
+      eris が PR #291 に comment back、8 観察 → 5 ships + 1 lore principle
+      + 3 local memos の mapping を投下。別 Claude が self-correction で
+      返信: **substrate location 自体が自分の point 7 (judgment-as-flow)
+      の instance だった** — /tmp/swarm-real/ は翌朝には消えていて、
+      context を externalize する媒体を ephemeral storage に置いた構造矛盾
+      を観察できてなかった、と。次回は substrate/swarm-experiments/<date>-
+      claude-swarm-N/ から始める + --from-agora で judgment を play に bind
+      する commitment。PR #291 thread は substrate-honestly closed — 両
+      Claude instance の reasoning が記録され、future readers が cold-read
+      で full arc を reconstruct できる。"
+suspensions: []
+resumes: []
+concluded_at: 2026-05-11T04:00:00.000Z
+concluded_by: eris
+concluded_note: "principle 14 の production loop が 2 日間で完結。
+  meta-lesson: principle 14 が言う 'substrate is record; everything else
+  is testimony' は、この play 自体の存在意義でもある。判断の連鎖が
+  orchestrator の working memory にしか無ければ消えていた接続組織 —
+  そこを agora play (= substrate primitive そのもの) で preserved することで、
+  principle がどう loop から生まれたかを後の reader が cold-read できる shape
+  にした。three-passages-framing precedent と同型の『real arc preserved
+  as substrate, not narrative』。次に この principle が破綻するか拡張される
+  ような observation が surface したら、新 play で addresses。"
