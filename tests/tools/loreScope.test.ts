@@ -16,7 +16,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { spawnSync, type SpawnSyncReturns } from 'node:child_process';
 import { resolve, dirname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -30,11 +30,11 @@ const SCRIPT = resolve(REPO_ROOT, 'tools', 'lore-scope.sh');
 // read shebangs. GitHub Actions windows-latest runners ship Git Bash on
 // PATH, so we invoke the script via `bash` there. POSIX hosts use the
 // shebang directly.
-function spawn(args: readonly string[]): ReturnType<typeof spawnSync> {
+function spawn(args: readonly string[]): SpawnSyncReturns<string> {
   if (process.platform === 'win32') {
     return spawnSync('bash', [SCRIPT, ...args], { encoding: 'utf8' });
   }
-  return spawnSync(SCRIPT, args, { encoding: 'utf8' });
+  return spawnSync(SCRIPT, [...args], { encoding: 'utf8' });
 }
 
 function run(audience: string): { status: number; stdout: string; stderr: string } {
