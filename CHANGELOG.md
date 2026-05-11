@@ -7,6 +7,35 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
 
 ## [Unreleased]
 
+### Added
+
+- **`gate wave-status <id>` — per-executor in-flight slice status (closes #295)**
+  ([#295](https://github.com/eris-ths/guild-cli/issues/295)).
+  New read verb that composes per-executor view from existing
+  substrate fields (witness notes + claim state + status_log
+  timestamps) — no schema change needed for v1. Sibling of `gate
+  boot`'s cross-request overlap surface (#234): boot is actor-axis
+  cross-wave, wave-status is wave-axis cross-actor.
+  - Works on any state (pending / approved / executing / completed /
+    failed / denied).
+  - Single-executor renders a compact one-line form so the verb is
+    not useless for the common case.
+  - Multi-executor renders a per-executor block with witness note +
+    claim state + last attributable write.
+  - **Age-threshold disambiguation** (per #295 acceptance):
+    `< 5 min` suppresses any "no progress" warning (fresh wave —
+    witnesses may simply be incoming); `5-30 min` neutral note;
+    `≥ 30 min` no attributable activity surfaces `⚠ stale — no
+    in-flight progress note recorded` — the ceremony-swarm failure
+    mode (a wave with executors named who never landed any
+    substrate-side activity).
+  - Forward-compatible with #294: v1 uses witness-inference; when
+    #294 ships structured `executors[].status`, this verb pivots to
+    read that field directly without breaking the JSON shape.
+  - `gate schema` lists the verb under `category: 'read'` with full
+    input/output schema; the keys snapshot test surfaces the
+    addition forward-compatibly.
+
 ### Fixed
 
 - **`gate boot` now surfaces enrichment failures via `warnings: string[]`
