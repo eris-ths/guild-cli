@@ -11,3 +11,14 @@ examples/dogfood-session/data/
 # Local AI tooling state — never publish (Claude Code per-agent
 # settings, scheduled-task locks, ephemeral session files).
 .claude/
+
+# develop branch policy (matches main): the harness side is local-
+# only. Each contributor brings their own content_root config +
+# members + substrate accumulation; we do not ship anyone's
+# dogfood records to the public branch. See docs/governance.md
+# § "Why this exists" for the rationale.
+substrate/
+experiments/
+guild.config.yaml
+.envrc
+.guild-actor
