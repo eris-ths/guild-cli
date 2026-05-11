@@ -993,6 +993,11 @@ test('gate boot: active_overlapping_targets ignores requests with no target', ()
 test('gate boot: active_overlapping_targets carries claim_held marker for claimed wave', () => {
   const { root, cleanup } = bootstrap();
   try {
+    // Overlap text-mode rendering is profile=swarm only (#323).
+    writeFileSync(
+      join(root, 'guild.config.yaml'),
+      'content_root: .\nhost_names: [human]\nprofile: swarm\n',
+    );
     registerMember(root, 'leysia');
     // Use --executor to populate the executors[] slot the surface
     // renders (matching the issue's example output shape, which
@@ -1202,6 +1207,12 @@ test('gate boot: different actors with different sessions do NOT flag (#249 slic
 test('gate boot text: parallel-session warning lands under overlap section (#249 slice 4)', () => {
   const { root, cleanup } = bootstrap();
   try {
+    // Overlap text-mode rendering (and the parallel-session warn it
+    // hangs off) is profile=swarm only (#323).
+    writeFileSync(
+      join(root, 'guild.config.yaml'),
+      'content_root: .\nhost_names: [human]\nprofile: swarm\n',
+    );
     makeRequestSessioned(root, 'alice', 'work A', 'src/foo', 'alice-tmux-1');
     makeRequestSessioned(root, 'alice', 'work B', 'src/foo', 'alice-tmux-2');
 
