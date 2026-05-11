@@ -48,6 +48,7 @@ import {
 import { statusCmd } from './handlers/status.js';
 import { suggestCmd } from './handlers/suggest.js';
 import { transcriptCmd } from './handlers/transcript.js';
+import { waveStatusCmd } from './handlers/waveStatus.js';
 import { summarizeCmd } from './handlers/summarize.js';
 import { whyCmd } from './handlers/why.js';
 import { unrespondedCmd } from './handlers/unresponded.js';
@@ -284,6 +285,7 @@ const KNOWN_COMMANDS = [
   'rest',
   'wake',
   'farewell',
+  'wave-status',
 ] as const;
 
 export async function main(argv: readonly string[]): Promise<number> {
@@ -457,6 +459,8 @@ async function dispatch(
       return await suggestCmd(c, args);
     case 'transcript':
       return await transcriptCmd(c, args);
+    case 'wave-status':
+      return await waveStatusCmd(c, args);
     case 'summarize':
       return await summarizeCmd(c, args);
     case 'why':

@@ -568,6 +568,55 @@ const VERBS: readonly VerbSchema[] = [
     },
   },
   {
+    name: 'wave-status',
+    category: 'read',
+    summary:
+      "per-executor in-flight slice status for a multi-executor request (#295). Composes witness notes + claim state + status_log timestamps to surface 'is each executor making progress?' inside a single wave. Sibling of `gate boot`'s cross-request overlap surface (#234) — this one is wave-axis, that one is actor-axis.",
+    input: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'positional; request id (YYYY-MM-DD-NNNN)' },
+        format: {
+          type: 'string',
+          enum: ['text', 'json'],
+          description: 'output format (default: text — the per-executor block is human-readable)',
+        },
+      },
+      required: ['id'],
+    },
+    output: {
+      type: 'object',
+      properties: {
+        id: str,
+        state: str,
+        from: str,
+        executors: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              name: str,
+              witness_note: { type: 'string', description: 'null when no witness note recorded for this executor' },
+              witness_session: { type: 'string', description: 'null when no session_id was stamped on the witness' },
+              claim_held: { type: 'boolean' },
+              last_attributable_at: { type: 'string', description: 'most recent ISO timestamp in status_log attributable to this executor; null when no transition by them' },
+              activity_band: {
+                type: 'string',
+                enum: ['fresh', 'in-progress', 'stale', 'active'],
+              },
+            },
+          },
+        },
+        age_ms: { type: 'integer', description: 'ms since wave was approved; null when wave has never been approved' },
+        age_band: {
+          type: 'string',
+          enum: ['fresh', 'in-progress', 'stale'],
+        },
+        approved_at: { type: 'string', description: 'ISO timestamp of the first approved entry in status_log; null when wave has never been approved' },
+      },
+    },
+  },
+  {
     name: 'summarize',
     category: 'read',
     summary:
