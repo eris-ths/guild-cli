@@ -66,23 +66,36 @@ export interface WaveExecutorView {
   witness_session: string | null;
   claim_held: boolean;
   /**
-   * Most recent ISO timestamp in `status_log` attributable to this
-   * executor (state transitions they performed). Null when they have
-   * never touched the wave from their own `--by`. Witness notes are
-   * untimestamped on the current schema so cannot contribute to this
-   * field — only state transitions do.
+   * Most recent ISO timestamp attributable to this executor. Per #309,
+   * the max of:
+   *   - `witnessUpdatedAt[name]` (per-witness mutation timestamp)
+   *   - latest `status_log` entry with `by: <name>`
+   *   - `claimedAt` (only when claim is held by this executor)
+   * Null when this executor has no attributable signal at all.
    */
   last_attributable_at: string | null;
   /**
-   * One-line rendering hint for text format. Computed from the wave
-   * age + per-executor activity so the text renderer doesn't have to
-   * re-derive the policy.
+   * Per-witness mutation timestamp (#309) — null when this executor
+   * has not yet witnessed or the field is missing on a legacy record.
+   * Exposed separately so a consumer can tell witness-driven freshness
+   * apart from status_log-driven freshness when both are present.
+   */
+  witness_updated_at: string | null;
+  /**
+   * Per-executor freshness band (#309). Re-derived per executor from
+   * `last_attributable_at` rather than the wave-age clock, so a fresh
+   * witness on an aged wave does NOT trip stale.
    *
    * Values:
-   *   - "fresh"        wave < 5 min old; suppress warning
-   *   - "in-progress"  5-30 min old; neutral
-   *   - "stale"        ≥ 30 min old; surface the ⚠ stale line
-   *   - "active"       executor has at least one attributable write
+   *   - "fresh"        last_attributable_at < 5 min ago, OR
+   *                    last_attributable_at is null AND wave age < 5 min
+   *   - "in-progress"  5-30 min from last_attributable_at, or wave age
+   *                    fallback in the same band
+   *   - "stale"        > 30 min, or wave age > 30 with no signal
+   *   - "active"       deprecated (#309 — kept for wire-format tolerance,
+   *                    never emitted by post-#309 builds; readers that
+   *                    decoded this from older records should treat it
+   *                    as 'fresh')
    */
   activity_band: 'fresh' | 'in-progress' | 'stale' | 'active';
 }
@@ -95,6 +108,19 @@ export interface WaveStatusPayload {
   age_ms: number | null;
   age_band: 'fresh' | 'in-progress' | 'stale';
   approved_at: string | null;
+  /**
+   * Per #309: wave-level stale is derived from "all executors stale",
+   * NOT from wave_age > threshold. This separates "how long has this
+   * been open?" (age_band) from "is anyone still working?" (this
+   * field). Renderer footer uses this; downstream JSON consumers can
+   * still read age_band for the open-duration question.
+   *
+   * True when every executor's activity_band is 'stale'. False when at
+   * least one executor is 'fresh' or 'in-progress'. For a wave with no
+   * executors, falls back to age_band === 'stale' (no per-executor
+   * signal to aggregate over).
+   */
+  wave_stale_effective: boolean;
 }
 
 export async function waveStatusCmd(c: C, args: ParsedArgs): Promise<number> {
@@ -153,19 +179,22 @@ export function buildWaveStatus(r: Request, now: Date): WaveStatusPayload {
 
   const witnessNotes = r.witnessNotes; // ReadonlyMap<string, string>
   const witnessSessions = r.witnessSessions;
+  const witnessUpdatedAt = r.witnessUpdatedAt; // ReadonlyMap<string, string> (#309)
   const claimedBy = r.claimedBy?.value;
 
   const executorViews: WaveExecutorView[] = records.map((rec) => {
     const name = rec.name.value;
     const note = witnessNotes.get(name) ?? null;
     const sess = witnessSessions.get(name) ?? null;
+    const witAt = witnessUpdatedAt.get(name) ?? null;
     const claimHeld = claimedBy === name;
 
-    // Last attributable write: max ISO timestamp in status_log where
-    // `by === name`. Fallback to claimedAt only when claim is held by
-    // this executor AND no status_log entry exists (claim is the
-    // earliest verifiable activity in that case).
-    let lastAt: string | null = null;
+    // Per #309: last attributable write is the max of
+    //   - witnessUpdatedAt[name]  (per-witness mutation timestamp)
+    //   - latest status_log[by=name]
+    //   - claimedAt (only if claim is held by this executor)
+    // String compare on ISO-8601 is monotonic so plain `>` works.
+    let lastAt: string | null = witAt;
     for (const e of log) {
       if (e['by'] === name && typeof e['at'] === 'string') {
         const at = e['at'] as string;
@@ -176,9 +205,18 @@ export function buildWaveStatus(r: Request, now: Date): WaveStatusPayload {
       lastAt = r.claimedAt;
     }
 
+    // Per-executor freshness band (#309): when lastAt is set, judge by
+    // its age — NOT by the wave-age clock. A 2-min-old witness on a
+    // 33-min-old wave is fresh, not stale. When lastAt is null, fall
+    // back to wave age (the v1 behavior preserved for executors that
+    // have produced no signal at all).
     const band: WaveExecutorView['activity_band'] = (() => {
-      if (lastAt !== null) return 'active';
-      // No attributable write yet — fall back to wave age.
+      if (lastAt !== null) {
+        const sinceMs = Math.max(0, now.getTime() - new Date(lastAt).getTime());
+        if (sinceMs < FRESH_THRESHOLD_MS) return 'fresh';
+        if (sinceMs < STALE_THRESHOLD_MS) return 'in-progress';
+        return 'stale';
+      }
       if (ageBand === 'fresh') return 'fresh';
       if (ageBand === 'in-progress') return 'in-progress';
       return 'stale';
@@ -193,9 +231,15 @@ export function buildWaveStatus(r: Request, now: Date): WaveStatusPayload {
       witness_session: sess,
       claim_held: claimHeld,
       last_attributable_at: lastAt,
+      witness_updated_at: witAt,
       activity_band: band,
     };
   });
+
+  const waveStaleEffective =
+    executorViews.length === 0
+      ? ageBand === 'stale'
+      : executorViews.every((e) => e.activity_band === 'stale');
 
   return {
     id,
@@ -205,6 +249,7 @@ export function buildWaveStatus(r: Request, now: Date): WaveStatusPayload {
     age_ms: ageMs,
     age_band: ageBand,
     approved_at: approvedAt,
+    wave_stale_effective: waveStaleEffective,
   };
 }
 
@@ -259,15 +304,18 @@ function renderText(p: WaveStatusPayload): string {
     if (e.slice_completed_at) {
       lines.push(`    closed at: ${e.slice_completed_at}`);
     } else if (e.last_attributable_at) {
+      // Show lastAt + freshness tag per #309 — a stale executor whose
+      // last write is hours ago should not be silent just because it
+      // has *some* lastAt set. v1 suppressed the stale marker whenever
+      // any lastAt existed; v2 reads its age.
       lines.push(`    last write: ${e.last_attributable_at}`);
+      if (e.activity_band === 'stale') {
+        lines.push(`    ⚠ stale — last attributable write > 30 min ago`);
+      }
     } else {
-      // Per-executor band-driven rendering. The age-threshold contract
-      // from the issue lives here — different text for fresh / in-
-      // progress / stale so a just-approved wave isn't unfairly flagged.
+      // No lastAt → fall back to wave-age band. Same contract as v1.
       switch (e.activity_band) {
         case 'fresh':
-          // Suppress noise on a fresh wave; the executor may simply
-          // not have witnessed yet.
           break;
         case 'in-progress':
           lines.push(`    (in progress — no recent attributable write)`);
@@ -280,8 +328,7 @@ function renderText(p: WaveStatusPayload): string {
           }
           break;
         case 'active':
-          // Should not reach here (active implies last_attributable_at
-          // is set), but cover it explicitly.
+          // Legacy wire value; never emitted by post-#309 builds.
           break;
       }
     }
@@ -296,12 +343,14 @@ function renderAgeFooter(p: WaveStatusPayload): string[] {
     return [`wave state: ${p.state}   (not yet approved — age undefined)`];
   }
   const ageHuman = formatDuration(p.age_ms);
-  const bandTag =
-    p.age_band === 'fresh'
+  // Per #309: tag the footer with the *effective* stale signal — i.e.
+  // "all executors stale", not "wave age > threshold". An old wave
+  // with fresh executor activity is no longer mis-labeled.
+  const bandTag = p.wave_stale_effective
+    ? 'stale'
+    : p.age_band === 'fresh'
       ? 'fresh'
-      : p.age_band === 'in-progress'
-        ? 'in-progress'
-        : 'stale';
+      : 'in-progress';
   return [`wave state: ${p.state}   age: ${ageHuman} (${bandTag})`];
 }
 

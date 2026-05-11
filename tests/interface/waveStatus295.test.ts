@@ -214,5 +214,8 @@ test('#295: terminal-state wave (completed) still renders without crashing', (t)
   assert.equal(payload.executors.length, 1);
   assert.ok(payload.executors[0].last_attributable_at !== null,
     `expected alice's last_attributable_at to be populated from status_log; got: ${JSON.stringify(payload.executors[0])}`);
-  assert.equal(payload.executors[0].activity_band, 'active');
+  // #309: activity_band is now time-graded per-executor (fresh/in-
+  // progress/stale) rather than the deprecated 'active' sentinel.
+  // Just-completed wave has lastAt seconds ago → 'fresh'.
+  assert.equal(payload.executors[0].activity_band, 'fresh');
 });

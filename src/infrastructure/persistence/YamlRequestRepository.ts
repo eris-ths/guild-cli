@@ -799,6 +799,38 @@ function hydrate(
       }
       if (sessions.size > 0) props.witnessSessions = sessions;
     }
+    // witness_updated_at (issue #309) — per-witness mutation timestamp,
+    // keyed by lowercase actor name. Mirrors witness_notes/witness_sessions:
+    // entries for actors NOT in witnesses[] are dropped (no anchor),
+    // entries with non-ISO/non-string values are dropped via onMalformed.
+    // Pre-#309 records and same-body witness records lacking this field
+    // hydrate as undefined — round-trip byte-identical.
+    if (
+      obj['witness_updated_at'] !== null &&
+      typeof obj['witness_updated_at'] === 'object' &&
+      !Array.isArray(obj['witness_updated_at'])
+    ) {
+      const validActors = new Set(
+        (props.witnesses ?? []).map((m) => m.value),
+      );
+      const stamps = new Map<string, string>();
+      for (const [actor, raw] of Object.entries(
+        obj['witness_updated_at'] as Record<string, unknown>,
+      )) {
+        if (typeof raw !== 'string' || raw.length === 0) continue;
+        if (!validActors.has(actor)) continue;
+        const parsed = Date.parse(raw);
+        if (!Number.isFinite(parsed)) {
+          onMalformed(
+            source,
+            `witness_updated_at[${actor}] is not a parseable ISO timestamp; dropping`,
+          );
+          continue;
+        }
+        stamps.set(actor, raw);
+      }
+      if (stamps.size > 0) props.witnessUpdatedAt = stamps;
+    }
     // mutation_seq (issue #244 follow-up; Devil REJECT root cause).
     // Counter for cross-session-mutating verbs (claim/witness/
     // unwitness + terminal auto-reset) that don't grow status_log /

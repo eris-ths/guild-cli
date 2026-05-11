@@ -416,7 +416,12 @@ export class RequestUseCases {
       // re-witness with a divergent note (#246) — the latter doesn't
       // change witnesses.length but is a real mutation.
       const before = req.mutationSeq;
-      req.witness(actor, input.note, input.bySession);
+      req.witness(
+        actor,
+        input.note,
+        input.bySession,
+        this.deps.clock.now().toISOString(),
+      );
       const mutated = req.mutationSeq !== before;
       if (mutated && !input.dryRun) await this.deps.requests.save(req);
       return { request: req, mutated };

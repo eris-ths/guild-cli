@@ -168,6 +168,7 @@ primitives. The table below tells you which.
 | `request.thanks`    | `readonly Thank[]`  | `t.by.value` / `t.to.value`; `t.note` / `t.at` are strings |
 | `request.witnessNotes`    | `ReadonlyMap<string, string>` | iterate with `for (const [actor, note] of map)` |
 | `request.witnessSessions` | `ReadonlyMap<string, string>` | same shape |
+| `request.witnessUpdatedAt` | `ReadonlyMap<string, string>` | per-witness mutation timestamp (ISO-8601, #309). Empty when no witness has been stamped. |
 
 ---
 
