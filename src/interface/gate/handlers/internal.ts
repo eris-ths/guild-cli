@@ -242,11 +242,18 @@ export function warnIfMisconfiguredCwd(c: C, isEmpty: boolean): void {
  *
  * The shape:
  *   `content root: <abs> (config: <abs>/guild.config.yaml)`
- *   `content root: <abs> (config: none — cwd used as fallback root)`
+ *   `content root: <abs> (config: none — cwd used as fallback root)\n  next: create guild.config.yaml here, OR cd into an existing content_root`
  *
  * Phrasing matches `gate register`'s success notice (PR #108)
  * `(config: ...)` segment so the operator recognises the
  * orientation cue across verbs without re-reading.
+ *
+ * When `configFile === null` (the silent-fallback case), the line
+ * is followed by a `\n  next:` sub-bullet pointing at the two
+ * corrective paths — addresses combo C3 ("silent-fallback-loses-
+ * signal") surfaced in the 2026-05-10 eris-dogfood agora play:
+ * the notice identifies the fallback but historically didn't
+ * suggest how to opt out.
  *
  * Pure formatter — caller decides where the line goes (stderr,
  * stdout text body, etc.) and whether to additionally guard on
@@ -264,7 +271,11 @@ export function formatContentRootDisclosure(
     config.configFile === null
       ? 'config: none — cwd used as fallback root'
       : `config: ${config.configFile}`;
-  return `content root: ${config.contentRoot} (${configSegment})`;
+  const base = `content root: ${config.contentRoot} (${configSegment})`;
+  if (config.configFile === null) {
+    return `${base}\n  next: create guild.config.yaml here, OR cd into an existing content_root`;
+  }
+  return base;
 }
 
 // --- Editor fallback for long-form review comments ---------------------
