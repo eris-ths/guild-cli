@@ -185,6 +185,24 @@ the `toJSON()` escape hatch — is documented in
 [`docs/plugin-schema.md`](plugin-schema.md). Read it before writing
 your first hook; the alternative is reading `src/domain/`.
 
+### Hook subject migration (#290 — Phase 2 extension)
+
+Phase 1 hooks (#259) saw `ctx.request: Request` as a non-optional
+field. Phase 2 (#290) added session-boundary verbs (`gate rest` /
+`gate wake` / `gate farewell`) whose subject is a `SessionEvent`
+instead. Rather than break the existing field, the bus now exposes
+two orthogonal optionals: `ctx.request?: Request` and
+`ctx.sessionEvent?: SessionEvent`. Exactly one is populated per
+invocation, picked by which verb fired the hook. Existing plugins
+that read `ctx.request.X` directly continue to work for their
+subscribed events (request-lifecycle invocations always set
+`ctx.request`); the only migration cost is a one-line null-check
+when a plugin spans both subject axes — and even that's optional if
+the plugin only subscribes to events on one axis. See
+[`docs/plugin-schema.md`](plugin-schema.md) § "HookContext shape" for
+the full table and `examples/plugins/hooks/audit-log.mjs` for the
+multi-axis branching pattern.
+
 ## Security fixes
 
 Security patches may ship in any release type (patch, minor, major).

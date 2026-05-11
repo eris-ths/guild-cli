@@ -285,6 +285,9 @@ function hydrateStateLog(
     }
     const logEntry: IssueStateLogEntry = { state, by, at };
     if (typeof r['invoked_by'] === 'string') logEntry.invokedBy = r['invoked_by'];
+    if (typeof r['note'] === 'string' && r['note'].length > 0) {
+      logEntry.note = r['note'];
+    }
     out.push(logEntry);
   }
   return out;

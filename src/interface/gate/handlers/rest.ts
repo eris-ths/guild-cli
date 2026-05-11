@@ -6,6 +6,12 @@ import {
 } from '../../shared/parseArgs.js';
 import { C } from './internal.js';
 import { parseFormat } from './writeFormat.js';
+import {
+  fireBeforeSessionHook,
+  fireAfterSessionHook,
+  emitHookVeto,
+} from '../../../application/plugin/HookBus.js';
+import { SessionEventVetoed } from '../../../application/session/SessionEventUseCases.js';
 
 /**
  * gate rest [--by <m>] [--note <s>] [--format json|text]
@@ -40,11 +46,42 @@ export async function restCmd(c: C, args: ParsedArgs): Promise<number> {
   const note = optionalOption(args, 'note');
   const format = parseFormat(args);
 
-  const event = await c.sessionEventUC.record({
-    kind: 'rest',
-    by,
-    ...(note !== undefined ? { note } : {}),
-  });
+  // #290: fire before:rest / after:rest hooks around the record path.
+  // The `before` veto sees the unsaved SessionEvent (so a policy can
+  // inspect note / actor before persistence); a veto blocks the save.
+  // The `after` fires post-save so an audit hook sees the final id.
+  let event;
+  try {
+    event = await c.sessionEventUC.record(
+      {
+        kind: 'rest',
+        by,
+        ...(note !== undefined ? { note } : {}),
+      },
+      {
+        beforeSave: async (e) => {
+          const veto = await fireBeforeSessionHook(
+            c.hookSubscriptions, 'rest', e, by,
+          );
+          return { veto: veto ? { reason: veto.reason } : null };
+        },
+        afterSave: async (e) => {
+          await fireAfterSessionHook(c.hookSubscriptions, 'rest', e, by);
+        },
+      },
+    );
+  } catch (e) {
+    if (e instanceof SessionEventVetoed) {
+      // No id is allocated to a vetoed record — render `(unsaved)` so
+      // the operator's grep for "hook vetoed rest" still matches the
+      // standard surface from `emitHookVeto`.
+      return emitHookVeto('rest', '(unsaved)', {
+        allow: false,
+        reason: e.reason,
+      });
+    }
+    throw e;
+  }
 
   const message = `✓ rested: ${event.id} by ${event.by.value}`;
   if (format === 'json') {

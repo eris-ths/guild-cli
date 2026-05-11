@@ -31,15 +31,22 @@
 
 import type { Request } from '../../domain/request/Request.js';
 import type { DevilReview } from '../../passages/devil/domain/DevilReview.js';
+import type { SessionEvent } from '../../domain/session/SessionEvent.js';
 
 /**
- * The lifecycle events a hook can subscribe to. Phase 1 covers the
- * five request transitions plus review. fast-track / claim / witness
- * / unwitness / thank are intentionally out of scope for v1 — they
- * either compose multiple events (fast-track) or sit on a different
- * axis from state transitions (the stake/observe verbs). Adding
- * those is additive within the 0.x line per `docs/POLICY.md`
- * § "Plugin stability".
+ * The lifecycle events a hook can subscribe to.
+ *
+ * Phase 1 (#259): the six request transitions plus review.
+ * Phase 2 (#290): the three session-boundary verbs (rest / wake /
+ *   farewell, #261-#263). These do not transition request state —
+ *   they stamp a `SessionEvent` record. Hooks see the event on
+ *   `ctx.sessionEvent` (instead of `ctx.request`).
+ *
+ * fast-track / claim / witness / unwitness / thank are intentionally
+ * out of scope — they either compose multiple events (fast-track) or
+ * sit on a different axis from state transitions (the stake/observe
+ * verbs). Adding those is additive within the 0.x line per
+ * `docs/POLICY.md` § "Plugin stability".
  */
 export type HookEvent =
   | 'before:approve' | 'after:approve'
@@ -47,7 +54,10 @@ export type HookEvent =
   | 'before:execute' | 'after:execute'
   | 'before:complete' | 'after:complete'
   | 'before:fail'    | 'after:fail'
-  | 'before:review'  | 'after:review';
+  | 'before:review'  | 'after:review'
+  | 'before:rest'    | 'after:rest'
+  | 'before:wake'    | 'after:wake'
+  | 'before:farewell' | 'after:farewell';
 
 export const ALL_HOOK_EVENTS: readonly HookEvent[] = [
   'before:approve', 'after:approve',
@@ -56,23 +66,54 @@ export const ALL_HOOK_EVENTS: readonly HookEvent[] = [
   'before:complete', 'after:complete',
   'before:fail',    'after:fail',
   'before:review',  'after:review',
+  'before:rest',    'after:rest',
+  'before:wake',    'after:wake',
+  'before:farewell', 'after:farewell',
 ];
 
 /**
- * Per-event context the hook receives. The `request` is the
- * pre-mutation snapshot for `before:` events (so a veto sees the
- * original state) and the post-mutation snapshot for `after:`
- * events (so an audit hook sees the new state). `actor` is the
- * canonicalised `--by` / `--from` invoker.
+ * Per-event context the hook receives.
+ *
+ * EXACTLY ONE of `request` / `sessionEvent` is populated, picked by
+ * which verb fired the hook:
+ *
+ *   - request-lifecycle events (`approve`, `deny`, `execute`,
+ *     `complete`, `fail`, `review`) populate `request` — pre-mutation
+ *     snapshot for `before:` events (so a veto sees the original
+ *     state), post-mutation for `after:` events (so an audit hook
+ *     sees the new state).
+ *
+ *   - session-boundary events (`rest`, `wake`, `farewell`, #290)
+ *     populate `sessionEvent` — the `SessionEvent` aggregate that
+ *     either WILL be saved (before) or HAS been saved (after).
+ *     `request` is undefined; a plugin that only handles
+ *     request-lifecycle events should null-check `ctx.request` and
+ *     return early when absent.
+ *
+ * `actor` is the canonicalised `--by` / `--from` invoker, populated
+ * for both subject kinds.
  *
  * `extra` carries event-specific payload — currently only `review`
- * uses it (carries the DevilReview-like record). Kept as an
- * optional discriminated field so phase-2 events can extend without
- * a breaking change to the base shape.
+ * uses it (carries the DevilReview-like record). Kept as an optional
+ * discriminated field so future events can extend without a breaking
+ * change to the base shape.
+ *
+ * Why orthogonal optionals (Option B) rather than a discriminated
+ * `subject: { kind, ... }` (Option A): existing plugins read
+ * `ctx.request.X` directly. Option B keeps that exact path working
+ * — the only migration is one defensive null-check at the top of a
+ * hook that subscribes to a session-boundary event. Option A would
+ * have forced every existing access site through a discriminator
+ * branch. See commit message + #290 for the trade analysis.
  */
 export interface HookContext {
   readonly event: HookEvent;
-  readonly request: Request;
+  /** Populated for request-lifecycle events (approve/deny/execute/
+   *  complete/fail/review). Undefined for session-boundary events. */
+  readonly request?: Request;
+  /** Populated for session-boundary events (rest/wake/farewell, #290).
+   *  Undefined for request-lifecycle events. */
+  readonly sessionEvent?: SessionEvent;
   readonly actor: string;
   readonly extra?: { readonly review?: DevilReview | unknown };
 }

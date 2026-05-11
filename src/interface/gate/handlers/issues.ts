@@ -5,6 +5,7 @@ import {
   rejectUnknownFlags,
 } from '../../shared/parseArgs.js';
 import { notFoundMessage } from '../../shared/notFoundHint.js';
+import { resolveGuildSessionId } from '../../shared/resolveGuildSessionId.js';
 import { parseExecutorsList } from './request.js';
 import {
   C,
@@ -42,7 +43,13 @@ const ISSUES_NOTE_KNOWN_FLAGS: ReadonlySet<string> = new Set(['by', 'text']);
 // `gate issues resolve/defer/start/reopen` take `--by <m>` (or fall
 // back to GUILD_ACTOR) so the state_log audit entry can record who
 // ran the transition. See Sec H3 (state_log per transition).
-const ISSUES_TRANSITION_KNOWN_FLAGS: ReadonlySet<string> = new Set(['by']);
+// `--note <s>` is optional free-form rationale (#289 hunk 1) persisted
+// onto the state_log entry; omitted from the YAML when absent so
+// pre-#289 records round-trip byte-identical.
+const ISSUES_TRANSITION_KNOWN_FLAGS: ReadonlySet<string> = new Set([
+  'by',
+  'note',
+]);
 
 export async function issuesCmd(c: C, args: ParsedArgs): Promise<number> {
   const sub = args.positional[0];
@@ -207,10 +214,13 @@ export async function issuesCmd(c: C, args: ParsedArgs): Promise<number> {
   if (nextState !== undefined) {
     rejectUnknownFlags(args, ISSUES_TRANSITION_KNOWN_FLAGS, `issues ${sub}`);
     const id = args.positional[1];
-    if (!id) throw new Error(`Usage: gate issues ${sub} <id> --by <m>`);
+    if (!id) {
+      throw new Error(`Usage: gate issues ${sub} <id> --by <m> [--note <s>]`);
+    }
     const by = requireOption(args, 'by', '<m>', 'GUILD_ACTOR');
     const invokedBy = resolveInvokedBy(by, `issues ${sub}`, id);
-    const issue = await c.issueUC.setState(id, nextState, by, invokedBy);
+    const note = optionalOption(args, 'note');
+    const issue = await c.issueUC.setState(id, nextState, by, invokedBy, note);
     process.stdout.write(`✓ issue ${issue.id.value}: → ${nextState} by ${by}\n`);
     return 0;
   }
@@ -290,6 +300,12 @@ async function issuesPromote(c: C, args: ParsedArgs): Promise<number> {
   // promotion is visible in the new request's initial status_log.
   const invokedByPromote = deriveInvokedBy(from);
   if (invokedByPromote !== undefined) input.invokedBy = invokedByPromote;
+  // Boot-context session_id (#249 / #289 hunk 2). promote → request
+  // is the same write-side primitive as `gate request`, so the same
+  // GUILD_SESSION_ID stamping contract applies. Absence stays absent
+  // on disk so pre-#249 records stay byte-identical.
+  const sessionId = resolveGuildSessionId();
+  if (sessionId !== undefined) input.openedBySession = sessionId;
 
   // Non-atomic by design: create request first, then resolve issue.
   // If the second step fails we emit the request id so the operator
