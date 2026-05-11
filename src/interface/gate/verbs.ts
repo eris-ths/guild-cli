@@ -30,6 +30,7 @@ export const READ_VERBS: ReadonlySet<string> = new Set([
   'status',
   'boot',
   'suggest',
+  'flow-suggest',
   'transcript',
   'summarize',
   'why',

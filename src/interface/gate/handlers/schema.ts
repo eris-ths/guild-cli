@@ -532,6 +532,75 @@ const VERBS: readonly VerbSchema[] = [
     },
   },
   {
+    name: 'flow-suggest',
+    category: 'read',
+    summary:
+      'advisory: maps (severity, area, [scope]) → a recommended flow (fast-track / direct-pr / full-request) with reason and alternatives. Pure read; no substrate writes. Heuristic — `reason` is the load-bearing output.',
+    input: {
+      type: 'object',
+      properties: {
+        severity: {
+          type: 'string',
+          enum: ['low', 'med', 'high'],
+          description: 'severity tier matching `gate issues add --severity`',
+        },
+        area: {
+          type: 'string',
+          description:
+            'free-form domain tag (e.g. copy, doc, style, bug, auth, data). ' +
+            'The engine matches case-insensitively against known buckets; ' +
+            'unknown areas fall through to the conservative default.',
+        },
+        scope: {
+          type: 'string',
+          description:
+            'optional scope hint (single-file, multi-file, multi-pr, ...). ' +
+            'Echoed back in the response; not load-bearing in v1.',
+        },
+        format: formatField,
+      },
+      required: ['severity', 'area'],
+    },
+    output: {
+      type: 'object',
+      properties: {
+        recommended: {
+          type: 'string',
+          enum: ['fast-track', 'direct-pr', 'full-request'],
+        },
+        reason: {
+          type: 'string',
+          description:
+            'The load-bearing field: a one-line explanation of why this ' +
+            'flow was chosen, in the same `key=value` shape the rest of ' +
+            'the gate envelopes use.',
+        },
+        alternatives: {
+          type: 'array',
+          items: {
+            type: 'string',
+            enum: ['fast-track', 'direct-pr', 'full-request'],
+          },
+          description:
+            'Other flows the operator can fall back to if the primary ' +
+            'recommendation does not fit the situation.',
+        },
+        inputs: {
+          type: 'object',
+          description:
+            'Echo of the inputs the engine consumed, so the response is ' +
+            'self-describing without the caller having to retain argv.',
+          properties: {
+            severity: { type: 'string' },
+            area: { type: 'string' },
+            scope: { type: 'string' },
+          },
+        },
+      },
+      required: ['recommended', 'reason', 'alternatives', 'inputs'],
+    },
+  },
+  {
     name: 'transcript',
     category: 'read',
     summary:

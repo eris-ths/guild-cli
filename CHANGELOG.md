@@ -148,11 +148,17 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
   quarantineable findings are processed inline via the repair
   use case and the outcome is reported under `doctor.auto_repair`.
   Default behavior is unchanged — without `--with-doctor` the JSON
-  shape and text prose are byte-identical to pre-#306. Closes the
-  2-step friction `eris-gate-flow.md` flagged: a dirty substrate
-  now surfaces at the moment of session boot, before the agent
-  starts writing again. `--auto-repair` without `--with-doctor`
-  is rejected with a pointed error.
+  shape and text prose are byte-identical to pre-#306.
+
+- **`gate flow-suggest` — advisory verb for picking a flow shape (closes #307)**
+  ([#307](https://github.com/eris-ths/guild-cli/issues/307)).
+  New read verb: `gate flow-suggest --severity <low|med|high> --area <s>
+  [--scope <s>] [--format json|text]`. Maps the (severity, area, scope)
+  tuple to a recommended flow — `fast-track`, `direct-pr`, or
+  `full-request` — and returns the reason plus alternative options.
+  Pure advisory: no substrate writes, no state. Rule engine in
+  `application/request/flowSuggest.ts`; future v2 can wrap it with a
+  `guild.config.yaml` override without touching the CLI surface.
 
 - **`gate wave-status <id>` — per-executor in-flight slice status (closes #295)**
   ([#295](https://github.com/eris-ths/guild-cli/issues/295)).

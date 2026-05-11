@@ -47,6 +47,7 @@ import {
 } from './handlers/messages.js';
 import { statusCmd } from './handlers/status.js';
 import { suggestCmd } from './handlers/suggest.js';
+import { flowSuggestCmd } from './handlers/flowSuggest.js';
 import { transcriptCmd } from './handlers/transcript.js';
 import { waveStatusCmd } from './handlers/waveStatus.js';
 import { lenseStatsCmd } from './handlers/lenseStats.js';
@@ -220,6 +221,14 @@ Status:
                        Defaults: --tail 5 --utterances 5 (lean for
                        hot-path session start; pass higher N for deeper
                        history).
+  gate flow-suggest --severity <low|med|high> --area <s> [--scope <s>]
+                    [--format json|text]
+                       Advisory: maps (severity, area, [scope]) → a
+                       recommended flow (fast-track / direct-pr /
+                       full-request) plus reason and alternatives. Pure
+                       read — no substrate writes. Heuristic, not a
+                       directive; the reason field is the load-bearing
+                       output (override when judgement differs).
   gate suggest [--format json|text]
                        Tight-loop sibling of boot: returns ONLY the
                        suggested_next triple (verb/args/reason) or
@@ -290,7 +299,7 @@ const KNOWN_COMMANDS = [
   'complete', 'fail', 'review', 'claim', 'witness', 'unwitness',
   'thank', 'fast-track', 'issues', 'message',
   'broadcast', 'inbox', 'doctor', 'repair', 'status', 'boot',
-  'suggest', 'transcript', 'summarize', 'why', 'resume', 'schema',
+  'suggest', 'flow-suggest', 'transcript', 'summarize', 'why', 'resume', 'schema',
   'unresponded',
   'templates',
   'rest',
@@ -469,6 +478,8 @@ async function dispatch(
       return await bootCmd(c, args);
     case 'suggest':
       return await suggestCmd(c, args);
+    case 'flow-suggest':
+      return await flowSuggestCmd(c, args);
     case 'transcript':
       return await transcriptCmd(c, args);
     case 'wave-status':
