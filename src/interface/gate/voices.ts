@@ -516,7 +516,7 @@ export function computeVoiceCalibration(
         // verdict=reject + state=completed: header calls this
         // `overruled` (you said no, it shipped anyway). counted as
         // missed here — conservative read: from a work-as-evidence
-        // lens, the no was wrong because the work landed. the
+        // lense, the no was wrong because the work landed. the
         // alternative ("the risk you flagged was reviewed and held")
         // is plausible but not separately observable from this
         // record alone, so we don't try to distinguish.

@@ -213,7 +213,7 @@ const utteranceSchema: JsonSchema = {
     },
     lense: {
       type: 'string',
-      description: '[review only] reviewer lens (devil/layer/cognitive/user).',
+      description: '[review only] reviewer lense (devil/layer/cognitive/user).',
     },
     verdict: {
       type: 'string',
@@ -755,7 +755,7 @@ const VERBS: readonly VerbSchema[] = [
     name: 'review-context',
     category: 'read',
     summary:
-      'reviewer-facing bundle for a wave: action/reason/target, executors, depth advisory (#221), recommended lens set by depth, and prior reviews. Lets a devil/reviewer agent drive behaviour from substrate state instead of out-of-band prompt content (#310 Layer A). Read-only; depth and lens-set are advisory not directive (principle 02).',
+      'reviewer-facing bundle for a wave: action/reason/target, executors, depth advisory (#221), recommended lense set by depth, and prior reviews. Lets a devil/reviewer agent drive behaviour from substrate state instead of out-of-band prompt content (#310 Layer A). Read-only; depth and lense-set are advisory not directive (principle 02).',
     input: {
       type: 'object',
       properties: {
