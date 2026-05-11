@@ -383,11 +383,13 @@ forces one or the other on every new `Request` getter.
 - `mutationSeq` — internal sequence number for in-memory mutation
   ordering. Not stable across processes.
 - `executorRecords` — structured per-executor slice records (issue #294
-  internal shape: `{ name, status, completedAt?, note? }`). Plugins
-  should read `executors` (the `MemberName[]` name list) and, when a
-  slice-status check is needed, call `executorStatus(name)` — both are
-  stable wrappers; the record shape is part of the internal migration
-  surface and may grow new fields without notice.
+  internal shape: `{ name, status, completedAt?, note? }`). The record
+  object shape is part of the internal migration surface and may grow
+  new fields without notice — plugins should NOT destructure it. Use
+  the stable wrappers instead: `executors` (the `MemberName[]` name
+  list) for membership / iteration, and `executorStatus(name)` (method)
+  for a slice-status check by name. Those two surfaces are version-
+  stable.
 
 If you reach for one of these inside a plugin, you almost certainly
 want a different field — open an issue describing the use case.
