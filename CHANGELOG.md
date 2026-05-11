@@ -119,6 +119,22 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
 
 ### Added
 
+- **`gate flow-suggest` — advisory verb for picking a flow shape (closes #307)**
+  ([#307](https://github.com/eris-ths/guild-cli/issues/307)).
+  New read verb: `gate flow-suggest --severity <low|med|high> --area <s>
+  [--scope <s>] [--format json|text]`. Maps the (severity, area, scope)
+  tuple to a recommended flow — `fast-track`, `direct-pr`, or
+  `full-request` — and returns the reason plus alternative options.
+  Pure advisory: no substrate writes, no state. The rule engine lives
+  in `application/request/flowSuggest.ts` so a future v2 layer
+  (`guild.config.yaml` override) can wrap it without touching the CLI
+  surface; v1 ships with the hard-coded default rules from the issue.
+  Motivation: ErisMind dogfood surfaced friction where trivial typo
+  fixes were getting routed through the full issue → agora → devil
+  ceremony — `flow-suggest` lets the operator (human or agent) get a
+  one-line "this is a direct PR" answer without re-deriving the
+  trade-off each time.
+
 - **`gate wave-status <id>` — per-executor in-flight slice status (closes #295)**
   ([#295](https://github.com/eris-ths/guild-cli/issues/295)).
   New read verb that composes per-executor view from existing

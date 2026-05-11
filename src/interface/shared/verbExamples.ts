@@ -47,6 +47,7 @@ export const VERB_EXAMPLES: Record<string, Record<string, string>> = {
     boot: 'boot',
     status: 'status',
     suggest: 'suggest',
+    'flow-suggest': 'flow-suggest --severity low --area copy',
     resume: 'resume',
     summarize: 'summarize <id>',
     why: 'why <id>',
