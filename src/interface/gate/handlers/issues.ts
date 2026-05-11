@@ -5,6 +5,7 @@ import {
   rejectUnknownFlags,
 } from '../../shared/parseArgs.js';
 import { notFoundMessage } from '../../shared/notFoundHint.js';
+import { resolveGuildSessionId } from '../../shared/resolveGuildSessionId.js';
 import { parseExecutorsList } from './request.js';
 import {
   C,
@@ -299,6 +300,12 @@ async function issuesPromote(c: C, args: ParsedArgs): Promise<number> {
   // promotion is visible in the new request's initial status_log.
   const invokedByPromote = deriveInvokedBy(from);
   if (invokedByPromote !== undefined) input.invokedBy = invokedByPromote;
+  // Boot-context session_id (#249 / #289 hunk 2). promote → request
+  // is the same write-side primitive as `gate request`, so the same
+  // GUILD_SESSION_ID stamping contract applies. Absence stays absent
+  // on disk so pre-#249 records stay byte-identical.
+  const sessionId = resolveGuildSessionId();
+  if (sessionId !== undefined) input.openedBySession = sessionId;
 
   // Non-atomic by design: create request first, then resolve issue.
   // If the second step fails we emit the request id so the operator
