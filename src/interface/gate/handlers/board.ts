@@ -141,8 +141,18 @@ export async function boardCmd(c: C, args: ParsedArgs): Promise<number> {
       // for the approved/executing rows where the executor is the
       // next-action holder. Reads from the new `executors` array form;
       // legacy single-executor records hydrate as a one-element list.
+      // toJSON two-mode shape post-#294: normalize both flat strings
+      // and structured `{ name, status, ... }` entries to a name list.
       const execList = Array.isArray(j['executors'])
-        ? (j['executors'] as string[])
+        ? (j['executors'] as unknown[])
+            .map((e) =>
+              typeof e === 'string'
+                ? e
+                : e && typeof e === 'object' && typeof (e as { name?: unknown }).name === 'string'
+                  ? (e as { name: string }).name
+                  : '',
+            )
+            .filter((n) => n.length > 0)
         : [];
       const executor = execList.length > 0 ? `  exec=${execList.join(',')}` : '';
       process.stdout.write(

@@ -325,7 +325,11 @@ test('gate show --format json: emits BOTH `executors` and deprecated `executor` 
 
   const show = run(root, ['show', id, '--format', 'json']);
   const j = JSON.parse(show.stdout) as Record<string, unknown>;
-  assert.deepEqual(j['executors'], ['miki', 'leysia']);
+  // Issue #294: structured form for freshly-created records.
+  assert.deepEqual(j['executors'], [
+    { name: 'miki', status: 'pending' },
+    { name: 'leysia', status: 'pending' },
+  ]);
   // Back-compat alias (Devil blocker 2): tool wirings reading
   // `jq .executor` continue to work, getting the first-of-list
   // value. To be removed in v0.7.0 of guild-cli per the deprecation

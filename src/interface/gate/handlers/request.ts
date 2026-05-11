@@ -692,7 +692,19 @@ function formatRequestText(r: Request): string {
   // single-name case still reads naturally (`executors: alice`).
   // Issue #230.
   if (Array.isArray(j['executors']) && (j['executors'] as unknown[]).length > 0) {
-    lines.push(`  executors: ${(j['executors'] as string[]).join(', ')}`);
+    // toJSON emits either flat strings or `{ name, status, ... }`
+    // entries post-#294. Render the name list either way; status
+    // surfaces through dedicated verbs (e.g. `gate wave-status`).
+    const names = (j['executors'] as unknown[])
+      .map((e) =>
+        typeof e === 'string'
+          ? e
+          : e && typeof e === 'object' && typeof (e as { name?: unknown }).name === 'string'
+            ? (e as { name: string }).name
+            : '',
+      )
+      .filter((n) => n.length > 0);
+    if (names.length > 0) lines.push(`  executors: ${names.join(', ')}`);
   }
   if (j['target']) lines.push(`  target:   ${j['target']}`);
   if (j['auto_review']) lines.push(`  reviewer: ${j['auto_review']}`);

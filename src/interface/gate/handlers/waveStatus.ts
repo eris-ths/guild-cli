@@ -115,8 +115,18 @@ export function buildWaveStatus(r: Request, now: Date): WaveStatusPayload {
   const id = String(j['id']);
   const state = String(j['state']);
   const from = String(j['from']);
+  // toJSON emits either flat strings (legacy/unknown-only round-trip)
+  // or structured `{ name, status, ... }` objects post-#294. Normalize
+  // to a name list here; Slice B's `wave-status` redesign will read
+  // the structured shape directly.
   const executors = Array.isArray(j['executors'])
-    ? (j['executors'] as string[])
+    ? (j['executors'] as unknown[]).map((e) =>
+        typeof e === 'string'
+          ? e
+          : e && typeof e === 'object' && typeof (e as { name?: unknown }).name === 'string'
+            ? ((e as { name: string }).name)
+            : '',
+      ).filter((n) => n.length > 0)
     : [];
   const log = Array.isArray(j['status_log'])
     ? (j['status_log'] as Array<Record<string, unknown>>)

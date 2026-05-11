@@ -248,7 +248,8 @@ test('show --fields: trims JSON to requested keys', () => {
     const payload = JSON.parse(stdout);
     assert.deepEqual(Object.keys(payload).sort(), ['executors', 'state']);
     assert.equal(payload.state, 'pending');
-    assert.deepEqual(payload.executors, ['bob']);
+    // Issue #294: structured form for freshly-created records.
+    assert.deepEqual(payload.executors, [{ name: 'bob', status: 'pending' }]);
   } finally {
     cleanup();
   }

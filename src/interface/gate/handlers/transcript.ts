@@ -88,8 +88,19 @@ function buildTranscript(r: Request): TranscriptPayload {
   // existing prose ("naming alice as executor"); for multi-executor
   // records we render the joined list ("naming alice, bob as
   // executors"). Plural form is selected below.
+  // toJSON emits either flat strings (legacy/unknown round-trip) or
+  // `{ name, status, ... }` objects post-#294 slice-closure. Normalize
+  // both shapes to a name list for the rendering pass.
   const executors = Array.isArray(j['executors'])
-    ? (j['executors'] as string[])
+    ? (j['executors'] as unknown[])
+        .map((e) =>
+          typeof e === 'string'
+            ? e
+            : e && typeof e === 'object' && typeof (e as { name?: unknown }).name === 'string'
+              ? (e as { name: string }).name
+              : '',
+        )
+        .filter((n) => n.length > 0)
     : [];
   const autoReview = j['auto_review'] ? String(j['auto_review']) : undefined;
   const log = Array.isArray(j['status_log'])

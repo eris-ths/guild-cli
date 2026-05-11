@@ -94,7 +94,11 @@ test('gate request --executors a,b: writes executors array (multi)', (t) => {
   const showJson = run(root, ['show', id, '--format', 'json']);
   assert.equal(showJson.status, 0);
   const payload = JSON.parse(showJson.stdout) as Record<string, unknown>;
-  assert.deepEqual(payload['executors'], ['miki', 'leysia']);
+  // Issue #294: post-create records emit structured form (status='pending').
+  assert.deepEqual(payload['executors'], [
+    { name: 'miki', status: 'pending' },
+    { name: 'leysia', status: 'pending' },
+  ]);
   // Devil review #230 blocker 2: render-side keeps the deprecated
   // `executor` key (= first-of-list) for back-compat with tool
   // wirings reading the singleton directly. Persistence (YAML) does
@@ -129,7 +133,7 @@ test('gate request --executor (singular) still works as a back-compat alias', (t
   // The on-record file uses the new wire form even when input was singular.
   const showJson = run(root, ['show', id, '--format', 'json']);
   const payload = JSON.parse(showJson.stdout) as Record<string, unknown>;
-  assert.deepEqual(payload['executors'], ['bob']);
+  assert.deepEqual(payload['executors'], [{ name: 'bob', status: 'pending' }]);
 });
 
 test('gate request --executor and --executors together: exit 1, flag-shaped error', (t) => {

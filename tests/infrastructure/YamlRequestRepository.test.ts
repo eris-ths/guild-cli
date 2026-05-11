@@ -520,7 +520,14 @@ test('hydrate: new `executors: [a, b]` round-trips byte-stable', async () => {
       reloaded!.executors.map((m) => m.value),
       ['miki', 'leysia'],
     );
-    assert.deepEqual(reloaded!.toJSON()['executors'], ['miki', 'leysia']);
+    // Issue #294: freshly-created records carry status='pending' and
+    // emit the structured form. The flat form is reserved for hydrate
+    // of pre-#294 legacy records (where every entry hydrates with
+    // status='unknown') round-tripping without mutation.
+    assert.deepEqual(reloaded!.toJSON()['executors'], [
+      { name: 'miki', status: 'pending' },
+      { name: 'leysia', status: 'pending' },
+    ]);
   } finally {
     cleanup();
   }
