@@ -52,6 +52,12 @@ behind the design. One principle per file, ~30 lines each. Read these
 when you need to know why a choice was made, not how. Append-only in
 spirit, like the records `gate` itself produces.
 
+Recent: [`principle 14`](./lore/principles/14-substrate-engagement-reduces-coordination-context-cost.md)
+extends principle 04 to coordination state — when multiple SubAgents
+run in parallel, the substrate engagement (gate request + witness +
+session_id stamps) IS the context-cost reduction; worked recipe in
+[`docs/playbook.md`](./docs/playbook.md) § "Swarm × Claude SubAgent harness".
+
 ### For AI agents
 
 If you are an AI agent: before asking what this tool *does*, ask what
@@ -89,6 +95,9 @@ export GUILD_ACTOR=<you>
 
 # Every session: orient with one command.
 node ./bin/gate.mjs boot                 # identity + status + tail + inbox + cross_passage in one JSON
+
+# Discover the wave-brief templates shipped with this repo (#235):
+node ./bin/gate.mjs templates list       # parallel-impl / compare-and-ratify / verification / single-impl / research-wave
 ```
 
 #### Entry points
@@ -148,48 +157,24 @@ recognizing the shape. The set is open — see
 for how additional passages compose with these without absorbing
 into any one of them.
 
-- **`gate`** (CLI) — the request-lifecycle / review / dialogue
-  passage. Decisions and the deliberation around them: file a
-  request, transition through approve / execute / complete,
-  attach multi-lens reviews, audit-trail forever. The surface
-  most agent work flows through.
-- **`agora`** (CLI) — the play / narrative passage (alpha,
-  shipping under `bin/agora.mjs`). Quest and Sandbox style games
-  with **suspend / resume as a first-class primitive**: an
-  agent leaves a `cliff` (what just happened) and an
-  `invitation` (what the next opener should do); the next
-  instance reads those and acts on the substrate-side Zeigarnik
-  effect. The design rationale lives in
-  [issue #117](https://github.com/eris-ths/guild-cli/issues/117).
-- **`devil`** (CLI) — the security-backstop review passage
-  (alpha, shipping under `bin/devil.mjs`). A **multi-persona,
-  lense-enforced, time-extended review surface** that composes
-  with single-pass tools (Anthropic `/ultrareview`, Claude
-  Security, supply-chain-guard) rather than replacing them.
-  Reviewers commit to a `persona` (red-team / author-defender /
-  mirror), touch a per-content_root `lense` catalog, and
-  conclude with synthesis prose rather than a verdict. Designed
-  to **raise the security knowledge floor** for code reviewed
-  by authors who haven't met OWASP top 10 — not to guarantee
-  protection, but to keep the deliberation honest when a finding
-  is dismissed. The design rationale lives in
-  [issue #126](https://github.com/eris-ths/guild-cli/issues/126).
-  See also the sister project
-  [eris-ths/supply-chain-guard](https://github.com/eris-ths/supply-chain-guard)
-  whose Devil Gate framework devil-review's `supply-chain` lense
-  delegates to.
-- **`ctx`** (CLI) — the fact-accumulation passage (alpha
-  phase 1, shipping under `bin/ctx.mjs`). Verdict-less,
-  attribution-required, append-only. Where `gate` records
-  *judgments* and `agora` records *thoughts in motion*, `ctx`
-  records *what has been observed* — facts the substrate has
-  witnessed across sessions, attributed to an actor, tagged
-  with `prefix:value` labels (e.g. `tech:typescript`,
-  `status:active`) for semantic query later. Phase 1 ships
-  only `ctx record`; `fork` / `supersede` / `show` / `list` /
-  `chain` / `status` arrive in phase 2. Useful when an
-  observation should outlive the session that produced it
-  without forcing a decision or a deliberation.
+Per-passage notes (each builds on the dispatch table above):
+
+- **`gate`** — request lifecycle + multi-lense reviews + audit
+  trail. The surface most agent work flows through.
+- **`agora`** — Quest / Sandbox plays with **suspend / resume as a
+  first-class primitive** (cliff + invitation for substrate-side
+  Zeigarnik continuity across instances). Design: [#117](https://github.com/eris-ths/guild-cli/issues/117).
+- **`devil`** — multi-persona (red-team / author-defender / mirror),
+  lense-enforced review designed to **raise the security knowledge
+  floor**, composing with single-pass tools rather than replacing
+  them. Conclude with synthesis prose, not a verdict. Design:
+  [#126](https://github.com/eris-ths/guild-cli/issues/126); the
+  `supply-chain` lense delegates to sister project
+  [eris-ths/supply-chain-guard](https://github.com/eris-ths/supply-chain-guard).
+- **`ctx`** (phase 1) — verdict-less, append-only fact records with
+  `prefix:value` labels (e.g. `tech:typescript`) for semantic query
+  later. Phase 1 ships `ctx record` only; `fork` / `supersede` / etc.
+  in phase 2.
 
 Plus a thin operator helper:
 
