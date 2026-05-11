@@ -1667,8 +1667,41 @@ const VERBS: readonly VerbSchema[] = [
   {
     name: 'doctor',
     category: 'admin',
-    summary: 'read-only content-root health check',
-    input: { type: 'object', properties: { summary: { type: 'boolean' }, format: formatField } },
+    summary:
+      'read-only content-root health check. Sub-verb `sweep-traps` (#327) ' +
+      'retires expired trap memory: --apply quarantines, --revive <name> ' +
+      'restores; both write a YAML audit entry to trap-retirement-log.yaml.',
+    input: {
+      type: 'object',
+      properties: {
+        // Sub-verb is positional, not a flag — modeled as `subcommand`
+        // for parity with `gate issues` / `gate templates` schema entries.
+        subcommand: {
+          type: 'string',
+          enum: ['sweep-traps'],
+          description:
+            'optional sub-verb. `sweep-traps` retires expired trap memory; ' +
+            'absence runs the standard read-only diagnostic.',
+        },
+        summary: { type: 'boolean' },
+        apply: {
+          type: 'boolean',
+          description:
+            '[sweep-traps only] when true, move expired traps to ' +
+            '<content_root>/trap-quarantine/ and append an entry to ' +
+            'trap-retirement-log.yaml. Without --apply, sweep-traps is a ' +
+            'dry-run that lists what would happen.',
+        },
+        revive: {
+          type: 'string',
+          description:
+            '[sweep-traps only] bare filename of a quarantined trap to ' +
+            'restore to <content_root>/lore/traps/. Mutually exclusive ' +
+            'with --apply. Records a `revive` event in the audit log.',
+        },
+        format: formatField,
+      },
+    },
     output: { type: 'object' },
   },
   {

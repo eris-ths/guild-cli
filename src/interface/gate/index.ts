@@ -76,6 +76,7 @@ export {
 // shows the full catalog. `gate schema --format json` remains
 // exhaustive regardless of profile or --all.
 
+
 // Mirror of the switch below for typo suggestions. Keeping it adjacent
 // to the switch (rather than auto-derived) is an obvious-when-broken
 // signal: a new verb forgotten here just loses its did-you-mean entry,
