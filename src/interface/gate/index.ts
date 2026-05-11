@@ -59,6 +59,7 @@ import { templatesCmd } from './handlers/templates.js';
 import { withEntryLock } from '../../infrastructure/lock/withEntryLock.js';
 import { resolveGuildActor } from '../shared/resolveGuildActor.js';
 import { READ_VERBS, WRITE_VERBS, LOCK_EXEMPT_VERBS } from './verbs.js';
+import { renderHelp } from './help.js';
 import type { Container } from '../shared/container.js';
 import type { ParsedArgs } from '../shared/parseArgs.js';
 
@@ -70,225 +71,10 @@ export {
   computeReviewMarkerWidth,
 } from './handlers/request.js';
 
-const HELP = `gate — request lifecycle & dialogue CLI
-
-Getting started:
-  gate register --name <n> [--category <c>] [--display-name <s>]
-                 [--dry-run] [--format json|text]
-                       Register yourself (or another member) as an
-                       actor. Category defaults to "professional";
-                       aliases accepted (pro, prof, member). Host is
-                       NOT registerable via CLI — edit
-                       guild.config.yaml directly. --dry-run shows
-                       the YAML that would be written.
-
-Requests:
-  gate request --from <m> --action <a> --reason <r>
-                 [--executor <m>] [--target <s>] [--auto-review <m>]
-                 [--with <n1>[,<n2>...]] [--depth shallow|standard|deep]
-  gate pending [--for <m>]
-  gate board [--for <m>] [--format json|text]
-                       What's in flight: pending + approved +
-                       executing, grouped by state.
-  gate list --state <state> [--for <m>] [--from <m>]
-                            [--executor <m>] [--auto-review <m>]
-  gate show <id> [--format json|text] [--fields k1,k2,...] [--plain]
-                       --fields trims the JSON payload to just the
-                       requested keys (agent-facing; JSON only).
-                       --plain + --fields <single-key> emits just
-                       the value (no JSON quotes) for shell combos:
-                         state=$(gate show $id --fields state --plain)
-                         [ "$state" = "pending" ] && gate approve $id
-  gate voices <name> [--lense <l>] [--verdict <v>] [--limit <N>]
-                     [--format json|text]          (default: json)
-  gate tail [N]                                   (default 20)
-  gate whoami                                     (needs GUILD_ACTOR)
-  gate chain <id>                                 (request or issue;
-                                                   forward refs + inbound)
-  gate approve <id> --by <m> [--note <s>] [--dry-run]
-  gate deny <id> --by <m> [--note <s> | --reason <s> | <reason>] [--dry-run]
-  gate execute <id> --by <m> [--note <s>] [--dry-run]
-  gate complete <id> --by <m> [--note <s>] [--dry-run]
-  gate fail <id> --by <m> [--note <s> | --reason <s> | <reason>] [--dry-run]
-  gate review <id> --by <m> --lense <l> --verdict <v>
-                   [--comment <s> | --comment - | <comment>] [--dry-run]
-  gate claim <id> --by <m> [--dry-run]
-                       Stake a cross-session claim on a pending or
-                       approved request (issue #226 phase 1). Same-
-                       actor re-claim is a no-op; a different actor
-                       attempting to claim while one is already held
-                       is refused. The claim auto-releases when the
-                       request reaches a terminal state (completed /
-                       failed / denied).
-  gate witness <id> --by <m> [--dry-run]
-  gate unwitness <id> --by <m> [--dry-run]
-                       Register / remove a non-exclusive observer on
-                       a pending / approved / executing request
-                       (issue #244). Multiple actors may witness in
-                       parallel and witness coexists with any claim.
-                       Same-actor re-witness is a no-op; unwitness
-                       only removes the caller's own witness (refuses
-                       on a foreign actor). Auto-resets to no
-                       witnesses when the request reaches a terminal
-                       state.
-                       --dry-run on any write verb above emits a
-                       preview JSON envelope (dry_run/verb/would_
-                       transition/preview) without persisting.
-  gate thank <to> --for <id> [--by <m>] [--reason <s> | --reason -]
-                  [--dry-run]
-                       Record cross-actor appreciation against a
-                       specific request. Sibling of 'review' — no
-                       verdict, no state change, no calibration
-                       impact. Reviews track judgement; thanks
-                       track gratitude.
-  gate fast-track --from <m> --action <a> --reason <r>
-                  [--executor <m>] [--auto-review <m>] [--note <s>]
-                  [--with <n1>[,<n2>...]]
-
-Issues:
-  gate issues add --from <m> --severity <s> --area <a>
-                  [--text <s> | --text - | <text>]
-  gate issues list [--state <s>] [--format json|text]
-                       Default --state is open (worklist semantic).
-                       Use --state all to see every state, or pass a
-                       specific state. Note: status.open_issues
-                       counts open+in_progress (triage), so list and
-                       status report different scopes on purpose.
-  gate issues resolve|defer|start|reopen <id>
-  gate issues note <id> --by <m> [--text <s> | --text - | <text>]
-  gate issues promote <id> --from <m> [--executor <m>] [--auto-review <m>]
-                                      [--action <a>] [--reason <r>]
-
-Messages:
-  gate message --from <m> --to <m> [--text <s> | --text -]
-  gate broadcast --from <m> [--text <s> | --text -]
-  gate inbox --for <m> [--unread] [--format json|text]
-  gate inbox mark-read [N] [--for <m>]
-
-States: pending | approved | executing | completed | failed | denied
-Verdicts: ok | concern | reject
-Lenses: devil | layer | cognitive | user (configurable via guild.config.yaml)
-
-Values beginning with "--":
-  Bare \`--key <value>\` will not consume a value that itself starts
-  with "--" (the parser can't tell it from the next flag). Use either
-  form below to pass such literals:
-    --key=<value>                            # inline, any content
-    ... -- <value> [<value>...]              # POSIX end-of-options marker
-  Example:
-    gate issues note <id> --by eris -- "the --reason - sentinel is cool"
-
-Environment:
-  GUILD_ACTOR=<name>   If set, used as the default for --from / --by /
-                       --for when those flags are omitted. Explicit flags
-                       always win. Intended for interactive shells
-                       (export it in your shell profile or direnv).
-                       Automations should continue to pass --from / --by
-                       explicitly.
-                       When GUILD_ACTOR differs from the explicit --by
-                       (e.g. an AI agent acting for a human), write
-                       verbs record invoked_by=<GUILD_ACTOR> on the
-                       status_log entry (or review) and print a
-                       one-line delegation notice to stderr. The on-
-                       record actor (--by) still wins for attribution;
-                       invoked_by preserves the delegation for audits.
-                       Same pattern as inbox read_by.
-
-Diagnostic / Repair:
-  gate doctor [--summary | --format json]
-                       Read-only health check over the content root.
-                       Exits 1 if any malformed records are detected.
-  gate repair [--apply] [--from-doctor <path>] [--format json]
-                       Intervention layer paired with doctor. Reads
-                       'gate doctor --format json' from stdin (or
-                       --from-doctor <file>) and either prints the
-                       proposed plan (default --dry-run) or executes
-                       it (--apply). Quarantine is the only action;
-                       duplicate_id and unknown findings are no-op.
-                       Usage:
-                         gate doctor --format json | gate repair
-                         gate doctor --format json | gate repair --apply
-
-Status:
-  gate status [--for <m>] [--format json|text]
-                       Agent orientation: pending/approved/executing
-                       counts, open issues, unread inbox, last activity.
-                       Default output is JSON (agent-first).
-  gate boot [--format json|text] [--tail <N>] [--utterances <N>]
-                       Single-command session bootstrap for agents.
-                       Returns identity + status + tail + your recent
-                       utterances + inbox unread as one JSON payload.
-                       GUILD_ACTOR optional (global view if unset).
-                       Defaults: --tail 5 --utterances 5 (lean for
-                       hot-path session start; pass higher N for deeper
-                       history).
-  gate flow-suggest --severity <low|med|high> --area <s> [--scope <s>]
-                    [--format json|text]
-                       Advisory: maps (severity, area, [scope]) → a
-                       recommended flow (fast-track / direct-pr /
-                       full-request) plus reason and alternatives. Pure
-                       read — no substrate writes. Heuristic, not a
-                       directive; the reason field is the load-bearing
-                       output (override when judgement differs).
-  gate suggest [--format json|text]
-                       Tight-loop sibling of boot: returns ONLY the
-                       suggested_next triple (verb/args/reason) or
-                       null. Use when you want "what's the one next
-                       thing?" without the full orientation payload.
-                       Priority ladder is shared with boot, so the
-                       two never disagree.
-  gate summarize <id> [--format text|json]
-                       Compressed view: state, decision, open
-                       concerns, review/thank counts. The "30-second
-                       read" sibling of transcript.
-  gate why <id> [--format text|json]
-                       Trace the decision chain: terminal transition,
-                       reviews that aligned with the outcome, reviews
-                       that contested it. Perception, not judgement.
-  gate transcript <id> [--format text|json]
-                       Narrative prose render of one request's arc,
-                       composed from status_log + reviews. Sibling
-                       of 'gate show' (structured) and 'gate voices'
-                       (per-actor). JSON mode carries both the
-                       narrative and a summary (actors/verdicts/
-                       duration_ms) for programmatic consumers.
-  gate resume [--format json|text]
-                       Reconstruct what the actor was doing when the
-                       last session ended. Returns last utterance,
-                       last transition, open loops (awaiting/
-                       executing/pending review/unreviewed), and a
-                       prose restoration note. Requires GUILD_ACTOR.
-                       Same-actor continuation only — for a newcomer
-                       arriving via handoff, use 'gate boot' to see
-                       cross-actor signals (inbox, --with assignments).
-  gate unresponded [--for <m>] [--max-age-days <N>] [--format json|text]
-                       Read-only surface for concern/reject verdicts on
-                       the actor's authored or pair-made requests that
-                       have no follow-up record yet. Thin wrapper over
-                       UnrespondedConcernsQuery — same detector that
-                       drives 'gate resume'. Default actor is
-                       GUILD_ACTOR; default window is 30 days. The
-                       detector is deliberately coarse (does not infer
-                       whether a follow-up actually addresses a
-                       concern); 'gate chain <id>' walks the actual
-                       references when the reader wants to verify.
-
-Calibration:
-  gate lense-stats [--for <m>] [--since <duration>] [--format json|text]
-                       Count review entries per lense in the window.
-                       Highlights the most-frequent and least-frequent
-                       lense so a reader can spot bias ("I keep hitting
-                       auth-access; have I run devil or composition
-                       lately?"). Sources: gate \`review\` records +
-                       devil-passage entries. Duration: <int><s|m|h|d>
-                       (default 7d). Read-only.
-
-Meta:
-  gate schema [--verb <name>] [--format json|text]
-                       Introspection: JSON Schema for every verb's
-                       inputs and outputs. Consumed by LLM tool layers.
-  gate --version       Print version and exit
-`;
+// Top-level `gate --help` text is rendered by `renderHelp` (see
+// ./help.ts): tiered by guild profile, with a `--all` override that
+// shows the full catalog. `gate schema --format json` remains
+// exhaustive regardless of profile or --all.
 
 // Mirror of the switch below for typo suggestions. Keeping it adjacent
 // to the switch (rather than auto-derived) is an obvious-when-broken
@@ -317,8 +103,21 @@ export async function main(argv: readonly string[]): Promise<number> {
     return 0;
   }
   const [cmd, ...rest] = argv;
+  // Top-level help (#324). Tiering uses the guild profile loaded
+  // from disk: standard → BASE only, swarm → BASE + COORDINATION,
+  // `--all` → full catalog regardless. Config load failures fall
+  // back to a standard-profile view so `gate --help` keeps working
+  // even on a misconfigured root (the help payload is purely
+  // informational and must never block diagnosis).
   if (!cmd || cmd === '--help' || cmd === '-h') {
-    process.stdout.write(HELP);
+    const wantAll = rest.includes('--all');
+    let profile: 'standard' | 'swarm' = 'standard';
+    try {
+      profile = GuildConfig.load().profile;
+    } catch {
+      profile = 'standard';
+    }
+    process.stdout.write(renderHelp({ profile, all: wantAll }));
     return 0;
   }
   const args = parseArgs(rest);

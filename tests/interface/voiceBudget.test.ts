@@ -141,7 +141,7 @@ const VOICE_BUDGET: readonly BudgetEntry[] = [
     allowed_files: [
       'src/application/concern/UnrespondedConcernsQuery.ts',
       'src/interface/gate/handlers/unresponded.ts',
-      'src/interface/gate/index.ts',
+      'src/interface/gate/help.ts',
     ],
     rationale:
       'principled limitation marker for UnrespondedConcernsQuery — ' +
@@ -150,7 +150,8 @@ const VOICE_BUDGET: readonly BudgetEntry[] = [
       'is enforced), the handler (where it is exposed via the verb), ' +
       'and the help text (where it is announced). budget 3 = current ' +
       'count; new surfaces inheriting this discipline should reuse the ' +
-      'phrase rather than paraphrase.',
+      'phrase rather than paraphrase. (Help text moved from index.ts ' +
+      'to help.ts under #324 tiered-help.)',
   },
   {
     phrase: 'perception, not judgement',
