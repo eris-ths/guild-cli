@@ -13,20 +13,25 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
   ([#305](https://github.com/eris-ths/guild-cli/issues/305)).
   Counts review entries per lense over a window (`--since 7d` default),
   highlights the most-frequent and least-frequent lense, and surfaces a
-  `next:` hint when one lense dominates 3× the bottom. Sources: gate
-  `Request.reviews[]` + devil-passage `DevilReview.entries[]`. Read-only,
-  text + json formats, optional `--for <actor>` author filter.
+  `next:` hint when one lense dominates 3× the bottom.
 
 - **Per-executor freshness for `gate wave-status` (closes #309)**
   ([#309](https://github.com/eris-ths/guild-cli/issues/309)).
   Stale judgment is now per-executor, derived from each executor's
-  most recent attributable activity (max of `witnessUpdatedAt[name]`,
-  `status_log[by=name].at`, and `claimedAt` when the claim is held).
-  An executor whose witness note was updated 2 min ago is no longer
-  flagged stale on a 33-min-old wave. Wave-level `(stale)` in the
-  footer now derives from "all executors stale" (`wave_stale_effective`),
-  separating "how long has this been open?" (`age_band`) from
-  "is anyone still working?" (`wave_stale_effective`).
+  most recent attributable activity. Wave-level `(stale)` in the
+  footer now derives from "all executors stale" (`wave_stale_effective`).
+
+- **`gate review-context <id>` verb — depth-aware reviewer bundle (closes #310)**
+  ([#310](https://github.com/eris-ths/guild-cli/issues/310),
+  builds on [#221](https://github.com/eris-ths/guild-cli/issues/221)).
+  Returns the bundle a reviewer needs to drive behaviour from substrate
+  state: `action`, `reason`, `target`, `executors`, `depth`,
+  `recommended_lenses` (`shallow` → `[Logic]`; `standard` → 6-lens
+  default; `deep` → all 10 + memory MCP + state-machine + cross-check),
+  `prior_reviews`. Closes the substrate-to-reviewer signal loop: the
+  `--depth` field was previously decorative — set on the wave but read
+  by nobody. Also declares `wave-status` in `verbs.ts` READ_VERBS,
+  closing a pre-existing gap.
 
 ### ⚠ BREAKING (JSON shape)
 
