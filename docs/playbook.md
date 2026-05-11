@@ -560,8 +560,11 @@ sees one terminal cwd, one author, no executor stamp, no witness
 notes. The coordination state lives only in the orchestrator's
 context window and dies at session end.
 
-This is principle 04 (records-outlive-writers) applied to
-coordination, not just judgment. Two axes of the same coordination:
+This is the load-bearing case of
+[principle 14](../lore/principles/14-substrate-engagement-reduces-coordination-context-cost.md)
+(substrate engagement reduces coordination context cost) — itself an
+extension of principle 04 (records-outlive-writers) from judgment
+artifacts to coordination state. Two axes of the same coordination:
 
 | Axis | Mechanism | What it gives |
 |---|---|---|
