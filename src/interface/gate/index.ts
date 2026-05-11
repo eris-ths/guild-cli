@@ -47,8 +47,11 @@ import {
 } from './handlers/messages.js';
 import { statusCmd } from './handlers/status.js';
 import { suggestCmd } from './handlers/suggest.js';
+import { flowSuggestCmd } from './handlers/flowSuggest.js';
 import { transcriptCmd } from './handlers/transcript.js';
 import { waveStatusCmd } from './handlers/waveStatus.js';
+import { lenseStatsCmd } from './handlers/lenseStats.js';
+import { reviewContextCmd } from './handlers/reviewContext.js';
 import { summarizeCmd } from './handlers/summarize.js';
 import { whyCmd } from './handlers/why.js';
 import { unrespondedCmd } from './handlers/unresponded.js';
@@ -219,6 +222,14 @@ Status:
                        Defaults: --tail 5 --utterances 5 (lean for
                        hot-path session start; pass higher N for deeper
                        history).
+  gate flow-suggest --severity <low|med|high> --area <s> [--scope <s>]
+                    [--format json|text]
+                       Advisory: maps (severity, area, [scope]) → a
+                       recommended flow (fast-track / direct-pr /
+                       full-request) plus reason and alternatives. Pure
+                       read — no substrate writes. Heuristic, not a
+                       directive; the reason field is the load-bearing
+                       output (override when judgement differs).
   gate suggest [--format json|text]
                        Tight-loop sibling of boot: returns ONLY the
                        suggested_next triple (verb/args/reason) or
@@ -262,6 +273,16 @@ Status:
                        concern); 'gate chain <id>' walks the actual
                        references when the reader wants to verify.
 
+Calibration:
+  gate lense-stats [--for <m>] [--since <duration>] [--format json|text]
+                       Count review entries per lense in the window.
+                       Highlights the most-frequent and least-frequent
+                       lense so a reader can spot bias ("I keep hitting
+                       auth-access; have I run devil or composition
+                       lately?"). Sources: gate \`review\` records +
+                       devil-passage entries. Duration: <int><s|m|h|d>
+                       (default 7d). Read-only.
+
 Meta:
   gate schema [--verb <name>] [--format json|text]
                        Introspection: JSON Schema for every verb's
@@ -279,13 +300,15 @@ const KNOWN_COMMANDS = [
   'complete', 'fail', 'review', 'claim', 'witness', 'unwitness',
   'thank', 'fast-track', 'issues', 'message',
   'broadcast', 'inbox', 'doctor', 'repair', 'status', 'boot',
-  'suggest', 'transcript', 'summarize', 'why', 'resume', 'schema',
+  'suggest', 'flow-suggest', 'transcript', 'summarize', 'why', 'resume', 'schema',
   'unresponded',
   'templates',
   'rest',
   'wake',
   'farewell',
   'wave-status',
+  'lense-stats',
+  'review-context',
 ] as const;
 
 export async function main(argv: readonly string[]): Promise<number> {
@@ -457,10 +480,16 @@ async function dispatch(
       return await bootCmd(c, args);
     case 'suggest':
       return await suggestCmd(c, args);
+    case 'flow-suggest':
+      return await flowSuggestCmd(c, args);
     case 'transcript':
       return await transcriptCmd(c, args);
     case 'wave-status':
       return await waveStatusCmd(c, args);
+    case 'lense-stats':
+      return await lenseStatsCmd(c, args);
+    case 'review-context':
+      return await reviewContextCmd(c, args);
     case 'summarize':
       return await summarizeCmd(c, args);
     case 'why':

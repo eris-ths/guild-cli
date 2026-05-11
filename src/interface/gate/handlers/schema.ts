@@ -532,6 +532,75 @@ const VERBS: readonly VerbSchema[] = [
     },
   },
   {
+    name: 'flow-suggest',
+    category: 'read',
+    summary:
+      'advisory: maps (severity, area, [scope]) → a recommended flow (fast-track / direct-pr / full-request) with reason and alternatives. Pure read; no substrate writes. Heuristic — `reason` is the load-bearing output.',
+    input: {
+      type: 'object',
+      properties: {
+        severity: {
+          type: 'string',
+          enum: ['low', 'med', 'high'],
+          description: 'severity tier matching `gate issues add --severity`',
+        },
+        area: {
+          type: 'string',
+          description:
+            'free-form domain tag (e.g. copy, doc, style, bug, auth, data). ' +
+            'The engine matches case-insensitively against known buckets; ' +
+            'unknown areas fall through to the conservative default.',
+        },
+        scope: {
+          type: 'string',
+          description:
+            'optional scope hint (single-file, multi-file, multi-pr, ...). ' +
+            'Echoed back in the response; not load-bearing in v1.',
+        },
+        format: formatField,
+      },
+      required: ['severity', 'area'],
+    },
+    output: {
+      type: 'object',
+      properties: {
+        recommended: {
+          type: 'string',
+          enum: ['fast-track', 'direct-pr', 'full-request'],
+        },
+        reason: {
+          type: 'string',
+          description:
+            'The load-bearing field: a one-line explanation of why this ' +
+            'flow was chosen, in the same `key=value` shape the rest of ' +
+            'the gate envelopes use.',
+        },
+        alternatives: {
+          type: 'array',
+          items: {
+            type: 'string',
+            enum: ['fast-track', 'direct-pr', 'full-request'],
+          },
+          description:
+            'Other flows the operator can fall back to if the primary ' +
+            'recommendation does not fit the situation.',
+        },
+        inputs: {
+          type: 'object',
+          description:
+            'Echo of the inputs the engine consumed, so the response is ' +
+            'self-describing without the caller having to retain argv.',
+          properties: {
+            severity: { type: 'string' },
+            area: { type: 'string' },
+            scope: { type: 'string' },
+          },
+        },
+      },
+      required: ['recommended', 'reason', 'alternatives', 'inputs'],
+    },
+  },
+  {
     name: 'transcript',
     category: 'read',
     summary:
@@ -617,6 +686,119 @@ const VERBS: readonly VerbSchema[] = [
     },
   },
   {
+    name: 'lense-stats',
+    category: 'read',
+    summary:
+      "lense rotation diagnostic (#305): count review entries per lense over a window, highlight the most-frequent and least-frequent lense so bias surfaces. Sources gate `Request.reviews[]` + devil-passage `DevilReview.entries[]`. Read-only; default window 7d.",
+    input: {
+      type: 'object',
+      properties: {
+        for: { type: 'string', description: 'filter by author of the review/entry (review.by / entry.by)' },
+        since: {
+          type: 'string',
+          description: 'window size as <int><s|m|h|d>; default 7d',
+        },
+        format: {
+          type: 'string',
+          enum: ['text', 'json'],
+          description: 'output format (default: text)',
+        },
+      },
+    },
+    output: {
+      type: 'object',
+      properties: {
+        window: {
+          type: 'object',
+          properties: {
+            since: { type: 'string', description: 'ISO cutoff (now - duration)' },
+            duration: { type: 'string', description: 'echoed --since value, e.g. "7d"' },
+          },
+        },
+        filter: {
+          type: 'object',
+          properties: {
+            actor: { type: 'string', description: 'echoed --for value; null when omitted' },
+          },
+        },
+        totals: {
+          type: 'object',
+          properties: {
+            entries_counted: { type: 'integer' },
+            lenses_with_use: { type: 'integer' },
+          },
+        },
+        most: { type: 'string', description: 'most-frequent lense; null when totals.entries_counted=0' },
+        least: { type: 'string', description: 'least-frequent lense among those with ≥1 use; null when totals=0' },
+        stats: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              lense: str,
+              count: { type: 'integer' },
+              last_at: { type: 'string', description: 'most recent ISO timestamp seen for this lense; null when count=0' },
+              sources: {
+                type: 'object',
+                properties: {
+                  gate_reviews: { type: 'integer' },
+                  devil_entries: { type: 'integer' },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+  {
+    name: 'review-context',
+    category: 'read',
+    summary:
+      'reviewer-facing bundle for a wave: action/reason/target, executors, depth advisory (#221), recommended lens set by depth, and prior reviews. Lets a devil/reviewer agent drive behaviour from substrate state instead of out-of-band prompt content (#310 Layer A). Read-only; depth and lens-set are advisory not directive (principle 02).',
+    input: {
+      type: 'object',
+      properties: {
+        id: idStr,
+        format: formatField,
+      },
+      required: ['id'],
+    },
+    output: {
+      type: 'object',
+      properties: {
+        id: str,
+        state: str,
+        from: str,
+        action: str,
+        reason: str,
+        target: { type: 'string', description: 'null when wave has no target field' },
+        executors: { type: 'array', items: str },
+        depth: {
+          type: 'string',
+          enum: ['shallow', 'standard', 'deep'],
+          description: 'null when no depth was recorded on this wave',
+        },
+        recommended_lenses: { type: 'array', items: str },
+        recommended_extras: { type: 'array', items: str },
+        prior_reviews: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              by: str,
+              lense: str,
+              verdict: str,
+              at: str,
+              comment: { type: 'string', description: 'null when review carried no comment' },
+            },
+          },
+        },
+        warning: { type: 'string', description: 'empty string when depth is recorded' },
+      },
+    },
+  },
+  {
     name: 'summarize',
     category: 'read',
     summary:
@@ -677,6 +859,16 @@ const VERBS: readonly VerbSchema[] = [
       properties: {
         format: formatField,
         locale: { type: 'string', enum: ['en', 'ja'], description: 'prose language; also via GUILD_LOCALE env' },
+        'with-doctor': {
+          type: 'boolean',
+          description:
+            '#306 — augment payload with a `gate doctor` summary so session re-entry surfaces a dirty substrate before the agent starts writing again.',
+        },
+        'auto-repair': {
+          type: 'boolean',
+          description:
+            '#306 — only meaningful with --with-doctor; runs `gate repair --apply` inline for quarantineable findings. Without --with-doctor this flag is rejected.',
+        },
       },
     },
     output: {
@@ -710,6 +902,26 @@ const VERBS: readonly VerbSchema[] = [
         },
         suggested_next: { type: 'object' },
         restoration_prose: str,
+        doctor: {
+          type: 'object',
+          description:
+            '#306 — present only when --with-doctor was passed. Carries the diagnostic findings and a one-line summary; when --auto-repair was also passed, an `auto_repair` sub-object reports the quarantine outcome.',
+          properties: {
+            findings: { type: 'array', items: { type: 'object' } },
+            summary: str,
+            is_clean: { type: 'boolean' },
+            auto_repair: {
+              type: 'object',
+              properties: {
+                attempted: { type: 'boolean' },
+                quarantined: { type: 'integer' },
+                skipped: { type: 'integer' },
+                errors: { type: 'integer' },
+                summary: str,
+              },
+            },
+          },
+        },
       },
     },
   },

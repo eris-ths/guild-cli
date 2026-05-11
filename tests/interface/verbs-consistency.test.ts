@@ -41,8 +41,9 @@ const GATE_ALL = [
   'complete', 'fail', 'review', 'claim', 'witness', 'unwitness',
   'thank', 'fast-track', 'issues',
   'message', 'broadcast', 'inbox', 'doctor', 'repair', 'status',
-  'boot', 'suggest', 'transcript', 'summarize', 'why', 'resume',
+  'boot', 'suggest', 'flow-suggest', 'transcript', 'summarize', 'why', 'resume',
   'schema', 'unresponded', 'templates', 'rest', 'wake', 'farewell',
+  'wave-status', 'lense-stats', 'review-context',
 ] as const;
 
 const AGORA_ALL = [
