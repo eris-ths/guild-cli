@@ -26,8 +26,19 @@ const here = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(here, '..', '..', '..');
 const SCRIPT = resolve(REPO_ROOT, 'tools', 'lore-scope.sh');
 
+// On Windows, .sh files can't be executed directly — the OS doesn't
+// read shebangs. GitHub Actions windows-latest runners ship Git Bash on
+// PATH, so we invoke the script via `bash` there. POSIX hosts use the
+// shebang directly.
+function spawn(args: readonly string[]): ReturnType<typeof spawnSync> {
+  if (process.platform === 'win32') {
+    return spawnSync('bash', [SCRIPT, ...args], { encoding: 'utf8' });
+  }
+  return spawnSync(SCRIPT, args, { encoding: 'utf8' });
+}
+
 function run(audience: string): { status: number; stdout: string; stderr: string } {
-  const result = spawnSync(SCRIPT, [audience], { encoding: 'utf8' });
+  const result = spawn([audience]);
   return {
     status: result.status ?? -1,
     stdout: result.stdout ?? '',
@@ -111,6 +122,6 @@ test('lore-scope.sh exits non-zero on invalid audience', () => {
 });
 
 test('lore-scope.sh exits non-zero on missing argument', () => {
-  const result = spawnSync(SCRIPT, [], { encoding: 'utf8' });
+  const result = spawn([]);
   assert.notEqual(result.status ?? 0, 0, 'no-arg invocation must exit non-zero');
 });
