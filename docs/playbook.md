@@ -549,6 +549,148 @@ its design phase (see `examples/three-passages-framing/`,
 
 ---
 
+## Swarm × Claude SubAgent harness
+
+When you orchestrate parallel implementation through Claude Code's
+SubAgent system, **the SubAgent's `isolation: "worktree"` flag and
+gate's `profile: swarm` are complementary, not redundant**. Skipping
+the substrate side because the filesystem side is already isolated
+produces a parallel implementation with **no audit trail** — gate
+sees one terminal cwd, one author, no executor stamp, no witness
+notes. The coordination state lives only in the orchestrator's
+context window and dies at session end.
+
+This is principle 04 (records-outlive-writers) applied to
+coordination, not just judgment. Two axes of the same coordination:
+
+| Axis | Mechanism | What it gives |
+|---|---|---|
+| **Filesystem** | Claude SubAgent `isolation: "worktree"` | each SubAgent works in a disjoint git clone; no file-write race |
+| **Substrate** | `profile: swarm` on `guild.config.yaml` | `executors:[a,b]` stamped on the request, `requires_worktree_isolation: true` declared, `self_approve: forbidden`, witness notes per slice with `session_id` stamps, terminal lifecycle records each actor's arc |
+
+Use both. The filesystem axis prevents file-write races; the
+substrate axis records who-did-what for cold readers and lowers the
+orchestrator's per-iteration context cost (the substrate becomes
+the orchestrator's external memory — principle 04 + principle 12
+combo / Flow vocabulary).
+
+### Worked sequence (2-slice parallel-impl wave)
+
+Below is the shape used in PR #291 (issues.ts hardening + hook bus
+extension, 2026-05-11). Names are illustrative.
+
+```bash
+# 0) Substrate location — pick by audience
+#    ✓ substrate/swarm-experiments/<topic>/   for demonstrations
+#    ✓ <repo>/requests/                        for real waves on this repo
+#    ✗ /tmp/<name>/                            NEVER — disappears between sessions
+#                                               (principle 04 violation: the trail
+#                                                that was supposed to make the
+#                                                orchestrator's context redundant
+#                                                has the lifespan of /tmp)
+cd <real-substrate-dir>
+
+# 1) profile: swarm + self_approve: forbidden + worktree required
+cat > guild.config.yaml <<'YAML'
+profile: swarm
+host_names: [eris]
+features:
+  self_approve: forbidden
+  worktree_required_for_parallel: true
+YAML
+
+# 2) register the orchestrator + each SubAgent identity as members
+gate register --name eris --category host
+gate register --name agent-issues
+gate register --name agent-hookbus
+gate register --name critic   # someone to approve, since self-approve is forbidden
+
+# 3) one multi-executor request — the wave-shaped envelope
+gate request \
+  --from eris \
+  --executors agent-issues,agent-hookbus \
+  --action "ship #289 + #290 in parallel" \
+  --reason "two independent slices; no file overlap" \
+  --target "src/interface/gate/handlers/issues.ts, src/application/plugin/HookPlugin.ts"
+# → 2026-05-11-0001
+
+# 4) critic approves (self_approve: forbidden refuses eris approving their own)
+gate approve 2026-05-11-0001 --by critic
+
+# 5) each SubAgent witnesses the wave with its own session_id BEFORE writing code
+#    (this is the part the worktree-only attempt skipped)
+GUILD_SESSION_ID=agent-issues-2026-05-11   gate witness 2026-05-11-0001 --by agent-issues   --note "claim issues.ts slice"
+GUILD_SESSION_ID=agent-hookbus-2026-05-11  gate witness 2026-05-11-0001 --by agent-hookbus  --note "claim hook bus slice"
+
+# 6) Claude SubAgents run in their worktrees, implement, commit. Update witness
+#    note as the slice progresses so cold readers can trace per-executor state.
+GUILD_SESSION_ID=agent-issues-2026-05-11  gate witness 2026-05-11-0001 --by agent-issues   --note "executing slice — 2 commits cherry-pickable"
+
+# 7) One execute → one complete (lifecycle is wave-scoped, not per-executor)
+gate execute 2026-05-11-0001 --by agent-issues
+# … cherry-pick both SubAgents' commits into a single branch, push, open PR …
+gate complete 2026-05-11-0001 --by agent-issues --note "PR #291 opened"
+```
+
+### What the substrate now carries (cold-reader audit)
+
+```bash
+gate transcript 2026-05-11-0001
+# → "3 actors / 21min — eris filed, critic approved, agent-issues +
+#    agent-hookbus witnessed with distinct session_ids, completed by
+#    agent-issues with PR link in the note"
+```
+
+The cold reader gets the wave's coordination shape from one command.
+That's the substrate engagement payoff: the orchestrator's working
+memory of "who's doing what" was moved into a YAML file the audit
+replay reads cleanly.
+
+### Known limitations (as of 2026-05-11)
+
+These are real, known, and tracked as separate issues for shipable
+fixes:
+
+- **One lifecycle for N executors** — `gate complete` fires once for
+  the wave even when multiple executors finished different slices.
+  Per-slice closure is not first-class on the substrate. Follow-up
+  to #230 (see issue tracker — `gate slice-complete` / per-executor
+  status field).
+- **In-flight slice status not visible** — `gate boot` and the
+  overlap surface (#234) detect cross-request overlap but don't
+  expose per-executor progress inside a single wave. A future
+  `gate wave-status <id>` read verb composes per-executor latest
+  witness + last write; tracked separately.
+- **Judgment trail is half** — the substrate captures who-did-what
+  (operational) but not why-this-option-not-that (judgment). The
+  per-slice agora play is the right home for the judgment layer;
+  bind it via `--from-agora <play_id>` on the request to keep both
+  axes linked. A swarm PR that doesn't bind an agora play is
+  half-substrate.
+- **session_id boilerplate** — each SubAgent prompt currently must
+  `export GUILD_SESSION_ID=<role>-<wave_date>` explicitly. Auto-
+  allocation is on the design backlog but has identification trade-
+  offs (random hash defeats the human-readable-session-id purpose
+  — a deterministic template like `agent-{role}-{wave_id}` is the
+  candidate shape).
+
+### Failure mode: worktree-only ("ceremony swarm")
+
+The original PR #291 attempt fell into this. 3 Claude SubAgents in
+isolated worktrees, no `gate request`, no `executors:` stamping, no
+witness notes. The implementation worked, but **gate's coordination
+substrate stayed empty**: a cold reader of `requests/` would see
+nothing about the wave. The orchestrator's context held the entire
+state, and that state evaporated at session end.
+
+Recovery shape: close the issues, throw away the worktrees, run the
+sequence above against a fresh substrate (`substrate/swarm-experiments/`,
+NOT `/tmp/`). Cost is real but bounded; the lesson — "parallel
+execution alone is not swarm; substrate engagement = context-cost
+reduction" — is one PR cycle to install permanently.
+
+---
+
 ## Where to find things
 
 | Need | Location |
