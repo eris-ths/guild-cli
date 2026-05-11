@@ -72,6 +72,12 @@ const SUBCOMMAND_UMBRELLAS: ReadonlySet<string> = new Set([
   // collapses them into a single `templates` entry with a `subcommand`
   // discriminator. Skip in line with the policy comment above.
   'templates',
+  // doctor (#327): doctor + `doctor sweep-traps` sub-verb. The schema
+  // collapses both into one entry with `subcommand`/`apply`/`revive`
+  // properties, but runtime declares two separate KNOWN_FLAGS sets
+  // (DOCTOR_KNOWN_FLAGS for the bare verb, SWEEP_TRAPS_KNOWN_FLAGS for
+  // the sub-verb). Same redesign-not-drift situation as issues/templates.
+  'doctor',
 ]);
 
 // `gate help` and the very top-level positional verb dispatcher

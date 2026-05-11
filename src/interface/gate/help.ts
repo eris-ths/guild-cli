@@ -289,6 +289,24 @@ const SECTIONS: readonly Section[] = [
       {
         tier: 'extra',
         text:
+          '  gate doctor sweep-traps [--apply] [--revive <name>] [--format json]\n' +
+          '                       Trap-memory retirement (#327). Trap files at\n' +
+          '                       <content_root>/lore/traps/*.md may carry a\n' +
+          '                       relevant_until: YYYY-MM-DD or "indefinite"\n' +
+          '                       frontmatter field. Without --apply, lists which\n' +
+          '                       traps would be quarantined (dry-run). With\n' +
+          '                       --apply, moves expired traps to\n' +
+          '                       <content_root>/trap-quarantine/ and appends an\n' +
+          '                       audit entry to\n' +
+          '                       <content_root>/trap-retirement-log.yaml.\n' +
+          '                       --revive <filename> restores a quarantined\n' +
+          '                       trap and records a revive entry. Per principle\n' +
+          '                       04 (records outlive writers): never deletes;\n' +
+          '                       quarantine is the only retirement shape.',
+      },
+      {
+        tier: 'extra',
+        text:
           '  gate repair [--apply] [--from-doctor <path>] [--format json]\n' +
           '                       Intervention layer paired with doctor. Reads\n' +
           "                       'gate doctor --format json' from stdin (or\n" +
