@@ -129,8 +129,8 @@ test('#294: gate complete partial — 1 of 2 slices closed, wave state unchanged
   assert.equal(closed.status, 0, `complete failed: ${closed.stderr}`);
   assert.match(closed.stdout, /✓ slice closed: .* by miki/);
   assert.match(closed.stdout, /open slices remaining:/);
-  assert.match(closed.stdout, /- leysia \(status: pending\)/);
-  assert.match(closed.stdout, /next: each remaining executor must run/);
+  assert.match(closed.stdout, /- leysia\s+\[pending\]/);
+  assert.match(closed.stdout, /→ next: each remaining executor must run/);
 
   // miki should NOT appear in "remaining" (their slice is closed).
   const remainingBlock = closed.stdout.split('open slices remaining:')[1] ?? '';
@@ -185,7 +185,7 @@ test('#294: gate fail partial — 1 of 2 slices failed, wave state unchanged', (
   assert.equal(failed.status, 0, `fail failed: ${failed.stderr}`);
   assert.match(failed.stdout, /✓ slice failed: .* by miki/);
   assert.match(failed.stdout, /open slices remaining:/);
-  assert.match(failed.stdout, /- leysia \(status: pending\)/);
+  assert.match(failed.stdout, /- leysia\s+\[pending\]/);
 
   // Wave stays executing — any-fail-wave-fail composition only fires
   // once every slice is terminal.
@@ -440,4 +440,79 @@ test('#294 / devil round-2 N1: concurrent slice-close races retry instead of err
   for (const e of j.executors) {
     assert.equal(e.status, 'completed');
   }
+});
+
+// -------------------- auto-review hint suppression on slice-only path --------------------
+
+test('#294 followup: auto-review pending hint is suppressed on slice-only complete (Noir review §3)', (t) => {
+  // Auto-review fires once the wave is terminal — surfacing
+  // "→ auto-review pending" on a slice-only close would mislead the
+  // operator into thinking the reviewer can act now. The hint MUST
+  // surface only on the closing-slice call (when the wave moves to
+  // its terminal state).
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  registerAll(root, ['alice', 'miki', 'leysia', 'bob']);
+
+  // Two-executor wave WITH an auto-reviewer (bob).
+  const created = run(root, [
+    'request',
+    '--from', 'alice',
+    '--action', 'parallel slice work',
+    '--reason', 'two-executor wave with auto-review',
+    '--executors', 'miki,leysia',
+    '--auto-review', 'bob',
+    '--format', 'json',
+  ]);
+  assert.equal(created.status, 0, `request failed: ${created.stderr}`);
+  const id = (JSON.parse(created.stdout) as { id: string }).id;
+  run(root, ['approve', id, '--by', 'eris']);
+  run(root, ['execute', id, '--by', 'miki']);
+
+  // miki closes — slice-only path. Auto-review hint MUST NOT appear.
+  const partial = run(root, ['complete', id, '--by', 'miki', '--note', 'm done']);
+  assert.equal(partial.status, 0);
+  assert.match(partial.stdout, /✓ slice closed/);
+  assert.doesNotMatch(partial.stdout, /auto-review pending/);
+
+  // leysia closes — wave terminal. Auto-review hint MUST appear.
+  const final = run(root, ['complete', id, '--by', 'leysia', '--note', 'l done']);
+  assert.equal(final.status, 0);
+  assert.match(final.stdout, /✓ completed:/);
+  assert.match(final.stdout, /auto-review pending for: bob/);
+});
+
+// -------------------- hydrate sanitize (defense-in-depth) --------------------
+
+test('#294 followup: hand-edited control bytes in executors[].note are stripped at hydrate (#7 elevated)', (t) => {
+  // Domain sanitizeText runs on every save path; a YAML record planted
+  // out-of-band (hand edit, corrupt copy) bypasses that and could carry
+  // C0 escape sequences. wave-status text-mode flattenForRender covers
+  // only newlines. Defense-in-depth: hydrate sanitizes too.
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  registerAll(root, ['alice', 'miki', 'leysia']);
+  const id = bootstrapTwoExecWave(root, ['miki', 'leysia']);
+  // Close miki's slice via normal verb, then plant a control byte in
+  // the on-disk note by direct YAML rewrite (simulating a hand edit).
+  run(root, ['complete', id, '--by', 'miki', '--note', 'clean']);
+  const path = join(root, 'requests', 'executing', `${id}.yaml`);
+  const raw = readFileSync(path, 'utf8');
+  // Inject ESC + ANSI color code into miki's note.
+  const tampered = raw.replace(
+    /note: clean/,
+    'note: "clean\\u001b[31mRED\\u001b[0m"',
+  );
+  writeFileSync(path, tampered);
+  // Hydrate via wave-status; the C0 bytes should be stripped before
+  // they reach render.
+  const ws = run(root, ['wave-status', id, '--format', 'json']);
+  assert.equal(ws.status, 0, `wave-status failed: ${ws.stderr}`);
+  const j = JSON.parse(ws.stdout) as {
+    executors: Array<{ name: string; slice_note: string | null }>;
+  };
+  const miki = j.executors.find((e) => e.name === 'miki');
+  assert.ok(miki, 'miki not in wave-status output');
+  // C0 escape () must NOT survive into the rendered note.
+  assert.doesNotMatch(miki!.slice_note ?? '', //);
 });

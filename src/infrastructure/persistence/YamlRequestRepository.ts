@@ -17,6 +17,7 @@ import { Review } from '../../domain/request/Review.js';
 import { isRequestDepth } from '../../domain/request/RequestDepth.js';
 import { Thank } from '../../domain/request/Thank.js';
 import { MemberName } from '../../domain/member/MemberName.js';
+import { sanitizeText as sharedSanitizeText } from '../../domain/shared/sanitizeText.js';
 import {
   RequestRepository,
   RequestIdCollision,
@@ -555,7 +556,26 @@ function hydrate(
             (rec as { completedAt?: string }).completedAt = ro['completed_at'] as string;
           }
           if (typeof ro['note'] === 'string' && (ro['note'] as string).length > 0) {
-            (rec as { note?: string }).note = ro['note'] as string;
+            // Defense in depth (#7 elevated by #294 devil round-2): a
+            // hand-edited or corrupted YAML can carry control bytes in
+            // the note. The domain save path always runs sanitizeText
+            // before persisting, but a record planted out-of-band
+            // would bypass that — and the render-time newline strip
+            // in wave-status text mode (#294 §Security 1) covers only
+            // newlines, not C0 escape sequences. Sanitize at hydrate so
+            // every read-then-render path sees a normalized note.
+            try {
+              const cleaned = sharedSanitizeText(ro['note'], `executors[${i}].note`, {
+                maxLen: 4096,
+                requireNonEmpty: false,
+              });
+              if (cleaned.length > 0) {
+                (rec as { note?: string }).note = cleaned;
+              }
+            } catch (e) {
+              const msg = e instanceof Error ? e.message : String(e);
+              onMalformed(source, `executors[${i}].note dropped at hydrate: ${msg}`);
+            }
           }
           list.push(rec);
         }
