@@ -1210,10 +1210,20 @@ function emitSliceClose(
   if (remaining.length > 0) {
     lines.push('open slices remaining:');
     for (const rec of remaining) {
-      lines.push(`  - ${rec.name.value} (status: ${rec.status})`);
+      // Tag aligned with `gate wave-status` rendering (#294 vocab
+      // unify): `[?]` for legacy `unknown`, plain status name for
+      // recognized values. Keeping the two surfaces' vocabulary in
+      // lockstep so an operator who reads `wave-status` first and
+      // `complete` second sees the same shape for the same record.
+      const tag = rec.status === 'unknown' ? '[?]' : `[${rec.status}]`;
+      lines.push(`  - ${rec.name.value}  ${tag}`);
     }
+    // Style aligned with stdout success-mode `→ next:` convention
+    // (matches boot.ts:1564, 1569). Previously bare `next:` was a
+    // third style alongside stderr-error `  next:` and stdout-success
+    // `→ next:`; consolidating to one style per channel.
     lines.push(
-      `next: each remaining executor must run \`gate ${verb} ${r.id.value} --by <name>\` to terminate the wave.`,
+      `→ next: each remaining executor must run \`gate ${verb} ${r.id.value} --by <name>\` to terminate the wave.`,
     );
   }
   for (const e of extraLines) lines.push(e);
@@ -1263,15 +1273,6 @@ export async function reqComplete(c: C, args: ParsedArgs): Promise<number> {
   const priorState = priorComplete?.state;
   const r = await c.requestUC.complete(id, by, note, invokedBy);
   await fireAfterHook(c.hookSubscriptions, 'complete', r, by);
-  const extraLines: string[] = [];
-  if (r.autoReview) {
-    const reviewer = r.autoReview.value;
-    const tpl =
-      `gate review ${id} --by ${reviewer} --lense devil ` +
-      `--verdict <ok|concern|reject> "<comment>"`;
-    extraLines.push(`→ auto-review pending for: ${reviewer}`);
-    extraLines.push(`  ${tpl}`);
-  }
   // Issue #294: slice-only vs wave-terminal output split.
   //   - Wave terminal: state changed (e.g. executing → completed).
   //     Existing output kept ("✓ completed: <id>").
@@ -1281,6 +1282,21 @@ export async function reqComplete(c: C, args: ParsedArgs): Promise<number> {
   //     slices so the caller knows the wave isn't done.
   const stateUnchanged = priorState !== undefined && priorState === r.state;
   const isSliceOnly = stateUnchanged && r.hasExecutor(by);
+  // auto-review is a WAVE-level callback — it fires once the wave is
+  // terminal. Surfacing the "→ auto-review pending" hint on a slice-
+  // only close would mislead the operator into thinking the reviewer
+  // can act now (they cannot — the wave hasn't transitioned). Suppress
+  // the hint on slice-only path; it will surface on the closing-slice
+  // call when the wave finally moves to its terminal state.
+  const extraLines: string[] = [];
+  if (r.autoReview && !isSliceOnly) {
+    const reviewer = r.autoReview.value;
+    const tpl =
+      `gate review ${id} --by ${reviewer} --lense devil ` +
+      `--verdict <ok|concern|reject> "<comment>"`;
+    extraLines.push(`→ auto-review pending for: ${reviewer}`);
+    extraLines.push(`  ${tpl}`);
+  }
   if (isSliceOnly) {
     emitSliceClose(r, by, 'complete', c.config, parseFormat(args), extraLines);
     return 0;
