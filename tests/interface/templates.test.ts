@@ -105,29 +105,52 @@ function writeTemplate(
 
 // ---------------- templates list ----------------
 
-test('gate templates list: empty dir → advisory line', (t) => {
+test('gate templates list: empty content_root → built-in tier visible (#302)', (t) => {
   const { root, cleanup } = bootstrap();
   t.after(cleanup);
   registerAll(root, ['miki']);
   const r = run(root, ['templates', 'list']);
   assert.equal(r.status, 0, `list failed: ${r.stderr}`);
-  assert.match(r.stdout, /empty: templates dir not found/);
+  // Built-in templates ship with guild-cli (#302). When no content_root
+  // override exists, the catalogue shows only built-ins, each tagged
+  // `[built-in]`. The 5 names shipped match `templates/wave-brief/`.
+  assert.match(r.stdout, /single-impl.*\[built-in\]/);
+  assert.match(r.stdout, /parallel-impl.*\[built-in\]/);
+  assert.match(r.stdout, /verification.*\[built-in\]/);
+});
+
+test('gate templates list: content_root override shadows built-in (#302)', (t) => {
+  const { root, templatesDir, cleanup } = bootstrap();
+  t.after(cleanup);
+  // Author a same-name override; the override should win and the
+  // entry should be tagged `[content_root]` rather than `[built-in]`.
+  writeTemplate(templatesDir, 'parallel-impl', {
+    intendedUse: 'CUSTOM-PARALLEL-IMPL-OVERRIDE',
+  });
+  registerAll(root, ['miki']);
+  const r = run(root, ['templates', 'list']);
+  assert.equal(r.status, 0, `list failed: ${r.stderr}`);
+  assert.match(r.stdout, /parallel-impl.*\[content_root\].*CUSTOM-PARALLEL-IMPL-OVERRIDE/);
+  // Other built-ins still visible, untagged-as-override.
+  assert.match(r.stdout, /verification.*\[built-in\]/);
 });
 
 test('gate templates list: dir with templates → catalogue', (t) => {
   const { root, templatesDir, cleanup } = bootstrap();
   t.after(cleanup);
-  writeTemplate(templatesDir, 'parallel-impl', {
-    intendedUse: 'parallel implementation wave',
+  // Use names not present in built-in so the assertions don't rely on
+  // override semantics.
+  writeTemplate(templatesDir, 'custom-wave-a', {
+    intendedUse: 'custom wave A',
   });
-  writeTemplate(templatesDir, 'verification', {
-    intendedUse: 'verification wave',
+  writeTemplate(templatesDir, 'custom-wave-b', {
+    intendedUse: 'custom wave B',
   });
   registerAll(root, ['miki']);
   const r = run(root, ['templates', 'list']);
   assert.equal(r.status, 0, `list failed: ${r.stderr}`);
-  assert.match(r.stdout, /parallel-impl/);
-  assert.match(r.stdout, /verification/);
+  assert.match(r.stdout, /custom-wave-a.*\[content_root\]/);
+  assert.match(r.stdout, /custom-wave-b.*\[content_root\]/);
   assert.match(r.stdout, /v1/);
   assert.match(r.stdout, /\[gate-required\]/);
 });
@@ -135,16 +158,21 @@ test('gate templates list: dir with templates → catalogue', (t) => {
 test('gate templates list --format json: structured payload', (t) => {
   const { root, templatesDir, cleanup } = bootstrap();
   t.after(cleanup);
-  writeTemplate(templatesDir, 'single-impl', { intendedUse: 'single' });
+  writeTemplate(templatesDir, 'custom-single', { intendedUse: 'single' });
   registerAll(root, ['miki']);
   const r = run(root, ['templates', 'list', '--format', 'json']);
   assert.equal(r.status, 0);
   const j = JSON.parse(r.stdout) as { templates: Array<Record<string, unknown>>; _meta: Record<string, unknown> };
-  assert.equal(j.templates.length, 1);
-  assert.equal(j.templates[0]!['name'], 'single-impl');
-  assert.equal(j.templates[0]!['version'], 1);
-  assert.equal(j.templates[0]!['gate_required'], true);
+  // Two tiers: 1 content_root + N built-in. Find the override entry
+  // by name rather than asserting on count (built-in count can drift
+  // as guild-cli ships more templates).
+  const custom = j.templates.find((tpl) => tpl['name'] === 'custom-single');
+  assert.ok(custom, 'custom-single missing from list');
+  assert.equal(custom!['version'], 1);
+  assert.equal(custom!['gate_required'], true);
+  assert.equal(custom!['source'], 'content_root');
   assert.equal(j._meta['exists'], true);
+  assert.equal(j._meta['builtin_exists'], true);
 });
 
 // ---------------- templates show ----------------

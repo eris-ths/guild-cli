@@ -20,7 +20,10 @@ import { BundledLenseCatalog } from '../../passages/devil/infrastructure/Bundled
 import { ComposedLenseCatalog } from '../../passages/devil/infrastructure/ComposedLenseCatalog.js';
 import { YamlPlayRepository } from '../../passages/agora/infrastructure/YamlPlayRepository.js';
 import { PlayRepository } from '../../passages/agora/application/PlayRepository.js';
-import { FsTemplateRepository } from '../../infrastructure/template/TemplateRepository.js';
+import {
+  FsTemplateRepository,
+  resolveBuiltinTemplatesDir,
+} from '../../infrastructure/template/TemplateRepository.js';
 import { TemplateUseCases } from '../../application/template/TemplateUseCases.js';
 import { YamlSessionEventRepository } from '../../infrastructure/persistence/YamlSessionEventRepository.js';
 import { SessionEventUseCases } from '../../application/session/SessionEventUseCases.js';
@@ -51,10 +54,12 @@ export interface Container {
    */
   playRepo: PlayRepository;
   /**
-   * Wave-brief template registry adapter (#235). Wired so
+   * Wave-brief template registry adapter (#235, two-tier #302).
    * `gate templates list/show` and `gate request --template <name>`
-   * read from the per-instance template SOT under
-   * `<content_root>/data/guild/templates/wave-brief/`.
+   * read from two sources, with content_root shadowing built-in:
+   *   - user override: `<content_root>/data/guild/templates/wave-brief/`
+   *   - built-in:      packaged `templates/wave-brief/` shipped with
+   *                    guild-cli (resolved relative to this module).
    */
   templateUC: TemplateUseCases;
   /**
@@ -213,7 +218,11 @@ export function buildContainer(opts: BuildContainerOpts = {}): Container {
     unrespondedConcernsQ: new UnrespondedConcernsQuery(requests, issues),
     playRepo: new YamlPlayRepository(config),
     templateUC: new TemplateUseCases(
-      new FsTemplateRepository(config.contentRoot, config.onMalformed),
+      new FsTemplateRepository(
+        config.contentRoot,
+        resolveBuiltinTemplatesDir(),
+        config.onMalformed,
+      ),
     ),
     sessionEventUC: new SessionEventUseCases({
       events: new YamlSessionEventRepository(config),

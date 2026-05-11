@@ -7,6 +7,38 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
 
 ## [Unreleased]
 
+### Changed
+
+- **Template registry — two-tier resolution with built-in templates shipped (closes #302)**
+  ([#302](https://github.com/eris-ths/guild-cli/issues/302)).
+  Wave-brief templates now resolve from two sources, with the
+  user override always shadowing the built-in of the same name:
+  1. **Built-in** — packaged with guild-cli at
+     `<packageRoot>/templates/wave-brief/`. Five templates ship
+     out of the box (`single-impl`, `parallel-impl`,
+     `research-wave`, `verification`, `compare-and-ratify`) — a
+     fresh install / public-repo clone now sees a populated
+     `gate templates list` instead of an empty registry.
+  2. **User override** — per-instance customization at
+     `<content_root>/data/guild/templates/wave-brief/` (unchanged
+     path). A file there with the same `template_name` as a
+     built-in replaces the built-in entirely for that instance
+     (no merge; override wins).
+  - `gate templates list` (text) tags each entry with its source
+    (`[built-in]` / `[content_root]`).
+  - `gate templates list --format json` adds `source` per entry
+    and `_meta.builtin_dir` / `_meta.builtin_exists`.
+  - **Structural cleanup**: the previous one-off
+    `data/guild/templates/wave-brief/` at the repo top — which was
+    a `<content_root>` convention path masquerading as a tracked
+    distribution asset — moves to `templates/wave-brief/` (a
+    proper packaged asset). `package.json` `files:` adds
+    `templates` so npm publish ships them. The top-level `data/`
+    directory no longer holds tracked content.
+  - Backwards-compatible: existing instances with content_root
+    overrides keep working unchanged; the override path is
+    unchanged and still wins precedence.
+
 ### Added
 
 - **`gate wave-status <id>` — per-executor in-flight slice status (closes #295)**

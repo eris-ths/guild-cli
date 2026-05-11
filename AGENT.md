@@ -160,15 +160,22 @@ gate unwitness <id> --by <m>                   # remove your own witness
 - `--note` is short metadata for the stake event (≤ 80 chars), not
   commentary. Wider discussion belongs in agora plays.
 
-## Templates (#235)
+## Templates (#235, two-tier #302)
 
-Wave-brief skeletons under `data/guild/templates/wave-brief/`. The
-registry surfaces them through `gate` so agents discover what
-templates are available without scanning the filesystem.
+Wave-brief skeletons resolved from two tiers, with content_root
+shadowing built-in by name:
+
+- **Built-in** (shipped with guild-cli): `<packageRoot>/templates/wave-brief/`
+- **User override**: `<content_root>/data/guild/templates/wave-brief/`
+
+Five built-ins ship out of the box: `single-impl`, `parallel-impl`,
+`research-wave`, `verification`, `compare-and-ratify`. A user
+override with the same `template_name` replaces the built-in
+entirely for that instance (no merge).
 
 ```bash
-gate templates list                            # available template names
-gate templates show <name>                     # full template body
+gate templates list                            # tagged [built-in] / [content_root]
+gate templates show <name>                     # full template body (override wins)
 gate request --template <name> [--action ...]  # expand skeleton on create
 ```
 

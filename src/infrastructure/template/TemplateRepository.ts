@@ -1,11 +1,12 @@
-// Wave-brief template registry (#235).
+// Wave-brief template registry (#235, two-tier lookup #302).
 //
-// Reads frontmatter+body markdown templates from
-// `<content_root>/data/guild/templates/wave-brief/<name>.md`. The
-// templates SOT is per-instance (each guild keeps its own brief
-// catalogue under content_root); the public guild-cli repo does NOT
-// ship templates, so missing dir → "empty registry" is the legitimate
-// default for fresh installs.
+// Reads frontmatter+body markdown templates from two sources:
+//   1. user override: `<content_root>/data/guild/templates/wave-brief/<name>.md`
+//   2. built-in:      `<packageRoot>/templates/wave-brief/<name>.md`
+//
+// Same-name in content_root shadows the built-in (override semantics,
+// no merge). The built-in tier is what `guild-cli` ships out of the
+// box; the content_root tier is per-instance customization.
 //
 // Frontmatter is a YAML block delimited by lines containing exactly
 // `---` at file start and end of the metadata section. Body is
@@ -14,10 +15,13 @@
 // catalogue stays available.
 
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { readFileSync, existsSync, statSync } from 'node:fs';
 import YAML from 'yaml';
 import { listDirSafe } from '../persistence/safeFs.js';
 import { OnMalformed } from '../../application/ports/OnMalformed.js';
+
+export type TemplateSource = 'content_root' | 'builtin';
 
 /** Parsed wave-brief template. `body` is the markdown after the
  *  frontmatter block, trimmed at neither end (callers may render or
@@ -34,84 +38,155 @@ export interface ParsedTemplate {
   readonly frontmatter: Record<string, unknown>;
   /** Absolute path of the source file (for diagnostics). */
   readonly source: string;
+  /** Which tier this entry came from. `content_root` always wins over
+   *  `builtin` when both define the same name. */
+  readonly sourceKind: TemplateSource;
 }
 
 export interface TemplateRepository {
-  /** List every parseable template in the registry. Returns [] when
-   *  the templates dir does not exist. */
+  /** List every parseable template across both tiers, with content_root
+   *  shadowing built-in entries of the same name. Returns [] when
+   *  neither tier exists. */
   list(): ParsedTemplate[];
-  /** Find a single template by name. Returns null if no file matches
-   *  `<name>.md` or if the file failed to parse (caller should treat
-   *  null as "unknown name" — a parse failure already routed through
-   *  onMalformed). */
+  /** Find a single template by name. Tries content_root first, then
+   *  built-in. Returns null when no file matches or parsing failed. */
   find(name: string): ParsedTemplate | null;
-  /** Filesystem path of the templates directory (informational; used
-   *  by handlers to surface the SOT location in error messages). */
+  /** Filesystem path of the content_root templates directory
+   *  (informational; used by handlers to surface the SOT location). */
   readonly dir: string;
-  /** True when the templates dir exists on disk. False is the legitimate
-   *  fresh-install / public-repo case. */
+  /** True when the content_root templates dir exists on disk. The
+   *  packaged built-in tier is independent — `list()` returns built-in
+   *  entries even when this is false. */
   readonly exists: boolean;
+  /** Filesystem path of the packaged built-in templates dir, or null
+   *  when no built-in tier is configured. */
+  readonly builtinDir: string | null;
+  /** True when the built-in templates dir exists on disk. */
+  readonly builtinExists: boolean;
 }
 
 const TEMPLATE_FILE_PATTERN = /^[a-z][a-z0-9_-]*\.md$/;
 
 /**
- * Filesystem-backed template repo. Path is resolved from the content
- * root: `<contentRoot>/data/guild/templates/wave-brief/`. The fixed
- * subdirectory is intentional — different brief categories (e.g.
- * `code-review/`, `incident/`) would each get their own subdir under
- * `data/guild/templates/`, but only `wave-brief` is in scope for #235.
+ * Resolve the packaged built-in templates directory shipped with
+ * guild-cli (#302). Returns the first existing candidate, or `null`
+ * when no built-in tier is reachable (only happens if the package
+ * is unpacked without the `templates/` dir — e.g. a custom build).
+ *
+ * Two candidates are checked because this module is loaded from
+ * either path depending on how the caller runs guild-cli:
+ *   - `<root>/dist/src/infrastructure/template/` (production, via bin/)
+ *   - `<root>/src/infrastructure/template/`      (jest ts-source tests)
+ */
+export function resolveBuiltinTemplatesDir(): string | null {
+  const here = fileURLToPath(import.meta.url);
+  const candidates = [
+    join(here, '..', '..', '..', '..', '..', 'templates', 'wave-brief'),
+    join(here, '..', '..', '..', '..', 'templates', 'wave-brief'),
+  ];
+  for (const c of candidates) {
+    try {
+      if (existsSync(c) && statSync(c).isDirectory()) return c;
+    } catch {
+      // ignore — try next candidate
+    }
+  }
+  return null;
+}
+
+/**
+ * Filesystem-backed template repo with two-tier lookup (#302).
+ * - content_root tier: `<contentRoot>/data/guild/templates/wave-brief/`
+ * - built-in tier:     `<builtinDir>` (typically `<packageRoot>/templates/wave-brief/`)
+ *
+ * `builtinDir` may be `null` to disable the tier (tests that want pure
+ * content_root behavior pass null).
  */
 export class FsTemplateRepository implements TemplateRepository {
   readonly dir: string;
+  readonly builtinDir: string | null;
   constructor(
     contentRoot: string,
+    builtinDir: string | null,
     private readonly onMalformed: OnMalformed,
   ) {
     this.dir = join(contentRoot, 'data', 'guild', 'templates', 'wave-brief');
+    this.builtinDir = builtinDir;
   }
 
-  get exists(): boolean {
-    if (!existsSync(this.dir)) return false;
+  private dirExists(path: string | null): boolean {
+    if (!path) return false;
+    if (!existsSync(path)) return false;
     try {
-      return statSync(this.dir).isDirectory();
+      return statSync(path).isDirectory();
     } catch {
       return false;
     }
   }
 
+  get exists(): boolean {
+    return this.dirExists(this.dir);
+  }
+
+  get builtinExists(): boolean {
+    return this.dirExists(this.builtinDir);
+  }
+
   list(): ParsedTemplate[] {
-    if (!this.exists) return [];
-    // listDirSafe expects a base + relative; since `dir` is already
-    // absolute and outside the request layout's safety domain, use
-    // it as the base directly. Templates dir is read-only.
-    const files = listDirSafe(this.dir, '.').filter((f) =>
+    // Build from built-in first, then let content_root entries
+    // overwrite by name. Sort once at the end for deterministic output.
+    const byName = new Map<string, ParsedTemplate>();
+    if (this.builtinExists && this.builtinDir) {
+      for (const t of this.listDir(this.builtinDir, 'builtin')) {
+        byName.set(t.name, t);
+      }
+    }
+    if (this.exists) {
+      for (const t of this.listDir(this.dir, 'content_root')) {
+        byName.set(t.name, t);
+      }
+    }
+    return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  private listDir(dir: string, kind: TemplateSource): ParsedTemplate[] {
+    const files = listDirSafe(dir, '.').filter((f) =>
       TEMPLATE_FILE_PATTERN.test(f),
     );
     const out: ParsedTemplate[] = [];
     for (const f of files.sort()) {
-      const parsed = this.readFile(join(this.dir, f));
+      const parsed = this.readFile(join(dir, f), kind);
       if (parsed) out.push(parsed);
     }
     return out;
   }
 
   find(name: string): ParsedTemplate | null {
-    if (!this.exists) return null;
     if (!TEMPLATE_FILE_PATTERN.test(`${name}.md`)) {
       // Defensive: an attacker-controlled `name` could attempt path
-      // traversal through `--template ../../../etc/passwd`. We refuse
+      // traversal through `--template ../../../etc/passwd`. Refuse
       // anything that doesn't fit the simple slug shape rather than
-      // letting the filesystem decide. The list() filter uses the
-      // same regex, so the two surfaces stay consistent.
+      // letting the filesystem decide. Same regex as the list filter.
       return null;
     }
-    const path = join(this.dir, `${name}.md`);
-    if (!existsSync(path)) return null;
-    return this.readFile(path);
+    if (this.exists) {
+      const path = join(this.dir, `${name}.md`);
+      if (existsSync(path)) {
+        const parsed = this.readFile(path, 'content_root');
+        if (parsed) return parsed;
+      }
+    }
+    if (this.builtinExists && this.builtinDir) {
+      const path = join(this.builtinDir, `${name}.md`);
+      if (existsSync(path)) {
+        const parsed = this.readFile(path, 'builtin');
+        if (parsed) return parsed;
+      }
+    }
+    return null;
   }
 
-  private readFile(path: string): ParsedTemplate | null {
+  private readFile(path: string, kind: TemplateSource): ParsedTemplate | null {
     let raw: string;
     try {
       raw = readFileSync(path, 'utf8');
@@ -120,7 +195,7 @@ export class FsTemplateRepository implements TemplateRepository {
       this.onMalformed(path, `template read failed: ${msg}`);
       return null;
     }
-    return parseTemplate(raw, path, this.onMalformed);
+    return parseTemplate(raw, path, kind, this.onMalformed);
   }
 }
 
@@ -133,6 +208,7 @@ export class FsTemplateRepository implements TemplateRepository {
 export function parseTemplate(
   raw: string,
   source: string,
+  sourceKind: TemplateSource,
   onMalformed: OnMalformed,
 ): ParsedTemplate | null {
   // Frontmatter delimiter: a line containing just `---` at the very
@@ -143,7 +219,6 @@ export function parseTemplate(
     onMalformed(source, 'template missing opening frontmatter delimiter (---)');
     return null;
   }
-  // Skip the opening delimiter line, then find the closing one.
   const afterOpen = raw.replace(/^---\r?\n/, '');
   const closeIdx = afterOpen.search(/^---\r?\n/m);
   if (closeIdx < 0) {
@@ -195,5 +270,6 @@ export function parseTemplate(
     body,
     frontmatter: fmObj,
     source,
+    sourceKind,
   };
 }

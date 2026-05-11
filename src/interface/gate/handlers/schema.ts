@@ -1089,7 +1089,7 @@ const VERBS: readonly VerbSchema[] = [
     name: 'templates',
     category: 'read',
     summary:
-      'wave-brief template registry (#235). Subcommands: list (catalogue), show <name> (full body). The template SOT lives at <content_root>/data/guild/templates/wave-brief/; missing dir is the legitimate empty-registry case (public-repo / fresh-install).',
+      'wave-brief template registry (#235, two-tier #302). Subcommands: list (catalogue), show <name> (full body). Two sources are resolved with content_root shadowing built-in: user override at <content_root>/data/guild/templates/wave-brief/, built-in shipped with guild-cli under <packageRoot>/templates/wave-brief/. Each list entry is tagged with its source.',
     input: {
       type: 'object',
       properties: {

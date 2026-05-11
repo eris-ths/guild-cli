@@ -8,6 +8,7 @@
 import {
   TemplateRepository,
   ParsedTemplate,
+  TemplateSource,
 } from '../../infrastructure/template/TemplateRepository.js';
 
 export interface TemplateSummary {
@@ -15,6 +16,7 @@ export interface TemplateSummary {
   readonly version: number;
   readonly intendedUse: string;
   readonly gateRequired: boolean;
+  readonly sourceKind: TemplateSource;
 }
 
 export class TemplateUseCases {
@@ -43,6 +45,17 @@ export class TemplateUseCases {
   registryDir(): string {
     return this.repo.dir;
   }
+
+  /** True when the packaged built-in tier exists on disk (#302). */
+  builtinExists(): boolean {
+    return this.repo.builtinExists;
+  }
+
+  /** Filesystem path of the packaged built-in templates dir, or null
+   *  when no built-in tier is reachable (#302). */
+  builtinDir(): string | null {
+    return this.repo.builtinDir;
+  }
 }
 
 function toSummary(t: ParsedTemplate): TemplateSummary {
@@ -51,5 +64,6 @@ function toSummary(t: ParsedTemplate): TemplateSummary {
     version: t.version,
     intendedUse: t.intendedUse,
     gateRequired: t.gateRequired,
+    sourceKind: t.sourceKind,
   };
 }
