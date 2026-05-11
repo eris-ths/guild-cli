@@ -508,6 +508,14 @@ profile. It tightens defaults (`self_approve: forbidden`,
 in `gate boot` for cross-session race risks. `profile: standard`
 default behaviour is unchanged.
 
+> **Claude SubAgent harness × swarm**: `isolation: "worktree"` on a
+> SubAgent invocation is the **filesystem** axis of parallel-impl
+> coordination; `profile: swarm` is the **substrate** axis. They are
+> complementary, not redundant — using only one collapses the other
+> axis and you ship without an audit trail. See
+> [`docs/playbook.md` § Swarm × Claude SubAgent harness](docs/playbook.md#swarm--claude-subagent-harness)
+> for the worked sequence + known limitations.
+
 `plugins.trusted: true` is required to load any verb / hook plugin
 (#36 Phase 1). Without it, the loader logs the path but skips
 execution. Trust model is explicit because plugins run as
