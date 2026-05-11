@@ -1,3 +1,7 @@
+---
+applies_to: swarm
+---
+
 # Substrate engagement reduces coordination context cost
 
 **Coordination state held only in the orchestrator's working memory
