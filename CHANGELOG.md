@@ -85,7 +85,7 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
     `[failed]` / `[?]` (legacy unknown). Witness-inference (v1)
     remains as the freshness fallback until #309 lands per-
     executor freshness.
-  - 19 new tests across domain + interface layers; 1502/1502 pass.
+  - 22 new tests across domain + interface layers; 1509/1509 pass.
 
 - **Template registry — two-tier resolution with built-in templates shipped (closes #302)**
   ([#302](https://github.com/eris-ths/guild-cli/issues/302)).
