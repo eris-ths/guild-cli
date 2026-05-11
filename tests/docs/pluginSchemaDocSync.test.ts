@@ -44,6 +44,7 @@ const REPO = resolve(here, '../../..');
 
 const REQUEST_DTS = resolve(REPO, 'dist/src/domain/request/Request.d.ts');
 const REVIEW_DTS = resolve(REPO, 'dist/src/domain/request/Review.d.ts');
+const SESSION_EVENT_DTS = resolve(REPO, 'dist/src/domain/session/SessionEvent.d.ts');
 const SCHEMA_DOC = resolve(REPO, 'docs/plugin-schema.md');
 
 /**
@@ -118,6 +119,23 @@ function extractDocReviewFields(docText: string): Set<string> {
   // Same negative-lookahead rule as Request: skip method calls.
   // See extractDocRequestFields for the backtracking-defeat rationale.
   const re = /`r\.([a-zA-Z_]\w*)(?![\w(])/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(docText)) !== null) {
+    out.add(m[1]!);
+  }
+  return out;
+}
+
+/**
+ * Extract SessionEvent field names referenced as `sessionEvent.NAME` in
+ * the doc. Same shape as extractDocReviewFields but for the inline
+ * `sessionEvent.X` pattern used in the § SessionEvent reference section.
+ */
+function extractDocSessionEventFields(docText: string): Set<string> {
+  const out = new Set<string>();
+  // Same negative-lookahead rule as Request/Review: skip method calls.
+  // See extractDocRequestFields for the backtracking-defeat rationale.
+  const re = /`sessionEvent\.([a-zA-Z_]\w*)(?![\w(])/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(docText)) !== null) {
     out.add(m[1]!);
@@ -221,6 +239,31 @@ test('#283: every `r.X` reference in docs/plugin-schema.md exists as a Review ge
       `next: a Review getter was likely renamed or removed; update or\n` +
       `delete the corresponding inline reference in the\n` +
       `§ ctx.extra.review section of docs/plugin-schema.md.\n`,
+  );
+});
+
+// -------------------- SessionEvent stale-reference check --------------------
+
+test('#283: every `sessionEvent.X` reference in docs/plugin-schema.md exists as a SessionEvent getter', () => {
+  // Note: this is a one-way check — the doc does NOT claim to enumerate
+  // every SessionEvent getter. Same posture as Review: the doc surface
+  // is opt-in for non-Request classes. We only fail when the doc makes
+  // a claim that no longer matches code.
+  const codeGetters = extractGetters(SESSION_EVENT_DTS, 'SessionEvent');
+  const docText = readFileSync(SCHEMA_DOC, 'utf8');
+  const documented = extractDocSessionEventFields(docText);
+
+  const stale = [...documented].filter((d) => !codeGetters.has(d));
+  assert.equal(
+    stale.length,
+    0,
+    `\n\n` +
+      `docs/plugin-schema.md references \`sessionEvent.X\` field(s) on\n` +
+      `SessionEvent that do NOT exist as public getters:\n` +
+      `  ${fmt(stale)}\n\n` +
+      `next: a SessionEvent getter was likely renamed or removed; update\n` +
+      `or delete the corresponding inline reference in the\n` +
+      `§ SessionEvent reference section of docs/plugin-schema.md.\n`,
   );
 });
 
