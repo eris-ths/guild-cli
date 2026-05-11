@@ -30,20 +30,43 @@ see; it does not tell you what to conclude.
 > threat model and [`CHANGELOG.md`](./CHANGELOG.md) for release
 > history.
 
+### Solo flow (30 seconds)
+
+If you are one person (or one AI agent) working alone, the whole
+tool is five verbs:
+
+```bash
+gate register --name <you>
+gate request --action "..." --reason "..." --executors <you>
+gate review <id> --by <reviewer> --lense user --verdict ok
+gate execute <id> --by <you>
+gate complete <id> --by <you>
+```
+
+That's the arc: register once, file the request, get a review
+under a different `--by` (Two-Persona Devil discipline — even
+solo, the reviewer is a different lense / different moment), do
+the work, close. Everything else in this README is depth on top
+of this loop.
+
+Need multiple agents working in parallel, worktree isolation, or
+the swarm coordination story? See [`docs/swarm.md`](./docs/swarm.md).
+
 ### How much of this do I need to read?
 
 Pick a depth. Every layer works on its own.
 
-| Depth | File | When it's enough |
-|-------|------|------------------|
-| 30 sec | the paragraphs above | you want to know what this is |
-| 5 min | [`docs/concepts-for-newcomers.md`](./docs/concepts-for-newcomers.md) | you came from Jira / PR review / ADR and want the translation |
-| 10 min | [`AGENT.md`](./AGENT.md) | you're an AI agent and want the full verb map across all four passages |
-| 15 min | [`docs/playbook.md`](./docs/playbook.md) | you know each passage; you want **combos** (gate + agora + devil flows; ctx-inclusive patterns arrive in phase 2), recipes, and the bug-killing flow |
-| 30 min | [`docs/verbs.md`](./docs/verbs.md) | you want per-verb examples and design notes |
-| 1 hour | [`examples/dogfood-session/`](./examples/dogfood-session/) | you're adopting this seriously and want to see real sessions |
-| working notes | [`docs/domain-fit/`](./docs/domain-fit/) | you're curious whether gate fits a non-standard domain |
-| when needed | [`docs/POLICY.md`](./docs/POLICY.md) / [`docs/storage-format.md`](./docs/storage-format.md) / [`SECURITY.md`](./SECURITY.md) | you're embedding guild-cli and need the stability / on-disk shape / threat contract |
+| Depth | File | Audience | When it's enough |
+|-------|------|----------|------------------|
+| 30 sec | the paragraphs + "Solo flow" above | solo | you want to know what this is |
+| 5 min | [`docs/concepts-for-newcomers.md`](./docs/concepts-for-newcomers.md) | solo | you came from Jira / PR review / ADR and want the translation |
+| 10 min | [`AGENT.md`](./AGENT.md) | solo / agent | you're an AI agent and want the full verb map across all four passages |
+| 15 min | [`docs/playbook.md`](./docs/playbook.md) | pair | you know each passage; you want **combos** (gate + agora + devil flows; ctx-inclusive patterns arrive in phase 2), recipes, and the bug-killing flow |
+| 15 min | [`docs/swarm.md`](./docs/swarm.md) | swarm | you orchestrate ≥2 parallel executors / Claude SubAgents and need the substrate-engagement recipe |
+| 30 min | [`docs/verbs.md`](./docs/verbs.md) | any | you want per-verb examples and design notes |
+| 1 hour | [`examples/dogfood-session/`](./examples/dogfood-session/) | any | you're adopting this seriously and want to see real sessions |
+| working notes | [`docs/domain-fit/`](./docs/domain-fit/) | any | you're curious whether gate fits a non-standard domain |
+| when needed | [`docs/POLICY.md`](./docs/POLICY.md) / [`docs/storage-format.md`](./docs/storage-format.md) / [`SECURITY.md`](./SECURITY.md) | embedder | you're embedding guild-cli and need the stability / on-disk shape / threat contract |
 
 ### Lore
 
@@ -56,7 +79,7 @@ Recent: [`principle 14`](./lore/principles/14-substrate-engagement-reduces-coord
 extends principle 04 to coordination state — when multiple SubAgents
 run in parallel, the substrate engagement (gate request + witness +
 session_id stamps) IS the context-cost reduction; worked recipe in
-[`docs/playbook.md`](./docs/playbook.md) § "Swarm × Claude SubAgent harness".
+[`docs/swarm.md`](./docs/swarm.md) § "Swarm × Claude SubAgent harness".
 
 ### For AI agents
 

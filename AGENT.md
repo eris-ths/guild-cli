@@ -6,16 +6,45 @@
 > is a 30-second map. Design rationale lives in
 > [`README.md`](./README.md). For **how to combine gate / agora /
 > devil for real work** (combos, recipes, bug-killing flow), see
-> [`docs/playbook.md`](./docs/playbook.md).
+> [`docs/playbook.md`](./docs/playbook.md). For **multi-executor /
+> SubAgent swarm coordination**, see [`docs/swarm.md`](./docs/swarm.md).
 
 File-based coordination for AI agents. No daemon, no DB, no network.
 State lives in YAML files under a `content_root`. Git gives you history.
+
+## Solo flow
+
+If you are running solo (one actor, one shell, one wave at a time),
+you need only the **Common** verbs below. The full arc is five calls:
+
+```bash
+gate register --name <you>            # once per content_root
+gate request --action "..." --reason "..." --executors <you>
+gate review <id> --by <reviewer> --lense user --verdict ok
+gate execute <id> --by <you>
+gate complete <id> --by <you>
+```
+
+The verb table further down is **tiered by audience**:
+
+- **Common** — every solo / pair / swarm flow uses these
+- **Coordination** — `claim` / `witness` / `executors` / sessions, for swarm
+- **Boundary** — `agora` / `devil` / `ctx`, when the work isn't gate-shaped
+- **Diagnostic** — `doctor` / `boot` / `schema`, when something breaks
+
+Skip the Coordination tier on first read if you only ship solo waves.
 
 **You don't need to read all of this to be productive.** The
 [Session start](#session-start) and [Agent-first knobs](#agent-first-knobs)
 sections are enough for most days. Sections further down
 (Diagnostic, Configuration, File layout, Troubleshooting) become
 useful when something breaks or you want to extend the system.
+
+# Tier: Common (solo-usable)
+
+These verbs cover the 5-step solo arc plus the read-side that
+every flow uses. If you are running solo you can stop reading
+after this tier.
 
 ## Session start
 
@@ -139,6 +168,13 @@ gate summarize <id> [--limit <N>]       # narrative summary
 gate unresponded [--for <m>]            # concerns recorded but not yet responded to
 ```
 
+# Tier: Coordination (swarm)
+
+These verbs and configuration knobs are for multi-executor /
+cross-session work. If you only ship solo waves, skip ahead to
+the Boundary tier or the Issues / Messages sections. The worked
+recipes for this tier live in [`docs/swarm.md`](./docs/swarm.md).
+
 ## Coordination & stake (#226 / #244 / #246)
 
 Cross-session race mediation for waves where multiple actors might
@@ -184,6 +220,8 @@ Under `profile: swarm`, parallel-shaped waves
 so the brief is on record (Phase 1 — warning only; enforcement is
 follow-up).
 
+# Tier: Common (continued — issues / messages / members)
+
 ## Issues
 
 ```
@@ -216,6 +254,8 @@ gate inbox mark-read [N] --for <m>
 that suggestion when no higher-priority lifecycle work is open;
 the surface clears when the recipient marks the entry read.
 
+# Tier: Coordination (continued — sessions)
+
 ## Sessions (#249)
 
 Optional **session_id** dimension on top of the member axis so
@@ -240,6 +280,8 @@ gate witness <id> --by <m> # stamps `witness_sessions[<actor>]: <id>`
   flags an actor authoring ≥2 overlapping requests from ≥2 distinct
   sessions; text mode prints `⚠ same-actor parallel sessions: <m>`.
 
+# Tier: Common (continued — members)
+
 ## Members
 
 ```bash
@@ -250,6 +292,13 @@ guild validate                          # check all member YAMLs
 ```
 
 Categories: `core | professional | assignee | trial | special | host`
+
+# Tier: Boundary (agora / devil / ctx)
+
+These are the non-gate passages — reach for them when the work
+isn't request-shaped (open exploration, multi-persona security
+review, or verdict-less observation). Solo flows can ignore this
+tier entirely if all your work fits the gate request lifecycle.
 
 ## The four passages — a one-line dispatch shorthand
 
@@ -471,6 +520,13 @@ Status: alpha phase 1. Read-side is currently grep on
 phase 2 and that's the design test (junk-drawer risk vs principled
 substrate).
 
+# Tier: Diagnostic
+
+These verbs and configuration sections are for when something
+breaks, when you're embedding guild-cli, or when you want to
+extend the system with plugins. Daily operation rarely needs
+them.
+
 ## Diagnostic
 
 ```bash
@@ -520,7 +576,7 @@ default behaviour is unchanged.
 > coordination; `profile: swarm` is the **substrate** axis. They are
 > complementary, not redundant — using only one collapses the other
 > axis and you ship without an audit trail. See
-> [`docs/playbook.md` § Swarm × Claude SubAgent harness](docs/playbook.md#swarm--claude-subagent-harness)
+> [`docs/swarm.md` § Swarm × Claude SubAgent harness](docs/swarm.md#swarm--claude-subagent-harness)
 > for the worked sequence + known limitations.
 
 `plugins.trusted: true` is required to load any verb / hook plugin
@@ -647,7 +703,8 @@ cue carries cross-verb without re-reading.
 ## Deep dives
 
 - [`docs/verbs.md`](./docs/verbs.md) — per-verb examples and design notes
-- [`docs/playbook.md`](./docs/playbook.md) — combo recipes (gate × agora × devil flows)
+- [`docs/playbook.md`](./docs/playbook.md) — combo recipes (gate × agora × devil flows, solo / pair)
+- [`docs/swarm.md`](./docs/swarm.md) — multi-executor / Claude SubAgent harness recipes
 - [`docs/storage-format.md`](./docs/storage-format.md) — full per-record YAML schema
 - [`docs/POLICY.md`](./docs/POLICY.md) — versioning + plugin-stability contract
 - [`SECURITY.md`](./SECURITY.md) — plugin trust model + threat surface
