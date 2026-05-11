@@ -48,9 +48,20 @@ const STALE_THRESHOLD_MS = 30 * 60 * 1000;
  * absence (no witness note, no attributable activity yet, etc.) rather
  * than zero values that a consumer might confuse with "value present
  * but zero-shaped."
+ *
+ * `slice_status` is the per-executor terminal-status field introduced
+ * by #294: 'pending' (open slice), 'completed' / 'failed' (slice closed
+ * by this actor), or 'unknown' (legacy pre-#294 record where no slice
+ * status was ever stamped — renderers should surface this as '?' so a
+ * reader can distinguish "we don't know" from "we know it's still
+ * pending"). `slice_note` is the optional close note from `gate
+ * complete --note` / `gate fail --reason`.
  */
 export interface WaveExecutorView {
   name: string;
+  slice_status: 'pending' | 'completed' | 'failed' | 'unknown';
+  slice_completed_at: string | null;
+  slice_note: string | null;
   witness_note: string | null;
   witness_session: string | null;
   claim_held: boolean;
@@ -115,19 +126,11 @@ export function buildWaveStatus(r: Request, now: Date): WaveStatusPayload {
   const id = String(j['id']);
   const state = String(j['state']);
   const from = String(j['from']);
-  // toJSON emits either flat strings (legacy/unknown-only round-trip)
-  // or structured `{ name, status, ... }` objects post-#294. Normalize
-  // to a name list here; Slice B's `wave-status` redesign will read
-  // the structured shape directly.
-  const executors = Array.isArray(j['executors'])
-    ? (j['executors'] as unknown[]).map((e) =>
-        typeof e === 'string'
-          ? e
-          : e && typeof e === 'object' && typeof (e as { name?: unknown }).name === 'string'
-            ? ((e as { name: string }).name)
-            : '',
-      ).filter((n) => n.length > 0)
-    : [];
+  // Slice B (#294): read executor slice status directly from the
+  // domain. `executorRecords` carries the structured form (name +
+  // status + completedAt + note); legacy pre-#294 records hydrate
+  // with status='unknown' so the field is always defined.
+  const records = r.executorRecords;
   const log = Array.isArray(j['status_log'])
     ? (j['status_log'] as Array<Record<string, unknown>>)
     : [];
@@ -152,7 +155,8 @@ export function buildWaveStatus(r: Request, now: Date): WaveStatusPayload {
   const witnessSessions = r.witnessSessions;
   const claimedBy = r.claimedBy?.value;
 
-  const executorViews: WaveExecutorView[] = executors.map((name) => {
+  const executorViews: WaveExecutorView[] = records.map((rec) => {
+    const name = rec.name.value;
     const note = witnessNotes.get(name) ?? null;
     const sess = witnessSessions.get(name) ?? null;
     const claimHeld = claimedBy === name;
@@ -182,6 +186,9 @@ export function buildWaveStatus(r: Request, now: Date): WaveStatusPayload {
 
     return {
       name,
+      slice_status: rec.status,
+      slice_completed_at: rec.completedAt ?? null,
+      slice_note: rec.note ?? null,
       witness_note: note,
       witness_session: sess,
       claim_held: claimHeld,
@@ -217,11 +224,19 @@ function renderText(p: WaveStatusPayload): string {
   // than emitting a 6-line block for a 1-actor wave.
   if (p.executors.length === 1) {
     const e = p.executors[0]!;
-    lines.push(`executor: ${e.name}` + (e.claim_held ? ' (claim_held)' : ''));
+    lines.push(
+      `executor: ${e.name}  ${renderSliceTag(e.slice_status)}` +
+        (e.claim_held ? ' (claim_held)' : ''),
+    );
+    if (e.slice_note) {
+      lines.push(`  note: ${e.slice_note}`);
+    }
     if (e.witness_note) {
       lines.push(`  witness: ${e.witness_note}` + (e.witness_session ? `  [session=${e.witness_session}]` : ''));
     }
-    if (e.last_attributable_at) {
+    if (e.slice_completed_at) {
+      lines.push(`  closed at: ${e.slice_completed_at}`);
+    } else if (e.last_attributable_at) {
       lines.push(`  last write: ${e.last_attributable_at}`);
     }
     lines.push('');
@@ -234,11 +249,16 @@ function renderText(p: WaveStatusPayload): string {
   for (const e of p.executors) {
     const claim = e.claim_held ? '  [claim_held]' : '';
     const sess = e.witness_session ? `  session=${e.witness_session}` : '';
-    lines.push(`  ${e.name}${claim}${sess}`);
+    lines.push(`  ${e.name}  ${renderSliceTag(e.slice_status)}${claim}${sess}`);
+    if (e.slice_note) {
+      lines.push(`    note: ${e.slice_note}`);
+    }
     if (e.witness_note) {
       lines.push(`    witness: ${e.witness_note}`);
     }
-    if (e.last_attributable_at) {
+    if (e.slice_completed_at) {
+      lines.push(`    closed at: ${e.slice_completed_at}`);
+    } else if (e.last_attributable_at) {
       lines.push(`    last write: ${e.last_attributable_at}`);
     } else {
       // Per-executor band-driven rendering. The age-threshold contract
@@ -283,6 +303,21 @@ function renderAgeFooter(p: WaveStatusPayload): string[] {
         ? 'in-progress'
         : 'stale';
   return [`wave state: ${p.state}   age: ${ageHuman} (${bandTag})`];
+}
+
+/**
+ * Render the per-executor slice status as a compact bracketed tag.
+ * 'unknown' renders as `[?]` so a reader can distinguish "we don't
+ * know" (legacy pre-#294 record where no slice was ever stamped) from
+ * `[pending]` (we know the slice is open and awaiting close). #294.
+ */
+function renderSliceTag(s: WaveExecutorView['slice_status']): string {
+  switch (s) {
+    case 'pending':   return '[pending]';
+    case 'completed': return '[completed]';
+    case 'failed':    return '[failed]';
+    case 'unknown':   return '[?]';
+  }
 }
 
 function formatDuration(ms: number): string {

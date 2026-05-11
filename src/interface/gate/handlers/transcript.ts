@@ -83,25 +83,13 @@ function buildTranscript(r: Request): TranscriptPayload {
   const from = String(j['from']);
   const action = String(j['action']);
   const reason = String(j['reason']);
-  // Issue #230: read from the new `executors` array. For single-
-  // executor records the array has exactly one entry, preserving the
-  // existing prose ("naming alice as executor"); for multi-executor
-  // records we render the joined list ("naming alice, bob as
-  // executors"). Plural form is selected below.
-  // toJSON emits either flat strings (legacy/unknown round-trip) or
-  // `{ name, status, ... }` objects post-#294 slice-closure. Normalize
-  // both shapes to a name list for the rendering pass.
-  const executors = Array.isArray(j['executors'])
-    ? (j['executors'] as unknown[])
-        .map((e) =>
-          typeof e === 'string'
-            ? e
-            : e && typeof e === 'object' && typeof (e as { name?: unknown }).name === 'string'
-              ? (e as { name: string }).name
-              : '',
-        )
-        .filter((n) => n.length > 0)
-    : [];
+  // Issue #230 / #294: read directly from the domain getter. The
+  // rendering only needs names; slice status (pre-#294 unknown vs
+  // post-#294 per-executor terminal) surfaces via dedicated verbs
+  // (e.g. `gate wave-status`). Single-executor records expose a
+  // one-element list, preserving the "naming alice as executor"
+  // prose path.
+  const executors = r.executors.map((m) => m.value);
   const autoReview = j['auto_review'] ? String(j['auto_review']) : undefined;
   const log = Array.isArray(j['status_log'])
     ? (j['status_log'] as Array<Record<string, unknown>>)

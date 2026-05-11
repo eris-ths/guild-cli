@@ -691,20 +691,12 @@ function formatRequestText(r: Request): string {
   // pluralised even for one entry so the schema is uniform; the
   // single-name case still reads naturally (`executors: alice`).
   // Issue #230.
-  if (Array.isArray(j['executors']) && (j['executors'] as unknown[]).length > 0) {
-    // toJSON emits either flat strings or `{ name, status, ... }`
-    // entries post-#294. Render the name list either way; status
-    // surfaces through dedicated verbs (e.g. `gate wave-status`).
-    const names = (j['executors'] as unknown[])
-      .map((e) =>
-        typeof e === 'string'
-          ? e
-          : e && typeof e === 'object' && typeof (e as { name?: unknown }).name === 'string'
-            ? (e as { name: string }).name
-            : '',
-      )
-      .filter((n) => n.length > 0);
-    if (names.length > 0) lines.push(`  executors: ${names.join(', ')}`);
+  // Read via the domain getter — slice-closure (issue #294) doesn't
+  // affect this row; status surfaces through dedicated verbs (e.g.
+  // `gate wave-status`).
+  const execNames = r.executors.map((m) => m.value);
+  if (execNames.length > 0) {
+    lines.push(`  executors: ${execNames.join(', ')}`);
   }
   if (j['target']) lines.push(`  target:   ${j['target']}`);
   if (j['auto_review']) lines.push(`  reviewer: ${j['auto_review']}`);
@@ -1161,6 +1153,73 @@ export async function reqExecute(c: C, args: ParsedArgs): Promise<number> {
   return 0;
 }
 
+/**
+ * Issue #294 / miki concern #1.
+ *
+ * When a wave has assigned executors and `by` is not one of them,
+ * `complete` / `fail` must refuse before writing — otherwise Slice A's
+ * domain fallback (which routes to wave-level transition when
+ * `hasExecutor(by)` is false, for pre-#294 / executors-empty records)
+ * would silently close the whole wave on a `--by` typo (e.g. `miik`
+ * instead of `miki`). The fallback is correct for executors-empty
+ * records (legacy single-executor or wave-only waves) but dangerous
+ * when executors is non-empty. Returning `null` means "go ahead";
+ * returning an exit code means "we already wrote the error message".
+ */
+function rejectIfNonMember(
+  prior: Request,
+  by: string,
+  verb: 'complete' | 'fail',
+): number | null {
+  const assigned = prior.executors;
+  if (assigned.length === 0) return null; // pre-#294 / executors-empty — fallback path is safe
+  if (prior.hasExecutor(by)) return null; // member: slice-close path
+  const list = assigned.map((m) => m.value).join(', ');
+  process.stderr.write(
+    `error: ${by} is not in this wave's executors (${list}); ` +
+      `typo? --by must match one of: ${list}\n` +
+      `  next: re-run 'gate ${verb} <id> --by <name>' with one of the assigned actors.\n`,
+  );
+  return 1;
+}
+
+/**
+ * Issue #294: render the slice-only close notice. Fires when the
+ * caller closed *their* slice but other executors remain open — wave
+ * state is unchanged, the wave-level transition is deferred until the
+ * last slice closes. Surfaces the remaining open slices (with their
+ * status, so a reader can distinguish `pending` from `unknown` —
+ * `unknown` means the slice predates #294 and was never explicitly
+ * stamped, so the caller likely wants to ask whoever owns it whether
+ * they intend to close it).
+ */
+function emitSliceClose(
+  r: Request,
+  by: string,
+  verb: 'complete' | 'fail',
+  config: unknown,
+  format: ReturnType<typeof parseFormat>,
+  extraLines: readonly string[],
+): void {
+  const verbPast = verb === 'complete' ? 'closed' : 'failed';
+  const remaining = r.executorRecords.filter(
+    (rec) => rec.status === 'pending' || rec.status === 'unknown',
+  );
+  const lines: string[] = [];
+  lines.push(`✓ slice ${verbPast}: ${r.id.value} by ${by}`);
+  if (remaining.length > 0) {
+    lines.push('open slices remaining:');
+    for (const rec of remaining) {
+      lines.push(`  - ${rec.name.value} (status: ${rec.status})`);
+    }
+    lines.push(
+      `next: each remaining executor must run \`gate ${verb} ${r.id.value} --by <name>\` to terminate the wave.`,
+    );
+  }
+  for (const e of extraLines) lines.push(e);
+  emitWriteResponse(format, r, lines.join('\n'), config as Parameters<typeof emitWriteResponse>[3]);
+}
+
 export async function reqComplete(c: C, args: ParsedArgs): Promise<number> {
   rejectUnknownFlags(args, COMPLETE_KNOWN_FLAGS, 'complete');
   const id = args.positional[0];
@@ -1180,9 +1239,22 @@ export async function reqComplete(c: C, args: ParsedArgs): Promise<number> {
   }
   const priorComplete = await c.requestUC.show(id);
   if (priorComplete !== null) {
+    // Issue #294 (miki concern #1): when the wave has assigned
+    // executors and `by` is not one of them, refuse before writing.
+    // Pre-#294 fallback (Slice A's domain `complete`) silently routes
+    // to wave-level transition when `hasExecutor(by)` is false; that's
+    // correct for executors-empty records (legacy single-executor or
+    // no-executor waves) but dangerous when executors is non-empty —
+    // a typo (`--by miik`) would close the whole wave without ever
+    // matching a slice. Reject at the handler boundary so the trail
+    // never records the false transition.
+    const sliceReject = rejectIfNonMember(priorComplete, by, 'complete');
+    if (sliceReject !== null) return sliceReject;
+
     const veto = await fireBeforeHook(c.hookSubscriptions, 'complete', priorComplete, by);
     if (veto) return emitHookVeto('complete', id, veto);
   }
+  const priorState = priorComplete?.state;
   const r = await c.requestUC.complete(id, by, note, invokedBy);
   await fireAfterHook(c.hookSubscriptions, 'complete', r, by);
   const extraLines: string[] = [];
@@ -1193,6 +1265,19 @@ export async function reqComplete(c: C, args: ParsedArgs): Promise<number> {
       `--verdict <ok|concern|reject> "<comment>"`;
     extraLines.push(`→ auto-review pending for: ${reviewer}`);
     extraLines.push(`  ${tpl}`);
+  }
+  // Issue #294: slice-only vs wave-terminal output split.
+  //   - Wave terminal: state changed (e.g. executing → completed).
+  //     Existing output kept ("✓ completed: <id>").
+  //   - Slice only: state unchanged (e.g. executing → executing) —
+  //     the actor closed their slice but other executors are still
+  //     pending. Surface "✓ slice closed" plus the remaining open
+  //     slices so the caller knows the wave isn't done.
+  const stateUnchanged = priorState !== undefined && priorState === r.state;
+  const isSliceOnly = stateUnchanged && r.hasExecutor(by);
+  if (isSliceOnly) {
+    emitSliceClose(r, by, 'complete', c.config, parseFormat(args), extraLines);
+    return 0;
   }
   emitWriteResponse(parseFormat(args), r, `✓ completed: ${id}`, c.config, extraLines);
   return 0;
@@ -1222,11 +1307,26 @@ export async function reqFail(c: C, args: ParsedArgs): Promise<number> {
   }
   const priorFail = await c.requestUC.show(id);
   if (priorFail !== null) {
+    // See reqComplete: issue #294 / miki concern #1 — refuse fail
+    // when wave has executors and `by` is not one of them. Same
+    // typo-safety rationale as complete: a misspelt `--by` would
+    // otherwise close the wave without matching a slice.
+    const sliceReject = rejectIfNonMember(priorFail, by, 'fail');
+    if (sliceReject !== null) return sliceReject;
+
     const veto = await fireBeforeHook(c.hookSubscriptions, 'fail', priorFail, by);
     if (veto) return emitHookVeto('fail', id, veto);
   }
+  const priorState = priorFail?.state;
   const r = await c.requestUC.fail(id, by, reason, invokedBy);
   await fireAfterHook(c.hookSubscriptions, 'fail', r, by);
+  // Issue #294: slice-only vs wave-terminal split (see reqComplete).
+  const stateUnchanged = priorState !== undefined && priorState === r.state;
+  const isSliceOnly = stateUnchanged && r.hasExecutor(by);
+  if (isSliceOnly) {
+    emitSliceClose(r, by, 'fail', c.config, parseFormat(args), []);
+    return 0;
+  }
   emitWriteResponse(parseFormat(args), r, `✓ failed: ${id}`, c.config);
   return 0;
 }
