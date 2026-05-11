@@ -229,10 +229,10 @@ function renderText(p: WaveStatusPayload): string {
         (e.claim_held ? ' (claim_held)' : ''),
     );
     if (e.slice_note) {
-      lines.push(`  note: ${e.slice_note}`);
+      lines.push(`  note: ${flattenForRender(e.slice_note)}`);
     }
     if (e.witness_note) {
-      lines.push(`  witness: ${e.witness_note}` + (e.witness_session ? `  [session=${e.witness_session}]` : ''));
+      lines.push(`  witness: ${flattenForRender(e.witness_note)}` + (e.witness_session ? `  [session=${e.witness_session}]` : ''));
     }
     if (e.slice_completed_at) {
       lines.push(`  closed at: ${e.slice_completed_at}`);
@@ -251,10 +251,10 @@ function renderText(p: WaveStatusPayload): string {
     const sess = e.witness_session ? `  session=${e.witness_session}` : '';
     lines.push(`  ${e.name}  ${renderSliceTag(e.slice_status)}${claim}${sess}`);
     if (e.slice_note) {
-      lines.push(`    note: ${e.slice_note}`);
+      lines.push(`    note: ${flattenForRender(e.slice_note)}`);
     }
     if (e.witness_note) {
-      lines.push(`    witness: ${e.witness_note}`);
+      lines.push(`    witness: ${flattenForRender(e.witness_note)}`);
     }
     if (e.slice_completed_at) {
       lines.push(`    closed at: ${e.slice_completed_at}`);
@@ -311,6 +311,19 @@ function renderAgeFooter(p: WaveStatusPayload): string[] {
  * know" (legacy pre-#294 record where no slice was ever stamped) from
  * `[pending]` (we know the slice is open and awaiting close). #294.
  */
+/**
+ * Strip newline / carriage-return from user-controlled note text before
+ * rendering in text mode (#294 devil review §Security 1). The substrate
+ * `sanitizeText` preserves `\n \t \r` for prose round-trip, but text-
+ * mode renderers emit one note per line — a malicious or careless note
+ * containing `\n  bob  [completed]` would inject a fake per-executor
+ * line into operator output. Single-line render space-collapses the
+ * note for display only; the stored YAML is unaffected.
+ */
+function flattenForRender(s: string): string {
+  return s.replace(/[\r\n]+/g, ' ');
+}
+
 function renderSliceTag(s: WaveExecutorView['slice_status']): string {
   switch (s) {
     case 'pending':   return '[pending]';

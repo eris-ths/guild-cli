@@ -886,6 +886,24 @@ export class Request {
     note: string | undefined,
     invokedBy: string | undefined,
   ): void {
+    // Refuse slice closure on a wave that has already reached a terminal
+    // state (#294 devil review §Correctness 2). Without this guard, a
+    // late `complete --by X` after the wave was already failed/completed
+    // by another path would mutate the slice + push a status_log entry,
+    // then throw inside `this.transition()` via `assertTransition`,
+    // leaving the aggregate inconsistent for any caller that catches
+    // and reuses the instance. Domain-level early reject closes the
+    // partial-mutation hazard at the source.
+    if (
+      this.props.state === 'completed' ||
+      this.props.state === 'failed' ||
+      this.props.state === 'denied'
+    ) {
+      throw new DomainError(
+        `Cannot close slice for ${by.value}: request ${this.props.id.value} is already ${this.props.state}; slice closure only applies on live waves.`,
+        'state',
+      );
+    }
     const list = this.props.executors ?? [];
     const idx = list.findIndex((e) => e.name.value === by.value);
     if (idx < 0) {
@@ -894,6 +912,21 @@ export class Request {
       // bypassed call.
       throw new DomainError(
         `Cannot close slice for ${by.value}: not an assigned executor of request ${this.props.id.value}`,
+        'executors',
+      );
+    }
+    // Per-slice double-close guard (#294 devil review §Correctness 1).
+    // Without this, a same-actor re-close silently overwrites the prior
+    // completedAt + note, and complete→fail (or vice versa) silently
+    // flips the slice verdict — which then drives any-fail-wave-fail.
+    // Attribution loss is the exact failure mode slice closure was
+    // designed to eliminate; refusing the second close here keeps the
+    // first attribution authoritative. Pre-#294 records hydrate with
+    // `status: 'unknown'` and stay closeable once (the migration path).
+    const existing = list[idx]!.status;
+    if (existing === 'completed' || existing === 'failed') {
+      throw new DomainError(
+        `Slice for ${by.value} on request ${this.props.id.value} is already ${existing}; re-closing as ${sliceStatus} would silently overwrite the prior attribution. The first close stands.`,
         'executors',
       );
     }
