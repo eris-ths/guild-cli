@@ -25,6 +25,7 @@ import {
 import { agoraOrientation } from '../../../passages/agora/interface/orientation.js';
 import { ctxOrientation } from '../../../passages/ctx/interface/orientation.js';
 import { devilOrientation } from '../../../passages/devil/interface/orientation.js';
+import type { GuildProfile } from '../../../infrastructure/config/GuildConfig.js';
 
 /**
  * Next-step hint embedded in boot. Mirrors the SuggestedNext shape
@@ -665,7 +666,7 @@ export async function bootCmd(c: C, args: ParsedArgs): Promise<number> {
   if (format === 'json') {
     process.stdout.write(JSON.stringify(payload, null, 2) + '\n');
   } else {
-    process.stdout.write(renderBootText(payload));
+    process.stdout.write(renderBootText(payload, c.config.profile));
   }
   return 0;
 }
@@ -1351,7 +1352,7 @@ function deriveVerbsAvailableNow(
   };
 }
 
-function renderBootText(p: BootPayload): string {
+function renderBootText(p: BootPayload, profile: GuildProfile): string {
   const lines: string[] = [];
   if (p.actor) {
     const sessionTag =
@@ -1360,7 +1361,7 @@ function renderBootText(p: BootPayload): string {
   } else {
     lines.push('── boot (no GUILD_ACTOR; global view) ──');
   }
-  if (p.hints.session_id_unset) {
+  if (p.hints.session_id_unset && profile === 'swarm') {
     lines.push('');
     lines.push(
       'notice: no session_id resolved (GUILD_SESSION_ID unset, no --session-id flag).',
@@ -1473,7 +1474,12 @@ function renderBootText(p: BootPayload): string {
   // silent so the common "no overlap" boot doesn't carry an empty
   // header line. JSON consumers read `active_overlapping_targets`
   // directly — text mode here is the human-readable projection.
-  if (p.active_overlapping_targets.length > 0) {
+  //
+  // Profile gating (#323): swarm-only signal. Solo users on
+  // profile=standard don't see the overlap section or the parallel-
+  // session warning in text mode. JSON envelope is unchanged so
+  // orchestrators keep their contract regardless of profile.
+  if (profile === 'swarm' && p.active_overlapping_targets.length > 0) {
     lines.push('');
     lines.push('active waves with overlapping target:');
     for (const o of p.active_overlapping_targets) {
