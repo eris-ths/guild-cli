@@ -238,6 +238,25 @@ interface BootPayload {
   }>;
   last_activity: string | null;
   /**
+   * Non-fatal warnings raised while assembling the payload (combo C3
+   * — silent-fallback-loses-signal).
+   *
+   * Pre-this-field, four enrichment paths (issues count, inbox unread,
+   * unresponded concerns, content_root_health probe) caught their own
+   * errors silently — `// may not be configured — non-fatal` — so a
+   * broken issue repository or a partly-quarantined inbox passed
+   * through invisibly. Devil's concern2 on PR #105 (agent-first-session
+   * 2026-04-16) flagged this as the gap that lets agents trust an
+   * orientation snapshot more than they should.
+   *
+   * Each warning is a human-readable single-line string. Empty array
+   * is the common case (no enrichment failed). Plugin authors and
+   * orchestrators can surface these directly to the operator without
+   * re-parsing — same shape as `gate doctor` findings, but local to
+   * the orientation snapshot.
+   */
+  warnings: string[];
+  /**
    * Diagnostic hints to help agents detect misconfiguration early.
    *
    * `misconfigured_cwd`: true iff NO `guild.config.yaml` was found up
@@ -442,14 +461,19 @@ export async function bootCmd(c: C, args: ParsedArgs): Promise<number> {
   const status = collectStatus(allRequests, actor);
 
   // Enrich status with issues + inbox (mirrors statusCmd) so the
-  // single payload is self-contained.
+  // single payload is self-contained. Errors surface in `warnings[]`
+  // (combo C3 / devil concern2 PR #105) — silent try/catch was the
+  // pre-this-PR shape and let broken repos pass through invisibly.
+  const warnings: string[] = [];
   try {
     const issues = await c.issueUC.listAll();
     status.open_issues = issues.filter(
       (i) => i.state === 'open' || i.state === 'in_progress',
     ).length;
-  } catch {
-    // issues dir may not exist — non-fatal
+  } catch (e) {
+    warnings.push(
+      `issues enrichment failed (open_issues count may be inaccurate): ${e instanceof Error ? e.message : String(e)}`,
+    );
   }
 
   const inboxUnread: BootPayload['inbox_unread'] = [];
@@ -467,8 +491,10 @@ export async function bootCmd(c: C, args: ParsedArgs): Promise<number> {
           ...(m.expectsResponse === true ? { expects_response: true } : {}),
         });
       }
-    } catch {
-      // inbox may not exist for this actor — non-fatal
+    } catch (e) {
+      warnings.push(
+        `inbox enrichment failed for actor=${actor} (inbox_unread may be inaccurate): ${e instanceof Error ? e.message : String(e)}`,
+      );
     }
   }
 
@@ -483,8 +509,10 @@ export async function bootCmd(c: C, args: ParsedArgs): Promise<number> {
         now: new Date(),
       });
       status.unresponded = entries.length;
-    } catch {
-      // requests/issues dirs may be missing — non-fatal.
+    } catch (e) {
+      warnings.push(
+        `unresponded-concerns scan failed for actor=${actor} (unresponded count may be inaccurate): ${e instanceof Error ? e.message : String(e)}`,
+      );
     }
   }
 
@@ -555,8 +583,10 @@ export async function bootCmd(c: C, args: ParsedArgs): Promise<number> {
         'Quarantine is reversible: files move under ' +
         '`<content_root>/quarantine/<timestamp>/<area>/`.';
     }
-  } catch {
-    // Diagnostic errored — skip health, keep boot usable.
+  } catch (e) {
+    warnings.push(
+      `content_root health probe failed (malformed_count may be inaccurate): ${e instanceof Error ? e.message : String(e)}`,
+    );
   }
 
   const baseSuggestedNext = deriveBootSuggestedNext(
@@ -617,6 +647,7 @@ export async function bootCmd(c: C, args: ParsedArgs): Promise<number> {
     your_recent: yourRecent,
     inbox_unread: inboxUnread,
     last_activity: status.last_activity,
+    warnings,
     hints: {
       session_id_unset: sessionIdUnset,
       misconfigured_cwd: misconfiguredCwd,
@@ -1410,6 +1441,15 @@ function renderBootText(p: BootPayload): string {
     }
   }
   if (p.last_activity) lines.push(`last activity: ${p.last_activity}`);
+  if (p.warnings.length > 0) {
+    lines.push('');
+    lines.push(`⚠ ${p.warnings.length} warning(s) raised while assembling this snapshot:`);
+    for (const w of p.warnings) {
+      lines.push(`   ${w}`);
+    }
+    lines.push(`   (counts in 'queues:' / 'inbox unread:' may be inaccurate;`);
+    lines.push(`    run 'gate doctor' to inspect the underlying repos)`);
+  }
 
   // Cross-passage summary: render only the passages with records.
   // Empty cross_passage stays silent (voice budget — fresh roots
