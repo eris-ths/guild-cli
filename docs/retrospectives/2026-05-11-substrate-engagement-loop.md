@@ -5,7 +5,8 @@
 shipped PR #291, and nao reviewing both.
 **Artifact produced**: `lore/principles/14-substrate-engagement-
 reduces-coordination-context-cost.md` plus 6 supporting PRs and 5
-devil-agent-memory trap pins.
+local devil-side memo pins (off-substrate, on the maintainer's
+AI-tooling memory store — not in the repo).
 
 ## The arc, step by step
 
@@ -36,8 +37,10 @@ hint, devil's concern2 on PR #105 from 2026-04-16).
 - **Instance 1 (cwd-fallback `next:` hint)** deferred — single-
   observation evidence, per the operational rule that became
   `trap_dogfood_deferred_open_rot.md`.
-- Devil-agent-memory pinned `trap_silent_fallback_loses_signal.md`
-  so the pattern routes future fallback-path PR reviews.
+- A local devil-side memo (`trap_silent_fallback_loses_signal.md`,
+  off-substrate in the maintainer's AI-tooling memory) was pinned
+  so the pattern routes future fallback-path PR reviews on this
+  side of the loop.
 
 ### Step 3 — overnight: a different Claude instance ships PR #291
 
@@ -65,7 +68,7 @@ into:
   harness section)
 - **2 new issues**: #294 (slice-closure design) + #295 (wave-status
   read verb spec)
-- **3 trap memory files** in devil-agent-memory covering the
+- **3 local devil-side memo files** (off-substrate) covering the
   patterns that don't yet have a shipable shape
 - **1 PR comment** back to the other Claude on PR #291 closing the
   loop
@@ -168,11 +171,17 @@ Why this matters specifically as a record-shape:
 | #299 | chore: move wave-brief templates to canonical location | Cleanup of `.tmp-asteria-235/` |
 | #300 | docs(readme): tidy + principle 14 link | README integration of recent work |
 
-### Trap memory pins (devil-agent-memory)
+### Local devil-side memo pins (off-substrate)
+
+These live in the maintainer's AI-tooling memory store (e.g. a
+Claude Code per-agent memory dir; other contributors' harnesses
+may carry equivalents in their own form). They are explicitly NOT
+part of the repo — naming them here for historical accuracy of
+the arc, but they are private practice, not project record.
 
 | File | Pattern |
 |------|---------|
-| `trap_dogfood_deferred_open_rot.md` | Open backlog signal decay; close+memory-pin as default |
+| `trap_dogfood_deferred_open_rot.md` | Open backlog signal decay; close+memo-pin as default |
 | `trap_lense_addresses_vocab_drift.md` | `addresses` (devil-side) is the canonical cross-reference name |
 | `trap_hook_ctx_normalize_vs_doc.md` | #280 A parked / B shipped; drift detection for `docs/plugin-schema.md` |
 | `trap_silent_fallback_loses_signal.md` | combo C3 — `warnings: string[]` shape |

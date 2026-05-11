@@ -15,6 +15,13 @@ The five surfaces guild-cli uses, in increasing distance from code:
 | GitHub Pull Requests | per-change code review + merged decision trail | repo collaborators |
 | GitHub Discussions | announcements + extracted-pattern retrospectives | repo collaborators only (write); public read |
 
+> Contributors may additionally keep harness-side memo files (devil-shaped
+> trap notes, persona-shaped checklists, etc.) inside their own AI tooling
+> — Claude Code's per-agent memory, Codex's profile config, etc. Those are
+> **off-substrate by design** and not part of project governance; this doc
+> covers only the five surfaces above. The harness side is the maintainer's
+> private practice; the substrate side is the project's record.
+
 `lore/principles/` and `docs/` are not coordination surfaces — they
 are **stewardship outputs** that get rewritten when their content
 needs revision. Append-only is the spirit, but a principle doc can
@@ -90,16 +97,17 @@ Cheat-sheet for the AI agents (and humans) who write into this repo:
 | Session-local dogfood arc | `substrate/agora/plays/` (local-only) |
 | Production lifecycle record | content_root `requests/` `agora/` etc. |
 | Principle-level claim | `lore/principles/` + Discussions/Announcements |
-| Devil-side trap memo | `/Users/<actor>/.claude/agent-memory/devil/` |
 
 ## Why this exists
 
-The devil-agent-memory trap `trap_dogfood_deferred_open_rot.md`
-(local to each maintainer's `.claude/agent-memory/devil/` —
-written 2026-05-10 during the eris-dogfood-0510 close arc) names
-the principle: open backlog signal decays when surfaces absorb
-artifacts they weren't shaped for. This doc is the same
-principle applied across all coordination surfaces, not just
+Open backlog signal decays when surfaces absorb artifacts they
+weren't shaped for. The pattern surfaced during the 2026-05-10
+backlog triage (see
+[`docs/retrospectives/2026-05-11-substrate-engagement-loop.md`](retrospectives/2026-05-11-substrate-engagement-loop.md)
+§ "Step 2"): single-session evidence + open-with-trigger-waited
+issues rot the open backlog read-worthiness in 1-3 cycles. The
+operational rule that came out — close+memo-pin as default,
+open is the exception — applies across all surfaces, not just
 Issues.
 
 Per [`principle 14`](../lore/principles/14-substrate-engagement-reduces-coordination-context-cost.md),
