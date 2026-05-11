@@ -15,6 +15,56 @@ in `README.md` and `docs/verbs.md`. This folder is for:
 - (More sections may grow here over time. Principles is the
   starting set.)
 
+## `applies_to:` frontmatter convention
+
+Not every principle is load-bearing for every reader. Some apply
+only when a specific mode is in play (e.g. principle 14 — substrate
+engagement — only fires under `profile: swarm`). To let cold
+readers and tooling filter by audience, principle files MAY carry
+a YAML frontmatter block at the very top:
+
+```markdown
+---
+applies_to: swarm
+---
+
+# Principle title
+...
+```
+
+The frontmatter is optional. The convention:
+
+- **Default (no frontmatter present): `applies_to: all`.** Most
+  principles are universal and need no annotation. The default
+  exists so the convention is additive — existing files do not
+  need migration.
+- **Scalar form: `applies_to: <value>`.** Single audience.
+- **List form: `applies_to: [swarm, passage:devil]`.** Multiple
+  audiences; matches any.
+
+Value vocabulary:
+
+| value          | meaning                                                    |
+|----------------|------------------------------------------------------------|
+| `all`          | universal — applies regardless of mode or passage          |
+| `swarm`        | relevant when running multi-executor / `profile: swarm`    |
+| `passage:gate` | specific to the `gate` passage                             |
+| `passage:agora`| specific to the `agora` passage                            |
+| `passage:devil`| specific to the `devil` passage                            |
+| `passage:ctx`  | specific to the `ctx` passage                              |
+
+Filter principles by audience with `tools/lore-scope.sh`:
+
+```sh
+./tools/lore-scope.sh solo            # principles where applies_to is 'all' (or absent)
+./tools/lore-scope.sh swarm           # principles applying under swarm (includes 'all')
+./tools/lore-scope.sh passage:devil   # principles relevant to the devil passage
+```
+
+The `all` default makes the audience filter inclusive by design: a
+solo reader sees everything not explicitly swarm-only; a swarm
+reader sees everything (the universal set plus their own extras).
+
 ## Why this exists
 
 Every non-trivial codebase accumulates opinions that don't fit in
