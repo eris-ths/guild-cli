@@ -7,6 +7,18 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
 
 ## [Unreleased]
 
+### Added
+
+- **`gate lense-stats` verb — lense rotation diagnostic ([#305](https://github.com/eris-ths/guild-cli/issues/305)).**
+  Counts review entries per lense over a window (`--since 7d` default),
+  highlights the most-frequent and least-frequent lense, and surfaces a
+  `next:` hint when one lense dominates 3× the bottom. Sources: gate
+  `Request.reviews[]` + devil-passage `DevilReview.entries[]`. Read-only,
+  text + json formats, optional `--for <actor>` author filter. Motivated
+  by the ErisMind dogfood where four consecutive devil reviews all used
+  the `auth-access` lense — bias became visible only after an
+  independent audit. The verb makes that observable directly.
+
 ### ⚠ BREAKING (JSON shape)
 
 - **`executors` field in JSON / YAML changed shape for any mutated
