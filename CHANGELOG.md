@@ -7,6 +7,33 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
 
 ## [Unreleased]
 
+### Added
+
+- **Per-executor freshness for `gate wave-status` (closes #309)**
+  ([#309](https://github.com/eris-ths/guild-cli/issues/309)).
+  Stale judgment is now per-executor, derived from each executor's
+  most recent attributable activity (max of `witnessUpdatedAt[name]`,
+  `status_log[by=name].at`, and `claimedAt` when the claim is held).
+  An executor whose witness note was updated 2 min ago is no longer
+  flagged stale on a 33-min-old wave. Wave-level `(stale)` in the
+  footer now derives from "all executors stale" (`wave_stale_effective`),
+  separating "how long has this been open?" (`age_band`) from
+  "is anyone still working?" (`wave_stale_effective`).
+
+  Schema additive: new `witness_updated_at: Map<actor, ISO>` field on
+  `Request`, mirroring `witness_notes` / `witness_sessions`. Stamped
+  on first witness and on any re-witness mutation; cleared on
+  unwitness and terminal auto-reset. Omit-when-empty so pre-#309
+  records round-trip byte-identically. Hydrate-tolerant (ISO-parse
+  failures drop the entry via `onMalformed`).
+
+  Wire-format additions to `gate wave-status --format json` output:
+  - `executors[].witness_updated_at: string | null`
+  - `wave_stale_effective: boolean`
+  - `executors[].activity_band` enum unchanged but `'active'` is now
+    deprecated (never emitted by post-#309 builds; readers that
+    decoded it from legacy snapshots should treat as `'fresh'`).
+
 ### ⚠ BREAKING (JSON shape)
 
 - **`executors` field in JSON / YAML changed shape for any mutated

@@ -342,6 +342,31 @@ export interface RequestProps {
    */
   witnessSessions?: Map<string, string>;
   /**
+   * Per-witness mutation timestamp, keyed by lowercase actor name
+   * (issue #309). Stamped on first witness and on any successful
+   * re-witness mutation (note diff or session diff). The map mirrors
+   * `witnessNotes`'s shape: omit-when-empty so pre-#309 records that
+   * have never been witnessed round-trip byte-identically.
+   *
+   * Powers `gate wave-status`'s per-executor freshness judgment: the
+   * stale flag reads each executor's `witnessUpdatedAt[name]` (and
+   * the latest `status_log[].at` with `by: name`) instead of falling
+   * back to a single wave-age clock. An executor whose witness note
+   * was updated 2 min ago is not stale even on a 33 min-old wave.
+   *
+   * Lifecycle mirrors `witnessNotes`:
+   *   - witness() first-time → insert with current `at`.
+   *   - witness() re-witness with note/session diff → overwrite `at`.
+   *   - unwitness() → delete the key.
+   *   - resetWitnesses() (terminal auto-reset) → drop the entire map.
+   *
+   * Hydrate tolerates missing values (legacy records). Wire form on
+   * disk: ISO-8601 strings. Anything that fails ISO parsing is
+   * silently dropped via `onMalformed` rather than crashing — same
+   * defense-in-depth as `witnessNotes` text sanitisation (#315).
+   */
+  witnessUpdatedAt?: Map<string, string>;
+  /**
    * Monotonic mutation counter for cross-session-mutating verbs that
    * are NOT append-only on a recorded array (issue #244 follow-up;
    * Devil REJECT root cause). `claim` / `witness` / `unwitness` and
@@ -1059,6 +1084,12 @@ export class Request {
   get witnessSessions(): ReadonlyMap<string, string> {
     return this.props.witnessSessions ?? new Map();
   }
+  /** Per-witness mutation timestamp (#309) keyed by lowercase actor.
+   *  Empty when no witness has ever been stamped (legacy + pre-witness
+   *  records). Values are ISO-8601 strings. */
+  get witnessUpdatedAt(): ReadonlyMap<string, string> {
+    return this.props.witnessUpdatedAt ?? new Map();
+  }
 
   /**
    * Stake a cross-session claim (issue #226). Three outcomes:
@@ -1215,7 +1246,12 @@ export class Request {
    * this" signal, whereas claim on `executing` would be too late to
    * mediate the cross-session race claim is designed for.
    */
-  witness(by: MemberName, note?: string, bySession?: string): void {
+  witness(
+    by: MemberName,
+    note?: string,
+    bySession?: string,
+    at?: string,
+  ): void {
     if (
       this.props.state !== 'pending' &&
       this.props.state !== 'approved' &&
@@ -1277,7 +1313,10 @@ export class Request {
         this.props.witnessSessions = map;
         mutated = true;
       }
-      if (mutated) this.bumpMutationSeq();
+      if (mutated) {
+        if (at !== undefined) this.stampWitnessUpdatedAt(actorKey, at);
+        this.bumpMutationSeq();
+      }
       return;
     }
     list.push(by);
@@ -1292,9 +1331,16 @@ export class Request {
       map.set(actorKey, cleanedSession);
       this.props.witnessSessions = map;
     }
+    if (at !== undefined) this.stampWitnessUpdatedAt(actorKey, at);
     // Real mutation — bump for the same reason claim does. See
     // `bumpMutationSeq` doc and `RequestProps.mutationSeq`.
     this.bumpMutationSeq();
+  }
+
+  private stampWitnessUpdatedAt(actorKey: string, at: string): void {
+    const map = this.props.witnessUpdatedAt ?? new Map<string, string>();
+    map.set(actorKey, at);
+    this.props.witnessUpdatedAt = map;
   }
 
   /**
@@ -1362,6 +1408,13 @@ export class Request {
       sessions.delete(by.value);
       if (sessions.size === 0) delete this.props.witnessSessions;
     }
+    // witnessUpdatedAt (#309) moves alongside the witness entry —
+    // freshness has no meaning once the actor is gone from the list.
+    const updatedAt = this.props.witnessUpdatedAt;
+    if (updatedAt !== undefined) {
+      updatedAt.delete(by.value);
+      if (updatedAt.size === 0) delete this.props.witnessUpdatedAt;
+    }
     // Real mutation — bump so two concurrent unwitness calls by
     // different actors don't both pass the optimistic-lock check
     // (which sees identical pre-mutation length on both sides) and
@@ -1388,6 +1441,8 @@ export class Request {
     // lifecycle — terminal records carry no live observation context,
     // so the session map clears alongside the witnesses.
     delete this.props.witnessSessions;
+    // Per-witness freshness timestamps (#309) — same lifecycle.
+    delete this.props.witnessUpdatedAt;
     // Per-actor accounting: bump once per cleared witness so a
     // terminal frontier collapsing N witnesses contributes +N to the
     // version token. Keeps "how many actors were observing at close"
@@ -1609,6 +1664,17 @@ export class Request {
         sessions[actor] = session;
       }
       out['witness_sessions'] = sessions;
+    }
+    // Per-witness mutation timestamp (issue #309). Same shape as
+    // witness_notes/witness_sessions — map keyed by lowercase actor,
+    // omitted when empty. Pre-#309 records lack the field; post-#309
+    // records that never witnessed also lack it. ISO-8601 strings.
+    if (this.props.witnessUpdatedAt !== undefined && this.props.witnessUpdatedAt.size > 0) {
+      const stamps: Record<string, string> = {};
+      for (const [actor, at] of this.props.witnessUpdatedAt) {
+        stamps[actor] = at;
+      }
+      out['witness_updated_at'] = stamps;
     }
     // mutation_seq (issue #244 follow-up). Surface only when > 0 so
     // pre-#244 records and never-mediated post-#244 records both emit
