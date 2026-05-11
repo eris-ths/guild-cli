@@ -9,7 +9,7 @@
 //     extensions). Unknown lenses rejected.
 //   - regression: `--lense devil` always works under default config
 //     (DEFAULT_LENSES include 'devil') AND under strict mode (bundled
-//     catalog includes 'devil-substrate' lenses but NOT a 'devil' lens
+//     catalog includes 'devil-substrate' lenses but NOT a 'devil' lense
 //     — wait — the substrate-side bundled lenses are different from
 //     gate's DEFAULT_LENSES. Strict-mode flip is a real migration step
 //     for teams that used 'devil' as a gate framing label).

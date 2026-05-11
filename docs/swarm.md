@@ -42,7 +42,7 @@ agora new --slug ordering-<topic>-<date> --kind quest \
 agora play --slug ordering-<topic>-<date> --by <you>
 # → 2026-MM-DD-NNN
 
-# 2) Deliberate with multi-voice (one move per voice / lens)
+# 2) Deliberate with multi-voice (one move per voice / lense)
 agora move <play-id> --by <you>   --text "candidates + dependencies"
 agora move <play-id> --by <miki>  --text "size + conflict-surface analysis"
 agora move <play-id> --by <noir>  --text "dependency graph: independent vs chained"

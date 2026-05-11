@@ -1,7 +1,7 @@
 // #310 — gate review-context regression.
 //
 // Acceptance:
-//   - shallow / standard / deep produce the matching lens recommendation
+//   - shallow / standard / deep produce the matching lense recommendation
 //   - missing depth on a wave surfaces a non-empty warning + empty lenses
 //   - prior reviews are bundled into the payload
 //   - non-existent id → exit 1 with notFoundHint
@@ -74,7 +74,7 @@ test('#310: review-context on wave without depth → empty lenses + warning', (t
   assert.deepEqual(payload.executors, ['alice']);
 });
 
-test('#310: depth=shallow → point-check lens set', (t) => {
+test('#310: depth=shallow → point-check lense set', (t) => {
   const { root, cleanup } = bootstrap();
   t.after(cleanup);
   const created = runGate(root, [
@@ -95,7 +95,7 @@ test('#310: depth=shallow → point-check lens set', (t) => {
   assert.equal(payload.warning, '');
 });
 
-test('#310: depth=standard → 6-lens default', (t) => {
+test('#310: depth=standard → 6-lense default', (t) => {
   const { root, cleanup } = bootstrap();
   t.after(cleanup);
   const created = runGate(root, [
@@ -174,7 +174,7 @@ test('#310: review-context bundles prior reviews into the payload', (t) => {
   assert.equal(payload.prior_reviews[0].comment, 'first pass clean');
 });
 
-test('#310: text format renders depth + lens recommendation + prior reviews', (t) => {
+test('#310: text format renders depth + lense recommendation + prior reviews', (t) => {
   const { root, cleanup } = bootstrap();
   t.after(cleanup);
   const created = runGate(root, [

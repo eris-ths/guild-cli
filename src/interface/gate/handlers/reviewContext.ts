@@ -26,12 +26,12 @@ import { RequestDepth } from '../../../domain/request/RequestDepth.js';
 const REVIEW_CONTEXT_KNOWN_FLAGS: ReadonlySet<string> = new Set(['format']);
 
 /**
- * Lens recommendation by depth. Encoded here (not in domain) because
+ * Lense recommendation by depth. Encoded here (not in domain) because
  * the choice is policy that may evolve with reviewer practice — keeping
  * it at the interface layer lets the substrate remain advisory-only.
  *
- *   - shallow:  point-check with the highest-severity general lens.
- *   - standard: 6-lens default mirroring the published /devil contract.
+ *   - shallow:  point-check with the highest-severity general lense.
+ *   - standard: 6-lense default mirroring the published /devil contract.
  *   - deep:     all 10 lenses + memory MCP + state-machine trace.
  *
  * The reviewer is free to widen or narrow this set on a given run
@@ -59,9 +59,9 @@ const LENSES_BY_DEPTH: Readonly<Record<RequestDepth, readonly string[]>> = {
 
 /**
  * Extras the reviewer is invited to exercise at a given depth, beyond
- * the lens set itself. Surfaced separately so a deep reviewer sees
+ * the lense set itself. Surfaced separately so a deep reviewer sees
  * "memory MCP lookup + state-machine trace + prior-review cross-check"
- * as explicit obligations, not just lens names.
+ * as explicit obligations, not just lense names.
  */
 const EXTRAS_BY_DEPTH: Readonly<Record<RequestDepth, readonly string[]>> = {
   shallow: [],
@@ -85,7 +85,7 @@ export interface ReviewContextPayload {
    *  without `--depth` and never re-stamped — reviewer should treat
    *  as standard and surface a warning. */
   depth: RequestDepth | null;
-  /** Recommended lens set derived from depth. Empty when `depth` is
+  /** Recommended lense set derived from depth. Empty when `depth` is
    *  null (reviewer falls back to its own default but can record the
    *  drift). */
   recommended_lenses: readonly string[];
@@ -160,7 +160,7 @@ export function buildReviewContext(r: Request): ReviewContextPayload {
     warning:
       depth === null
         ? 'no depth recorded on this wave — reviewer should default to standard ' +
-          'lens set and surface the missing advisory in its preamble (#310 #221)'
+          'lense set and surface the missing advisory in its preamble (#310 #221)'
         : '',
   };
 }
