@@ -119,6 +119,20 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
 
 ### Added
 
+- **`gate resume --with-doctor [--auto-repair]` — surface substrate health at session re-entry (closes #306)**
+  ([#306](https://github.com/eris-ths/guild-cli/issues/306)).
+  New flags on the existing `gate resume` verb that fold a `gate
+  doctor` summary into the resume payload (`doctor.findings`,
+  `doctor.summary`, `doctor.is_clean`). With `--auto-repair`,
+  quarantineable findings are processed inline via the repair
+  use case and the outcome is reported under `doctor.auto_repair`.
+  Default behavior is unchanged — without `--with-doctor` the JSON
+  shape and text prose are byte-identical to pre-#306. Closes the
+  2-step friction `eris-gate-flow.md` flagged: a dirty substrate
+  now surfaces at the moment of session boot, before the agent
+  starts writing again. `--auto-repair` without `--with-doctor`
+  is rejected with a pointed error.
+
 - **`gate wave-status <id>` — per-executor in-flight slice status (closes #295)**
   ([#295](https://github.com/eris-ths/guild-cli/issues/295)).
   New read verb that composes per-executor view from existing

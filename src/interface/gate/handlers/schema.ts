@@ -677,6 +677,16 @@ const VERBS: readonly VerbSchema[] = [
       properties: {
         format: formatField,
         locale: { type: 'string', enum: ['en', 'ja'], description: 'prose language; also via GUILD_LOCALE env' },
+        'with-doctor': {
+          type: 'boolean',
+          description:
+            '#306 — augment payload with a `gate doctor` summary so session re-entry surfaces a dirty substrate before the agent starts writing again.',
+        },
+        'auto-repair': {
+          type: 'boolean',
+          description:
+            '#306 — only meaningful with --with-doctor; runs `gate repair --apply` inline for quarantineable findings. Without --with-doctor this flag is rejected.',
+        },
       },
     },
     output: {
@@ -710,6 +720,26 @@ const VERBS: readonly VerbSchema[] = [
         },
         suggested_next: { type: 'object' },
         restoration_prose: str,
+        doctor: {
+          type: 'object',
+          description:
+            '#306 — present only when --with-doctor was passed. Carries the diagnostic findings and a one-line summary; when --auto-repair was also passed, an `auto_repair` sub-object reports the quarantine outcome.',
+          properties: {
+            findings: { type: 'array', items: { type: 'object' } },
+            summary: str,
+            is_clean: { type: 'boolean' },
+            auto_repair: {
+              type: 'object',
+              properties: {
+                attempted: { type: 'boolean' },
+                quarantined: { type: 'integer' },
+                skipped: { type: 'integer' },
+                errors: { type: 'integer' },
+                summary: str,
+              },
+            },
+          },
+        },
       },
     },
   },
