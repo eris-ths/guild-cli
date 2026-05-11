@@ -191,6 +191,14 @@ export interface IssueStateLogEntry {
   by: string;
   at: string;
   invokedBy?: string;
+  /**
+   * Optional free-form transition rationale (#289 hunk 1). Threaded
+   * from `gate issues defer/resolve/start/reopen --note <s>` so the
+   * audit trail records *why* the state moved, not just who/when.
+   * Omitted on the wire when absent so pre-#289 records and same-body
+   * unstamped writes both round-trip byte-identical YAML.
+   */
+  note?: string;
 }
 
 export interface IssueProps {
@@ -296,7 +304,12 @@ export class Issue {
     return this.props.text;
   }
 
-  setState(next: IssueState, by: string, invokedBy?: string): void {
+  setState(
+    next: IssueState,
+    by: string,
+    invokedBy?: string,
+    note?: string,
+  ): void {
     assertIssueTransition(this.props.state, next);
     const byName = MemberName.of(by).value;
     this.props.state = next;
@@ -314,6 +327,13 @@ export class Issue {
     };
     if (invokedBy !== undefined && invokedBy !== byName) {
       entry.invokedBy = invokedBy;
+    }
+    if (note !== undefined) {
+      const cleaned = sharedSanitizeText(note, 'note', {
+        maxLen: MAX_TEXT,
+        requireNonEmpty: false,
+      });
+      if (cleaned.length > 0) entry.note = cleaned;
     }
     this.props.stateLog.push(entry);
   }
@@ -407,6 +427,7 @@ function stateLogEntryToJSON(e: IssueStateLogEntry): Record<string, unknown> {
     at: e.at,
   };
   if (e.invokedBy !== undefined) out['invoked_by'] = e.invokedBy;
+  if (e.note !== undefined) out['note'] = e.note;
   return out;
 }
 

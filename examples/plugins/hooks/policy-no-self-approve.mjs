@@ -32,6 +32,14 @@
 export default {
   on: 'before:approve',
   run: async (ctx) => {
+    // #290: defensive null check. `before:approve` always populates
+    // `ctx.request`, but a typo upstream that subscribed this plugin
+    // to a session-boundary event (`before:rest`/`before:wake`/
+    // `before:farewell`) would land here with `ctx.request` undefined.
+    // Returning silently rather than throwing keeps the policy hook
+    // forward-compatible with future event kinds — bad config should
+    // not fail the transition closed.
+    if (!ctx.request) return;
     const author = ctx.request.from.value;
     if (ctx.actor === author) {
       return {

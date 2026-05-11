@@ -1330,6 +1330,13 @@ const VERBS: readonly VerbSchema[] = [
             "`list` only. text (default) flattens notes for human reading; " +
             'json keeps notes nested per issue.',
         },
+        note: strOpt(
+          'optional rationale for `resolve`/`defer`/`start`/`reopen` ' +
+            'transitions (#289 hunk 1). Persisted onto the matching ' +
+            'state_log entry as `note: <s>`; omitted when absent so ' +
+            'pre-#289 records and same-body unstamped writes round-trip ' +
+            'byte-identical YAML.',
+        ),
       },
     },
     output: { type: 'object' },
