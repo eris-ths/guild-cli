@@ -1112,22 +1112,37 @@ section under `status_log` so they don't read as transition entries:
     witnesses: alice (watching dedup), bob, carol (perf)
 ```
 
-### Templates (#235)
+### Templates (#235, two-tier #302)
 
-`gate templates list` / `show` discover wave-brief skeletons
-shipped under `data/guild/templates/wave-brief/`. The registry
-surfaces them so agents pick a brief shape without scanning the
-filesystem; `gate request --template <name>` expands the chosen
-skeleton into action / reason while preserving caller overrides.
+`gate templates list` / `show` discover wave-brief skeletons from
+two sources, with the user override always shadowing the built-in
+of the same name:
+
+1. **Built-in** — shipped with guild-cli under
+   `<packageRoot>/templates/wave-brief/`. Available to every install
+   out of the box (`single-impl`, `parallel-impl`, `research-wave`,
+   `verification`, `compare-and-ratify`).
+2. **User override** — per-instance customization at
+   `<content_root>/data/guild/templates/wave-brief/`. A file there
+   with the same `template_name` as a built-in replaces the built-in
+   for that instance (no merge; the override wins).
+
+The registry surfaces both tiers so agents pick a brief shape without
+scanning the filesystem; `gate request --template <name>` expands the
+chosen skeleton into action / reason while preserving caller overrides.
 
 ```bash
-gate templates list                     # available template names
-gate templates show parallel-impl       # full template body
+gate templates list                     # tagged [built-in] / [content_root]
+gate templates show parallel-impl       # full template body (override wins)
 gate request --template parallel-impl --executors a,b
 # action defaults to "wave-brief: parallel-impl"; reason defaults to
 # the template's `intended_use`. Both can be overridden with explicit
 # --action / --reason.
 ```
+
+Each list entry is tagged with its source so an operator can see at
+a glance which catalogue entry is the project's local fork vs the
+out-of-the-box shape.
 
 Records carry `template`, `template_version`, and
 `gate_required_acknowledged` so audits can tell template-shaped waves

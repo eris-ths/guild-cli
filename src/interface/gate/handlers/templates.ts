@@ -58,6 +58,8 @@ async function templatesList(c: C, args: ParsedArgs): Promise<number> {
   const items = c.templateUC.list();
   const exists = c.templateUC.registryExists();
   const dir = c.templateUC.registryDir();
+  const builtinExists = c.templateUC.builtinExists();
+  const builtinDir = c.templateUC.builtinDir();
   if (format === 'json') {
     process.stdout.write(
       JSON.stringify(
@@ -67,8 +69,14 @@ async function templatesList(c: C, args: ParsedArgs): Promise<number> {
             version: t.version,
             intended_use: t.intendedUse,
             gate_required: t.gateRequired,
+            source: t.sourceKind,
           })),
-          _meta: { dir, exists },
+          _meta: {
+            dir,
+            exists,
+            builtin_dir: builtinDir,
+            builtin_exists: builtinExists,
+          },
         },
         null,
         2,
@@ -76,19 +84,23 @@ async function templatesList(c: C, args: ParsedArgs): Promise<number> {
     );
     return 0;
   }
-  if (!exists) {
-    // Empty / missing dir — print a single advisory line so an
-    // operator on a fresh checkout (or the public guild-cli repo)
-    // sees why the catalogue is empty rather than a blank stdout.
-    process.stdout.write(
-      `(empty: templates dir not found at ${dir})\n`,
-    );
-    return 0;
-  }
   if (items.length === 0) {
-    process.stdout.write(
-      `(no templates found in ${dir})\n`,
-    );
+    // Neither tier produced anything. Show both paths so the operator
+    // knows where to drop a template (or knows the built-in tier is
+    // missing — unusual, only happens on a non-standard install).
+    if (!exists && !builtinExists) {
+      process.stdout.write(
+        `(empty: no templates found)\n` +
+          `  content_root: ${dir} (missing)\n` +
+          `  built-in:     ${builtinDir ?? '(not packaged)'}\n`,
+      );
+    } else {
+      process.stdout.write(
+        `(no templates found)\n` +
+          `  content_root: ${dir}${exists ? '' : ' (missing)'}\n` +
+          `  built-in:     ${builtinDir ?? '(not packaged)'}${builtinExists ? '' : ' (missing)'}\n`,
+      );
+    }
     return 0;
   }
   // Pad name column for readable alignment. Same shape as
@@ -97,8 +109,9 @@ async function templatesList(c: C, args: ParsedArgs): Promise<number> {
   for (const t of items) {
     const padded = t.name.padEnd(nameWidth);
     const lock = t.gateRequired ? '[gate-required]' : '[no-gate]';
+    const tag = t.sourceKind === 'builtin' ? '[built-in]' : '[content_root]';
     process.stdout.write(
-      `${padded}  v${t.version}  ${lock}  ${t.intendedUse}\n`,
+      `${padded}  v${t.version}  ${lock}  ${tag}  ${t.intendedUse}\n`,
     );
   }
   return 0;
