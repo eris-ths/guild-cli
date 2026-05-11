@@ -7,6 +7,30 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
 
 ## [Unreleased]
 
+### Added
+
+- **`gate review-context <id>` verb — depth-aware reviewer bundle (closes #310)**
+  ([#310](https://github.com/eris-ths/guild-cli/issues/310),
+  builds on [#221](https://github.com/eris-ths/guild-cli/issues/221)).
+  Single read verb that returns the bundle a reviewer needs to drive
+  behaviour from substrate state: `action`, `reason`, `target`,
+  `executors`, `depth`, `recommended_lenses`, `recommended_extras`,
+  `prior_reviews`. Lens recommendation derives from the wave's
+  `depth` advisory:
+  - `shallow` → `[Logic]`
+  - `standard` → 6-lens default (`Logic, Pattern, Flow, Error, Test, Input`)
+  - `deep` → all 10 lenses + extras (`memory_mcp_trap_lookup`,
+    `state_machine_trace`, `prior_review_cross_check`)
+  - depth absent → empty lens set + `warning` advising the reviewer to
+    default to standard and surface the missing advisory in its preamble.
+
+  Closes the substrate-to-reviewer signal loop: `--depth` was
+  previously decorative — set on the wave but read by nobody.
+
+  Also fixes a pre-existing gap: `wave-status` was missing from
+  `verbs.ts` READ_VERBS — now declared alongside `review-context`.
+  The verbs-consistency test pins both.
+
 ### ⚠ BREAKING (JSON shape)
 
 - **`executors` field in JSON / YAML changed shape for any mutated

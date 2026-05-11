@@ -43,6 +43,7 @@ const GATE_ALL = [
   'message', 'broadcast', 'inbox', 'doctor', 'repair', 'status',
   'boot', 'suggest', 'transcript', 'summarize', 'why', 'resume',
   'schema', 'unresponded', 'templates', 'rest', 'wake', 'farewell',
+  'wave-status', 'review-context',
 ] as const;
 
 const AGORA_ALL = [

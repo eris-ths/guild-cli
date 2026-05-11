@@ -617,6 +617,53 @@ const VERBS: readonly VerbSchema[] = [
     },
   },
   {
+    name: 'review-context',
+    category: 'read',
+    summary:
+      'reviewer-facing bundle for a wave: action/reason/target, executors, depth advisory (#221), recommended lens set by depth, and prior reviews. Lets a devil/reviewer agent drive behaviour from substrate state instead of out-of-band prompt content (#310 Layer A). Read-only; depth and lens-set are advisory not directive (principle 02).',
+    input: {
+      type: 'object',
+      properties: {
+        id: idStr,
+        format: formatField,
+      },
+      required: ['id'],
+    },
+    output: {
+      type: 'object',
+      properties: {
+        id: str,
+        state: str,
+        from: str,
+        action: str,
+        reason: str,
+        target: { type: 'string', description: 'null when wave has no target field' },
+        executors: { type: 'array', items: str },
+        depth: {
+          type: 'string',
+          enum: ['shallow', 'standard', 'deep'],
+          description: 'null when no depth was recorded on this wave',
+        },
+        recommended_lenses: { type: 'array', items: str },
+        recommended_extras: { type: 'array', items: str },
+        prior_reviews: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              by: str,
+              lense: str,
+              verdict: str,
+              at: str,
+              comment: { type: 'string', description: 'null when review carried no comment' },
+            },
+          },
+        },
+        warning: { type: 'string', description: 'empty string when depth is recorded' },
+      },
+    },
+  },
+  {
     name: 'summarize',
     category: 'read',
     summary:
