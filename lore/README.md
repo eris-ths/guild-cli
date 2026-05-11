@@ -53,6 +53,18 @@ pinned. nao made the order asymmetry explicit ("人間でも AI-first
 は変わらない、 人間向けは projection で済む") and the principle
 was named immediately so agora design wouldn't re-litigate it.
 
+Principle 14 (substrate engagement reduces coordination context
+cost) was named on 2026-05-11 by eris after dogfooding `profile:
+swarm` end-to-end on her own hands (the
+`substrate/swarm-experiments/2026-05-11-eris-swarm-test/` arc).
+Triggered by the PR #291 swarm retrospective from a different
+Claude instance: their named insight ("並列 ≠ swarm. substrate
+engagement = context cost reduction") was strong, but principles
+are felt-not-just-read — so eris ran a 2-slice parallel-impl wave
+of her own (PR #296) before promoting the insight from trap memory
+to lore. Two independent observations (the other Claude's
+retrospective + eris's own) cleared the dogfood-trigger bar.
+
 They are not timeless truths — they are stances, named, so a
 future reader can engage with them rather than re-derive them.
 
@@ -65,7 +77,7 @@ If you have 5 minutes:
 Those two carry the most weight for how agents interact with the
 tool.
 
-If you have 20 minutes, read all eleven in order. They compose:
+If you have 20 minutes, read all fourteen in order. They compose:
 each builds on the previous, and the most recent ones are the
 foundations the earlier ones implicitly lean on.
 
@@ -80,6 +92,12 @@ foundations the earlier ones implicitly lean on.
 - **Principle 09 (orientation disclosure)** is the operational
   test case for 10 + 11: when surface drifts from substrate,
   the verb has to disclose.
+- **Principle 14 (substrate engagement reduces coordination
+  context cost)** extends principle 04 from judgment artifacts to
+  coordination state — what the orchestrator holds in working
+  memory when multiple SubAgents run in parallel. Read it together
+  with `docs/playbook.md` § "Swarm × Claude SubAgent harness" for
+  the worked recipe.
 
 ## Relationship to `alexandria/`
 
