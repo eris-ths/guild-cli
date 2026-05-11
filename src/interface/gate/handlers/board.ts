@@ -139,11 +139,10 @@ export async function boardCmd(c: C, args: ParsedArgs): Promise<number> {
       // `exec=` summary: for a single executor we show the name; for
       // multiple (issue #230) we list comma-separated. Compact enough
       // for the approved/executing rows where the executor is the
-      // next-action holder. Reads from the new `executors` array form;
-      // legacy single-executor records hydrate as a one-element list.
-      const execList = Array.isArray(j['executors'])
-        ? (j['executors'] as string[])
-        : [];
+      // next-action holder. Reads via the domain getter so slice-
+      // closure (issue #294) doesn't affect this row — the board only
+      // wants names; per-slice status surfaces via `gate wave-status`.
+      const execList = r.executors.map((m) => m.value);
       const executor = execList.length > 0 ? `  exec=${execList.join(',')}` : '';
       process.stdout.write(
         `  ${j['id']}  from=${j['from']}${executor}  ${markers}${String(j['action']).slice(0, 60)}\n`,

@@ -251,11 +251,21 @@ export class RequestUseCases {
     invokedBy?: string,
     opts?: { dryRun?: boolean },
   ): Promise<Request> {
-    const req = await this.loadOrThrow(id);
-    const actor = await assertActor(by, '--by', this.deps.members);
-    req.complete(actor, note, invokedBy);
-    if (!opts?.dryRun) await this.deps.requests.save(req);
-    return req;
+    // Per-executor slice closure (#294) makes `complete` the canonical
+    // parallel-friendly verb: two executors closing their own slices on
+    // the same wave is the normal mode, not the exception. Wrap in
+    // version-conflict retry so commutative parallel closes don't error
+    // out on RequestVersionConflict — same pattern as claim/witness/
+    // unwitness. Refusal cases (terminal-wave reject, double-close
+    // refusal, member-check) throw DomainError, NOT VersionConflict,
+    // so retry never loops on a genuine refusal.
+    return retryOnVersionConflict('complete', id, async () => {
+      const req = await this.loadOrThrow(id);
+      const actor = await assertActor(by, '--by', this.deps.members);
+      req.complete(actor, note, invokedBy);
+      if (!opts?.dryRun) await this.deps.requests.save(req);
+      return req;
+    });
   }
 
   async fail(
@@ -265,11 +275,17 @@ export class RequestUseCases {
     invokedBy?: string,
     opts?: { dryRun?: boolean },
   ): Promise<Request> {
-    const req = await this.loadOrThrow(id);
-    const actor = await assertActor(by, '--by', this.deps.members);
-    req.fail(actor, reason, invokedBy);
-    if (!opts?.dryRun) await this.deps.requests.save(req);
-    return req;
+    // Mirror of `complete` — `fail` also routes through `failSlice` for
+    // multi-executor waves and races commutatively with sibling closes.
+    // Same retry rationale; same safety property (DomainError throws
+    // refusal; VersionConflict throws contention).
+    return retryOnVersionConflict('fail', id, async () => {
+      const req = await this.loadOrThrow(id);
+      const actor = await assertActor(by, '--by', this.deps.members);
+      req.fail(actor, reason, invokedBy);
+      if (!opts?.dryRun) await this.deps.requests.save(req);
+      return req;
+    });
   }
 
   async review(input: {

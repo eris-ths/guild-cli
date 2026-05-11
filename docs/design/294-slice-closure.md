@@ -263,3 +263,54 @@ Drafted by eris during the 2026-05-11 close-out of the #291 dogfood
 arc. The 2026-05-11 issue comment proposed template-bound failure
 policy (PR-C); this design doc folds that proposal in as the PR-C
 sequencing step rather than relitigating it.
+
+## Post-implementation amendment (PR-A2)
+
+PR-A2 shipped with one intentional divergence from this design:
+
+- **`r.executors` getter was NOT renamed to `r.executorNames`.** The
+  doc sketched a rename so that the structured-form accessor
+  (`executorRecords`) would be the unambiguous getter for new code,
+  with `executorNames` carrying name-only access. PR-A2 declined to
+  land that 55+ call-site sweep. Instead, `r.executors` keeps its
+  existing signature (`readonly MemberName[]`, name-only) and the
+  structured form is exposed through a new getter `r.executorRecords`
+  plus a new method `executorStatus(name)`. Trade-off accepted:
+  existing call sites stay byte-stable; the cost is asymmetry — the
+  name `executors` continues to mean "name list" in code while in
+  YAML/JSON it has migrated to the structured object shape. If the
+  asymmetry surfaces as a maintenance burden, the rename remains
+  available as a future sweep PR.
+
+Hardening added during PR-A2's devil review (not present in the
+original design lock):
+
+- **Double-close refusal.** `applySliceClosure` refuses to re-close a
+  slice that is already `completed` or `failed`. Without this guard, a
+  same-actor re-close would silently overwrite the prior `completedAt`
+  / `note`, and `complete → fail` (or vice versa) would silently flip
+  the slice verdict — which then drives any-fail-wave-fail. Refusing
+  at the domain keeps the first attribution authoritative. Pre-#294
+  legacy records that hydrate as `status: 'unknown'` stay closeable
+  once (the migration path).
+- **Terminal-wave early reject.** `applySliceClosure` refuses any
+  slice closure when the wave is already in a terminal state
+  (`completed | failed | denied`). Without this guard, a late call
+  would mutate the slice + push a status_log entry, then throw inside
+  `transition()` via `assertTransition` — leaving the aggregate
+  partially mutated for any caller that catches and reuses it.
+- **Render-time newline strip on note text.** `gate wave-status`
+  text-mode flattens `\r\n` to space when rendering note fields.
+  Without this, a note like `"ok\n  bob  [completed]"` would inject a
+  fake per-executor line into operator-facing output. The stored YAML
+  remains unmodified — strip is render-only.
+
+Other design decisions held as-shipped:
+- Shape B (structured executors) — landed as designed.
+- No new verb (`gate complete --by X` is per-slice) — landed.
+- Phase-1 composition default `any-fail-wave-fail` — landed.
+- Hydrate tolerance (legacy flat → in-memory unknown, byte-stable
+  round-trip until first mutation, one-way migrate on save) —
+  landed.
+- Mutation accounting through existing `status_log` length —
+  landed.

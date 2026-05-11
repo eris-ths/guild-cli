@@ -40,6 +40,52 @@ const MAX_STAKE_NOTE = 80;
  */
 export const SESSION_ID_RE = /^[a-z0-9][a-z0-9_:.-]{0,63}$/;
 
+/**
+ * Per-executor slice status (issue #294). The substrate-side state of a
+ * single executor's slice within a multi-executor wave.
+ *
+ *   - 'pending'   : slice assigned but not yet stamped terminal.
+ *   - 'completed' : slice closed successfully by `gate complete --by X`.
+ *   - 'failed'    : slice closed failure via `gate fail --by X` or
+ *                   `complete --status failed`.
+ *   - 'unknown'   : in-memory only — emerges on hydrate of a legacy
+ *                   flat-array record (`executors: [a, b]` pre-#294).
+ *                   Never round-trips to disk: a no-mutation save of a
+ *                   legacy record emits the same flat form it loaded.
+ *
+ * Once any mutation lands on a hydrated-from-legacy record (a
+ * completeSlice / failSlice / addReview / etc.), the on-disk
+ * representation migrates to the structured form on the next save.
+ * One-way migration: structured form is a strict superset.
+ */
+export type ExecutorStatus = 'pending' | 'completed' | 'failed' | 'unknown';
+
+/**
+ * A single executor's slice record. `name` is the actor; the remaining
+ * fields move together — `completedAt` is the ISO timestamp paired with
+ * a non-pending/non-unknown `status`, and `note` is the slice-scoped
+ * message the closing call attached (e.g. "issues.ts hardening — 2
+ * commits cherry-pickable").
+ *
+ * Persistence: structured form serializes as a list of mappings:
+ *
+ *   executors:
+ *     - name: agent-issues
+ *       status: completed
+ *       completed_at: 2026-05-11T01:00:00Z
+ *       note: "..."
+ *
+ * Legacy flat-array form (pre-#294) hydrates as
+ * `{ name, status: 'unknown' }` and round-trips to the flat form on
+ * save IF no mutation has touched the record. See `toJSON`.
+ */
+export interface ExecutorRecord {
+  readonly name: MemberName;
+  readonly status: ExecutorStatus;
+  readonly completedAt?: string;
+  readonly note?: string;
+}
+
 export interface StatusLogEntry {
   state: RequestState;
   by: string;
@@ -81,11 +127,20 @@ export interface RequestProps {
    * attribution race surfaced in substrate-experiment 6 (parallel-impl
    * waves where two agents both claim authorship of one request).
    *
-   * Persistence: `toJSON` always emits `executors: [...]` (new form).
-   * Hydrate accepts the legacy `executor: <string>` and normalises it
-   * to a single-element array — old records load without migration.
+   * Persistence: `toJSON` emits either the flat-array legacy form
+   * (every record has `status: 'unknown'` — i.e., a freshly-hydrated
+   * pre-#294 record nobody has mutated yet) or the structured form
+   * (any record has a non-unknown status). Hydrate accepts both forms
+   * plus the legacy single-`executor: <string>` field. See `toJSON`
+   * and `YamlRequestRepository.hydrate` for the migration contract.
+   *
+   * Issue #294 — per-executor slice closure. Internal representation
+   * is now `ExecutorRecord[]` so a multi-executor wave can record
+   * each slice's terminal state independently. The wave-level
+   * transition is derived: it fires only when every assigned
+   * executor's record has reached a terminal slice status.
    */
-  executors?: MemberName[];
+  executors?: ExecutorRecord[];
   target?: string;
   /**
    * Reviewer-depth advisory (issue #221). Optional; absence reads
@@ -439,7 +494,7 @@ export class Request {
     }
     if (input.executors !== undefined) {
       const seen = new Set<string>();
-      const list: MemberName[] = [];
+      const list: ExecutorRecord[] = [];
       for (const raw of input.executors) {
         const m = MemberName.of(raw);
         if (seen.has(m.value)) {
@@ -449,13 +504,17 @@ export class Request {
           );
         }
         seen.add(m.value);
-        list.push(m);
+        // New requests start every assigned executor at status='pending'
+        // (issue #294). The 'unknown' status is reserved exclusively
+        // for hydrate of a legacy flat-array record — a freshly-created
+        // request always knows its slice state.
+        list.push({ name: m, status: 'pending' });
       }
       // Empty array is allowed — same as omitting the field. Persist
       // the field only when non-empty, matching how `with` behaves.
       if (list.length > 0) props.executors = list;
     } else if (input.executor !== undefined) {
-      props.executors = [MemberName.of(input.executor)];
+      props.executors = [{ name: MemberName.of(input.executor), status: 'pending' }];
     }
     if (input.autoReview !== undefined) {
       props.autoReview = MemberName.of(input.autoReview);
@@ -590,14 +649,36 @@ export class Request {
    *  intentionally at the call site (e.g. `r.executors[0]?.value`)
    *  with a comment naming why "first" is meaningful there. */
   get executors(): readonly MemberName[] {
+    return (this.props.executors ?? []).map((e) => e.name);
+  }
+  /** Structured per-executor records (issue #294). Each entry carries
+   *  the executor's name plus their slice closure status — a
+   *  multi-executor wave can record each slice terminal independently
+   *  of the wave-level state. Pre-#294 records hydrate every entry as
+   *  `status: 'unknown'` (in-memory only; round-trips to the legacy
+   *  flat array on save until a real mutation lands).
+   *
+   *  This is the read surface for code that needs the structured form
+   *  (e.g. `gate wave-status`, the slice-completion check inside
+   *  `completeSlice`). For "the list of names" the existing
+   *  `executors` getter still works (it now derives from records). */
+  get executorRecords(): readonly ExecutorRecord[] {
     return this.props.executors ?? [];
+  }
+  /** Look up a single executor's slice status by name. Returns
+   *  `undefined` when the named actor isn't on the executor list (the
+   *  pre-#294 fallback uses this to distinguish "this caller is an
+   *  assigned executor" from "this caller is unrelated"). Issue #294. */
+  executorStatus(name: string): ExecutorStatus | undefined {
+    const e = (this.props.executors ?? []).find((r) => r.name.value === name);
+    return e ? e.status : undefined;
   }
   /** Membership check — preferred predicate for "is this actor an
    *  assigned executor?". Pushed onto the aggregate so call sites
    *  don't open-code `r.executors.some(m => m.value === x)` and risk
    *  drifting on case / encoding. */
   hasExecutor(name: string): boolean {
-    return (this.props.executors ?? []).some((m) => m.value === name);
+    return (this.props.executors ?? []).some((r) => r.name.value === name);
   }
   get target(): string | undefined {
     return this.props.target;
@@ -738,11 +819,182 @@ export class Request {
   }
 
   complete(by: MemberName, note?: string, invokedBy?: string): void {
+    // Issue #294: when `by` is one of the assigned executors, route
+    // through the per-slice path so the wave-terminal transition is
+    // derived from "all slices closed" rather than fired directly.
+    // The fallback (executor not in the list) preserves pre-#294
+    // behavior: stamping the wave-level transition immediately, which
+    // is what records-with-no-executor-list have always done.
+    if (this.hasExecutor(by.value)) {
+      this.completeSlice(by, note, invokedBy);
+      return;
+    }
     this.transition('completed', by, note, invokedBy);
   }
 
   fail(by: MemberName, reason: string, invokedBy?: string): void {
+    if (this.hasExecutor(by.value)) {
+      this.failSlice(by, reason, invokedBy);
+      return;
+    }
     this.transition('failed', by, reason, invokedBy);
+  }
+
+  /**
+   * Mark a single executor's slice as completed (issue #294).
+   *
+   * Per-slice flow:
+   *   1. Replace the named executor's record with status='completed',
+   *      stamping completedAt and the optional note.
+   *   2. Append a status_log entry at the wave's CURRENT state (not a
+   *      transition — the wave-level state may stay unchanged) so
+   *      attribution is preserved.
+   *   3. If every assigned executor is now terminal
+   *      (`completed | failed`), derive the wave-level transition:
+   *      - all `completed`  → `transition('completed', ...)`
+   *      - any `failed`     → `transition('failed', ...)` (any-fail-
+   *                          wave-fail; design doc § Phase-1 default).
+   *
+   * The "executor not in list" fallback is handled by `complete()` —
+   * callers that pre-checked via `hasExecutor` reach this method
+   * already.
+   */
+  completeSlice(by: MemberName, note?: string, invokedBy?: string): void {
+    this.applySliceClosure(by, 'completed', note, invokedBy);
+  }
+
+  /**
+   * Mark a single executor's slice as failed (issue #294). Mirrors
+   * `completeSlice` but stamps `status: 'failed'`; the `reason` is the
+   * slice-scoped note. The wave-level derivation rule is the same: a
+   * single failed slice does NOT immediately fail the wave — the wave
+   * transitions only when every slice is terminal, at which point
+   * any-fail-wave-fail picks `failed`.
+   */
+  failSlice(by: MemberName, reason: string, invokedBy?: string): void {
+    this.applySliceClosure(by, 'failed', reason, invokedBy);
+  }
+
+  /**
+   * Shared implementation behind completeSlice / failSlice. Kept
+   * private so the public surface stays the two named verbs — callers
+   * never construct a status enum value themselves.
+   */
+  private applySliceClosure(
+    by: MemberName,
+    sliceStatus: 'completed' | 'failed',
+    note: string | undefined,
+    invokedBy: string | undefined,
+  ): void {
+    // Refuse slice closure on a wave that has already reached a terminal
+    // state (#294 devil review §Correctness 2). Without this guard, a
+    // late `complete --by X` after the wave was already failed/completed
+    // by another path would mutate the slice + push a status_log entry,
+    // then throw inside `this.transition()` via `assertTransition`,
+    // leaving the aggregate inconsistent for any caller that catches
+    // and reuses the instance. Domain-level early reject closes the
+    // partial-mutation hazard at the source.
+    if (
+      this.props.state === 'completed' ||
+      this.props.state === 'failed' ||
+      this.props.state === 'denied'
+    ) {
+      throw new DomainError(
+        `Cannot close slice for ${by.value}: request ${this.props.id.value} is already ${this.props.state}; slice closure only applies on live waves.`,
+        'state',
+      );
+    }
+    const list = this.props.executors ?? [];
+    const idx = list.findIndex((e) => e.name.value === by.value);
+    if (idx < 0) {
+      // Should not happen — `complete()` / `fail()` route through here
+      // only after `hasExecutor` is true. Defensive throw catches a
+      // bypassed call.
+      throw new DomainError(
+        `Cannot close slice for ${by.value}: not an assigned executor of request ${this.props.id.value}`,
+        'executors',
+      );
+    }
+    // Per-slice double-close guard (#294 devil review §Correctness 1).
+    // Without this, a same-actor re-close silently overwrites the prior
+    // completedAt + note, and complete→fail (or vice versa) silently
+    // flips the slice verdict — which then drives any-fail-wave-fail.
+    // Attribution loss is the exact failure mode slice closure was
+    // designed to eliminate; refusing the second close here keeps the
+    // first attribution authoritative. Pre-#294 records hydrate with
+    // `status: 'unknown'` and stay closeable once (the migration path).
+    const existing = list[idx]!.status;
+    if (existing === 'completed' || existing === 'failed') {
+      throw new DomainError(
+        `Slice for ${by.value} on request ${this.props.id.value} is already ${existing}; re-closing as ${sliceStatus} would silently overwrite the prior attribution. The first close stands.`,
+        'executors',
+      );
+    }
+    // Capacity check BEFORE mutating any state (#294 devil round-2 N2).
+    // Slice closure pushes a status_log entry; if the cap is hit, we
+    // throw — but executors must not be partially mutated by that throw.
+    // Moving the check above the executors-array replacement closes the
+    // partial-mutation hazard the round-1 terminal-wave reject was
+    // meant to cover end-to-end.
+    if (this.props.statusLog.length >= MAX_STATUS_LOG) {
+      throw new DomainError(
+        `Status log overflow (max ${MAX_STATUS_LOG})`,
+        'statusLog',
+      );
+    }
+    // Replace the record immutably (the field is `readonly`-typed for
+    // external readers but the underlying object is replaced in the
+    // array, not mutated).
+    const sanitizedNote =
+      note !== undefined ? sanitizeText(note, 'note') : undefined;
+    const completedAt = new Date().toISOString();
+    const updated: ExecutorRecord = {
+      name: list[idx]!.name,
+      status: sliceStatus,
+      completedAt,
+    };
+    if (sanitizedNote !== undefined) {
+      (updated as { note?: string }).note = sanitizedNote;
+    }
+    const nextList = list.slice();
+    nextList[idx] = updated;
+    this.props.executors = nextList;
+
+    // Append a status_log entry at the CURRENT wave state — this is
+    // attribution, not transition. The slice closure is recorded
+    // regardless of whether the wave itself moves on this call.
+    const sliceEntry: StatusLogEntry = {
+      state: this.props.state,
+      by: by.value,
+      at: completedAt,
+      note: sanitizedNote ?? (sliceStatus === 'failed' ? 'slice failed' : 'slice completed'),
+    };
+    if (invokedBy !== undefined && invokedBy !== by.value) {
+      sliceEntry.invokedBy = invokedBy;
+    }
+    this.props.statusLog.push(sliceEntry);
+
+    // Derive the wave-level transition only when every executor record
+    // is terminal. any-fail-wave-fail: if any slice failed, the wave
+    // fails; otherwise it completes. Phase-1 default per design doc.
+    const allTerminal = nextList.every(
+      (e) => e.status === 'completed' || e.status === 'failed',
+    );
+    if (allTerminal) {
+      const anyFailed = nextList.some((e) => e.status === 'failed');
+      const targetState: RequestState = anyFailed ? 'failed' : 'completed';
+      // The wave's transition reuses the same `by` (the closing actor)
+      // and a derived note so the wave-terminal status_log entry is
+      // distinguishable from the slice entry above. The slice-scoped
+      // note already lives on the executor record + the prior log
+      // entry; duplicating it on the wave-terminal row would be noise.
+      this.transition(
+        targetState,
+        by,
+        anyFailed ? 'wave failed (any-fail-wave-fail)' : 'wave completed (all slices closed)',
+        invokedBy,
+      );
+    }
   }
 
   addReview(review: Review): void {
@@ -1228,9 +1480,37 @@ export class Request {
     // process.stdout.write — keeping them as separate functions makes
     // it impossible to accidentally pollute the persistence side with
     // the back-compat alias.
+    // Executor serialization (issue #294). Two emit modes:
+    //
+    //   (a) Every record has status='unknown'. That's the in-memory
+    //       shape produced by hydrating a legacy flat-array record
+    //       that nobody has mutated yet. We emit back the flat form
+    //       `executors: [a, b]` so a read-then-resave of a pre-#294
+    //       record is byte-stable — principle 04, records-outlive-
+    //       writers, applied to the executor field specifically.
+    //
+    //   (b) Any record has a non-unknown status (pending / completed
+    //       / failed). The record has been touched (or was created
+    //       post-#294), so we emit the structured form. This is a
+    //       one-way migration: once structured, the file stays
+    //       structured. Acceptable because the structured form is a
+    //       strict superset.
     const execList = this.props.executors ?? [];
     if (execList.length > 0) {
-      out['executors'] = execList.map((m) => m.value);
+      const allUnknown = execList.every((e) => e.status === 'unknown');
+      if (allUnknown) {
+        out['executors'] = execList.map((e) => e.name.value);
+      } else {
+        out['executors'] = execList.map((e) => {
+          const row: Record<string, unknown> = {
+            name: e.name.value,
+            status: e.status,
+          };
+          if (e.completedAt !== undefined) row['completed_at'] = e.completedAt;
+          if (e.note !== undefined) row['note'] = e.note;
+          return row;
+        });
+      }
     }
     if (this.props.autoReview)
       out['auto_review'] = this.props.autoReview.value;
@@ -1370,7 +1650,7 @@ export class Request {
     const base = this.toJSON();
     const execList = this.props.executors ?? [];
     if (execList.length > 0) {
-      base['executor'] = execList[0]!.value;
+      base['executor'] = execList[0]!.name.value;
     }
     return base;
   }

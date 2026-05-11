@@ -1,6 +1,12 @@
 import YAML from 'yaml';
 import { join } from 'node:path';
-import { Request, StatusLogEntry, computeVersion } from '../../domain/request/Request.js';
+import {
+  Request,
+  StatusLogEntry,
+  ExecutorRecord,
+  ExecutorStatus,
+  computeVersion,
+} from '../../domain/request/Request.js';
 import { RequestId } from '../../domain/request/RequestId.js';
 import {
   RequestState,
@@ -489,16 +495,72 @@ function hydrate(
     // into a single-element array. The next save() upgrades the file
     // to the new form. Records-outlive-writers (principle 04) — we
     // tolerate the legacy keys forever, never write them.
-    let executorList: MemberName[] | undefined;
+    // Executors (issues #230 + #294). Three accepted on-disk shapes:
+    //   (1) Structured form (post-#294, post-mutation):
+    //          executors:
+    //            - name: a
+    //              status: completed
+    //              completed_at: ...
+    //              note: "..."
+    //   (2) Legacy flat-array (pre-#294 multi-executor):
+    //          executors: [a, b]
+    //       → hydrate every entry as { name, status: 'unknown' }.
+    //   (3) Single-`executor: <string>` field plus rare experimental
+    //       aliases (`executor_actual` / `executor_preferred`) from a
+    //       pre-#230 branch. Folded into a single-element array, same
+    //       `status: 'unknown'` rule as (2).
+    //
+    // The 'unknown' status is the honest answer for pre-#294 records
+    // and round-trips back to the flat form on a no-mutation save —
+    // byte-stable round-trip per principle 04.
+    let executorList: ExecutorRecord[] | undefined;
     if (Array.isArray(obj['executors'])) {
-      const list: MemberName[] = [];
+      const list: ExecutorRecord[] = [];
       const seen = new Set<string>();
-      for (const raw of obj['executors'] as unknown[]) {
-        if (typeof raw !== 'string') continue;
-        const m = MemberName.of(raw);
-        if (seen.has(m.value)) continue; // de-dupe defensively on read
-        seen.add(m.value);
-        list.push(m);
+      for (let i = 0; i < (obj['executors'] as unknown[]).length; i++) {
+        const raw = (obj['executors'] as unknown[])[i];
+        if (typeof raw === 'string') {
+          // Legacy flat-array form: name only, status defaults to
+          // 'unknown' (never round-trips to disk in this shape).
+          const m = MemberName.of(raw);
+          if (seen.has(m.value)) continue;
+          seen.add(m.value);
+          list.push({ name: m, status: 'unknown' });
+        } else if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+          const ro = raw as Record<string, unknown>;
+          if (typeof ro['name'] !== 'string') continue;
+          const m = MemberName.of(ro['name']);
+          if (seen.has(m.value)) continue;
+          seen.add(m.value);
+          // Status enum validation. Anything outside the four
+          // recognized values falls back to 'unknown' with an
+          // onMalformed warn so silent corruption is impossible.
+          const rawStatus = ro['status'];
+          let status: ExecutorStatus = 'unknown';
+          if (
+            rawStatus === 'pending' ||
+            rawStatus === 'completed' ||
+            rawStatus === 'failed' ||
+            rawStatus === 'unknown'
+          ) {
+            status = rawStatus;
+          } else if (rawStatus !== undefined) {
+            onMalformed(
+              source,
+              `executors[${i}].status="${String(rawStatus)}" is not a recognized ExecutorStatus; falling back to 'unknown'`,
+            );
+          }
+          const rec: ExecutorRecord = { name: m, status };
+          if (typeof ro['completed_at'] === 'string' && (ro['completed_at'] as string).length > 0) {
+            (rec as { completedAt?: string }).completedAt = ro['completed_at'] as string;
+          }
+          if (typeof ro['note'] === 'string' && (ro['note'] as string).length > 0) {
+            (rec as { note?: string }).note = ro['note'] as string;
+          }
+          list.push(rec);
+        }
+        // Other shapes (numbers, arrays, null) silently dropped —
+        // same conservative tolerance as elsewhere in this hydrate.
       }
       if (list.length > 0) executorList = list;
     } else {
@@ -511,7 +573,7 @@ function hydrate(
               ? (obj['executor_preferred'] as string)
               : undefined;
       if (executorRaw !== undefined) {
-        executorList = [MemberName.of(executorRaw)];
+        executorList = [{ name: MemberName.of(executorRaw), status: 'unknown' }];
       }
     }
     if (executorList !== undefined) props.executors = executorList;

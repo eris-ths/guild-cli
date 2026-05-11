@@ -7,7 +7,85 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
 
 ## [Unreleased]
 
+### ⚠ BREAKING (JSON shape)
+
+- **`executors` field in JSON / YAML changed shape for any mutated
+  multi-executor request.** Prior to #294 the field serialized as
+  a flat array of name strings: `"executors": ["a", "b"]`. After
+  the first slice closure (or for any request created post-merge),
+  the field serializes as an array of objects:
+  `"executors": [{"name": "a", "status": "completed", "completed_at": "...", "note": "..."}, {"name": "b", "status": "pending"}]`.
+  Records that have never seen a slice closure (legacy pre-#294
+  files that are read-then-resaved without mutation) still emit
+  the legacy flat shape — byte-stable round-trip is preserved by a
+  sentinel-rule (`status: 'unknown'` on every entry collapses the
+  serializer to the legacy form).
+
+  **Migration for JSON consumers** (`jq` pipelines, dashboards,
+  third-party scripts):
+
+  ```diff
+  - jq '.executors[]'
+  + jq '.executors[] | (.name // .)'
+  ```
+
+  The same expression works against both legacy flat records and
+  post-#294 structured records.
+
 ### Changed
+
+- **Per-executor slice closure on multi-executor requests (closes #294 — PR-A2 schema migration)**
+  ([#294](https://github.com/eris-ths/guild-cli/issues/294),
+  design lock at [#304](https://github.com/eris-ths/guild-cli/pull/304)).
+  `gate complete --by X` and `gate fail --by X` are now per-slice
+  operations on multi-executor waves. Each executor's slice has its
+  own `status` (`pending` / `completed` / `failed` / `unknown`) and
+  `completed_at` stamp; the wave-level state transitions only when
+  every assigned executor's slice is terminal (any-fail-wave-fail is
+  the phase-1 default — PR-C will replace it with template-bound
+  policy via #235 phase 2).
+  - **Domain (Request entity)**: `executors` getter signature
+    unchanged (`readonly MemberName[]`, 55+ existing call sites
+    keep working). New surface: `executorRecords` getter, plus
+    `executorStatus(name)` and `completeSlice` / `failSlice`
+    methods. `Request.complete(by)` auto-routes to `completeSlice`
+    when `hasExecutor(by)` is true; falls back to direct wave
+    transition otherwise (pre-#294 record compat). Note: the
+    design doc (#304) sketched a rename from `executors` to
+    `executorNames`; PR-A2 declined to follow that and kept the
+    existing getter intact to avoid 55+ call-site sweeps. Will
+    revisit if a structural reason for the rename surfaces.
+  - **Persistence**: byte-stable round-trip is preserved by a
+    sentinel rule — when every executor record has `status:
+    'unknown'` (= legacy hydrate of a pre-#294 record), the
+    serializer emits the legacy flat array form
+    (`executors: [a, b]`). Any structural mutation (a single
+    `completeSlice` call) flips the record to structured-form
+    output on the next save; the migration is one-way per the
+    design doc.
+  - **Hydrate tolerance**: three input shapes are accepted —
+    structured array of `{name, status, ...}`, legacy flat
+    `[name, name]`, single-string `executor: name`. The first two
+    are tested via existing fixtures; legacy records that never
+    re-save stay byte-identical forever.
+  - **Interface (`gate complete` / `gate fail`)**: a slice-closing
+    call that leaves other executors open emits `slice closed:
+    <id> by <by>` plus a list of remaining open executors with
+    their current status and a "next: each remaining executor
+    must run `gate complete --by <name>` to terminate the wave"
+    hint. When the call closes the last slice, the historical
+    `completed: <id>` output is preserved.
+  - **Typo safety (miki concern #1 from #304 review)**: if a wave
+    has assigned executors and the `--by` actor is not among them,
+    the verb refuses with exit 1 instead of silently stamping the
+    wave terminal. Closes the multi-executor wave-fail-on-typo
+    accident path.
+  - **`gate wave-status` pivot**: reads structured form directly.
+    Per-executor lines surface `[pending]` / `[completed]` /
+    `[failed]` / `[?]` (legacy unknown). Witness-inference (v1)
+    remains as the freshness fallback until #309 lands per-
+    executor freshness.
+  - 22 new tests across domain + interface layers; 1509/1509 pass.
 
 - **Template registry — two-tier resolution with built-in templates shipped (closes #302)**
   ([#302](https://github.com/eris-ths/guild-cli/issues/302)).
