@@ -6,12 +6,47 @@ import {
 } from '../../shared/parseArgs.js';
 import { C } from './internal.js';
 
-const RESUME_KNOWN_FLAGS: ReadonlySet<string> = new Set(['format', 'locale']);
+const RESUME_KNOWN_FLAGS: ReadonlySet<string> = new Set([
+  'format',
+  'locale',
+  'with-doctor',
+  'auto-repair',
+]);
 import { Request, StatusLogEntry } from '../../../domain/request/Request.js';
 import { collectUtterances, Utterance, RequestJSON } from '../voices.js';
 import { deriveSuggestedNext, SuggestedNext } from './writeFormat.js';
 import { UnrespondedConcernsEntry } from '../../../application/concern/UnrespondedConcernsQuery.js';
 import type { SessionEvent, SessionKind } from '../../../domain/session/SessionEvent.js';
+import {
+  DiagnosticReport,
+  DiagnosticFinding,
+} from '../../../domain/diagnostic/DiagnosticReport.js';
+import { RepairResult } from '../../../application/repair/RepairUseCases.js';
+
+/**
+ * #306 — `--with-doctor` augments the resume payload with a
+ * `gate doctor` summary. `--auto-repair` (only meaningful with
+ * `--with-doctor`) additionally invokes the repair use case in
+ * `--apply` mode: quarantine actions run, destructive ones are
+ * skipped. The point is to surface a dirty substrate at the moment
+ * of session re-entry, before the agent starts writing again.
+ *
+ * The shape stays backward compatible — `doctor` is omitted from
+ * the JSON when the flag is absent, and the text mode appends a
+ * trailing section instead of restructuring the prose.
+ */
+interface DoctorSection {
+  readonly findings: ReadonlyArray<DiagnosticFinding>;
+  readonly summary: string;
+  readonly is_clean: boolean;
+  readonly auto_repair?: {
+    readonly attempted: boolean;
+    readonly quarantined: number;
+    readonly skipped: number;
+    readonly errors: number;
+    readonly summary: string;
+  };
+}
 
 /**
  * Most recent session boundary stamped by the resuming actor
@@ -130,6 +165,14 @@ interface ResumePayload {
   unresponded_concerns: ReadonlyArray<UnrespondedConcernsEntry>;
   suggested_next: SuggestedNext | null;
   restoration_prose: string;
+  /**
+   * #306 — present only when `--with-doctor` was passed. Carries the
+   * doctor summary (+ optional auto-repair outcome) so the agent can
+   * see substrate health at the moment of resume without a second
+   * verb call. Omitted entirely (key absent) when the flag is off,
+   * preserving the pre-#306 JSON shape for existing consumers.
+   */
+  doctor?: DoctorSection;
 }
 
 export async function resumeCmd(c: C, args: ParsedArgs): Promise<number> {
@@ -137,6 +180,15 @@ export async function resumeCmd(c: C, args: ParsedArgs): Promise<number> {
   const format = optionalOption(args, 'format') ?? 'json';
   if (format !== 'json' && format !== 'text') {
     throw new Error(`--format must be 'json' or 'text', got: ${format}`);
+  }
+  const withDoctor = args.options['with-doctor'] === true;
+  const autoRepair = args.options['auto-repair'] === true;
+  if (autoRepair && !withDoctor) {
+    process.stderr.write(
+      'error: --auto-repair requires --with-doctor\n' +
+        '  next: gate resume --with-doctor --auto-repair\n',
+    );
+    return 1;
   }
   const actor = resolveGuildActor();
   if (!actor || actor.length === 0) {
@@ -241,6 +293,26 @@ export async function resumeCmd(c: C, args: ParsedArgs): Promise<number> {
     locale,
   });
 
+  // #306 — doctor section. Only built when --with-doctor was passed
+  // so the default surface stays byte-identical to pre-#306 callers.
+  // Auto-repair runs inline (apply mode) when requested; quarantine
+  // is the only action kind today so "destructive skip" is moot for
+  // now — keeping the flag dichotomy in place anticipates future
+  // RepairAction kinds that may need explicit consent.
+  let doctorSection: DoctorSection | undefined;
+  if (withDoctor) {
+    const report = await c.diagnosticUC.run();
+    doctorSection = buildDoctorSection(report, locale);
+    if (autoRepair && !report.isClean) {
+      const plan = c.repairUC.plan(report.findings);
+      const result = await c.repairUC.apply(plan);
+      doctorSection = {
+        ...doctorSection,
+        auto_repair: buildAutoRepairSummary(result, locale),
+      };
+    }
+  }
+
   const payload: ResumePayload = {
     actor,
     session_hint: sessionHint,
@@ -255,14 +327,112 @@ export async function resumeCmd(c: C, args: ParsedArgs): Promise<number> {
     unresponded_concerns: unrespondedConcerns,
     suggested_next: suggested,
     restoration_prose: restorationProse,
+    ...(doctorSection !== undefined ? { doctor: doctorSection } : {}),
   };
 
   if (format === 'json') {
     process.stdout.write(JSON.stringify(payload, null, 2) + '\n');
   } else {
     process.stdout.write(restorationProse + '\n');
+    if (doctorSection !== undefined) {
+      process.stdout.write('\n' + renderDoctorSectionText(doctorSection, locale) + '\n');
+    }
   }
   return 0;
+}
+
+function buildDoctorSection(
+  report: DiagnosticReport,
+  locale: 'en' | 'ja',
+): DoctorSection {
+  const findings = report.findings;
+  const s = report.summary;
+  const summary =
+    locale === 'ja'
+      ? `members ${s.members.malformed}/${s.members.total} 不正、requests ${s.requests.malformed}/${s.requests.total} 不正、issues ${s.issues.malformed}/${s.issues.total} 不正`
+      : `members ${s.members.malformed}/${s.members.total} malformed, requests ${s.requests.malformed}/${s.requests.total} malformed, issues ${s.issues.malformed}/${s.issues.total} malformed`;
+  return {
+    findings,
+    summary,
+    is_clean: report.isClean,
+  };
+}
+
+function buildAutoRepairSummary(
+  result: RepairResult,
+  locale: 'en' | 'ja',
+): {
+  attempted: boolean;
+  quarantined: number;
+  skipped: number;
+  errors: number;
+  summary: string;
+} {
+  const s = result.summary;
+  const summary =
+    locale === 'ja'
+      ? `auto-repair: ${s.quarantined} quarantine、${s.skipped} skip、${s.error} error`
+      : `auto-repair: ${s.quarantined} quarantined, ${s.skipped} skipped, ${s.error} error(s)`;
+  return {
+    attempted: true,
+    quarantined: s.quarantined,
+    skipped: s.skipped,
+    errors: s.error,
+    summary,
+  };
+}
+
+function renderDoctorSectionText(
+  d: DoctorSection,
+  locale: 'en' | 'ja',
+): string {
+  const lines: string[] = [];
+  if (locale === 'ja') {
+    lines.push('# substrate doctor');
+    if (d.is_clean) {
+      lines.push('✓ clean — malformed record なし');
+    } else {
+      lines.push(`✗ ${d.findings.length} finding(s) — ${d.summary}`);
+      for (const f of d.findings.slice(0, 10)) {
+        lines.push(`  - [${f.area}/${f.kind}] ${f.source}`);
+      }
+      if (d.findings.length > 10) {
+        lines.push(`  ... 他 ${d.findings.length - 10} 件`);
+      }
+    }
+    if (d.auto_repair !== undefined) {
+      lines.push('');
+      lines.push(d.auto_repair.summary);
+    } else if (!d.is_clean) {
+      lines.push('');
+      lines.push(
+        'next: `gate doctor --format json | gate repair --apply` で隔離、または再実行時に `--auto-repair` を付与',
+      );
+    }
+  } else {
+    lines.push('# substrate doctor');
+    if (d.is_clean) {
+      lines.push('✓ clean — no malformed records');
+    } else {
+      lines.push(`✗ ${d.findings.length} finding(s) — ${d.summary}`);
+      for (const f of d.findings.slice(0, 10)) {
+        lines.push(`  - [${f.area}/${f.kind}] ${f.source}`);
+      }
+      if (d.findings.length > 10) {
+        lines.push(`  ... and ${d.findings.length - 10} more`);
+      }
+    }
+    if (d.auto_repair !== undefined) {
+      lines.push('');
+      lines.push(d.auto_repair.summary);
+    } else if (!d.is_clean) {
+      lines.push('');
+      lines.push(
+        'next: pipe `gate doctor --format json | gate repair --apply` or re-run with `--auto-repair`',
+      );
+    }
+  }
+  return lines.join('\n');
 }
 
 function transitionToJSON(

@@ -101,13 +101,18 @@ const VOICE_BUDGET: readonly BudgetEntry[] = [
   },
   {
     phrase: 'advisory — override freely',
-    budget: 1,
-    allowed_files: ['src/interface/gate/handlers/suggest.ts'],
+    budget: 2,
+    allowed_files: [
+      'src/interface/gate/handlers/suggest.ts',
+      'src/interface/gate/handlers/flowSuggest.ts',
+    ],
     rationale:
-      'stderr footer of `gate suggest --format text` — principle 02 ' +
-      'at the point of use. budget 1 because this is an at-the-edge ' +
-      'phrase tied to one surface (the suggest verb), not pedagogical ' +
-      'across surfaces.',
+      'stderr footer of advisory read verbs (gate suggest, gate ' +
+      'flow-suggest) — principle 02 at the point of use. budget 2 ' +
+      'covers both advisory surfaces; the phrase is intentionally ' +
+      'shared so the reader recognises "this is a heuristic" across ' +
+      'verbs. New advisory verbs should reuse this footer rather than ' +
+      'inventing a paraphrase.',
   },
   {
     phrase: 'DETECTOR, not an enforcer',

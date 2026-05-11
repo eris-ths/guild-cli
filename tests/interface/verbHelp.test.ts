@@ -169,7 +169,7 @@ test('VERB_EXAMPLES: every documented verb is mapped to a runnable example', () 
       'inbox mark-read', 'issues add', 'issues list', 'issues note',
       'issues promote', 'issues resolve', 'issues defer', 'issues start',
       'issues reopen', 'show', 'list', 'board', 'tail', 'chain', 'transcript',
-      'voices', 'whoami', 'boot', 'status', 'suggest', 'resume', 'summarize',
+      'voices', 'whoami', 'boot', 'status', 'suggest', 'flow-suggest', 'resume', 'summarize',
       'why', 'unresponded', 'schema', 'doctor', 'repair',
     ],
     agora: [

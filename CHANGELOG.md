@@ -9,30 +9,29 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
 
 ### Added
 
+- **`gate lense-stats` verb — lense rotation diagnostic (closes #305)**
+  ([#305](https://github.com/eris-ths/guild-cli/issues/305)).
+  Counts review entries per lense over a window (`--since 7d` default),
+  highlights the most-frequent and least-frequent lense, and surfaces a
+  `next:` hint when one lense dominates 3× the bottom.
+
 - **Per-executor freshness for `gate wave-status` (closes #309)**
   ([#309](https://github.com/eris-ths/guild-cli/issues/309)).
   Stale judgment is now per-executor, derived from each executor's
-  most recent attributable activity (max of `witnessUpdatedAt[name]`,
-  `status_log[by=name].at`, and `claimedAt` when the claim is held).
-  An executor whose witness note was updated 2 min ago is no longer
-  flagged stale on a 33-min-old wave. Wave-level `(stale)` in the
-  footer now derives from "all executors stale" (`wave_stale_effective`),
-  separating "how long has this been open?" (`age_band`) from
-  "is anyone still working?" (`wave_stale_effective`).
+  most recent attributable activity. Wave-level `(stale)` in the
+  footer now derives from "all executors stale" (`wave_stale_effective`).
 
-  Schema additive: new `witness_updated_at: Map<actor, ISO>` field on
-  `Request`, mirroring `witness_notes` / `witness_sessions`. Stamped
-  on first witness and on any re-witness mutation; cleared on
-  unwitness and terminal auto-reset. Omit-when-empty so pre-#309
-  records round-trip byte-identically. Hydrate-tolerant (ISO-parse
-  failures drop the entry via `onMalformed`).
-
-  Wire-format additions to `gate wave-status --format json` output:
-  - `executors[].witness_updated_at: string | null`
-  - `wave_stale_effective: boolean`
-  - `executors[].activity_band` enum unchanged but `'active'` is now
-    deprecated (never emitted by post-#309 builds; readers that
-    decoded it from legacy snapshots should treat as `'fresh'`).
+- **`gate review-context <id>` verb — depth-aware reviewer bundle (closes #310)**
+  ([#310](https://github.com/eris-ths/guild-cli/issues/310),
+  builds on [#221](https://github.com/eris-ths/guild-cli/issues/221)).
+  Returns the bundle a reviewer needs to drive behaviour from substrate
+  state: `action`, `reason`, `target`, `executors`, `depth`,
+  `recommended_lenses` (`shallow` → `[Logic]`; `standard` → 6-lens
+  default; `deep` → all 10 + memory MCP + state-machine + cross-check),
+  `prior_reviews`. Closes the substrate-to-reviewer signal loop: the
+  `--depth` field was previously decorative — set on the wave but read
+  by nobody. Also declares `wave-status` in `verbs.ts` READ_VERBS,
+  closing a pre-existing gap.
 
 ### ⚠ BREAKING (JSON shape)
 
@@ -145,6 +144,26 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
     unchanged and still wins precedence.
 
 ### Added
+
+- **`gate resume --with-doctor [--auto-repair]` — surface substrate health at session re-entry (closes #306)**
+  ([#306](https://github.com/eris-ths/guild-cli/issues/306)).
+  New flags on the existing `gate resume` verb that fold a `gate
+  doctor` summary into the resume payload (`doctor.findings`,
+  `doctor.summary`, `doctor.is_clean`). With `--auto-repair`,
+  quarantineable findings are processed inline via the repair
+  use case and the outcome is reported under `doctor.auto_repair`.
+  Default behavior is unchanged — without `--with-doctor` the JSON
+  shape and text prose are byte-identical to pre-#306.
+
+- **`gate flow-suggest` — advisory verb for picking a flow shape (closes #307)**
+  ([#307](https://github.com/eris-ths/guild-cli/issues/307)).
+  New read verb: `gate flow-suggest --severity <low|med|high> --area <s>
+  [--scope <s>] [--format json|text]`. Maps the (severity, area, scope)
+  tuple to a recommended flow — `fast-track`, `direct-pr`, or
+  `full-request` — and returns the reason plus alternative options.
+  Pure advisory: no substrate writes, no state. Rule engine in
+  `application/request/flowSuggest.ts`; future v2 can wrap it with a
+  `guild.config.yaml` override without touching the CLI surface.
 
 - **`gate wave-status <id>` — per-executor in-flight slice status (closes #295)**
   ([#295](https://github.com/eris-ths/guild-cli/issues/295)).
