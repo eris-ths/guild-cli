@@ -424,6 +424,105 @@ gate (+ devil if security)` end-to-end.** Each phase uses the
 right-shape passage; the substrate links them via free-text
 references.
 
+### C5: agora + gate — ordering N independent items
+
+**Shape**: you have N independent issues / verbs / tasks to ship.
+Each is doable solo. The question is *order*, not *whether*. The
+deliberation deserves a record so the order isn't forgotten 30 min
+later and so a cold reader can audit "why this order?".
+
+```bash
+# 1) Stand up the deliberation as an agora quest
+agora new --slug ordering-<topic>-<date> --kind quest \
+  --title "ordering for N issues" \
+  --description "#A / #B / #C / #D ... — pick an order"
+agora play --slug ordering-<topic>-<date> --by <you>
+# → 2026-MM-DD-NNN
+
+# 2) Deliberate with multi-voice (one move per voice / lens)
+agora move <play-id> --by <you>   --text "candidates + dependencies"
+agora move <play-id> --by <miki>  --text "size + conflict-surface analysis"
+agora move <play-id> --by <noir>  --text "dependency graph: independent vs chained"
+agora move <play-id> --by <devil> --text "what fails if order is wrong"
+agora move <play-id> --by <you>   --text "decision: A → B → C → D, defer E"
+
+# 3) Conclude with the order in the note (one-line audit trail)
+agora conclude <play-id> --by <you> \
+  --note "order locked: A → B → C → D; E deferred"
+
+# 4) Stamp gate waves in the chosen order (one per item, or N parallel)
+gate request --action "ship #A" --from <you> --executor <a> ...
+gate request --action "ship #B" --from <you> --executor <b> ...
+# ... approve / execute / complete as the ship plan dictates
+```
+
+**When to reach**: 3+ independent items, non-obvious order, or
+multiple voices have something to contribute. **When to skip**: 1-2
+items or order is forced by dependency; a 3-line code comment in
+the first commit suffices.
+
+### C6: bundle-PR recipe — N independent verbs touching the same config sites
+
+**Shape**: a swarm shipped N independent verbs in parallel
+(`gate request --executors a,b,c` or N separate one-actor waves
+via [C5](#c5-agora--gate--ordering-n-independent-items)). Each
+ended in its own PR. **All N PRs are MERGEABLE against current
+main individually**, but they all touch the same coordination
+sites (`index.ts` dispatcher, `verbs.ts` READ_VERBS, `schema.ts`
+verb registry, `verbs-consistency.test.ts` GATE_ALL). The first
+to merge conflicts the rest.
+
+```bash
+# 1) Identify the "anchor" PR — usually the largest or most-
+#    independent change. Merge it first (touches the fewest of
+#    the conflict sites, or none).
+gh pr merge <anchor-pr> --squash
+
+# 2) From updated main, create a single bundle branch.
+git fetch origin main
+git checkout main && git merge --ff-only origin/main
+git checkout -b feat/bundle-<topic>
+
+# 3) Cherry-pick each remaining PR's commit in turn. Conflicts will
+#    happen at the shared sites and are mechanical (each PR appends
+#    to the same lists). Resolve by keeping ALL entries.
+git fetch origin feat/<pr-A> feat/<pr-B> feat/<pr-C>
+git cherry-pick <pr-A-sha>
+# resolve conflicts (preserve every PR's entries in the appended
+# lists; CHANGELOG: keep one Added bullet per closed issue, tight)
+git add -A && git cherry-pick --continue --no-edit
+git cherry-pick <pr-B-sha>
+# ... repeat
+
+# 4) Build + test once on the bundle (catches "two PRs both added
+#    'foo-bar' to GATE_ALL" duplicate-key races that individual
+#    PRs couldn't see).
+npm run build && npm test
+
+# 5) Push + open ONE bundle PR. The body lists each commit ↔ issue
+#    pair and the SubAgent / owner for each so credit survives.
+git push -u origin feat/bundle-<topic>
+gh pr create --title "feat: bundle N verbs (#A #B #C #D)" --body "..."
+
+# 6) Note on the superseded PRs and close them. GitHub will NOT
+#    auto-close because the bundle's cherry-pick SHAs differ from
+#    the original branches' SHAs.
+for pr in <A> <B> <C> <D>; do
+  gh pr comment $pr --body "Superseded by #<bundle>. Closing manually."
+  gh pr close $pr
+done
+```
+
+**Why bundle**: avoids N-1 rebase rounds with mechanical conflicts.
+Reviewer sees one PR with N preserved commits; CI runs once. The
+4 issue → close-via-bundle pattern requires manual close after
+merge (GitHub's "closes #X" auto-detection works on the bundle PR;
+the *individual* PRs need a manual `gh pr close`).
+
+**When to skip**: only 2 PRs, or PRs touch disjoint files (rare
+when shipping N verbs of the same passage). Always bundle when
+N ≥ 3 and ≥ 2 of them touch the same dispatcher / config-list site.
+
 ---
 
 ## When NOT to use devil (honest limits)
@@ -676,6 +775,27 @@ fixes:
   offs (random hash defeats the human-readable-session-id purpose
   — a deterministic template like `agent-{role}-{wave_id}` is the
   candidate shape).
+- **Worktree → parent-ledger blindspot** — when SubAgent isolation
+  uses a Claude Code worktree (`.claude/worktrees/agent-*`), the
+  SubAgent's `gate witness` / `gate complete` against the parent
+  wave id **fails silently or with not-found**: the ledger lives in
+  the parent session's substrate, not in the worktree's git tree.
+  Two consequences:
+  1. Per-slice progress witness from inside the worktree is not
+     possible. The SubAgent should report progress in its final
+     report; the parent stamps `gate witness` / `gate complete` on
+     return.
+  2. The SubAgent brief MUST surface this. Otherwise each SubAgent
+     individually discovers it ("ledger not visible — can't stamp")
+     and the same friction recurs every wave.
+  Recommended brief snippet:
+  ```
+  Note: the gate wave record lives in the PARENT session's
+  substrate, not in this worktree. `gate witness` / `gate complete`
+  against the wave id WILL NOT reach the ledger from here. Do not
+  attempt; report progress in your final result message and the
+  parent will stamp on your behalf.
+  ```
 
 ### Failure mode: worktree-only ("ceremony swarm")
 
