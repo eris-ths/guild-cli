@@ -7,6 +7,27 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
 
 ## [Unreleased]
 
+### Fixed
+
+- **`gate boot` now surfaces enrichment failures via `warnings: string[]`
+  (combo C3 / silent-fallback-loses-signal)**.
+  Pre-fix, four enrichment paths (issues count, inbox unread,
+  unresponded concerns, content_root_health probe) caught their own
+  errors silently — `// may not be configured — non-fatal` — so a
+  broken issue repository or a partly-quarantined inbox passed
+  through invisibly: `status.open_issues = 0` looked identical
+  whether there were genuinely zero issues or the repo was unreadable.
+  Devil's concern2 on PR #105 (agent-first-session 2026-04-16-0001)
+  flagged this; 2026-05-10 dogfood (`substrate/agora/plays/eris-
+  dogfood-0510/`) re-surfaced it. New `warnings: string[]` field on
+  `BootPayload` (sorted into the keys snapshot per 0.x stability);
+  each silent catch now pushes a descriptive single-line entry
+  including `e.message`. Empty array = clean case (no extra noise).
+  Text format adds a `⚠ N warning(s) raised...` block when non-empty
+  with a one-line disclaimer naming which downstream values may be
+  inaccurate. Three regression tests pin: clean-empty / broken-repo-
+  surfaces / message-includes-error-detail.
+
 ### Added
 
 - **hook bus extended for session-boundary events (#290 — closes #290)**
