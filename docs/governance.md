@@ -50,7 +50,9 @@ carries the framing for readers who don't read every CHANGELOG entry.
 
 - Dogfood arcs that produced a load-bearing learning worth
   publishing (e.g. the 2026-05-11 combo-C3-to-principle-14 loop —
-  see `docs/retrospectives/2026-05-11-substrate-engagement-loop.md`)
+  preserved as a content_root with an agora play at
+  [`examples/swarm-engagement-loop/`](../examples/swarm-engagement-loop/),
+  same shape as `examples/three-passages-framing/`)
 - Extracted design patterns that surfaced across multiple issues
   (e.g. if "wave-element composition rules" recurs in #294 + a
   future devil-side parallel-review issue, the recurring shape gets
@@ -102,13 +104,13 @@ Cheat-sheet for the AI agents (and humans) who write into this repo:
 
 Open backlog signal decays when surfaces absorb artifacts they
 weren't shaped for. The pattern surfaced during the 2026-05-10
-backlog triage (see
-[`docs/retrospectives/2026-05-11-substrate-engagement-loop.md`](retrospectives/2026-05-11-substrate-engagement-loop.md)
-§ "Step 2"): single-session evidence + open-with-trigger-waited
-issues rot the open backlog read-worthiness in 1-3 cycles. The
-operational rule that came out — close+memo-pin as default,
-open is the exception — applies across all surfaces, not just
-Issues.
+backlog triage (preserved as the agora play at
+[`examples/swarm-engagement-loop/`](../examples/swarm-engagement-loop/)
+— see Step 2 of that play): single-session evidence +
+open-with-trigger-waited issues rot the open backlog
+read-worthiness in 1-3 cycles. The operational rule that came out
+— close+memo-pin as default, open is the exception — applies
+across all surfaces, not just Issues.
 
 Per [`principle 14`](../lore/principles/14-substrate-engagement-reduces-coordination-context-cost.md),
 the substrate is record; everything else is testimony. Each
