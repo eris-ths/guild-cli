@@ -443,6 +443,70 @@ references.
 
 ---
 
+## Synergies
+
+The combos above are *recipes for situations* — when a bug appears,
+when a PR needs review, when a wave needs ordering. **Synergies** are
+the other direction: pairings of verbs that, once you've seen them,
+start to feel less like ceremony and more like a move you reach for.
+Each one pins a small principle of the substrate in a single arc.
+
+Three things each synergy ships with:
+
+- **Purpose** — what becomes legible afterward that wasn't before.
+- **Trade-off** — what's preserved vs what's traded for the ergonomic shape.
+- **E2E test** — the synergy's contract is pinned by a runnable test
+  under `tests/e2e/`, so the doc and the substrate stay synced.
+
+### S1: Mirror Persona Loop — two `--by` names, one body of work
+
+```bash
+# Two registered names, one person:
+gate register --name <you>
+gate register --name <you-mirror>
+
+# Author, approve (by mirror), review (by mirror), execute, complete.
+gate request  --from <you>     --executors <you>           --action "..." --reason "..."
+gate approve  <id> --by <you-mirror>
+gate review   <id> --by <you-mirror> --lense user --verdict ok --note "..."
+gate execute  <id> --by <you>
+gate complete <id> --by <you> --note "..."
+```
+
+**Purpose.** Stamp authorship and review on the *same body of work*
+under *different `--by` names*. The substrate ends up carrying two
+distinct perspectives on one request — author and mirror — without
+inflating ceremony to a multi-actor wave. This is the minimal
+expression of Two-Persona Devil discipline
+([principle 02](../lore/principles/02-advisory-not-directive.md) +
+[principle 08](../lore/principles/08-voice-as-doctrine.md)) when
+you're solo.
+
+**Trade-off.** Review depth is operator discipline, not enforced.
+The mirror is the same actor wearing a different hat; if the
+hat-swap is shallow, the discipline degrades to a self-stamp. The
+`self_approve: allowed` default on the solo profile means a flat
+`--by <you>` arc *also* succeeds (just with a "notice: claude
+approved their own request" surfaced on the approve event). The
+synergy is the *practiced shape*, not a code-enforced one. Flip to
+`profile: swarm` and `self_approve: forbidden` makes the separate
+`--by` mandatory — same arc, different enforcement.
+
+**E2E test.** [`tests/e2e/synergy_s1_mirror_persona_loop.test.ts`](../tests/e2e/synergy_s1_mirror_persona_loop.test.ts)
+pins three contracts:
+
+1. The mirror arc completes (`state: completed`, both personas
+   recorded on `status_log[]`, one review by the mirror).
+2. The same-actor degenerate arc *also* completes — documenting the
+   trade-off surface (substrate cannot tell after the fact whether
+   the operator exercised the discipline).
+3. The swarm-profile flip refuses self-approve, requires the mirror.
+
+If you change the verb surface in a way that breaks any of those
+three, the test fails loud. The doc and the substrate move together.
+
+---
+
 ## When NOT to use devil (honest limits)
 
 devil is **shape-mismatched for general bug review**. Routine
