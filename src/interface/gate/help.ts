@@ -491,6 +491,19 @@ const SECTIONS: readonly Section[] = [
           '  gate templates list [--format json|text]\n' +
           '  gate templates show <name> [--format json|text]',
       },
+      {
+        tier: 'extra',
+        text:
+          '  gate lore list [--type principle|trap] [--applies-to <scope>]\n' +
+          '                 [--relevant-until current|expired|indefinite]\n' +
+          '                 [--format json|text]\n' +
+          '  gate lore show <name> [--format json|text]\n' +
+          '                       Package-shipped doctrine reader. Reads\n' +
+          '                       lore/principles/*.md and lore/traps/*.md and\n' +
+          '                       lets agents browse principles + traps from\n' +
+          '                       inside the substrate. <name> is the filename\n' +
+          '                       without .md (e.g. 11-ai-first-human-as-projection).',
+      },
     ],
   },
   {

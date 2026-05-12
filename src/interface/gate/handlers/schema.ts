@@ -1436,6 +1436,38 @@ const VERBS: readonly VerbSchema[] = [
     output: { type: 'object' },
   },
   {
+    name: 'lore',
+    category: 'read',
+    summary:
+      'package-shipped doctrine reader. Subcommands: list (catalogue + frontmatter-aware filters), show <name> (full markdown body). Reads <packageRoot>/lore/principles/*.md and <packageRoot>/lore/traps/*.md; no per-content_root tier. Lets agents touch doctrine from inside the substrate without needing to know the lore/ layout.',
+    input: {
+      type: 'object',
+      properties: {
+        subcommand: {
+          type: 'string',
+          enum: ['list', 'show'],
+        },
+        name: strOpt('lore entry name (positional, `show` only); filename without `.md` (e.g. `11-ai-first-human-as-projection`, `trap_doc_coverage_drift_post_ship`)'),
+        type: {
+          type: 'string',
+          enum: ['principle', 'trap'],
+          description: "`list` filter — narrow to one kind of entry.",
+        },
+        'applies-to': strOpt(
+          "`list` filter for principles — match `applies_to:` frontmatter (e.g. `swarm`). Entries without an explicit `applies_to` are treated as universal (`all`) and surface regardless of the filter value.",
+        ),
+        'relevant-until': {
+          type: 'string',
+          enum: ['current', 'expired', 'indefinite'],
+          description:
+            "`list` filter for traps — `current` keeps indefinite + future-dated, `expired` keeps past-dated, `indefinite` keeps only literally `indefinite`.",
+        },
+        format: formatField,
+      },
+    },
+    output: { type: 'object' },
+  },
+  {
     name: 'approve',
     category: 'write',
     summary:
