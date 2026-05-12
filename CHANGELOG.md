@@ -9,6 +9,26 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
 
 ### Added
 
+- **`gate decisions` verb — director-axis decision audit.**
+  Surfaces the approve / deny / execute / complete / fail transitions
+  an actor authored within a window. Decision-shaped sibling of
+  `gate voices` (review-shaped) and `gate lense-stats` (lense-shaped).
+  Defaults `--for` to `GUILD_ACTOR` so a bare `gate decisions` from
+  the calling actor's shell answers "what have I decided in the last
+  7 days?" Dedupes by `(request_id, transition)` — the #294 slice-
+  closure path adds an extra `executing` stamp on `gate complete --by X`
+  which would otherwise inflate raw counts.
+
+- **`gate self-pattern` verb — actor behavioral bias surface.**
+  Aggregates an actor's substrate footprint over a window: decision
+  counts (approve/deny/execute/complete/fail), review verdict ratio
+  (ok / concern / reject), top review lense, `approve_rate`
+  (approve / approve+deny), `ok_rate` (ok / total reviews). For the
+  *full* lense breakdown the verb hints at `gate lense-stats --for
+  <actor>` rather than duplicating it. Defaults `--for` to
+  `GUILD_ACTOR`. Read-only; no schema change — composes from existing
+  `status_log` + `reviews` data.
+
 - **`gate lense-stats` verb — lense rotation diagnostic (closes #305)**
   ([#305](https://github.com/eris-ths/guild-cli/issues/305)).
   Counts review entries per lense over a window (`--since 7d` default),
