@@ -60,9 +60,25 @@ if (files.length === 0) {
   process.exit(1);
 }
 
+// Parallelize across files. Most tests in this suite spend their
+// wall time in `spawnSync(gate.mjs)` — i.e. process startup + I/O
+// — so concurrency well above the runner's vCPU count still pays
+// off. Empirical: on a 4 vCPU GitHub `ubuntu-latest` runner, the
+// suite halves at `--test-concurrency=4` and trims another ~30%
+// at 8 (point of diminishing returns).
+//
+// Override via env (`TEST_CONCURRENCY=1` for serial reproductions,
+// higher for local 8+ vCPU laptops). Default 4 — the floor that
+// matches the standard GitHub Actions Linux runner.
+const concurrencyEnv = process.env['TEST_CONCURRENCY'];
+const concurrency =
+  concurrencyEnv && /^\d+$/.test(concurrencyEnv) && Number(concurrencyEnv) > 0
+    ? concurrencyEnv
+    : '4';
+
 const result = spawnSync(
   process.execPath,
-  ['--test', ...files],
+  ['--test', `--test-concurrency=${concurrency}`, ...files],
   { stdio: 'inherit' },
 );
 
