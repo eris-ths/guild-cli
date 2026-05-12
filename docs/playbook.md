@@ -614,6 +614,66 @@ pins four contracts:
    still lifts from cliff; `source_agora_play` survives the
    partial override.
 
+### S4: Swarm Slice Closure — multi-executor wave, per-slice complete
+
+```bash
+# Multi-executor wave, host approves.
+gate request --from <host> --executors <a>,<b> --action "..." --reason "..."
+gate approve <id> --by <critic>
+gate execute <id> --by <a>
+
+# Each executor witnesses their slice with a session_id (multi-body
+# trail per principle 14), then closes when done.
+GUILD_SESSION_ID=<a>-<wave-date> \
+  gate witness <id> --by <a> --note "slice A: implementation in flight"
+GUILD_SESSION_ID=<b>-<wave-date> \
+  gate witness <id> --by <b> --note "slice B: docs in flight"
+
+# Per-slice closure. The wave stays `executing` until the LAST
+# slice closes.
+gate complete <id> --by <a> --note "slice A: done"
+# wave state: still executing — slice A done, slice B pending.
+
+gate complete <id> --by <b> --note "slice B: done"
+# wave state: completed — last slice closed.
+```
+
+**Purpose.** Keep multi-executor coordination context-free for the
+director. Each executor reads "is my slice done?", closes when
+ready, and the wave's terminal moment is the **last** slice's
+stamp — not a coordinated wave-level handshake. The director never
+holds wave state in working memory because the substrate composes
+it (post-#294 `executors[]` carries per-slice `status` /
+`completed_at` / `note`; post-#309 `wave-status` shows per-executor
+freshness via `witness_updated_at`). This is
+[principle 14](../lore/principles/14-substrate-engagement-reduces-coordination-context-cost.md)'s
+load-bearing case, end-to-end.
+
+**Trade-off.** Any-fail composition: if any slice calls `gate fail
+--by <X>`, the wave transitions to `failed` even when other slices
+completed. The compose-rule is intentionally conservative — multi-
+executor success requires *unanimous* slice completion; one failure
+suffices to flip the wave. The trade is "fail fast" over
+"completed_with_partial_failure." Operators who want partial-success
+semantics have to model that as separate waves with their own
+dependencies, not as a single wave with mixed per-slice outcomes.
+Slice closure is also per-named-executor — `gate complete --by
+<non-executor>` is refused, so an unrelated actor cannot stamp
+another executor's slice closed.
+
+**E2E test.** [`tests/e2e/synergy_s4_swarm_slice_closure.test.ts`](../tests/e2e/synergy_s4_swarm_slice_closure.test.ts)
+pins four contracts:
+
+1. 2-executor wave stays `executing` after the first slice closes;
+   reaches `completed` only when the last slice closes. The
+   structured `executors[]` form (post-#294) carries per-slice
+   `status` correctly mid-flight (one `completed`, one `pending`).
+2. `gate wave-status` mid-flight shows per-executor `slice_status`
+   distinctly + per-executor `activity_band` (post-#309 freshness).
+3. `gate complete --by <non-executor>` is refused.
+4. Any-fail composition: one `gate fail` flips the whole wave
+   to `failed`, even when other slices succeeded.
+
 ---
 
 ## When NOT to use devil (honest limits)
