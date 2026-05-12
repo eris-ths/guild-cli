@@ -65,6 +65,27 @@ The `all` default makes the audience filter inclusive by design: a
 solo reader sees everything not explicitly swarm-only; a swarm
 reader sees everything (the universal set plus their own extras).
 
+### When to annotate
+
+Default is to **leave frontmatter absent** (= `all`). Most principles
+are universal stances about the project's shape and apply regardless
+of mode or passage. Annotate only when an unannotated principle
+would *mislead* a reader outside its scope.
+
+Concretely, annotate when:
+
+- The principle is only load-bearing under a specific mode — e.g.
+  principle 14 (substrate engagement) only fires when coordinating
+  multiple actors, so a solo reader reading it without context might
+  think the ceremony applies to their flow. `applies_to: swarm`.
+- The principle is specific to one passage's verbs / shape, and a
+  reader of another passage would file it under the wrong axis.
+  `applies_to: passage:<name>`.
+
+Do not annotate just to be precise. A solo-shaped principle that
+*also* makes sense universally should remain unannotated — the
+absence is the inclusive signal.
+
 ## Why this exists
 
 Every non-trivial codebase accumulates opinions that don't fit in
