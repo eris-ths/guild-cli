@@ -54,6 +54,43 @@ session を跨いで保留したい動いている思考 (`agora`)、 multi-pers
 scrutiny が要る security-prone な変更 (`devil`)、 verdict 不要だが
 session 終端で消したくない観察 (`ctx`)。
 
+### Solo flow (30秒)
+
+1人（または1つの AI エージェント）が単独で動く場合、 ツールの全体は
+6 verb に集約されます:
+
+```bash
+gate register --name <you>
+gate request --action "..." --reason "..." --executors <you>
+gate approve <id> --by <mirror>
+gate review  <id> --by <mirror> --lense user --verdict ok
+gate execute <id> --by <you>
+gate complete <id> --by <you>
+```
+
+`<mirror>` は **同じ actor の別 persona / 別 `--by`** です — 「別の
+hat を被った自分」、または critic として動く別の登録 actor。
+Two-Persona Devil discipline: solo であっても **approve / review の
+人格は execute の人格と別レンズ・別瞬間** であるべき、というのが
+substrate を形作っている規律です。 solo profile の default
+(`self_approve: allowed`) では `--by <you>` でも直接通せますが、
+mirror に手を伸ばすのが推奨形。 `swarm` profile に切り替えた瞬間に
+`self_approve: forbidden` が効き、別 `--by` が config 強制になります。
+
+並列 executor / worktree 隔離 / SubAgent swarm の流れは
+[`docs/swarm.md`](./docs/swarm.md) を参照してください。
+
+### このREADMEはどこまで読めばいい？
+
+| 深さ | ファイル | 想定読者 | 十分な条件 |
+|------|---------|---------|-----------|
+| 30秒 | この上の段落 + 「Solo flow」 | solo | 何のツールか知りたい |
+| 5分 | [`docs/concepts-for-newcomers.md`](./docs/concepts-for-newcomers.md) | solo | Jira / PR review / ADR から来た翻訳付き理解が欲しい |
+| 10分 | [`AGENT.md`](./AGENT.md) | solo / agent | AI agent で四つの passage の全 verb map が欲しい |
+| 15分 | [`docs/playbook.md`](./docs/playbook.md) | pair | passage 個別を知った上で **combos** (gate + agora + devil の合成パターン) が欲しい |
+| 15分 | [`docs/swarm.md`](./docs/swarm.md) | swarm | ≥2 並列 executor / Claude SubAgent を orchestrate していて substrate-engagement レシピが要る |
+| 30分 | [`docs/verbs.md`](./docs/verbs.md) | any | per-verb の例と設計ノートが欲しい |
+
 ## あなたができること
 
 - `guild new` で自分や仲間をメンバー登録する
@@ -77,6 +114,22 @@ session 終端で消したくない観察 (`ctx`)。
   `gate voices <name>` / `gate chain <id>` /
   `gate show <id> --format text` で、自分や他者の utterance を
   時系列・横断的に辿る
+- **Director 軸の読み (2026-05 ship arc)**:
+  - `gate decisions [--for <m>]` — 自分が authored した state
+    transition (approve / deny / execute / complete / fail) を window
+    内で並べる。 default `--for` は `GUILD_ACTOR`。
+  - `gate self-pattern [--for <m>]` — 自分の bias 面: decision counts +
+    verdict 比率 + top lense + approve_rate + ok_rate。
+  - `gate lense-stats [--for <m>]` — review entry の lense 分布。
+    bias surface — 「最近どの lense ばかり使ったか」が即わかる。
+  - `gate flow-suggest --severity <s> --area <a>` — 軽微修正で
+    full request まで回す過剰儀式を避けるための advisory verb。
+  - `gate wave-status <id>` — multi-executor wave の per-executor 進捗。
+    #309 で per-executor stale 判定が入り、 fresh witness が古い
+    wave で誤検知されない。
+  - `gate review-context <id>` — reviewer が読みたい bundle
+    (depth / recommended lenses / prior reviews) を 1 verb で。
+    `--depth` advisory が初めて consumer-side で活かされる verb。
 - write verbs に `--format json` を渡すと
   `{ok, id, state, suggested_next:{verb, args, reason}}` が返り、
   orchestrator は次の tool call を自分で導出せずに済む

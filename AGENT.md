@@ -64,7 +64,7 @@ table below lets you skip-jump by tier.
 | Tier | Sections (in document order) |
 |------|------------------------------|
 | **Common** | [Session start](#session-start) · [Agent-first knobs](#agent-first-knobs) · [Request lifecycle](#request-lifecycle) · [Review (Two-Persona Devil)](#review-two-persona-devil) · [Reading](#reading) · [Issues](#issues) · [Messages](#messages) · [Members](#members) |
-| **Coordination** | [Coordination & stake (#226 / #244 / #246)](#coordination--stake-226--244--246) · [Templates (#235, two-tier #302)](#templates-235-two-tier-302) · [Sessions (#249)](#sessions-249) |
+| **Coordination** | [Coordination & stake (#226 / #244 / #246)](#coordination--stake-226--244--246) · [Wave visibility (#295, freshness #309)](#wave-visibility-295-freshness-309) · [Reviewer-facing context (#310)](#reviewer-facing-context-310) · [Templates (#235, two-tier #302)](#templates-235-two-tier-302) · [Sessions (#249)](#sessions-249) |
 | **Boundary** | [The four passages — a one-line dispatch shorthand](#the-four-passages--a-one-line-dispatch-shorthand) · [Agora (second passage — play / narrative)](#agora-second-passage--play--narrative) · [devil-review (third passage — security backstop, alpha)](#devil-review-third-passage--security-backstop-alpha) · [ctx (fourth passage — fact accumulation, alpha phase 1)](#ctx-fourth-passage--fact-accumulation-alpha-phase-1) |
 | **Diagnostic** | [Diagnostic](#diagnostic) · [Configuration](#configuration) · [File layout](#file-layout) · [Environment](#environment) · [Output format](#output-format) · [Troubleshooting](#troubleshooting) · [Deep dives](#deep-dives) |
 
@@ -194,7 +194,18 @@ gate suggest [--format json|text]       # suggested_next only (hot-loop sibling 
 gate why <id>                           # decision walk: why is this request in this state?
 gate summarize <id> [--limit <N>]       # narrative summary
 gate unresponded [--for <m>]            # concerns recorded but not yet responded to
+gate flow-suggest --severity <s> --area <a> [--scope <s>]      # advisory: which flow shape? (#307)
+gate lense-stats [--for <m>] [--since <d>]                     # lense rotation diagnostic (#305)
+gate decisions [--for <m>] [--since <d>]                       # authored state transitions (#336; defaults --for to GUILD_ACTOR)
+gate self-pattern [--for <m>] [--since <d>]                    # behavioral bias surface — decision + verdict ratio (#336)
 ```
+
+The last four — `flow-suggest`, `lense-stats`, `decisions`,
+`self-pattern` — landed across the 2026-05 ship arc (#305 / #307 /
+#336). `decisions` and `self-pattern` are director-axis reads
+(default `--for` to `GUILD_ACTOR`); `lense-stats` is a bias mirror
+that `self-pattern` cross-links to for the full lense breakdown.
+`flow-suggest` is pure advisory — no substrate writes, no state.
 
 # Tier: Coordination (swarm)
 
@@ -223,6 +234,47 @@ gate unwitness <id> --by <m>                   # remove your own witness
 - Both auto-release on terminal transitions (completed / failed / denied).
 - `--note` is short metadata for the stake event (≤ 80 chars), not
   commentary. Wider discussion belongs in agora plays.
+
+### Wave visibility (#295, freshness #309)
+
+```bash
+gate wave-status <id> [--format text|json]
+```
+
+Per-executor in-flight slice view for a multi-executor wave.
+Composes executors + per-witness fields + status_log timestamps to
+surface "is each executor still making progress?" inside one wave.
+
+Per #309, the stale judgment is **per-executor** (max of
+`witnessUpdatedAt[name]`, `status_log[by=name]`, `claimedAt`). A
+fresh witness on a 33-min-old wave no longer trips a false stale.
+Wave-level `(stale)` in the footer derives from
+`wave_stale_effective` ("all executors stale"), separating
+"how old?" (`age_band`) from "is anyone still working?".
+
+### Reviewer-facing context (#310)
+
+```bash
+gate review-context <id> [--format text|json]
+```
+
+Single read verb that returns the bundle a reviewer (devil agent,
+CI script, human auditor) needs to drive behaviour from substrate
+state instead of out-of-band prompt content:
+
+- `action` / `reason` / `target` / `executors`
+- `depth` advisory (#221): `shallow | standard | deep` (null when
+  the wave was created without `--depth`)
+- `recommended_lenses`: derived from `depth`
+  - `shallow` → `[Logic]` (point-check)
+  - `standard` → 6-lens default (`Logic, Pattern, Flow, Error, Test, Input`)
+  - `deep` → all 10 + extras (`memory_mcp_trap_lookup`,
+    `state_machine_trace`, `prior_review_cross_check`)
+- `prior_reviews` bundled in-payload — saves a second `gate show`
+- `warning` is non-empty when no `--depth` was recorded
+
+Advisory not directive (principle 02). The reviewer is free to
+widen / narrow and record the divergence in its review output.
 
 ## Templates (#235, two-tier #302)
 

@@ -147,6 +147,16 @@ prose language. Defaults to `en`. Only the `restoration_prose` field
 is localized; the structured fields stay in English so programmatic
 consumers are stable.
 
+**`--with-doctor [--auto-repair]` (issue #306).** Folds a `gate
+doctor` summary into the resume payload — substrate health surfaces
+at the moment of session re-entry, before the agent starts writing
+again. JSON gets a top-level `doctor:` block (`findings`, `summary`,
+`is_clean`); text mode appends a "substrate doctor" section to the
+prose. `--auto-repair` (requires `--with-doctor`) runs `gate repair
+--apply` inline for quarantineable findings and reports the outcome
+under `doctor.auto_repair`. Default behaviour is unchanged — without
+`--with-doctor`, the payload shape is byte-identical to pre-#306.
+
 ### Boot: single-command orientation
 
 `gate boot` is the agent-first entry point. Where the Session-start
@@ -1190,6 +1200,114 @@ Session_id is **immutable in the trail**. There is no timeout, no
 heartbeat, no explicit lifecycle — `gate farewell` records the end
 as a write event; the session_id itself lives forever in whatever it
 claimed / witnessed / authored. A new session is just a new id.
+
+### Read verbs added in the 2026-05 ship arc
+
+Six read-only verbs landed across #305–#310 / #336, all composing
+from existing substrate (no schema changes; #309's `witness_updated_at`
+is the sole exception). Grouped here so a reader auditing the
+read-side surface sees them in one place.
+
+#### `gate wave-status <id>` (issue #295 / freshness #309)
+
+Per-executor in-flight slice view for a multi-executor request.
+Composes `executors[]` + per-witness fields + `status_log` timestamps
+to surface "is each executor making progress?" inside one wave.
+
+```bash
+gate wave-status 2026-05-11-0001 --format text
+```
+
+Per #309, the stale judgment is **per-executor**: each executor's
+`last_attributable_at` is the max of `witnessUpdatedAt[name]`,
+`status_log[by=name]`, and `claimedAt` (when held). Wave-level
+`(stale)` derives from "all executors stale" (`wave_stale_effective`).
+A fresh witness on a 33-min-old wave no longer trips a false stale.
+
+#### `gate review-context <id>` (issue #310)
+
+Reviewer-facing bundle: action / reason / target / executors / depth
+advisory (`shallow | standard | deep`) / recommended lens set / prior
+reviews. Lets a reviewer agent drive lens selection from substrate
+state rather than out-of-band prompt content.
+
+```bash
+gate review-context 2026-05-11-0005 --format json
+# {
+#   "depth": "deep",
+#   "recommended_lenses": ["Logic", "Performance", "Flow", ..., "Input"],
+#   "recommended_extras": ["memory_mcp_trap_lookup", ...],
+#   "prior_reviews": [...]
+# }
+```
+
+Lens recommendation by depth: `shallow → [Logic]`, `standard → 6-lens
+default`, `deep → all 10 + memory MCP + state-machine + cross-check`.
+Advisory not directive (principle 02) — the reviewer is free to
+widen / narrow.
+
+#### `gate lense-stats [--for <m>] [--since <d>]` (issue #305)
+
+Lense rotation diagnostic. Counts review entries per lense in the
+window, highlights most-frequent and least-frequent (with ≥ 1 use),
+surfaces a `next:` hint when one lense dominates 3× the bottom.
+Sources: gate `Request.reviews[]` + devil-passage `DevilReview.entries[]`.
+
+```bash
+gate lense-stats --for eris --since 7d --format text
+```
+
+Catalog lenses with zero hits still appear (`composition: 0`) so a
+reader sees what's missing rather than guessing.
+
+#### `gate flow-suggest --severity <s> --area <a> [--scope <s>]` (issue #307)
+
+Pure advisory: maps `(severity, area, scope)` → recommended flow
+(`direct-pr | fast-track | full-request`) plus reason and alternatives.
+No substrate writes. Rule table in `src/application/request/flowSuggest.ts`;
+override path reserved for v2 (`guild.config.yaml`).
+
+```bash
+gate flow-suggest --severity high --area auth --format json
+# { "recommended": "full-request", "reason": "...", "alternatives": [...] }
+```
+
+#### `gate decisions [--for <m>] [--since <d>]` (issue #336)
+
+Authored state transitions (approve / deny / execute / complete /
+fail) by an actor in a window. Decision-shaped sibling of `voices`
+(review-shaped) and `lense-stats` (lense-shaped). Defaults `--for`
+to `GUILD_ACTOR`.
+
+```bash
+gate decisions --since 24h --format text
+```
+
+Dedupes by `(request_id, transition)` — #294's slice-closure path
+adds an extra `executing` status_log entry on `gate complete --by X`,
+which would otherwise inflate raw counts. Semantic is "distinct
+decisions," not "log entries."
+
+#### `gate self-pattern [--for <m>] [--since <d>]` (issue #336)
+
+Behavioral bias surface: decision counts + review verdict ratio
+(`ok / concern / reject`) + top review lense + `approve_rate`
+(`approve / (approve + deny)`) + `ok_rate` (`ok / total reviews`).
+Composes from `status_log` + `reviews`. For the **full** lense
+breakdown the verb hints at `gate lense-stats --for <actor>`
+rather than duplicating it.
+
+```bash
+gate self-pattern --for eris --since 7d --format text
+# self-pattern  actor=eris  window=7d
+# decisions (22):  approve=14  deny=1  ...   approve_rate: 93%
+# reviews (0): (none in window)
+# hint: see `gate lense-stats --for eris --since 7d` for the full lense distribution
+```
+
+Director-axis introspection (#336): bare `gate self-pattern` from the
+calling actor's shell answers "show me my own pattern" without flag
+boilerplate.
 
 ---
 
