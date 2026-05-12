@@ -1231,10 +1231,13 @@ const VERBS: readonly VerbSchema[] = [
     name: 'chain',
     category: 'read',
     summary:
-      'walk cross-references one hop in both directions (forward: ids the root mentions; inbound: records that mention the root)',
+      'walk cross-references one hop in both directions (forward: ids the root mentions; inbound: records that mention the root). Cross-passage: request-shaped ids that miss the gate store are probed against the agora play store and labelled when found.',
     input: {
       type: 'object',
-      properties: { id: idStr },
+      properties: {
+        id: idStr,
+        format: formatField,
+      },
       required: ['id'],
     },
     output: { type: 'object' },
@@ -1682,15 +1685,16 @@ const VERBS: readonly VerbSchema[] = [
   {
     name: 'issues',
     category: 'write',
-    summary: 'subcommands: add|list|note|resolve|defer|start|reopen|promote',
+    summary: 'subcommands: add|list|show|note|resolve|defer|start|reopen|promote',
     input: {
       type: 'object',
       properties: {
         subcommand: {
           type: 'string',
-          enum: ['add', 'list', 'note', 'resolve', 'defer', 'start', 'reopen', 'promote'],
+          enum: ['add', 'list', 'show', 'note', 'resolve', 'defer', 'start', 'reopen', 'promote'],
           description:
-            "`note` appends an annotation without mutating severity/area/text — the issue record is otherwise immutable.",
+            "`note` appends an annotation without mutating severity/area/text — the issue record is otherwise immutable. " +
+            "`show <id>` is the per-id reader, sibling of `gate show <id>` / `agora show <id>` — full body + nested notes.",
         },
         state: {
           type: 'string',
@@ -1705,7 +1709,7 @@ const VERBS: readonly VerbSchema[] = [
           type: 'string',
           enum: ['text', 'json'],
           description:
-            "`list` only. text (default) flattens notes for human reading; " +
+            "`list` and `show`. text (default) flattens notes for human reading; " +
             'json keeps notes nested per issue.',
         },
         note: strOpt(

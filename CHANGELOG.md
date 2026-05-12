@@ -9,6 +9,35 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
 
 ### Added
 
+- **`gate issues show <id>` — per-id issue reader.** Sibling of
+  `gate show <id>` (request) and `agora show <id>` (play); closes the
+  asymmetry where `issues` had list/add/note/transition but no per-id
+  detail view. Supports `--format text|json`. Text renders the full
+  body (no list-row truncation) plus a notes block; JSON returns the
+  full issue `toJSON()`. Callers wired into muscle memory for
+  `gate show <id>` no longer bounce when reaching for the issue
+  equivalent.
+
+- **`gate chain --format text|json`.** Previously text-only by
+  design — the asymmetry vs every other read verb made `chain` an
+  outlier for pipeline writers. JSON shape: `{root, forward: {issues,
+  requests}, inbound: {issues, requests}}`, each item carrying `id /
+  found / bidirectional / summary / cross_passage`.
+
+- **Cross-passage chain resolution (gate → agora).** Request-shaped
+  ids (`YYYY-MM-DD-NNN`) that miss the gate request store are now
+  probed against the agora play store. Found plays render as
+  `→ agora play (game=<slug>, <state>)` instead of the previous
+  bare `(referenced but not found)`. Multi-game match (same play id
+  in multiple games) surfaces every candidate. The JSON shape carries
+  the matches under each item's `cross_passage.matches[]`.
+
+- **`gate issues <unknown-sub>` suggests the closest valid sub.**
+  Previously the error was bare `unknown issues sub: X`; readers
+  reaching for `issues show` got no orientation. Now the error
+  includes a `did you mean 'gate issues <best>'?` hint when the typo
+  has ≥50% overlap with a known sub, plus the full catalog inline.
+
 - **`gate decisions` verb — director-axis decision audit.**
   Surfaces the approve / deny / execute / complete / fail transitions
   an actor authored within a window. Decision-shaped sibling of
