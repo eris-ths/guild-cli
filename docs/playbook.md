@@ -557,6 +557,63 @@ pins three contracts:
    stderr and proceeds with the session unstamped — silent strip is
    refused.
 
+### S3: Agora-to-Gate Lift — bridge thought-in-motion into a request
+
+```bash
+# A explores in agora, hits an inflection, suspends with cliff + invitation.
+agora new   --slug <topic> --kind sandbox --title "..." --by <A>
+agora play  --slug <topic> --by <A>
+agora move  <play-id> --game <topic> --by <A> --text "..."
+agora suspend <play-id> --game <topic> --by <A> \
+  --cliff "what was being figured out" \
+  --invitation "what to do next"
+
+# B (or A later, or another body of A) lifts the suspension.
+gate request --from <B> --executors <B> --from-agora <play-id>
+# action  ← invitation
+# reason  ← cliff
+# source_agora_play = <play-id>
+```
+
+**Purpose.** Keep *thought-in-motion* and *judgment moments*
+connected on the substrate. Agora carries "what was being figured
+out"; gate carries "what we decided to do." Without the bridge, a
+request that inherits intent from a long agora session loses the
+trail — you'd paraphrase the cliff into `--reason` by hand and the
+link is lossy. With `--from-agora`, the substrate itself preserves
+the pivot: read the request, follow `source_agora_play` back to the
+deliberation. Pins
+[principle 04](../lore/principles/04-records-outlive-writers.md):
+the act of stopping (suspend) and the act of acting (request) are
+linked records, not separately remembered moments.
+
+**Trade-off.** The lift is one-shot but the substrate does not
+enforce "one request per suspension" or "one suspension per
+request." Re-lifting the same suspension produces a second request
+that shares the same `source_agora_play`. Operators have to keep
+the play's life cycle visible: file the request, then conclude
+the play (or re-suspend with a fresh cliff for the next slice).
+Leaving it suspended after a lift makes accidental double-lifts
+easy. Override is allowed on either axis (`--action` overrides
+invitation, `--reason` overrides cliff) but the structural link
+(`source_agora_play`) cannot be overridden — `--from-agora` always
+stamps the field, so a hand-overridden request that came *from* a
+play is still substrate-discoverable as such.
+
+**E2E test.** [`tests/e2e/synergy_s3_agora_to_gate_lift.test.ts`](../tests/e2e/synergy_s3_agora_to_gate_lift.test.ts)
+pins four contracts:
+
+1. A suspends, B lifts → request's `action` / `reason` /
+   `source_agora_play` carry the bridge correctly; relay carries
+   *intent*, not authorship (`from` is B even though the play was
+   A's).
+2. A concluded play refuses the lift — closed-thread contract.
+3. A playing-but-not-suspended play refuses the lift — nothing to
+   bridge.
+4. Explicit `--action` overrides the invitation lift but `--reason`
+   still lifts from cliff; `source_agora_play` survives the
+   partial override.
+
 ---
 
 ## When NOT to use devil (honest limits)
