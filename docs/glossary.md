@@ -53,7 +53,7 @@ If you are reading the codebase for the first time, the [`Quick vocabulary`](./c
 - **combo** — situational recipe in `docs/playbook.md` (C1-C6). When a specific situation arises (bug-killing flow, ordering N items, bundle PR), reach for the matching combo. See `docs/playbook.md` § "Combos (multi-passage workflows)".
 - **synergy** — exploratory verb pairing in `docs/playbook.md` (S1-S4). Where combos are *recipes for situations*, synergies are *verb pairings that pin a substrate principle in one arc*. Each ships with a runnable E2E test under `tests/e2e/synergy_*.test.ts`.
 - **tier** — `AGENT.md`'s reading hierarchy: **Common** (solo-usable) / **Coordination** (swarm) / **Boundary** (agora / devil / ctx) / **Diagnostic** (doctor / config / troubleshooting). Sections are ordered by topic, not tier; the [Tier index](../AGENT.md#tier-index) lets readers skip-jump.
-- **audience** — design priority axis (private memory, surfaced briefly in `lore/principles/11-ai-first-human-as-projection.md`): #1 eris-first / #2 AI agent first / #3 humans tertiary. The priority decides which surfaces grow first when capacity is finite.
+- **audience** — design priority axis pinned by [principle 11](../lore/principles/11-ai-first-human-as-projection.md): **AI-agent first; humans as projection.** When a surface choice has to favour one over the other, the AI-agent-readable shape wins; the human-readable version is layered on top. Decides which surfaces grow first when capacity is finite.
 
 ## Extension surfaces
 
