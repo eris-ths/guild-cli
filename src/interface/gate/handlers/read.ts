@@ -339,13 +339,19 @@ export async function reqWhoami(c: C, args: ParsedArgs): Promise<number> {
   return 0;
 }
 
-// gate chain takes only positionals (id), no flags. Strict-reject keeps
-// noise like `--format json` from being silently ignored — chain is
-// text-only by design, and a typo should fail closed.
-const CHAIN_KNOWN_FLAGS: ReadonlySet<string> = new Set();
+// gate chain accepts --format text|json. Previously text-only by
+// design (strict-reject on --format kept noise out), but the asymmetry
+// vs every other read verb made `chain` an outlier — pipeline writers
+// branched their --format json composition around chain alone. This
+// PR makes chain symmetric with the rest of the read surface.
+const CHAIN_KNOWN_FLAGS: ReadonlySet<string> = new Set(['format']);
 
 export async function reqChain(c: C, args: ParsedArgs): Promise<number> {
   rejectUnknownFlags(args, CHAIN_KNOWN_FLAGS, 'chain');
+  const format = optionalOption(args, 'format') ?? 'text';
+  if (format !== 'text' && format !== 'json') {
+    throw new Error(`--format must be 'text' or 'json', got: ${format}`);
+  }
   const rootId = args.positional[0];
   if (!rootId) {
     throw new Error('Usage: gate chain <request-id | issue-id>');
@@ -541,6 +547,97 @@ export async function reqChain(c: C, args: ParsedArgs): Promise<number> {
       .filter((i) => !bidirIssueIds.has(i.id.value))
       .map((i) => ({ id: i.id.value, record: i, bidirectional: false }));
 
+  // Cross-passage resolution: agora play ids match the request id
+  // regex (both are YYYY-MM-DD-NNN[N]), so they come through as
+  // `linkedRequestIds` but miss the request store. Before rendering,
+  // probe the play repo for any "not found" id so we can label it
+  // as an agora play instead of leaving the reader with the
+  // unhelpful "(referenced but not found)" status. Only the ids that
+  // missed the request store are probed — issues have a distinct
+  // i- prefix and never collide with agora.
+  const unresolvedRequestIds = linkedRequestIds.filter(
+    (id) => !requestById.has(id),
+  );
+  type CrossPassageMatch = { gameSlug: string; state: string };
+  type CrossPassage = { passage: 'agora'; matches: CrossPassageMatch[] };
+  const crossPassageById = new Map<string, CrossPassage>();
+  for (const id of unresolvedRequestIds) {
+    const plays = await c.playRepo.findAllById(id);
+    if (plays.length > 0) {
+      const matches: CrossPassageMatch[] = plays.map((p) => {
+        const pj = p.toJSON() as Record<string, unknown>;
+        return {
+          gameSlug: String(pj['game'] ?? ''),
+          state: String(pj['state'] ?? ''),
+        };
+      });
+      crossPassageById.set(id, { passage: 'agora', matches });
+    }
+  }
+
+  // JSON rendering: a structured shape mirroring the four sections
+  // plus a `cross_passage` view of any ids resolved outside gate.
+  // Each item has {id, found, bidirectional, summary?} so the
+  // pipeline consumer sees the same content the text tree shows,
+  // minus the glyphs.
+  if (format === 'json') {
+    type JsonItem = {
+      id: string;
+      found: boolean;
+      bidirectional: boolean;
+      summary: Record<string, unknown> | null;
+      cross_passage: CrossPassage | null;
+    };
+    const toJsonItem = (
+      r: typeof linkedRequests[number] | typeof linkedIssues[number],
+      kind: 'request' | 'issue',
+    ): JsonItem => {
+      const xp = crossPassageById.get(r.id) ?? null;
+      let summary: Record<string, unknown> | null = null;
+      if (r.record) {
+        const j = r.record.toJSON() as Record<string, unknown>;
+        if (kind === 'issue') {
+          summary = {
+            severity: j['severity'],
+            area: j['area'],
+            state: j['state'],
+            text: j['text'],
+          };
+        } else {
+          summary = {
+            state: j['state'],
+            from: j['from'],
+            action: j['action'],
+          };
+        }
+      }
+      return {
+        id: r.id,
+        found: r.record !== undefined,
+        bidirectional: r.bidirectional,
+        summary,
+        cross_passage: xp,
+      };
+    };
+    const payload = {
+      root: {
+        id: rootId,
+        kind: isIssueId ? 'issue' : 'request',
+        header: rootHeader,
+      },
+      forward: {
+        issues: linkedIssues.map((i) => toJsonItem(i, 'issue')),
+        requests: linkedRequests.map((r) => toJsonItem(r, 'request')),
+      },
+      inbound: {
+        issues: inboundIssues.map((i) => toJsonItem(i, 'issue')),
+        requests: inboundRequests.map((r) => toJsonItem(r, 'request')),
+      },
+    };
+    process.stdout.write(JSON.stringify(payload, null, 2) + '\n');
+    return 0;
+  }
+
   process.stdout.write(`${rootHeader}\n`);
 
   // Assemble the four possible sections. Rendered only when non-empty;
@@ -602,9 +699,27 @@ export async function reqChain(c: C, args: ParsedArgs): Promise<number> {
               `  ${truncateCodePoints(String(j['action'] ?? ''), 70)}`;
         process.stdout.write(`${childPrefix}${glyph} ${summary}\n`);
       } else {
-        process.stdout.write(
-          `${childPrefix}${glyph} ${bidirMark}${item.id}  (referenced but not found)\n`,
-        );
+        // Cross-passage hint: when an id misses the gate stores but
+        // resolves in agora, label it so the reader doesn't read
+        // 'not found' as a broken link. Only request-shaped ids
+        // collide with agora (issues carry the i- prefix).
+        const xp = section.kind === 'request' ? crossPassageById.get(item.id) : undefined;
+        if (xp) {
+          // Multi-match: each game has its own play-id sequence so the
+          // same id can resolve to plays in multiple games. Render all
+          // — the reader needs every candidate to disambiguate.
+          const labels = xp.matches
+            .map((m) => `game=${m.gameSlug}, ${m.state}`)
+            .join(' | ');
+          process.stdout.write(
+            `${childPrefix}${glyph} ${bidirMark}${item.id}  ` +
+              `→ agora play (${labels})\n`,
+          );
+        } else {
+          process.stdout.write(
+            `${childPrefix}${glyph} ${bidirMark}${item.id}  (referenced but not found)\n`,
+          );
+        }
       }
     }
   }

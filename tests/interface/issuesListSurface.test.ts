@@ -99,7 +99,7 @@ test('gate issues (no subcommand) emits a hint + exit 1', (t) => {
   assert.match(r.stderr, /gate issues add/);
   assert.match(r.stderr, /gate issues note/);
   // Gestures at the full catalog without listing it inline.
-  assert.match(r.stderr, /add\|list\|note\|resolve\|defer\|start\|reopen\|promote/);
+  assert.match(r.stderr, /add\|list\|show\|note\|resolve\|defer\|start\|reopen\|promote/);
 });
 
 test('gate issues list (default) emits a stderr hint disclosing the open-only filter', (t) => {

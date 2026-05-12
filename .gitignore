@@ -9,5 +9,10 @@ data/sync/
 examples/*/data/
 
 # Local gate dogfood records (actor names + session content — do not publish)
-# Root-anchored so examples/*/requests/ fixtures stay tracked.
+# Root-anchored so examples/*/requests/ + examples/*/issues/ + examples/*/agora/
+# fixtures stay tracked. Same rationale across stores — issues and agora
+# plays carry actor names and free-form session content the same way
+# requests do.
 /requests/
+/issues/
+/agora/

@@ -26,6 +26,13 @@ const ISSUES_LIST_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'state',
   'format',
 ]);
+// `gate issues show <id>` mirrors `gate show <id>` for requests and
+// `agora show <id>` for plays. Read-only detail view: looks up one
+// issue by id, surfaces its full body + notes. --format text|json
+// matches `gate issues list` so a caller wiring a json pipeline can
+// drop in `show` next to `list` without flag rework. See
+// asymmetry-catchup landed in this PR for the gap this closes.
+const ISSUES_SHOW_KNOWN_FLAGS: ReadonlySet<string> = new Set(['format']);
 const ISSUES_PROMOTE_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'from',
   'executor',
@@ -63,9 +70,10 @@ export async function issuesCmd(c: C, args: ParsedArgs): Promise<number> {
     process.stderr.write(
       'gate issues needs a subcommand. common ones:\n' +
         '  gate issues list                  # what is open\n' +
+        '  gate issues show <id>             # full body + notes\n' +
         '  gate issues add --from <m> --severity <s> --area <a> --text <s>\n' +
         '  gate issues note <id> --by <m> --text <s>\n' +
-        '  full set: add|list|note|resolve|defer|start|reopen|promote ' +
+        '  full set: add|list|show|note|resolve|defer|start|reopen|promote ' +
         '(gate --help)\n',
     );
     return 1;
@@ -209,6 +217,55 @@ export async function issuesCmd(c: C, args: ParsedArgs): Promise<number> {
     }
     return 0;
   }
+  if (sub === 'show') {
+    rejectUnknownFlags(args, ISSUES_SHOW_KNOWN_FLAGS, 'issues show');
+    const id = args.positional[1];
+    if (!id) {
+      throw new Error(
+        'Usage: gate issues show <id> [--format text|json]',
+      );
+    }
+    const format = optionalOption(args, 'format') ?? 'text';
+    if (format !== 'text' && format !== 'json') {
+      throw new Error(`--format must be 'text' or 'json', got: ${format}`);
+    }
+    const issue = await c.issueUC.find(id);
+    if (!issue) {
+      process.stderr.write(notFoundMessage('issue', id));
+      return 1;
+    }
+    const j = issue.toJSON();
+    if (format === 'json') {
+      process.stdout.write(JSON.stringify(j, null, 2) + '\n');
+      return 0;
+    }
+    // Text: full body without list-row truncation. Header line mirrors
+    // the list row format so a caller who eyeballed `issues list` and
+    // reached for `show` sees the same prefix shape, then the full
+    // text below as a body block. Notes follow with their full text
+    // (the list rendering already flattens notes inline; show keeps
+    // that shape for continuity).
+    const proxyTag = j['invoked_by'] ? ` [invoked_by=${j['invoked_by']}]` : '';
+    process.stdout.write(
+      `${j['id']} [${j['severity']}/${j['area']}] ${j['state']} from=${j['from']}${proxyTag}\n`,
+    );
+    process.stdout.write(`  created: ${j['created_at']}\n`);
+    process.stdout.write(`\n  ${String(j['text']).replace(/\n/g, '\n  ')}\n`);
+    const notes = Array.isArray(j['notes']) ? j['notes'] : [];
+    if (notes.length > 0) {
+      process.stdout.write(`\n  notes (${notes.length}):\n`);
+      for (const n of notes as Array<Record<string, unknown>>) {
+        const noteProxy = n['invoked_by']
+          ? ` [invoked_by=${n['invoked_by']}]`
+          : '';
+        process.stdout.write(
+          `    └ ${n['by']}${noteProxy} at ${n['at']}\n` +
+            `      ${String(n['text']).replace(/\n/g, '\n      ')}\n`,
+        );
+      }
+    }
+    return 0;
+  }
   // State transitions: resolve, defer, start, reopen.
   const nextState = resolveIssueVerb(sub);
   if (nextState !== undefined) {
@@ -224,7 +281,67 @@ export async function issuesCmd(c: C, args: ParsedArgs): Promise<number> {
     process.stdout.write(`✓ issue ${issue.id.value}: → ${nextState} by ${by}\n`);
     return 0;
   }
-  throw new Error(`unknown issues sub: ${sub}`);
+  // Unknown sub: suggest the closest match plus a gesture at the full
+  // catalog. The bare-list of valid subs is more useful than 'unknown
+  // sub: X' alone — without a hint a caller wired into muscle memory
+  // for `gate show <id>` reaches for `issues show` and bounces with
+  // no orientation. principle 09 (orientation-disclosure) applied to
+  // the error path.
+  const validSubs = [
+    'add', 'list', 'show', 'note',
+    'resolve', 'defer', 'start', 'reopen', 'promote',
+  ];
+  const suggestion = closestSub(sub, validSubs);
+  const hint = suggestion ? ` — did you mean 'gate issues ${suggestion}'?` : '';
+  throw new Error(
+    `unknown issues sub: ${sub}${hint}\n` +
+      `  valid: ${validSubs.join(' | ')}`,
+  );
+}
+
+// Levenshtein-ish closest-match: simple character-overlap heuristic
+// sufficient for short subcommand names. Returns the best candidate
+// when the input shares at least half its characters with one of the
+// valid subs; otherwise undefined so we don't suggest at random.
+function closestSub(input: string, valid: readonly string[]): string | undefined {
+  if (!input) return undefined;
+  const lower = input.toLowerCase();
+  let best: string | undefined;
+  let bestScore = 0;
+  for (const v of valid) {
+    const score = overlapScore(lower, v);
+    if (score > bestScore) {
+      bestScore = score;
+      best = v;
+    }
+  }
+  // Threshold: at least 50% character overlap with the candidate.
+  // Below this we'd be suggesting noise (e.g. `gate issues xyz` →
+  // 'add' is not helpful).
+  return bestScore >= Math.max(2, Math.ceil(input.length / 2)) ? best : undefined;
+}
+
+function overlapScore(a: string, b: string): number {
+  // Substring containment is the strongest signal — if the user
+  // typed a prefix of a valid sub, that's almost certainly what
+  // they meant. Otherwise count shared characters in order.
+  if (b.startsWith(a)) return a.length + 1; // boost prefix match
+  if (a.startsWith(b)) return b.length + 1;
+  let i = 0;
+  let j = 0;
+  let score = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) {
+      score += 1;
+      i += 1;
+      j += 1;
+    } else if (a.length - i > b.length - j) {
+      i += 1;
+    } else {
+      j += 1;
+    }
+  }
+  return score;
 }
 
 async function issuesPromote(c: C, args: ParsedArgs): Promise<number> {
