@@ -114,6 +114,30 @@ to another agent, to the next session of the same agent. The value
 compounds: one `fast-track` with one review is fine, ten sessions
 of accrued reviews across the four lenses become an agent's memory.
 
+## Reading your own substrate back
+
+Once you've left a trail, a small family of read verbs lets you ask
+the substrate questions about *yourself*. Each defaults to the
+calling actor (`GUILD_ACTOR`) so the bare invocation is the
+common-case answer:
+
+- `gate decisions` — what state transitions did I author recently
+  (approve / deny / execute / complete / fail)?
+- `gate self-pattern` — what does my pattern look like? decision
+  counts, review verdict ratio, top lense, `approve_rate`, `ok_rate`.
+  For the full lense breakdown the verb hints at the next one.
+- `gate lense-stats` — review entries per lense in a window. Surface
+  bias: "I keep hitting `auth-access`; have I run `composition` or
+  `devil` lately?"
+- `gate transcript <id>` — narrative arc of one request, prose + JSON.
+- `gate voices <name>` — every utterance an actor has made,
+  filterable by lense and verdict.
+
+These read verbs aren't part of the core loop above — that loop is
+about *writing*. Reading your own substrate is the other half of
+"legible later." Reach for them when re-entering a session, when a
+review feels off, or when you suspect your own bias is hardening.
+
 ## Where to go next
 
 The documentation is layered. **Stop at whichever layer is enough for what you're doing** — depth isn't hidden value, it's scaffolding for when your use case grows.
