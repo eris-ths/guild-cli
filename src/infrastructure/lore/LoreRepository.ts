@@ -135,6 +135,14 @@ interface ParsedMarkdown {
  * design, lore frontmatter is intentionally trivial.
  */
 function parseMarkdown(raw: string): ParsedMarkdown {
+  // Normalize line endings before any structural parsing. Files
+  // checked out on Windows with `core.autocrlf=true` arrive as CRLF;
+  // the frontmatter delimiter is matched as the literal `---\n`,
+  // and `body.split('\n')` leaves trailing `\r` on every line which
+  // confuses substring math even when individual regex tolerates it.
+  // Stripping CRs once at the top makes every downstream check
+  // platform-agnostic.
+  raw = raw.replace(/\r\n/g, '\n');
   let body = raw;
   const frontmatter: Record<string, string> = {};
   if (raw.startsWith('---\n')) {
