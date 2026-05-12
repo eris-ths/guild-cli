@@ -505,6 +505,58 @@ pins three contracts:
 If you change the verb surface in a way that breaks any of those
 three, the test fails loud. The doc and the substrate move together.
 
+### S2: Cross-Session Body Switch — one actor, distinct session_ids per body
+
+```bash
+# Same actor name. Two sessions, two GUILD_SESSION_ID values:
+export GUILD_ACTOR=<you>
+
+# Body A (e.g. terminal A, early-day) opens the wave.
+GUILD_SESSION_ID=<you>-terminal-a-2026-05-12 \
+  gate request --from <you> --executors <you> --action "..." --reason "..."
+# → 2026-05-12-0001
+
+# (Optional) Critic approves so the wave is claim-eligible.
+gate approve 2026-05-12-0001 --by <critic>
+
+# Body B (e.g. terminal B, later in the day) picks the wave up.
+GUILD_SESSION_ID=<you>-terminal-b-2026-05-12 \
+  gate claim 2026-05-12-0001 --by <you> --note "body B picks up"
+```
+
+**Purpose.** Pin *which body* of an actor did *which move* on the
+same record. The substrate then carries `opened_by_session` and
+`claimed_by_session` side-by-side under one `--by` — a cold reader
+sees "claude in terminal A opened this, claude in terminal B
+claimed it" without having to ask. This is the smallest expression
+of [principle 14](../lore/principles/14-substrate-engagement-reduces-coordination-context-cost.md):
+two bodies of one actor coordinate through the record, not through
+shared working memory.
+
+**Trade-off.** Session_ids are hand-named (`<role>-<wave_date>` is
+the suggested template, but no enforcement). Auto-allocation is on
+the backlog and would lose the human-readable property; until then,
+the operator picks names that survive being re-read 30 days later.
+`witness_sessions[<actor>]` is a single-value map: re-witness from
+a new session_id *overwrites* the previous one. The trade is
+explicit — the substrate carries "current body" per actor, not
+"history of bodies." Most coordination flows want the former; if
+the history matters, log it in an agora play or add explicit
+`gate message` entries.
+
+**E2E test.** [`tests/e2e/synergy_s2_cross_session_body_switch.test.ts`](../tests/e2e/synergy_s2_cross_session_body_switch.test.ts)
+pins three contracts:
+
+1. `opened_by_session` and `claimed_by_session` are distinct stamps
+   when the same actor opens-then-claims across two sessions.
+2. Re-witness with a new `GUILD_SESSION_ID` overwrites
+   `witness_sessions[<actor>]` and the matching `witness_notes`
+   entry (latest body wins).
+3. A malformed `GUILD_SESSION_ID` (whitespace / capital letters /
+   any value failing `SESSION_ID_RE`) surfaces a `notice:` on
+   stderr and proceeds with the session unstamped — silent strip is
+   refused.
+
 ---
 
 ## When NOT to use devil (honest limits)
