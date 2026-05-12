@@ -44,6 +44,7 @@ const GATE_ALL = [
   'boot', 'suggest', 'flow-suggest', 'transcript', 'summarize', 'why', 'resume',
   'schema', 'unresponded', 'templates', 'rest', 'wake', 'farewell',
   'wave-status', 'lense-stats', 'review-context',
+  'decisions', 'self-pattern',
 ] as const;
 
 const AGORA_ALL = [

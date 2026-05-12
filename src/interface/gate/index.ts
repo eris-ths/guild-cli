@@ -52,6 +52,8 @@ import { transcriptCmd } from './handlers/transcript.js';
 import { waveStatusCmd } from './handlers/waveStatus.js';
 import { lenseStatsCmd } from './handlers/lenseStats.js';
 import { reviewContextCmd } from './handlers/reviewContext.js';
+import { decisionsCmd } from './handlers/decisions.js';
+import { selfPatternCmd } from './handlers/selfPattern.js';
 import { summarizeCmd } from './handlers/summarize.js';
 import { whyCmd } from './handlers/why.js';
 import { unrespondedCmd } from './handlers/unresponded.js';
@@ -96,6 +98,8 @@ const KNOWN_COMMANDS = [
   'wave-status',
   'lense-stats',
   'review-context',
+  'decisions',
+  'self-pattern',
 ] as const;
 
 export async function main(argv: readonly string[]): Promise<number> {
@@ -290,6 +294,10 @@ async function dispatch(
       return await lenseStatsCmd(c, args);
     case 'review-context':
       return await reviewContextCmd(c, args);
+    case 'decisions':
+      return await decisionsCmd(c, args);
+    case 'self-pattern':
+      return await selfPatternCmd(c, args);
     case 'summarize':
       return await summarizeCmd(c, args);
     case 'why':

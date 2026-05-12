@@ -41,6 +41,8 @@ export const READ_VERBS: ReadonlySet<string> = new Set([
   'lense-stats',
   'wave-status',
   'review-context',
+  'decisions',
+  'self-pattern',
 ]);
 
 export const WRITE_VERBS: ReadonlySet<string> = new Set([
