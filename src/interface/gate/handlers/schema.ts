@@ -799,6 +799,123 @@ const VERBS: readonly VerbSchema[] = [
     },
   },
   {
+    name: 'decisions',
+    category: 'read',
+    summary:
+      "actor's authored state transitions (approve / deny / execute / complete / fail) within a window. Decision-shaped sibling of `voices` (review-shaped) and `lense-stats` (lense-shaped). Defaults --for to GUILD_ACTOR.",
+    input: {
+      type: 'object',
+      properties: {
+        for: { type: 'string', description: "filter by status_log[].by (default: GUILD_ACTOR)" },
+        since: {
+          type: 'string',
+          description: 'window size as <int><s|m|h|d>; default 7d',
+        },
+        format: formatField,
+      },
+    },
+    output: {
+      type: 'object',
+      properties: {
+        window: {
+          type: 'object',
+          properties: {
+            since: str,
+            duration: str,
+          },
+        },
+        filter: {
+          type: 'object',
+          properties: { actor: str },
+        },
+        totals: {
+          type: 'object',
+          properties: {
+            entries_counted: { type: 'integer' },
+            by_transition: {
+              type: 'object',
+              properties: {
+                approve: { type: 'integer' },
+                deny: { type: 'integer' },
+                execute: { type: 'integer' },
+                complete: { type: 'integer' },
+                fail: { type: 'integer' },
+              },
+            },
+          },
+        },
+        decisions: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              at: str,
+              request_id: str,
+              transition: { type: 'string', enum: ['approve', 'deny', 'execute', 'complete', 'fail'] },
+              note: { type: 'string', description: 'null when no note recorded' },
+            },
+          },
+        },
+      },
+    },
+  },
+  {
+    name: 'self-pattern',
+    category: 'read',
+    summary:
+      "actor's behavioral bias surface across a window: decision counts, review verdict ratio (ok/concern/reject), top review lense, approve-rate, ok-rate. Composes from existing substrate; for the *full* lense breakdown see `gate lense-stats --for <actor>`. Defaults --for to GUILD_ACTOR.",
+    input: {
+      type: 'object',
+      properties: {
+        for: { type: 'string', description: 'filter by author of status_log / review entries (default: GUILD_ACTOR)' },
+        since: { type: 'string', description: 'window size as <int><s|m|h|d>; default 7d' },
+        format: formatField,
+      },
+    },
+    output: {
+      type: 'object',
+      properties: {
+        window: { type: 'object', properties: { since: str, duration: str } },
+        filter: { type: 'object', properties: { actor: str } },
+        decisions: {
+          type: 'object',
+          properties: {
+            total: { type: 'integer' },
+            by_transition: {
+              type: 'object',
+              properties: {
+                approve: { type: 'integer' },
+                deny: { type: 'integer' },
+                execute: { type: 'integer' },
+                complete: { type: 'integer' },
+                fail: { type: 'integer' },
+              },
+            },
+          },
+        },
+        reviews: {
+          type: 'object',
+          properties: {
+            total: { type: 'integer' },
+            by_verdict: {
+              type: 'object',
+              description: 'verdict-keyed counts; keys present only when verdict was observed in window',
+            },
+            top_lense: { type: 'string', description: 'most-reached-for lense in window; null when no reviews' },
+          },
+        },
+        ratios: {
+          type: 'object',
+          properties: {
+            approve_rate: { type: 'number', description: 'approve / (approve + deny); null when both zero' },
+            ok_rate: { type: 'number', description: 'ok / total reviews; null when no reviews' },
+          },
+        },
+        hint: str,
+      },
+    },
+  },
+  {
     name: 'summarize',
     category: 'read',
     summary:
