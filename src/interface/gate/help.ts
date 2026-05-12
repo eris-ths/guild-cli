@@ -217,6 +217,19 @@ const SECTIONS: readonly Section[] = [
           '                       and aggregate state. Companion to claim /\n' +
           '                       witness for swarm coordination.',
       },
+      {
+        tier: 'coordination',
+        text:
+          '  gate review-context <id> [--format text|json]\n' +
+          '                       Reviewer-facing bundle for a wave: action /\n' +
+          '                       reason / target, executors, depth advisory,\n' +
+          '                       recommended lens set by depth, prior reviews.\n' +
+          '                       Lets a reviewer agent drive behaviour from\n' +
+          '                       substrate state instead of out-of-band prompt\n' +
+          '                       content. depth=shallow→[Logic], standard→6\n' +
+          '                       lenses, deep→all 10 + memory MCP + state-\n' +
+          '                       machine + cross-check. Advisory not directive.',
+      },
     ],
   },
   {
@@ -396,7 +409,7 @@ const SECTIONS: readonly Section[] = [
       {
         tier: 'extra',
         text:
-          '  gate resume [--format json|text]\n' +
+          '  gate resume [--with-doctor [--auto-repair]] [--format json|text]\n' +
           '                       Reconstruct what the actor was doing when the\n' +
           '                       last session ended. Returns last utterance,\n' +
           '                       last transition, open loops (awaiting/\n' +
@@ -404,7 +417,12 @@ const SECTIONS: readonly Section[] = [
           '                       prose restoration note. Requires GUILD_ACTOR.\n' +
           '                       Same-actor continuation only — for a newcomer\n' +
           "                       arriving via handoff, use 'gate boot' to see\n" +
-          '                       cross-actor signals (inbox, --with assignments).',
+          '                       cross-actor signals (inbox, --with assignments).\n' +
+          '                       --with-doctor folds a gate doctor summary\n' +
+          '                       into the payload (substrate health at session\n' +
+          '                       re-entry); --auto-repair (requires --with-\n' +
+          '                       doctor) processes quarantineable findings\n' +
+          '                       inline via gate repair.',
       },
       {
         tier: 'extra',
@@ -437,6 +455,30 @@ const SECTIONS: readonly Section[] = [
           '                       lately?"). Sources: gate `review` records +\n' +
           '                       devil-passage entries. Duration: <int><s|m|h|d>\n' +
           '                       (default 7d). Read-only.',
+      },
+      {
+        tier: 'extra',
+        text:
+          '  gate decisions [--for <m>] [--since <duration>] [--format json|text]\n' +
+          '                       Surface authored state transitions (approve /\n' +
+          '                       deny / execute / complete / fail) by an actor\n' +
+          '                       within a window. Decision-shaped sibling of\n' +
+          '                       voices (review-shaped) and lense-stats (lense-\n' +
+          "                       shaped). Defaults --for to GUILD_ACTOR — bare\n" +
+          '                       `gate decisions` answers "what did I decide?"\n' +
+          '                       Dedupes by (request_id, transition).',
+      },
+      {
+        tier: 'extra',
+        text:
+          '  gate self-pattern [--for <m>] [--since <duration>] [--format json|text]\n' +
+          '                       Behavioral bias surface: decision counts,\n' +
+          '                       review verdict ratio (ok/concern/reject), top\n' +
+          '                       review lense, approve_rate, ok_rate. Composes\n' +
+          '                       from status_log + reviews; no schema change.\n' +
+          '                       For the FULL lense breakdown, the verb hints\n' +
+          '                       at gate lense-stats rather than duplicating.\n' +
+          '                       Defaults --for to GUILD_ACTOR.',
       },
     ],
   },
