@@ -15,30 +15,58 @@ State lives in YAML files under a `content_root`. Git gives you history.
 ## Solo flow
 
 If you are running solo (one actor, one shell, one wave at a time),
-you need only the **Common** verbs below. The full arc is five calls:
+you need only the **Common** verbs below. The full arc is six calls:
 
 ```bash
 gate register --name <you>            # once per content_root
 gate request --action "..." --reason "..." --executors <you>
-gate review <id> --by <reviewer> --lense user --verdict ok
+gate approve <id> --by <mirror>
+gate review  <id> --by <mirror> --lense user --verdict ok
 gate execute <id> --by <you>
 gate complete <id> --by <you>
 ```
 
-The verb table further down is **tiered by audience**:
+`<mirror>` is a second persona / different `--by` for the same
+actor (you-as-critic, or another registered agent). Two-Persona
+Devil discipline: even solo, the approver / reviewer is a
+different lense from the executor. The default solo profile sets
+`self_approve: allowed` so `--by <you>` works for `approve` and
+`review` too, but the mirror is the discipline the substrate is
+shaped around — when you later flip to `swarm` profile,
+`self_approve: forbidden` kicks in and a separate `--by` is
+required by config.
+
+The verb table further down is **tiered by audience**. Use the
+[Tier index](#tier-index) to jump:
 
 - **Common** — every solo / pair / swarm flow uses these
 - **Coordination** — `claim` / `witness` / `executors` / sessions, for swarm
 - **Boundary** — `agora` / `devil` / `ctx`, when the work isn't gate-shaped
 - **Diagnostic** — `doctor` / `boot` / `schema`, when something breaks
 
-Skip the Coordination tier on first read if you only ship solo waves.
+Skip the Coordination and Boundary tiers on first read if you only
+ship solo waves.
 
 **You don't need to read all of this to be productive.** The
 [Session start](#session-start) and [Agent-first knobs](#agent-first-knobs)
 sections are enough for most days. Sections further down
 (Diagnostic, Configuration, File layout, Troubleshooting) become
 useful when something breaks or you want to extend the system.
+
+### Tier index
+
+Sections in this file are ordered by **topic** (lifecycle →
+coordination → meta), not by tier. That means a tier banner can
+appear more than once when its topic recurs — `Issues` and
+`Members` are Common but sit between Coordination topics. The
+table below lets you skip-jump by tier.
+
+| Tier | Sections (in document order) |
+|------|------------------------------|
+| **Common** | [Session start](#session-start) · [Agent-first knobs](#agent-first-knobs) · [Request lifecycle](#request-lifecycle) · [Review (Two-Persona Devil)](#review-two-persona-devil) · [Reading](#reading) · [Issues](#issues) · [Messages](#messages) · [Members](#members) |
+| **Coordination** | [Coordination & stake (#226 / #244 / #246)](#coordination--stake-226--244--246) · [Templates (#235, two-tier #302)](#templates-235-two-tier-302) · [Sessions (#249)](#sessions-249) |
+| **Boundary** | [The four passages — a one-line dispatch shorthand](#the-four-passages--a-one-line-dispatch-shorthand) · [Agora (second passage — play / narrative)](#agora-second-passage--play--narrative) · [devil-review (third passage — security backstop, alpha)](#devil-review-third-passage--security-backstop-alpha) · [ctx (fourth passage — fact accumulation, alpha phase 1)](#ctx-fourth-passage--fact-accumulation-alpha-phase-1) |
+| **Diagnostic** | [Diagnostic](#diagnostic) · [Configuration](#configuration) · [File layout](#file-layout) · [Environment](#environment) · [Output format](#output-format) · [Troubleshooting](#troubleshooting) · [Deep dives](#deep-dives) |
 
 # Tier: Common (solo-usable)
 
@@ -220,7 +248,9 @@ Under `profile: swarm`, parallel-shaped waves
 so the brief is on record (Phase 1 — warning only; enforcement is
 follow-up).
 
-# Tier: Common (continued — issues / messages / members)
+# Tier: Common — Issues / Messages
+
+_Common tier resumes here ([jump back to Tier index](#tier-index))._
 
 ## Issues
 
@@ -254,7 +284,9 @@ gate inbox mark-read [N] --for <m>
 that suggestion when no higher-priority lifecycle work is open;
 the surface clears when the recipient marks the entry read.
 
-# Tier: Coordination (continued — sessions)
+# Tier: Coordination — Sessions
+
+_Coordination tier resumes here ([jump back to Tier index](#tier-index))._
 
 ## Sessions (#249)
 
@@ -280,7 +312,9 @@ gate witness <id> --by <m> # stamps `witness_sessions[<actor>]: <id>`
   flags an actor authoring ≥2 overlapping requests from ≥2 distinct
   sessions; text mode prints `⚠ same-actor parallel sessions: <m>`.
 
-# Tier: Common (continued — members)
+# Tier: Common — Members
+
+_Common tier resumes here ([jump back to Tier index](#tier-index))._
 
 ## Members
 
