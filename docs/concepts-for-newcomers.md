@@ -51,18 +51,17 @@ sections in [`AGENT.md`](../AGENT.md) and worked examples in
 
 ## Quick vocabulary
 
-- **actor** — a human or AI agent. Has a `MemberName` (lowercase ASCII) and lives as `members/<name>.yaml`.
-- **host** — an actor that runs the content_root (not a member, but can `--by` / `--from` anything). Listed under `host_names:` in `guild.config.yaml`.
-- **request** — a decision-in-motion. Has `action`, `reason`, optional `executors` (one or more) / `auto-review`, and moves through `pending → approved → executing → completed` (or `denied` / `failed`). Even single-actor requests use the plural `executors:` field for uniformity — same shape across single and parallel waves means downstream tools never branch on arity. See [#230](https://github.com/eris-ths/guild-cli/issues/230) for the attribution rationale.
-- **review** — multi-perspective feedback on a request. Carries a `lense` (one of `devil | layer | cognitive | user` by default — extend via config) and a `verdict` (`ok | concern | reject`).
-- **lense** — the angle a reviewer is taking. (Spelled with a trailing `e` throughout this project — the value object, the CLI flag, and prose all align.) `devil` = "what breaks?", `layer` = "which structural layer is this on?", `cognitive` = "where would someone hesitate?", `user` = "whose happiness (LDD)?". Add domain lenses (`security`, `perf`, `a11y`, ...) in `guild.config.yaml`'s `lenses:` list, or — for the devil-side catalog — drop one YAML file per custom lense under `<content_root>/devil/lenses/<name>.yaml` (see #134 G).
-  - **gate vs devil enforcement.** Gate review's allowed-lense set comes from `guild.config.yaml`'s `lenses:` list by default — host project picks the vocabulary. Devil's `devil entry` requires a name from a strict bundled catalog (12 lenses in v1, see `docs/verbs.md` § Lenses) merged with content_root extensions. Same word, different enforcement: gate's lense is a label the team agrees on; devil's lense is a covered axis of the security-knowledge floor.
-  - **strict mode (#134 H2, opt-in).** Set `gate.strict_lenses: true` in `guild.config.yaml` to flip gate review's allowed-lense set from `lenses:` over to the unified devil catalog (bundled defaults + `<content_root>/devil/lenses/*.yaml` extensions). Default is permanently `false` — each team picks its own enforcement timing; we never auto-flip. Coverage gating stays devil-side.
-- **verdict** — `ok` (landed cleanly), `concern` (lives with the decision but you want it named), `reject` (don't do this). The word is deliberately soft — `concern` is usable, not a veto.
-- **fast-track** — single-actor shortcut for the full lifecycle when self-approved work is appropriate. Still requires `reason`; `review`s can be attached after.
-- **issue** — a standalone observation that has not yet become a decision. Lightweight, optional `severity` / `area`. Promote to `request` via `gate issues promote <id>`.
-- **pair-mode (`--with`)** — records who you were thinking with when you shaped a request. Surfaces in `show`, `voices`, and `resume` prose ("shaped with eris").
-- **content_root** — the YAML directory gate reads from. Contains `members/`, `requests/`, `issues/`, `inbox/`, and `guild.config.yaml`. Git it for history. See AGENT.md § File layout.
+A short primer for new readers. The **authoritative** reference is [`docs/glossary.md`](./glossary.md) — reach for it whenever a term feels under-defined here.
+
+- **actor** — a human or AI agent. Has a `MemberName` (lowercase ASCII) and lives as `members/<name>.yaml`. Hosts (listed in `guild.config.yaml#host_names`) are a related but distinct kind.
+- **request** — a decision-in-motion. Has `action`, `reason`, `executors` (one or more), and moves through `pending → approved → executing → completed` (or `denied` / `failed`). The plural `executors:` field is used uniformly across single-actor and parallel waves.
+- **review** — multi-perspective feedback on a request. Carries a `lense` and a `verdict`. **`lense` is spelled with a trailing `e`** throughout this project — the value object, the CLI flag, and prose all align.
+- **verdict** — `ok` (landed cleanly), `concern` (lives with the decision but you want it named), `reject` (don't do this). Deliberately soft — `concern` is usable, not a veto.
+- **fast-track** — single-actor shortcut for the full lifecycle when self-approved work is appropriate.
+- **issue** — a standalone observation that has not yet become a decision. Promote to a request via `gate issues promote <id>`.
+- **content_root** — the YAML directory gate reads from. Contains `members/`, `requests/`, `issues/`, `inbox/`, `agora/`, `devil/`, `ctx/`, and `guild.config.yaml`. Git it for history.
+
+For the full inventory — including `passage` / `substrate` / `wave` / `slice` / `mirror` / `claim` / `witness` / `lore` / `principle` / `trap` / `combo` / `synergy` / `tier` / `audience` / `axis` / `VerbPlugin` / `HookPlugin` / etc. — see [`docs/glossary.md`](./glossary.md).
 
 ## The 30-second first touch
 

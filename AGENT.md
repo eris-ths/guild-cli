@@ -8,6 +8,9 @@
 > devil for real work** (combos, recipes, bug-killing flow), see
 > [`docs/playbook.md`](./docs/playbook.md). For **multi-executor /
 > SubAgent swarm coordination**, see [`docs/swarm.md`](./docs/swarm.md).
+> For **project-specific term definitions** (passage / wave / slice /
+> mirror / synergy / axis / lore / etc.), see
+> [`docs/glossary.md`](./docs/glossary.md).
 
 File-based coordination for AI agents. No daemon, no DB, no network.
 State lives in YAML files under a `content_root`. Git gives you history.
