@@ -90,6 +90,7 @@ mirror に手を伸ばすのが推奨形。 `swarm` profile に切り替えた�
 | 15分 | [`docs/playbook.md`](./docs/playbook.md) | pair | passage 個別を知った上で **combos** (gate + agora + devil の合成パターン) が欲しい |
 | 15分 | [`docs/swarm.md`](./docs/swarm.md) | swarm | ≥2 並列 executor / Claude SubAgent を orchestrate していて substrate-engagement レシピが要る |
 | 30分 | [`docs/verbs.md`](./docs/verbs.md) | any | per-verb の例と設計ノートが欲しい |
+| reference | [`docs/glossary.md`](./docs/glossary.md) | any | project 固有の用語に当たって正典が欲しい |
 
 ## あなたができること
 
