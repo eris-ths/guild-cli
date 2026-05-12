@@ -33,21 +33,29 @@ see; it does not tell you what to conclude.
 ### Solo flow (30 seconds)
 
 If you are one person (or one AI agent) working alone, the whole
-tool is five verbs:
+tool is six verbs:
 
 ```bash
 gate register --name <you>
 gate request --action "..." --reason "..." --executors <you>
-gate review <id> --by <reviewer> --lense user --verdict ok
+gate approve <id> --by <mirror>
+gate review  <id> --by <mirror> --lense user --verdict ok
 gate execute <id> --by <you>
 gate complete <id> --by <you>
 ```
 
-That's the arc: register once, file the request, get a review
-under a different `--by` (Two-Persona Devil discipline — even
-solo, the reviewer is a different lense / different moment), do
-the work, close. Everything else in this README is depth on top
-of this loop.
+That's the arc: register once, file the request, the **mirror**
+approves and reviews, you execute and close.
+
+**What is `<mirror>`?** A second persona / different `--by` for
+the same actor — "you wearing a different hat," or another
+registered agent acting as critic. Two-Persona Devil discipline:
+even solo, the approver / reviewer is a different lense / different
+moment from the executor. The defaults (`self_approve: allowed`
+in the solo profile) permit `--by <you>` directly, but reaching
+for a mirror persona is the discipline the substrate is shaped
+around. Everything else in this README is depth on top of this
+loop.
 
 Need multiple agents working in parallel, worktree isolation, or
 the swarm coordination story? See [`docs/swarm.md`](./docs/swarm.md).
