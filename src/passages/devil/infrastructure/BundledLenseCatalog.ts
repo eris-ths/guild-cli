@@ -3,12 +3,13 @@ import { buildDefaultLenses, DEFAULT_LENSE_NAMES } from '../domain/defaultLenses
 import { LenseCatalog } from '../application/LenseCatalog.js';
 
 /**
- * v0 lense catalog: just the 11 bundled defaults from
- * domain/defaultLenses.ts. The content_root override loader (per
- * issue #126) lands later as a separate adapter — likely a
- * ComposedLenseCatalog that merges this with a YAML reader for
- * `<content_root>/devil/lenses/<custom>.yaml`. Until then, this is
- * the only adapter wired into the CLI.
+ * v0 lense catalog: just the 12 bundled defaults from
+ * domain/defaultLenses.ts (injection / injection-parser / path-network
+ * / auth-access / memory-safety / crypto / deserialization /
+ * protocol-encoding / supply-chain / composition / temporal /
+ * coherence). The content_root override loader (per issue #126)
+ * lands as a separate adapter (ComposedLenseCatalog) that merges
+ * this with a YAML reader for `<content_root>/devil/lenses/<custom>.yaml`.
  */
 export class BundledLenseCatalog implements LenseCatalog {
   private readonly map: ReadonlyMap<string, Lense>;
