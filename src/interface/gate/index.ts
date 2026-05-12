@@ -58,6 +58,7 @@ import { summarizeCmd } from './handlers/summarize.js';
 import { whyCmd } from './handlers/why.js';
 import { unrespondedCmd } from './handlers/unresponded.js';
 import { templatesCmd } from './handlers/templates.js';
+import { loreCmd } from './handlers/lore.js';
 import { withEntryLock } from '../../infrastructure/lock/withEntryLock.js';
 import { resolveGuildActor } from '../shared/resolveGuildActor.js';
 import { READ_VERBS, WRITE_VERBS, LOCK_EXEMPT_VERBS } from './verbs.js';
@@ -316,6 +317,8 @@ async function dispatch(
       return await unrespondedCmd(c, args);
     case 'templates':
       return await templatesCmd(c, args);
+    case 'lore':
+      return await loreCmd(c, args);
     default: {
       // Verb plugin dispatch (#36 Phase 1 step 4). Built-in cases
       // run first (the switch above); plugins are the fall-through

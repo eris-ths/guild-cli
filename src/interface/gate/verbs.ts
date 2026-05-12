@@ -38,6 +38,7 @@ export const READ_VERBS: ReadonlySet<string> = new Set([
   'schema',
   'unresponded',
   'templates',
+  'lore',
   'lense-stats',
   'wave-status',
   'review-context',

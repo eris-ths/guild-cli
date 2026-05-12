@@ -9,6 +9,20 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
 
 ### Added
 
+- **`gate lore` verb — package-shipped doctrine reader.**
+  Lets agents browse principles and traps from inside the substrate
+  without needing to know the `lore/` directory layout. Subcommands:
+  `list` (with `--type`, `--applies-to`, `--relevant-until` filters)
+  and `show <name>` (full markdown body, or `--format json` for the
+  structured entry). Reads `<packageRoot>/lore/principles/*.md` and
+  `<packageRoot>/lore/traps/*.md`; no per-content_root tier (lore is
+  authored via PR, not by a CLI write). The `--applies-to` filter
+  matches `applies_to:` frontmatter on principles; entries without an
+  explicit scope are universal (`all`) and surface regardless. The
+  `--relevant-until` filter classifies trap frontmatter as `current`
+  (indefinite or future-dated), `expired` (past-dated), or
+  `indefinite` (literal only).
+
 - **`gate issues show <id>` — per-id issue reader.** Sibling of
   `gate show <id>` (request) and `agora show <id>` (play); closes the
   asymmetry where `issues` had list/add/note/transition but no per-id

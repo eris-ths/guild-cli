@@ -25,6 +25,11 @@ import {
   resolveBuiltinTemplatesDir,
 } from '../../infrastructure/template/TemplateRepository.js';
 import { TemplateUseCases } from '../../application/template/TemplateUseCases.js';
+import {
+  FsLoreRepository,
+  resolveLoreBaseDir,
+} from '../../infrastructure/lore/LoreRepository.js';
+import { LoreUseCases } from '../../application/lore/LoreUseCases.js';
 import { YamlSessionEventRepository } from '../../infrastructure/persistence/YamlSessionEventRepository.js';
 import { SessionEventUseCases } from '../../application/session/SessionEventUseCases.js';
 import {
@@ -62,6 +67,14 @@ export interface Container {
    *                    guild-cli (resolved relative to this module).
    */
   templateUC: TemplateUseCases;
+  /**
+   * Package-shipped lore reader (`gate lore` verb). Resolves
+   * `<packageRoot>/lore/principles/*.md` + `<packageRoot>/lore/traps/*.md`
+   * at construction. `available` flips false when the directory cannot
+   * be located (e.g. an incomplete install), which the handler surfaces
+   * as a structured error instead of an empty list.
+   */
+  loreUC: LoreUseCases;
   /**
    * Session-boundary events (`gate rest` / `gate wake` /
    * `gate farewell`, #36 Phase 2). Phase 2's first slice ships
@@ -224,6 +237,7 @@ export function buildContainer(opts: BuildContainerOpts = {}): Container {
         config.onMalformed,
       ),
     ),
+    loreUC: new LoreUseCases(new FsLoreRepository(resolveLoreBaseDir())),
     sessionEventUC: new SessionEventUseCases({
       events: new YamlSessionEventRepository(config),
       members,

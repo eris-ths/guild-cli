@@ -78,6 +78,10 @@ const SUBCOMMAND_UMBRELLAS: ReadonlySet<string> = new Set([
   // (DOCTOR_KNOWN_FLAGS for the bare verb, SWEEP_TRAPS_KNOWN_FLAGS for
   // the sub-verb). Same redesign-not-drift situation as issues/templates.
   'doctor',
+  // lore: same shape as templates — `lore list` and `lore show` carry
+  // separate KNOWN_FLAGS sets, but the schema collapses them into a
+  // single `lore` entry with a `subcommand` discriminator.
+  'lore',
 ]);
 
 // `gate help` and the very top-level positional verb dispatcher
