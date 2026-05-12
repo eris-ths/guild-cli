@@ -29,6 +29,33 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+          # paths-filter (below) needs the merge base to diff against
+          # for pull_request events; fetch enough history for that.
+          fetch-depth: 0
+
+      # Detect whether this push / PR touches anything that the test
+      # suite covers. Docs-only changes (markdown, lore/, CHANGELOG)
+      # skip `npm test` so a typo fix doesn't burn 2-5 minutes of CI.
+      # Typecheck still runs, so any docs change that accidentally
+      # touches a code file (e.g. embedded TS in a tutorial) is caught.
+      # The job itself still reports success either way, so the
+      # `test (node X)` required check at branch protection stays
+      # green. See PR description for the safety analysis.
+      - name: Detect code changes
+        id: changes
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            code:
+              - 'src/**'
+              - 'tests/**'
+              - 'bin/**'
+              - 'examples/**'
+              - 'templates/**'
+              - 'package.json'
+              - 'package-lock.json'
+              - 'tsconfig.json'
+              - '.github/workflows/**'
 
       - name: Setup Node.js ${{ matrix.node }}
         uses: actions/setup-node@v4
@@ -66,7 +93,12 @@ jobs:
         run: npm run typecheck
 
       - name: Test
+        if: steps.changes.outputs.code == 'true'
         run: npm test
+
+      - name: Test (skipped — docs-only changeset)
+        if: steps.changes.outputs.code != 'true'
+        run: echo "docs-only changeset — no code paths touched, skipping npm test."
 
   test-windows:
     name: test-windows (node ${{ matrix.node }})
@@ -79,6 +111,23 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+          fetch-depth: 0
+
+      - name: Detect code changes
+        id: changes
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            code:
+              - 'src/**'
+              - 'tests/**'
+              - 'bin/**'
+              - 'examples/**'
+              - 'templates/**'
+              - 'package.json'
+              - 'package-lock.json'
+              - 'tsconfig.json'
+              - '.github/workflows/**'
 
       - name: Setup Node.js ${{ matrix.node }}
         uses: actions/setup-node@v4
@@ -93,7 +142,13 @@ jobs:
         run: npm run typecheck
 
       - name: Test
+        if: steps.changes.outputs.code == 'true'
         run: npm test
+
+      - name: Test (skipped — docs-only changeset)
+        if: steps.changes.outputs.code != 'true'
+        shell: bash
+        run: echo "docs-only changeset — no code paths touched, skipping npm test."
 
   # Verify the npm publish artifact stays clean: required files present,
   # develop-only / source-only paths absent. `package.json#files` is the
