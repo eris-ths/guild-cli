@@ -57,18 +57,18 @@ Two paths, both partial:
    limitation — author can bypass with intent.
 
 Neither is bulletproof. The real fix is **audience priority
-clarity**: per the project's audience-priority memo (audience #1 is
-eris-first; audience #2 is AI agents using `gate schema`; audience
-#3 is humans reading prose docs), the gap is acceptable for
-audience #1 (eris remembers what she shipped) and audience #2
-(`gate schema` is the source of truth for AI agents). The drift
-only hurts audience #3.
+clarity**: per [principle 11](../principles/11-ai-first-human-as-projection.md),
+AI agents are the primary audience (`gate schema` is the source of
+truth), with humans-as-projection the secondary surface. The drift
+this trap names mainly hurts the human-readable layer; the AI-
+agent contract stays consistent because `gate schema` is exhaustive
+by construction.
 
 **Decision rule**: a prose-doc update is required when the verb is
-likely to be read by audience #3 (a human onboarding to the tool).
-For private dogfood-only verbs, ship without prose doc updates is
-acceptable. For verbs that show up in README's "30-second tour" or
-playbook combos, prose doc updates are required pre-merge.
+likely to be read by a human onboarding to the tool (README's
+"30-second tour" verbs, playbook combos). For dogfood-only verbs
+that AI agents will primarily reach through `gate schema`,
+shipping without immediate prose-doc updates is acceptable.
 
 ## Why this is `indefinite`
 
