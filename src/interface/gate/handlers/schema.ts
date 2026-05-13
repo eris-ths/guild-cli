@@ -501,6 +501,28 @@ const VERBS: readonly VerbSchema[] = [
     output: { type: 'object' },
   },
   {
+    name: 'next',
+    category: 'read',
+    summary:
+      'one-call read-and-dispatch of the top actionable verb. Without --confirm: prints the plan (verb/args/reason). With --confirm: dispatches via subprocess. Auto-dispatches only verbs that need only --by (complete/execute/approve/show); verbs needing extra args (review/deny/fail) refuse and prompt for manual invocation. Sibling of boot — same actionable ladder, one verb to act on it.',
+    input: {
+      type: 'object',
+      properties: {
+        confirm: {
+          type: 'boolean',
+          description:
+            'When true, dispatch the actionable[0] verb via subprocess and propagate its exit code. When false (default), print the plan only.',
+        },
+        format: formatField,
+      },
+    },
+    output: {
+      type: 'object',
+      description:
+        '--format json: {plan: {verb, id, reason, by, can_auto_dispatch, command, needs_extra_args?}, dispatched: boolean, exit_code?: number}. plan=null when there is nothing actionable.',
+    },
+  },
+  {
     name: 'suggest',
     category: 'read',
     summary:

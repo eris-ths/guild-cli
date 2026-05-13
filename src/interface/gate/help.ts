@@ -363,6 +363,22 @@ const SECTIONS: readonly Section[] = [
           '                       history).',
       },
       {
+        tier: 'base',
+        text:
+          '  gate next [--confirm] [--format json|text]\n' +
+          '                       One-call read-and-dispatch of the top actionable\n' +
+          '                       verb. Without --confirm: prints the plan (verb /\n' +
+          '                       args / reason) without mutating. With --confirm:\n' +
+          '                       dispatches the verb via subprocess and returns\n' +
+          '                       its exit code. Auto-dispatches only verbs that\n' +
+          '                       need only --by (complete / execute / approve /\n' +
+          '                       show); verbs needing extra args (review / deny /\n' +
+          '                       fail) refuse and prompt for manual invocation.\n' +
+          '                       Agent loop: `while gate next --confirm; do :; done`\n' +
+          '                       drains the actionable ladder one verb at a time.\n' +
+          '                       Exit 2 = nothing actionable; the loop terminates.',
+      },
+      {
         tier: 'extra',
         text:
           '  gate flow-suggest --severity <low|med|high> --area <s> [--scope <s>]\n' +
