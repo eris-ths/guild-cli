@@ -9,6 +9,21 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
 
 ### Fixed
 
+- **`gate tail 0` no longer falsely claims the content_root is
+  empty.** Pre-fix, `gate tail 0` on a rich substrate rendered
+  the same `(no utterances on this content_root yet)` line as a
+  truly-empty root — a false claim about source state
+  (`trap_silent_fallback_loses_signal`). The empty-result branch
+  now disambiguates: `(0 utterances requested)` when the caller
+  asked for zero, the original message only when source is
+  actually empty.
+- **`gate tail` rejects extra positional arguments instead of
+  silently dropping them.** Pre-fix, `gate tail 3 extra`
+  returned the first 3 utterances and threw `extra` on the
+  floor — the same fail-open shape that `rejectUnknownFlags`
+  exists to prevent for flags. The rejection now fires
+  symmetrically for positionals, naming the unexpected values
+  in the error message.
 - **`gate voices <typo>` now surfaces a "did you typo the
   name?" diagnostic instead of returning identical empty output
   to a registered-but-quiet actor.** Pre-fix, the two cases were

@@ -155,6 +155,71 @@ test('gate tail --format json: positional N still controls limit', (t) => {
   assert.equal(arr.length, 2);
 });
 
+test('gate tail 0 on rich content_root says "(0 utterances requested)", not "no utterances yet"', (t) => {
+  // Pre-fix, `gate tail 0` on a content_root with plenty of records
+  // rendered the same "(no utterances on this content_root yet)"
+  // message as a truly-empty root — a false claim about the source
+  // state (trap_silent_fallback_loses_signal). The fix disambiguates
+  // using `limit === 0` since that's the only path producing empty
+  // results without source-emptiness.
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  // Seed via fast-track so there's at least one utterance on the root.
+  const seeded = runGate(
+    root,
+    [
+      'fast-track',
+      '--action',
+      'seed',
+      '--reason',
+      'rich-root pin',
+      '--format',
+      'json',
+    ],
+    { GUILD_ACTOR: 'alice' },
+  );
+  assert.equal(seeded.status, 0);
+
+  const zero = runGate(root, ['tail', '0']);
+  assert.equal(zero.status, 0);
+  assert.match(zero.stdout, /\(0 utterances requested\)/);
+  assert.doesNotMatch(
+    zero.stdout,
+    /no utterances on this content_root yet/,
+    'rich root must not falsely claim source-emptiness when N=0',
+  );
+
+  // Sanity: a truly-empty content_root still gets the source-empty
+  // message (limit defaults to 20, so the disambiguator picks the
+  // honest "yet" branch).
+  const empty = mkdtempSync(join(tmpdir(), 'guild-tail-empty-'));
+  try {
+    writeFileSync(
+      join(empty, 'guild.config.yaml'),
+      'content_root: .\nhost_names: [eris]\n',
+    );
+    mkdirSync(join(empty, 'members'));
+    const r = runGate(empty, ['tail']);
+    assert.equal(r.status, 0);
+    assert.match(r.stdout, /no utterances on this content_root yet/);
+  } finally {
+    rmSync(empty, { recursive: true, force: true });
+  }
+});
+
+test('gate tail rejects extra positionals instead of silently dropping them', (t) => {
+  // `gate tail 3 extra` pre-fix returned the first 3 utterances
+  // ignoring `extra` — the same fail-open shape that
+  // rejectUnknownFlags exists to prevent for flags. Symmetric
+  // rejection now fires for positionals.
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  const r = runGate(root, ['tail', '3', 'extra']);
+  assert.notEqual(r.status, 0);
+  assert.match(r.stderr + r.stdout, /takes at most one positional/);
+  assert.match(r.stderr + r.stdout, /"3", "extra"/);
+});
+
 test('gate schema declares tail format flag (orchestrator contract)', (t) => {
   // MCP wirings consume `gate schema` to discover what flags each
   // verb accepts. Pre-fix tail's schema entry was bare `input: {}`;

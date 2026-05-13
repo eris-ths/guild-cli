@@ -213,6 +213,20 @@ export async function reqTail(c: C, args: ParsedArgs): Promise<number> {
   rejectUnknownFlags(args, TAIL_KNOWN_FLAGS, 'tail');
   maybeEmitExplain(args, 'tail');
 
+  // Symmetric with the unknown-flag rejection above: extra positional
+  // arguments are silently dropped pre-fix (e.g. `gate tail 3 extra`
+  // returned the first 3 utterances ignoring `extra`). That's the
+  // same fail-open shape — the caller's intent is lost without any
+  // hint that it was lost. Reject with a usage line so a typo or
+  // misremembered flag surfaces immediately.
+  if (args.positional.length > 1) {
+    throw new Error(
+      `gate tail: takes at most one positional (N), got ${args.positional.length}: ` +
+        `${args.positional.map((p) => JSON.stringify(p)).join(', ')}\n` +
+        `  next: gate tail [N]                            # default N=20`,
+    );
+  }
+
   let n: number | undefined;
   const positional = args.positional[0];
   if (positional !== undefined) {
@@ -250,7 +264,18 @@ export async function reqTail(c: C, args: ParsedArgs): Promise<number> {
   }
 
   if (utterances.length === 0) {
-    process.stdout.write('(no utterances on this content_root yet)\n');
+    // Disambiguate "source is empty" from "caller asked for zero":
+    // pre-fix, `gate tail 0` on a rich content_root rendered the
+    // same "(no utterances on this content_root yet)" message as a
+    // truly-empty root — a false claim about the source state
+    // (lore/traps/trap_silent_fallback_loses_signal). An explicit
+    // limit=0 from the caller is the only path that yields empty-
+    // without-source-emptiness, so the limit alone disambiguates.
+    if (limit === 0) {
+      process.stdout.write('(0 utterances requested)\n');
+    } else {
+      process.stdout.write('(no utterances on this content_root yet)\n');
+    }
     return 0;
   }
   process.stdout.write(
