@@ -8,17 +8,15 @@ import { nearestCommand } from '../shared/nearestCommand.js';
 import { REQUEST_STATES } from '../../domain/request/RequestState.js';
 import { getPackageVersion, isVersionFlag } from '../shared/version.js';
 import { emitErrorEnvelope } from '../shared/errorEnvelope.js';
+import { reqCreate, reqFastTrack } from './handlers/request.js';
+import { reqList, reqShow } from './handlers/requestReads.js';
 import {
-  reqCreate,
-  reqList,
-  reqShow,
   reqApprove,
   reqDeny,
   reqExecute,
   reqComplete,
   reqFail,
-  reqFastTrack,
-} from './handlers/request.js';
+} from './handlers/requestLifecycle.js';
 import { reqReview } from './handlers/review.js';
 import { reqClaim } from './handlers/claim.js';
 import { reqWitness, reqUnwitness } from './handlers/witness.js';
@@ -67,12 +65,14 @@ import type { Container } from '../shared/container.js';
 import type { ParsedArgs } from '../shared/parseArgs.js';
 
 // Re-export for test backward-compat (tests/interface/reviewMarkers.test.ts).
-// formatReviewMarkers and computeReviewMarkerWidth live in handlers/request.ts
-// but tests still import from this module path.
+// formatReviewMarkers and computeReviewMarkerWidth live in
+// handlers/requestReads.ts (since the 2026-05-13 split — they used to
+// be in handlers/request.ts) but tests still import from this module
+// path.
 export {
   formatReviewMarkers,
   computeReviewMarkerWidth,
-} from './handlers/request.js';
+} from './handlers/requestReads.js';
 
 // Top-level `gate --help` text is rendered by `renderHelp` (see
 // ./help.ts): tiered by guild profile, with a `--all` override that

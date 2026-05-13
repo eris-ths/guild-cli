@@ -154,6 +154,21 @@ For day-to-day Unreleased churn, raw chronological append is fine.
   when called with `--explain`, joining `boot` / `list` /
   `show` / `chain` / `lore list` / `lore show`. JSON contract
   unchanged.
+- **`handlers/request.ts` split into three files by passage
+  role.** The original 1656-line module mixed creation,
+  read, lifecycle, and fast-track handlers in one place;
+  it has been split into `request.ts` (create + fast-track,
+  605 lines), `requestReads.ts` (list/pending/show +
+  formatters, 582 lines), and `requestLifecycle.ts` (approve/
+  deny/execute/complete/fail + helpers, 533 lines). The
+  dispatcher in `index.ts` now imports each set from its
+  dedicated module. **No behavior change** — every handler's
+  signature, output, and lifecycle remain byte-identical;
+  the existing test suite passes unchanged (1677/1677).
+  `board.ts` and the test re-export in `index.ts` updated to
+  import `formatReviewMarkers` / `computeReviewMarkerWidth`
+  from the new `requestReads.ts`; `issues.ts` still imports
+  `parseExecutorsList` from `request.ts` (unchanged path).
 
 ### Added
 
