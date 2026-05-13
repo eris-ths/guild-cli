@@ -119,6 +119,18 @@ For day-to-day Unreleased churn, raw chronological append is fine.
   `truncateCodePoints(..., 60)` helper (appends `...`, splits
   on code points). JSON consumers continue to see the full
   action verbatim — truncation is a text-mode-only concern.
+- **`bin/ctx.mjs` is now tracked as executable (mode 100755).**
+  Pre-fix, the file was shipped with mode 100644 since #143
+  (2026-05-04) — `./bin/ctx.mjs` from a clean checkout failed
+  with "permission denied." Invocation via `npm run ctx` or
+  `node bin/ctx.mjs` worked (which is how every test path
+  reaches it), so the regression hid in the gap between
+  shell-invoked and node-invoked entry points. The four
+  sibling dispatchers (`agora` / `devil` / `gate` / `guild`)
+  were already 100755. A new test
+  (`binEntryExecutableBit.test.ts`) pins the invariant via
+  `git ls-files -s` so the next bin entry can't regress in the
+  same way.
 
 ### Changed
 
