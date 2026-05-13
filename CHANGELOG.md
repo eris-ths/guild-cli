@@ -5,6 +5,23 @@ All notable changes to `guild-cli` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to the versioning policy described in [docs/POLICY.md](./docs/POLICY.md).
 
+<!--
+Convention for the `## [Unreleased]` block:
+APPEND new entries to the END of each section (Fixed / Changed /
+Added / Removed / Deprecated / Security). Do NOT insert at the top.
+
+Why: top-insertion makes every concurrently-open PR collide on the
+same anchor (HEAD's "next line" after the section heading). Appending
+to the end lets concurrent PRs merge without textual conflict —
+git's three-way merge resolves "two PRs appended" automatically when
+their content doesn't overlap.
+
+At release time, the `## [Unreleased]` block is renamed to the
+version heading; ordering within the section can be tidied during
+that same edit if a curator wants reverse-chronological prose.
+For day-to-day Unreleased churn, raw chronological append is fine.
+-->
+
 ## [Unreleased]
 
 ### Fixed
