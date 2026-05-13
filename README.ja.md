@@ -208,7 +208,7 @@ passage 固有の records はそれぞれ `<content_root>/agora/` /
 各ディレクトリは自己完結した `content_root` で、`cd` してそのまま
 verb を叩けます:
 
-- [`examples/quick-start/`](./examples/quick-start/) — 最小の config + members
+- [`examples/quick-start/`](./examples/quick-start/) — 最小の config + members。 README は 30秒 → 5分 → 20分 の graduated reading path
 - [`examples/dogfood-session/`](./examples/dogfood-session/) — 多 actor の長い実セッション（このツール自身が自分を拡張した完全な記録）
 - [`examples/agent-first-session/`](./examples/agent-first-session/) — JSON envelope を中心とした agent-driven flow
 - [`examples/agent-voices/`](./examples/agent-voices/) — multi-persona の voice 表現
