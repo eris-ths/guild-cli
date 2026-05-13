@@ -67,12 +67,14 @@ Pick a depth. Every layer works on its own.
 | Depth | File | Audience | When it's enough |
 |-------|------|----------|------------------|
 | 30 sec | the paragraphs + "Solo flow" above | solo | you want to know what this is |
+| 1 min | [`examples/quick-start/`](./examples/quick-start/) | solo / agent | you want to run gate against a content_root and see something happen — graduated 30s → 5min → 20min path inside |
 | 5 min | [`docs/concepts-for-newcomers.md`](./docs/concepts-for-newcomers.md) | solo | you came from Jira / PR review / ADR and want the translation |
 | 10 min | [`AGENT.md`](./AGENT.md) | solo / agent | you're an AI agent and want the full verb map across all four passages |
 | 15 min | [`docs/playbook.md`](./docs/playbook.md) | pair | you know each passage; you want **combos** (gate + agora + devil flows; ctx-inclusive patterns arrive in phase 2), recipes, and the bug-killing flow |
 | 15 min | [`docs/swarm.md`](./docs/swarm.md) | swarm | you orchestrate ≥2 parallel executors / Claude SubAgents and need the substrate-engagement recipe |
 | 30 min | [`docs/verbs.md`](./docs/verbs.md) | any | you want per-verb examples and design notes |
 | reference | [`docs/glossary.md`](./docs/glossary.md) | any | you hit a project-specific term and want the authoritative definition |
+| reference | [`lore/principles/`](./lore/principles/) (or `gate lore list`) | any | the 14 load-bearing ideas behind the design — read when you want to know why a choice was made, not how |
 | 1 hour | [`examples/dogfood-session/`](./examples/dogfood-session/) | any | you're adopting this seriously and want to see real sessions |
 | working notes | [`docs/domain-fit/`](./docs/domain-fit/) | any | you're curious whether gate fits a non-standard domain |
 | when needed | [`docs/POLICY.md`](./docs/POLICY.md) / [`docs/storage-format.md`](./docs/storage-format.md) / [`SECURITY.md`](./SECURITY.md) | embedder | you're embedding guild-cli and need the stability / on-disk shape / threat contract |
@@ -83,6 +85,11 @@ Pick a depth. Every layer works on its own.
 behind the design. One principle per file, ~30 lines each. Read these
 when you need to know why a choice was made, not how. Append-only in
 spirit, like the records `gate` itself produces.
+
+Also reachable from the CLI without leaving the substrate: `gate lore
+list` shows every principle + trap; `gate lore show <name>` reads
+one. Frontmatter-aware filtering (`--type`, `--applies-to`,
+`--relevant-until`) is supported.
 
 Recent: [`principle 14`](./lore/principles/14-substrate-engagement-reduces-coordination-context-cost.md)
 extends principle 04 to coordination state — when multiple SubAgents
