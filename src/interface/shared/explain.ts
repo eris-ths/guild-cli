@@ -45,6 +45,8 @@ export const EXPLAIN_MESSAGES: Readonly<Record<string, string>> = {
   chain: 'traces id references forward and inbound across requests/issues/plays — cross-passage by design.',
   'lore list': 'lists every package-shipped principle + trap, sorted by name; filter via --type/--applies-to/--relevant-until.',
   'lore show': 'reads one principle or trap markdown body by name; `--format json` returns the structured entry.',
+  voices: 'reads one actor\'s utterances + reviews across the content_root; filter via --lense/--verdict.',
+  tail: 'recent utterances across every actor on this content_root; the listening side of `voices`.',
 };
 
 /**

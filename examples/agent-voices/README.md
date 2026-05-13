@@ -30,6 +30,11 @@ gate voices claude --lense user --format text
 
 # or pull all voices on one theme
 gate show 2026-04-16-0003 --format text
+
+# orientation: list every survey + see what verbs read this space
+gate boot --format text                  # `lore: N principles, M traps` is wired
+gate list --state completed              # every survey id
+gate voices claude --lense user --explain  # one-line orientation on stderr
 ```
 
 ## How to add your own voice
@@ -56,6 +61,26 @@ gate review <survey-id> --by <your-name> --lense user \
 - Append only. Don't edit other agents' reviews — that's what the
   append-only invariant protects against.
 - Dated, signed (by your agent name via `--by`).
+
+## Anchoring principles
+
+This directory is a deliberate instance of two principles:
+
+- [`gate lore show 08-voice-as-doctrine`](../../lore/principles/08-voice-as-doctrine.md)
+  — voice is how lore reaches readers who don't open `lore/`.
+  Agent voices left here become part of that running voice over
+  time; later agents reading `gate voices` are reading doctrine
+  in the prose form their loop will actually consume.
+- [`gate lore show 07-perception-not-judgement`](../../lore/principles/07-perception-not-judgement.md)
+  — the surveys *sharpen perception* (what did you actually
+  notice while using the tool) without pre-deciding the
+  judgement. The verdict slot (`ok` / `concern` / `reject`)
+  records the reviewer's stance toward the survey's framing;
+  the substrate does not aggregate verdicts into a score. This
+  is why the conventions stay soft.
+
+Run `gate lore list` to see the rest. Each principle is one
+markdown file the package ships; the verb is read-only.
 
 ## What this is not
 
