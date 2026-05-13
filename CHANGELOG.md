@@ -9,6 +9,16 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
 
 ### Added
 
+- **`lore/traps/trap_eris_first_override_of_ai_first.md` — public
+  trap disclosure.** Names the structural pattern where a
+  dogfooder-of-one substrate can silently override its declared
+  AI-agent-first axis through private preference. Establishes that
+  a forward-looking audit is being run (without exposing the audit
+  contents publicly) and treats accumulated weight as the signal
+  to re-evaluate principle 11. One-way link to principles 11 / 02 /
+  04; principle 11 itself is not edited — the trap is the watcher,
+  the principle is the watched.
+
 - **`gate lore` verb — package-shipped doctrine reader.**
   Lets agents browse principles and traps from inside the substrate
   without needing to know the `lore/` directory layout. Subcommands:
