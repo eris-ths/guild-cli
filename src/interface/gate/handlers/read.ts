@@ -84,6 +84,24 @@ export async function reqVoices(c: C, args: ParsedArgs): Promise<number> {
   }
   const utterances = collectUtterances(allJson, filter);
 
+  // Typo diagnostic: a `name` that matches neither a current member
+  // nor a configured host AND produced zero utterances is almost
+  // certainly a typo. Pre-fix, `gate voices ghost-actor` returned
+  // identical empty output to `gate voices <registered-but-quiet>`,
+  // a silent-fallback signal-loss (trap_silent_fallback_loses_signal).
+  // The fix surfaces a structured `_meta.actor_unknown` field in JSON
+  // mode and a one-line hint in text mode. A name that *does* produce
+  // utterances is left alone — historical authors who are no longer
+  // current members keep working without false-flagging.
+  let actorUnknown = false;
+  if (utterances.length === 0) {
+    const nameLower = name.toLowerCase();
+    const members = await c.memberUC.list();
+    const isMember = members.some((m) => m.name.value === nameLower);
+    const isHost = c.config.hostNames.some((h) => h.toLowerCase() === nameLower);
+    actorUnknown = !isMember && !isHost;
+  }
+
   // Voice calibration: per-(actor, lense) score derived from historical
   // verdicts vs outcomes. Hidden when viewing your own voice (the
   // voter shouldn't game their own score); shown otherwise. See the
@@ -103,10 +121,28 @@ export async function reqVoices(c: C, args: ParsedArgs): Promise<number> {
     // consumers don't break. `--with-calibration` opts into an object
     // shape that carries both. The flag is registered in
     // KNOWN_BOOLEAN_FLAGS so its presence doesn't swallow positionals.
+    //
+    // Typo diagnostic: when `actorUnknown` is true (zero utterances
+    // AND not a current member/host), wrap the output in an object
+    // envelope carrying `_meta.actor_unknown: true`. Existing JSON
+    // consumers reading the array shape continue to work for the
+    // common path (registered actor with results); the envelope shape
+    // only triggers on the typo case, where the consumer is already
+    // re-interpreting an empty result anyway.
     if (withCalibration) {
       process.stdout.write(
         JSON.stringify(
-          { utterances, calibration: calibration },
+          actorUnknown
+            ? { utterances, calibration, _meta: { actor_unknown: true } }
+            : { utterances, calibration },
+          null,
+          2,
+        ) + '\n',
+      );
+    } else if (actorUnknown) {
+      process.stdout.write(
+        JSON.stringify(
+          { utterances, _meta: { actor_unknown: true } },
           null,
           2,
         ) + '\n',
@@ -125,7 +161,17 @@ export async function reqVoices(c: C, args: ParsedArgs): Promise<number> {
     filterDesc.length > 0 ? ` (${filterDesc.join(', ')})` : '';
 
   if (utterances.length === 0) {
-    process.stdout.write(`(no utterances from ${name}${filterSuffix})\n`);
+    if (actorUnknown) {
+      process.stdout.write(
+        `(no utterances from ${name}${filterSuffix})\n` +
+          `  note: '${name}' is not a registered member or host — ` +
+          `did you typo the name?\n` +
+          `  next: gate tail        # see actors with recent activity\n` +
+          `        gate register    # see how to register a new actor\n`,
+      );
+    } else {
+      process.stdout.write(`(no utterances from ${name}${filterSuffix})\n`);
+    }
     return 0;
   }
 
