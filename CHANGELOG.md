@@ -7,6 +7,17 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
 
 ## [Unreleased]
 
+### Changed
+
+- **`examples/quick-start/README.md` rewritten as a graduated
+  reading path** (30s → 5min → 20min), shape borrowed from
+  `snapshot/alexandria`'s START-HERE.md. Replaces the previous
+  one-paragraph copy-paste blurb. The new path walks a cold
+  reader through the smoke test, the four-step wave loop, the
+  `gate lore` doctrine reader, sibling passages (agora/devil/
+  ctx), and pointers to richer example directories. Underlying
+  scaffolding files (`guild.config.yaml`, `members/`) unchanged.
+
 ### Added
 
 - **`gate boot` ladder thickening — lore stats + alternative
