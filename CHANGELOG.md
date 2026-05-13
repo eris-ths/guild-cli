@@ -9,6 +9,17 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
 
 ### Fixed
 
+- **`gate boot` no longer raises the 7-line
+  "inbox-enrichment-failed" warning when the actor is a host.**
+  Hosts have no inbox by design (`MessageUseCases.inbox` throws
+  "hosts do not have inboxes"). Before this fix, every host-side
+  boot recapped that fact as a warning block, inverting
+  principle 09 (orientation-disclosure: surface surprising
+  cases, stay quiet otherwise). The fact is already conveyed by
+  `role: 'host'` in the payload. Inbox enrichment now skips on
+  the host path; the warning still fires for an unknown actor
+  (typo diagnostic), so the no-inbox surface remains useful
+  where it actually disambiguates.
 - **`gate boot` no longer steers the author of an executing
   wave toward `gate complete --by <author>` when a different
   actor is the named executor.** The actionable-transition

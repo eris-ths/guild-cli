@@ -822,6 +822,50 @@ test('gate boot: reviewed-authored is suppressed when a higher-priority transiti
   }
 });
 
+test('gate boot: host actor does NOT emit the "hosts have no inbox" warning', () => {
+  // Pre-fix, every boot run by a host actor produced a 7-line warning
+  // block ("inbox enrichment failed for actor=eris ... hosts do not
+  // have inboxes"). That fact is already conveyed by `role: 'host'`
+  // in the payload; emitting it as a warning every session inverts
+  // principle 09 (orientation-disclosure: surface surprising cases,
+  // stay quiet otherwise — being a host is not surprising state).
+  // The fix skips inbox enrichment for role='host' so the warning
+  // never fires on the host path.
+  const { root, cleanup } = bootstrap(); // host_names: [human]
+  try {
+    const { stdout, status } = runGate(root, ['boot'], {
+      GUILD_ACTOR: 'human',
+    });
+    assert.equal(status, 0);
+    const payload = JSON.parse(stdout);
+    assert.equal(payload.role, 'host', 'host bootstrap precondition');
+    const inboxWarning = (payload.warnings as string[]).find((w) =>
+      w.includes('inbox enrichment failed'),
+    );
+    assert.equal(
+      inboxWarning,
+      undefined,
+      'host boot must NOT raise inbox-enrichment warning (by-design no-inbox)',
+    );
+    // Sanity: a typo'd actor still surfaces the warning (the fix only
+    // suppresses the host path, not unknown-actor diagnostics).
+    const { stdout: typoStdout } = runGate(root, ['boot'], {
+      GUILD_ACTOR: 'nope-typo',
+    });
+    const typoPayload = JSON.parse(typoStdout);
+    assert.equal(typoPayload.role, 'unknown');
+    const typoWarning = (typoPayload.warnings as string[]).find((w) =>
+      w.includes('inbox enrichment failed'),
+    );
+    assert.ok(
+      typoWarning,
+      'unknown actor must still surface inbox-enrichment warning (typo diagnostic)',
+    );
+  } finally {
+    cleanup();
+  }
+});
+
 test('gate boot: executing wave where author≠executor does NOT surface to the author', () => {
   // Regression for the actionable-misattribution friction observed
   // 2026-05-13 on req 2026-05-08-0012 (author=eris, executors=[miki]).

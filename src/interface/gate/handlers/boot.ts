@@ -494,7 +494,17 @@ export async function bootCmd(c: C, args: ParsedArgs): Promise<number> {
   }
 
   const inboxUnread: BootPayload['inbox_unread'] = [];
-  if (actor) {
+  // Skip inbox enrichment when the actor is a host — hosts do not
+  // have inboxes by design (MessageUseCases.inbox throws with
+  // "hosts do not have inboxes"). Before this guard, every boot
+  // run by a host emitted a 7-line warning block recapping the
+  // by-design no-inbox fact — principle 09 (orientation-disclosure:
+  // surface surprising cases, stay quiet otherwise) inverted. The
+  // host's role is already conveyed via the `role: 'host'` field;
+  // suppressing the redundant warning is the orientation-clean
+  // shape. role='unknown' still attempts inbox so the throw
+  // produces a real warning for typo'd actor names.
+  if (actor && role !== 'host') {
     try {
       const msgs = await c.messageUC.inbox(actor);
       const unread = msgs.filter((m) => !m.read);
