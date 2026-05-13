@@ -7,8 +7,40 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
 
 ## [Unreleased]
 
+### Fixed
+
+- **`gate boot` no longer steers the author of an executing
+  wave toward `gate complete --by <author>` when a different
+  actor is the named executor.** The actionable-transition
+  predicate previously matched `executing-mine` on either
+  `r.hasExecutor(actor) || r.from === actor`, so a wave authored
+  by eris with `--executor miki` surfaced to eris with
+  `→ next: gate complete <id> --by eris`. Dispatch then failed
+  ("eris is not in this wave's executors (miki)"). The author
+  fallback is now gated on `executors.length === 0` (legacy /
+  self-execute records that never populated executors); when
+  the list names someone else, the wave does not appear on the
+  author's actionable ladder. Observed 2026-05-13 on a drained
+  test fixture (req 2026-05-08-0012).
+- **`gate fail` on a pending request redirects to `gate deny`
+  by name.** The domain still rejects the transition with the
+  state-name hint (`valid next states from pending: approved,
+  denied`) — that's the right shape for the domain layer — but
+  the interface now pre-checks state and surfaces `gate deny
+  <id> --by <m> --reason <s>` directly, so the next verb is
+  one line away instead of a translation step. Pairs with the
+  help-tier promotion below.
+
 ### Changed
 
+- **`gate deny` is now part of BASE help (profile=standard).**
+  Pre-fix it was tier=`extra`, visible only via `gate --help
+  --all` — yet `denied` was listed in BASE help's terminal
+  states block. A cold-session caller searching for "cancel a
+  pending request" hit `gate fail` first (illegal pending →
+  failed) and only found `deny` after invoking `--all`. The
+  verb is now surfaced symmetrically with `approve` /
+  `complete` / `fail`.
 - **`examples/agent-voices/README.md` cross-references the
   underlying lore.** Adds an "Anchoring principles" section
   linking principle 08 (voice-as-doctrine) and principle 07

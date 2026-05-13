@@ -132,7 +132,13 @@ const SECTIONS: readonly Section[] = [
         text: '  gate approve <id> --by <m> [--note <s>] [--dry-run]',
       },
       {
-        tier: 'extra',
+        // BASE — symmetric with the terminal states block: `denied`
+        // is listed alongside completed/failed at the bottom of help,
+        // but the verb that reaches it was previously --all-only.
+        // Cold-session callers searching for "cancel a pending"
+        // would hit `gate fail` (illegal transition pending→failed)
+        // before discovering deny. Surface it next to approve.
+        tier: 'base',
         text:
           '  gate deny <id> --by <m> [--note <s> | --reason <s> | <reason>] [--dry-run]',
       },

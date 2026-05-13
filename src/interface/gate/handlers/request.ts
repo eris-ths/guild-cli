@@ -1327,6 +1327,20 @@ export async function reqFail(c: C, args: ParsedArgs): Promise<number> {
   // in both preview and live runs.
   const priorFail = await c.requestUC.show(id);
   if (priorFail !== null) {
+    // Verb-shape redirect at the interface layer (state vocab stays
+    // in domain — see RequestState.ts comment): the domain rejects
+    // pending→failed with a state-name hint ("valid next states from
+    // pending: approved, denied"), but a cold-session caller reading
+    // that hint has to translate "denied" back to a verb. Pre-check
+    // and surface `gate deny` directly — the exact friction observed
+    // 2026-05-13 (drained test-fixture pendings).
+    if (priorFail.state === 'pending') {
+      throw new Error(
+        `Request ${id} is pending — fail is reachable only from executing.\n` +
+          `  To cancel a pending request, use:\n` +
+          `    gate deny ${id} --by <m> --reason <s>`,
+      );
+    }
     // See reqComplete: issue #294 / miki concern #1 — refuse fail
     // when wave has executors and `by` is not one of them. Same
     // typo-safety rationale as complete: a misspelt `--by` would

@@ -73,6 +73,11 @@ function run(
 const BASE_VERBS = [
   'request',
   'approve',
+  // `deny` is BASE symmetric with the terminal-state vocab (pending
+  // → denied is listed alongside completed/failed in help). Pre-fix
+  // it was --all-only, leaving cold-session callers to misroute
+  // through `fail` (illegal pending → failed) before finding deny.
+  'deny',
   'execute',
   'complete',
   'fail',
