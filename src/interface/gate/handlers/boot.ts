@@ -398,6 +398,20 @@ interface BootPayload {
    * (a condition to notice).
    */
   suggested_next: BootSuggestedNextOrPendingResponse | null;
+  /**
+   * Counts of package-shipped lore the caller can read via
+   * `gate lore list` / `gate lore show <name>`. Surfaces the
+   * presence of doctrine in the orientation payload so a cold
+   * AI agent learns the lore reader exists without having to
+   * grep the verb list. `available` is false when the lore
+   * directory could not be resolved (an unusual install state);
+   * in that case both counts are 0.
+   */
+  lore_stats: {
+    available: boolean;
+    principles: number;
+    traps: number;
+  };
 }
 
 export async function bootCmd(c: C, args: ParsedArgs): Promise<number> {
@@ -638,6 +652,19 @@ export async function bootCmd(c: C, args: ParsedArgs): Promise<number> {
   const crossPassage = await collectCrossPassage(c.config);
   const activeOverlappingTargets = computeActiveOverlappingTargets(allRequests);
 
+  // Lore stats: count principles + traps shipped with this package.
+  // Cheap (one fs scan, already cached by FsLoreRepository) and lets
+  // the boot text surface a one-line discoverability hint for the
+  // `gate lore` verb. Unavailable lore (unusual install state) reads
+  // as zeros + available=false so consumers can branch.
+  const loreStats = c.loreUC.available
+    ? {
+        available: true,
+        principles: c.loreUC.list({ type: 'principle' }).length,
+        traps: c.loreUC.list({ type: 'trap' }).length,
+      }
+    : { available: false, principles: 0, traps: 0 };
+
   const sessionIdUnset = actor !== null && sessionId === null;
 
   const payload: BootPayload = {
@@ -663,6 +690,7 @@ export async function bootCmd(c: C, args: ParsedArgs): Promise<number> {
     active_overlapping_targets: activeOverlappingTargets,
     suggested_next: suggestedNext,
     verbs_available_now: verbsAvailableNow,
+    lore_stats: loreStats,
   };
 
   if (format === 'json') {
@@ -1437,6 +1465,15 @@ function renderBootText(p: BootPayload, profile: GuildProfile): string {
   lines.push(
     `queues: pending=${p.status.pending.total} approved=${p.status.approved.total} executing=${p.status.executing.total} open_issues=${p.status.open_issues} unreviewed=${p.status.unreviewed}`,
   );
+  // Lore discoverability hint: one line below queues so a cold
+  // session sees `gate lore` exists without having to consult
+  // `--help`. Suppressed when lore is unavailable — the (rare)
+  // mis-install path would otherwise render as a confusing `0/0`.
+  if (p.lore_stats.available) {
+    lines.push(
+      `lore: ${p.lore_stats.principles} principles, ${p.lore_stats.traps} traps  (gate lore list)`,
+    );
+  }
   if (p.inbox_unread.length > 0) {
     lines.push(`inbox unread: ${p.inbox_unread.length}`);
     for (const m of p.inbox_unread.slice(0, 3)) {
@@ -1577,6 +1614,26 @@ function renderBootText(p: BootPayload, profile: GuildProfile): string {
       lines.push(`→ next: gate ${n.verb}${argsStr ? ' ' + argsStr : ''}`);
     }
     lines.push(`  (${n.reason})`);
+    // Alternative ladder: surface up to two sibling actionable verbs
+    // beneath the primary suggestion. `verbs_available_now.actionable`
+    // is the JSON catalog of every state-transition verb whose
+    // preconditions the caller already meets; `suggested_next` picks
+    // ONE to lead with. Without rendering the rest in text mode, the
+    // caller has to round-trip through `gate boot --format json` to
+    // see the siblings. Limited to two so the ladder stays scannable.
+    //
+    // We filter out the primary itself (matched on verb + id) so the
+    // ladder doesn't echo `→ next:` as `→ or:`. The id sits in the
+    // primary suggestion's `args.id` when present.
+    const primaryId =
+      'args' in n && typeof n.args['id'] === 'string' ? n.args['id'] : null;
+    const alts = p.verbs_available_now.actionable
+      .filter((a) => !(a.verb === n.verb && a.id === primaryId))
+      .slice(0, 2);
+    for (const a of alts) {
+      lines.push(`→ or:   gate ${a.verb} ${a.id}`);
+      lines.push(`        (${a.reason})`);
+    }
   }
   return lines.join('\n') + '\n';
 }

@@ -9,6 +9,23 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
 
 ### Added
 
+- **`gate boot` ladder thickening — lore stats + alternative
+  next steps.** Two surface improvements to the orientation
+  payload:
+  1. **`lore_stats`** is now part of the boot payload (JSON:
+     `{ available, principles, traps }`; text: a `lore: N
+     principles, M traps  (gate lore list)` line below
+     `queues:`). Cold AI agents learn that `gate lore` exists at
+     orientation time, without having to grep the verb catalog.
+  2. **Alternative ladder** in text mode: when
+     `verbs_available_now.actionable` carries more than one
+     entry, the renderer surfaces up to two siblings as `→ or:`
+     lines beneath the primary `→ next:`. Previously the
+     catalog was JSON-only — callers reading text saw a single
+     suggestion and had to round-trip through `--format json`
+     to see what else they could do. The primary is de-duped
+     from the ladder via verb + id match. JSON shape unchanged.
+
 - **Universal `--explain` flag on read verbs.** Callers append
   `--explain` to a registered read verb to receive a one-line
   orientation message on stderr describing what the verb returns
