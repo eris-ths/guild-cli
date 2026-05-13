@@ -1803,6 +1803,22 @@ const VERBS: readonly VerbSchema[] = [
     input: {
       type: 'object',
       properties: {
+        // Sub-verb is positional ('mark-read'), modeled here as
+        // `subcommand` for parity with `gate doctor` / `gate issues`
+        // / `gate templates` schema entries. Without this field, the
+        // `summary` claim "mark-read as subcommand" was unbacked by
+        // the structured contract — an MCP orchestrator reading the
+        // schema would see no way to invoke `inbox mark-read`
+        // (trap_help_text_drift_on_new_verb: the registry-of-
+        // surfaces drifted past one of the entries).
+        subcommand: {
+          type: 'string',
+          enum: ['mark-read'],
+          description:
+            'optional sub-verb. `mark-read [N]` marks the Nth-most-' +
+            "recent entry (or all when N omitted) as read; absence " +
+            'runs the standard list view.',
+        },
         for: str,
         unread: { type: 'boolean' },
         format: formatField,
