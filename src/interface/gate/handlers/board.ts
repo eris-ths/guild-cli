@@ -11,7 +11,7 @@ import { Request } from '../../../domain/request/Request.js';
 import {
   computeReviewMarkerWidth,
   formatReviewMarkers,
-} from './request.js';
+} from './requestReads.js';
 
 /**
  * gate board [--for <m>] [--format json|text]
