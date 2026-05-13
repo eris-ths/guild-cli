@@ -39,6 +39,7 @@ import type { ParsedArgs } from './parseArgs.js';
  */
 export const EXPLAIN_MESSAGES: Readonly<Record<string, string>> = {
   boot: 'session-start orientation; surfaces actor identity, recent wave activity, and the next verb to reach for.',
+  next: 'one-call read-and-dispatch of the top actionable verb. Without --confirm prints the plan; with --confirm dispatches via subprocess. Auto-dispatch limited to verbs needing only --by.',
   list: 'lists requests filtered by --state/--from/--executors/--target; pair with `gate show <id>` for full body.',
   pending: 'lists requests in state=pending — the approval queue; subset of `gate list --state pending`.',
   show: 'reads one request (or other id) by id; use --fields for projection or --plain for shell-friendly output.',

@@ -333,6 +333,25 @@ For day-to-day Unreleased churn, raw chronological append is fine.
   reuse the same dispatch path. First step of the "AI-agent-
   first delight" cluster — see `memory/eris_first_overrides.md`
   default-pattern section for the design rubric.
+- **`gate next` — one-call read-and-dispatch of the top
+  actionable verb.** Composes boot's actionable ladder with verb
+  dispatch so an agent loop can chain
+  `gate boot && gate next --confirm` to drain its queue one
+  transition at a time. Without `--confirm`, the verb is a read:
+  it prints the plan (verb / args / reason / can_auto_dispatch /
+  command) and exits 0 (or 2 when nothing is actionable — the
+  loop terminator). With `--confirm`, it dispatches via
+  subprocess so the actioned verb runs through its normal code
+  path (rejectUnknownFlags, hooks, write guards) and propagates
+  the exit code. Auto-dispatch is gated on whether the verb
+  needs only `--by` (`complete` / `execute` / `approve` /
+  `show`); verbs needing extra args (`review` / `deny` / `fail`)
+  refuse with a "needs additional args" message and the
+  caller-facing command line to invoke manually. The canonical
+  agent loop is `while gate next --confirm; do :; done`. Second
+  step of the "AI-agent-first delight" cluster (see
+  `memory/eris_first_overrides.md` default-pattern section);
+  pure shape, no eris-specific content.
 
 ### ⚠ BREAKING (JSON shape)
 
