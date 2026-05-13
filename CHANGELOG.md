@@ -9,14 +9,18 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
 
 ### Changed
 
-- **`examples/quick-start/README.md` rewritten as a graduated
-  reading path** (30s → 5min → 20min), shape borrowed from
-  `snapshot/alexandria`'s START-HERE.md. Replaces the previous
-  one-paragraph copy-paste blurb. The new path walks a cold
-  reader through the smoke test, the four-step wave loop, the
-  `gate lore` doctrine reader, sibling passages (agora/devil/
-  ctx), and pointers to richer example directories. Underlying
-  scaffolding files (`guild.config.yaml`, `members/`) unchanged.
+- **`examples/agent-voices/README.md` cross-references the
+  underlying lore.** Adds an "Anchoring principles" section
+  linking principle 08 (voice-as-doctrine) and principle 07
+  (perception-not-judgement) so a cold reader sees why this
+  content_root exists in the shape it does, not just how to
+  use it. Also surfaces the new boot/lore/`--explain`
+  affordances under "Everything is gate voices readable."
+- **`--explain` registered for `gate voices` and `gate tail`.**
+  These read verbs now emit a one-line orientation on stderr
+  when called with `--explain`, joining `boot` / `list` /
+  `show` / `chain` / `lore list` / `lore show`. JSON contract
+  unchanged.
 
 ### Added
 

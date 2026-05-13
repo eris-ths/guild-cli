@@ -49,6 +49,7 @@ const VOICES_KNOWN_FLAGS: ReadonlySet<string> = new Set([
 
 export async function reqVoices(c: C, args: ParsedArgs): Promise<number> {
   rejectUnknownFlags(args, VOICES_KNOWN_FLAGS, 'voices');
+  maybeEmitExplain(args, 'voices');
   const name = args.positional[0];
   if (!name) {
     throw new Error(
@@ -164,6 +165,7 @@ export async function reqTail(c: C, args: ParsedArgs): Promise<number> {
   // want surfaced. Pilot opt-in: other verbs migrate individually
   // in follow-up PRs.
   rejectUnknownFlags(args, TAIL_KNOWN_FLAGS, 'tail');
+  maybeEmitExplain(args, 'tail');
 
   let n: number | undefined;
   const positional = args.positional[0];
