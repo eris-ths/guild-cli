@@ -76,7 +76,13 @@ export async function boardCmd(c: C, args: ParsedArgs): Promise<number> {
     sections.push({ state, items });
   }
 
-  if (envActor !== undefined) {
+  // Suppress the redundant "filtered by GUILD_ACTOR" stderr disclosure
+  // in JSON mode — the same fact is carried structurally on stdout as
+  // `_meta.filter.for_source: 'GUILD_ACTOR'` (see payload block below).
+  // Text mode keeps the line because that's the only surface humans
+  // see. See lore/traps/trap_chronic_noise_blindness.md (fix shape
+  // "Move to a structured field only").
+  if (envActor !== undefined && format !== 'json') {
     process.stderr.write(
       `# filtered by GUILD_ACTOR=${envActor} (use --for <m> or unset GUILD_ACTOR to override)\n`,
     );

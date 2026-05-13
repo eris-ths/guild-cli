@@ -225,6 +225,67 @@ test('gate pending --format text preserves prior text behavior', (t) => {
   assert.match(r.stdout, /fix one/);
 });
 
+test('gate list/pending --format json suppresses the GUILD_ACTOR filter stderr notice', (t) => {
+  // The "filtered by GUILD_ACTOR=..." line is a human-facing
+  // disclosure for text mode. JSON consumers already get the same
+  // fact on stdout as `_meta.filter.for_source: 'GUILD_ACTOR'`, so
+  // the stderr line is redundant — emitting it on every JSON
+  // invocation crosses the chronic-noise threshold named by
+  // lore/traps/trap_chronic_noise_blindness.md. This test pins
+  // both halves of the asymmetry.
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  seedTwoPending(root);
+  // JSON: no stderr disclosure, but _meta.filter still carries the fact.
+  const jsonRun = runGate(
+    root,
+    ['list', '--state', 'pending', '--format', 'json'],
+    { GUILD_ACTOR: 'alice' },
+  );
+  assert.equal(jsonRun.status, 0);
+  assert.doesNotMatch(
+    jsonRun.stderr,
+    /filtered by GUILD_ACTOR/,
+    'JSON mode must not emit the redundant filter notice (carried structurally in _meta)',
+  );
+  const payload = JSON.parse(jsonRun.stdout);
+  assert.equal(payload._meta.filter.for_source, 'GUILD_ACTOR');
+  // Text: disclosure preserved so humans see the implicit scoping.
+  const textRun = runGate(
+    root,
+    ['list', '--state', 'pending', '--format', 'text'],
+    { GUILD_ACTOR: 'alice' },
+  );
+  assert.equal(textRun.status, 0);
+  assert.match(
+    textRun.stderr,
+    /filtered by GUILD_ACTOR=alice/,
+    'text mode must keep the filter notice — it is the only surface humans see',
+  );
+});
+
+test('gate board --format json suppresses the GUILD_ACTOR filter stderr notice', (t) => {
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  seedTwoPending(root);
+  const jsonRun = runGate(root, ['board', '--format', 'json'], {
+    GUILD_ACTOR: 'alice',
+  });
+  assert.equal(jsonRun.status, 0);
+  assert.doesNotMatch(
+    jsonRun.stderr,
+    /filtered by GUILD_ACTOR/,
+    'board JSON mode must not emit the redundant filter notice (carried as _meta.filter.source)',
+  );
+  const payload = JSON.parse(jsonRun.stdout);
+  assert.equal(payload._meta.filter.source, 'GUILD_ACTOR');
+  const textRun = runGate(root, ['board', '--format', 'text'], {
+    GUILD_ACTOR: 'alice',
+  });
+  assert.equal(textRun.status, 0);
+  assert.match(textRun.stderr, /filtered by GUILD_ACTOR=alice/);
+});
+
 test('gate pending --format invalid is rejected', (t) => {
   const { root, cleanup } = bootstrap();
   t.after(cleanup);

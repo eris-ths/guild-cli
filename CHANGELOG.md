@@ -20,6 +20,17 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
   the host path; the warning still fires for an unknown actor
   (typo diagnostic), so the no-inbox surface remains useful
   where it actually disambiguates.
+- **`gate list` / `gate pending` / `gate board` no longer
+  emit the "filtered by GUILD_ACTOR=..." stderr disclosure in
+  JSON mode.** That disclosure exists so a *human* reading text
+  output knows why their result set is implicitly scoped. JSON
+  consumers already receive the same fact on stdout as
+  `_meta.filter.for_source: 'GUILD_ACTOR'` (or
+  `_meta.filter.source` on board), so the stderr line is
+  structurally redundant; emitting it on every JSON invocation
+  crosses the chronic-noise threshold named by
+  `lore/traps/trap_chronic_noise_blindness.md`. Text mode
+  keeps the line because that's the only surface humans see.
 - **`gate boot` no longer steers the author of an executing
   wave toward `gate complete --by <author>` when a different
   actor is the named executor.** The actionable-transition
