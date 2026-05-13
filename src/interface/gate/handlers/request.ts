@@ -128,6 +128,7 @@ import {
   isDryRun,
   emitDryRunPreview,
   normalizeActor,
+  truncateCodePoints,
 } from './internal.js';
 import { emitWriteResponse, parseFormat } from './writeFormat.js';
 
@@ -1610,8 +1611,22 @@ export async function reqFastTrack(c: C, args: ParsedArgs): Promise<number> {
 function printSummary(r: Request, markerWidth = 16): void {
   const j = r.toJSON();
   const markers = formatReviewMarkers(j['reviews'], markerWidth);
+  // Two issues with the previous `String(j['action']).slice(0, 60)`:
+  //   1. silent truncation — a 500-char action rendered as exactly 60
+  //      chars with no indicator; the caller couldn't tell prefix from
+  //      full content (trap_silent_fallback_loses_signal).
+  //   2. newline-preserving — multi-line actions break the columnar
+  //      table layout; the second line shifts to column 0.
+  //   3. UTF-16 surrogate cleave — `.slice(60)` on a string ending
+  //      with an emoji can produce a broken char.
+  // truncateCodePoints handles (1) and (3) (appends `...`, splits on
+  // code points). Newlines/CRs/tabs are collapsed to a U+21B5 RETURN
+  // SYMBOL so the table stays one line per request while the truncation
+  // remains visible.
+  const oneLine = String(j['action']).replace(/[\r\n\t]+/g, ' ↵ ');
+  const display = truncateCodePoints(oneLine, 60);
   process.stdout.write(
-    `${j['id']}  [${j['state']}]  from=${j['from']}  ${markers}${String(j['action']).slice(0, 60)}\n`,
+    `${j['id']}  [${j['state']}]  from=${j['from']}  ${markers}${display}\n`,
   );
 }
 

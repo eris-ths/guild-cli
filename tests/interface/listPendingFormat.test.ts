@@ -314,3 +314,80 @@ test('gate pending still rejects unknown flags (format addition is targeted)', (
   assert.equal(r.status, 1);
   assert.match(r.stderr, /unknown flag/i);
 });
+
+// ---- list --format text: action truncation + newline-safety ----
+
+test('gate list --format text shows ellipsis when action exceeds 60 chars', (t) => {
+  // Pre-fix, `String(j['action']).slice(0, 60)` truncated silently:
+  // a 500-char action rendered as exactly 60 chars of prefix with no
+  // indicator. trap_silent_fallback_loses_signal — caller can't tell
+  // prefix from full content. Fix uses truncateCodePoints, which
+  // appends `...` and splits on Unicode code points (also closes the
+  // UTF-16 surrogate-cleave latent bug).
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  const longAction = 'x'.repeat(500);
+  runGate(
+    root,
+    ['request', '--from', 'alice', '--action', longAction, '--reason', 'r'],
+  );
+  const r = runGate(root, ['list', '--state', 'pending']);
+  assert.equal(r.status, 0);
+  // Find the line for our request and assert it ends with '...'
+  const line = r.stdout
+    .split('\n')
+    .find((ln) => /^\d{4}-\d{2}-\d{2}-\d+\s+\[pending\]/.test(ln));
+  assert.ok(line, 'must find the pending request line');
+  assert.match(line!, /\.\.\.$/, 'truncated action must end with `...`');
+  // Total visible action segment is 60 chars (57 of content + 3 dots).
+  const actionSegment = line!.replace(/^.*from=alice\s+/, '');
+  assert.equal(actionSegment.length, 60, 'truncated segment is exactly 60 chars');
+});
+
+test('gate list --format text collapses newlines in action to U+21B5 ↵', (t) => {
+  // Pre-fix, a multi-line action broke the columnar layout — the
+  // second line shifted to column 0. The fix replaces every
+  // \r/\n/\t run with ' ↵ ' so the table stays one line per row.
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  runGate(
+    root,
+    [
+      'request',
+      '--from', 'alice',
+      '--action', 'line1\nline2',
+      '--reason', 'r',
+    ],
+  );
+  const r = runGate(root, ['list', '--state', 'pending']);
+  assert.equal(r.status, 0);
+  // The line for our request must contain both halves on ONE line,
+  // joined by the ↵ marker.
+  const line = r.stdout
+    .split('\n')
+    .find((ln) => /^\d{4}-\d{2}-\d{2}-\d+\s+\[pending\]/.test(ln));
+  assert.ok(line, 'must find the pending request line');
+  assert.match(line!, /line1 ↵ line2/, 'newline collapsed to ↵ marker');
+  // The line "line2" must NOT appear on its own at the start of any
+  // subsequent line (which was the pre-fix layout break).
+  assert.ok(
+    !r.stdout.split('\n').some((ln) => /^line2\b/.test(ln)),
+    'no continuation line bleeds into the table layout',
+  );
+});
+
+test('gate list --format json preserves full action verbatim (no truncation)', (t) => {
+  // The text-mode truncation must not leak into JSON consumers.
+  // toRenderJSON emits the full string.
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  const longAction = 'y'.repeat(500);
+  runGate(
+    root,
+    ['request', '--from', 'alice', '--action', longAction, '--reason', 'r'],
+  );
+  const r = runGate(root, ['list', '--state', 'pending', '--format', 'json']);
+  assert.equal(r.status, 0);
+  const payload = JSON.parse(r.stdout);
+  assert.equal(payload.requests[0].action.length, 500);
+});

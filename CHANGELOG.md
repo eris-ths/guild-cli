@@ -105,6 +105,20 @@ For day-to-day Unreleased churn, raw chronological append is fine.
   Pattern aligns with the existing `doctor` / `issues` /
   `templates` / `lore` schema entries which carry a
   `subcommand` enum.
+- **`gate list` / `gate pending` text mode no longer silently
+  truncates long actions and no longer corrupts table layout on
+  multi-line actions.** Pre-fix, `printSummary` used
+  `String(j['action']).slice(0, 60)`: (a) it cut at exactly 60
+  chars with no indicator (`trap_silent_fallback_loses_signal`
+  — a 500-char action and a 60-char action rendered
+  identically), (b) it kept embedded `\n` in the slice, so the
+  second line shifted to column 0 and broke the columnar
+  layout, and (c) `.slice` on a UTF-16 boundary risked cleaving
+  a surrogate pair. The fix collapses `\r\n\t` to a U+21B5 ↵
+  marker first, then runs the existing
+  `truncateCodePoints(..., 60)` helper (appends `...`, splits
+  on code points). JSON consumers continue to see the full
+  action verbatim — truncation is a text-mode-only concern.
 
 ### Changed
 
