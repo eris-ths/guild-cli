@@ -169,6 +169,24 @@ For day-to-day Unreleased churn, raw chronological append is fine.
   import `formatReviewMarkers` / `computeReviewMarkerWidth`
   from the new `requestReads.ts`; `issues.ts` still imports
   `parseExecutorsList` from `request.ts` (unchanged path).
+- **`handlers/boot.ts` split into four files by concern.**
+  The original 1661-line module mixed payload types, derivation
+  logic, text rendering, and the dispatcher. It has been split
+  into `bootTypes.ts` (250 lines, leaf module owning every
+  shape), `bootActionable.ts` (650 lines, all derivation —
+  actionable transitions, suggested_next, verbs_available_now,
+  overlap detection, computeLastAuthoredWriteAt),
+  `bootRender.ts` (320 lines, text mode renderer + cross-passage
+  fan-out), and `boot.ts` itself (370 lines — bootCmd
+  orchestrator only). **No behavior change** — full test suite
+  passes unchanged (1677/1677). External consumers (`suggest.ts`,
+  `tests/interface/boot.test.ts`) keep their original import
+  paths via re-exports of `deriveBootSuggestedNext`,
+  `BootSuggestedNext`, and `computeLastAuthoredWriteAt` from
+  `boot.ts`. The leaf-module type layout was chosen specifically
+  to avoid the circular-import shape that would otherwise emerge
+  from "boot.ts holds bootCmd that needs derivation that needs
+  the payload shape that lives in boot.ts."
 
 ### Added
 
