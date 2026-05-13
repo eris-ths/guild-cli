@@ -518,12 +518,6 @@ export async function reqList(
     );
   }
 
-  if (envActor !== undefined) {
-    process.stderr.write(
-      `# filtered by GUILD_ACTOR=${envActor} (use --for <m> or unset GUILD_ACTOR to override)\n`,
-    );
-  }
-
   // --format closes the asymmetry surfaced in the post-merge bird's-eye
   // check (2026-05-03): every other gate read verb (board / status /
   // voices / tail / show / why / summarize) accepts --format json|text;
@@ -535,6 +529,21 @@ export async function reqList(
   const format = optionalOption(args, 'format') ?? 'text';
   if (format !== 'json' && format !== 'text') {
     throw new Error(`--format must be 'json' or 'text', got: ${format}`);
+  }
+
+  // The "filtered by GUILD_ACTOR=..." stderr notice exists so a *human*
+  // reading text output knows why their result set is implicitly
+  // scoped. JSON consumers already get this on stdout as
+  // `_meta.filter.for_source: 'GUILD_ACTOR'`, so the stderr line is
+  // redundant in JSON mode — and emitting it on every JSON invocation
+  // crosses the chronic-noise threshold named by
+  // lore/traps/trap_chronic_noise_blindness.md (stay quiet when a
+  // structured field already says it). Gate the stderr write on
+  // text-mode only; JSON envelope's _meta.filter remains authoritative.
+  if (envActor !== undefined && format !== 'json') {
+    process.stderr.write(
+      `# filtered by GUILD_ACTOR=${envActor} (use --for <m> or unset GUILD_ACTOR to override)\n`,
+    );
   }
 
   if (format === 'json') {
