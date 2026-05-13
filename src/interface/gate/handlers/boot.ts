@@ -6,6 +6,7 @@ import {
   optionalOption,
   rejectUnknownFlags,
 } from '../../shared/parseArgs.js';
+import { maybeEmitExplain } from '../../shared/explain.js';
 import { C, loadAllRequestsAsJson, parseOptionalIntOption } from './internal.js';
 import { SESSION_ID_RE } from '../../../domain/request/Request.js';
 
@@ -401,6 +402,7 @@ interface BootPayload {
 
 export async function bootCmd(c: C, args: ParsedArgs): Promise<number> {
   rejectUnknownFlags(args, BOOT_KNOWN_FLAGS, 'boot');
+  maybeEmitExplain(args, 'boot');
   const format = optionalOption(args, 'format') ?? 'json';
   if (format !== 'json' && format !== 'text') {
     throw new Error(`--format must be 'json' or 'text', got: ${format}`);

@@ -19,6 +19,7 @@ import {
   optionalOption,
   rejectUnknownFlags,
 } from '../../shared/parseArgs.js';
+import { maybeEmitExplain } from '../../shared/explain.js';
 import { LoreType } from '../../../infrastructure/lore/LoreRepository.js';
 import { C, truncateCodePoints } from './internal.js';
 
@@ -62,6 +63,7 @@ export async function loreCmd(c: C, args: ParsedArgs): Promise<number> {
 
 function loreList(c: C, args: ParsedArgs): number {
   rejectUnknownFlags(args, LORE_LIST_KNOWN_FLAGS, 'lore list');
+  maybeEmitExplain(args, 'lore list');
   const typeRaw = optionalOption(args, 'type');
   const appliesTo = optionalOption(args, 'applies-to');
   const relevantUntilRaw = optionalOption(args, 'relevant-until');
@@ -138,6 +140,7 @@ function loreList(c: C, args: ParsedArgs): number {
 
 function loreShow(c: C, args: ParsedArgs): number {
   rejectUnknownFlags(args, LORE_SHOW_KNOWN_FLAGS, 'lore show');
+  maybeEmitExplain(args, 'lore show');
   const name = args.positional[1];
   if (!name) {
     throw new Error(

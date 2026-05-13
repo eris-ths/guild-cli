@@ -270,9 +270,15 @@ export function rejectUnknownFlags(
   if (args.options['help'] === true) {
     throw new HelpRequested(verb, [...known].sort(), extras);
   }
+  // `--explain` is universal: every verb accepts it without listing
+  // it in its known set. The handler decides whether to emit an
+  // orientation line (via `maybeEmitExplain`); when no message is
+  // registered for the verb, the flag still passes silently rather
+  // than tripping unknown-flag rejection. See shared/explain.ts.
   const unknown: string[] = [];
   for (const key of Object.keys(args.options)) {
     if (key === 'help') continue;
+    if (key === 'explain') continue;
     if (!known.has(key)) unknown.push(key);
   }
   if (unknown.length === 0) return;

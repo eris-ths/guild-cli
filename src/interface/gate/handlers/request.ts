@@ -8,6 +8,7 @@ import {
   optionalOption,
   rejectUnknownFlags,
 } from '../../shared/parseArgs.js';
+import { maybeEmitExplain } from '../../shared/explain.js';
 import { notFoundMessage } from '../../shared/notFoundHint.js';
 import {
   fireBeforeHook,
@@ -473,6 +474,7 @@ export async function reqList(
     verb === 'pending' ? PENDING_KNOWN_FLAGS : LIST_KNOWN_FLAGS,
     verb,
   );
+  maybeEmitExplain(args, verb);
   const fromFilter = optionalOption(args, 'from');
   const executorFilter = optionalOption(args, 'executor');
   const autoReviewFilter = optionalOption(args, 'auto-review');
@@ -598,6 +600,7 @@ function describeFilters(filters: Record<string, string | undefined>): string {
 
 export async function reqShow(c: C, args: ParsedArgs): Promise<number> {
   rejectUnknownFlags(args, SHOW_KNOWN_FLAGS, 'show');
+  maybeEmitExplain(args, 'show');
   const id = args.positional[0];
   if (!id)
     throw new Error(

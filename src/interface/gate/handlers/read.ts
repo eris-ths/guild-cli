@@ -7,6 +7,7 @@ import {
   optionalOption,
   rejectUnknownFlags,
 } from '../../shared/parseArgs.js';
+import { maybeEmitExplain } from '../../shared/explain.js';
 import { notFoundMessage } from '../../shared/notFoundHint.js';
 import { parseLense } from '../../../domain/shared/Lense.js';
 import { parseVerdict } from '../../../domain/shared/Verdict.js';
@@ -348,6 +349,7 @@ const CHAIN_KNOWN_FLAGS: ReadonlySet<string> = new Set(['format']);
 
 export async function reqChain(c: C, args: ParsedArgs): Promise<number> {
   rejectUnknownFlags(args, CHAIN_KNOWN_FLAGS, 'chain');
+  maybeEmitExplain(args, 'chain');
   const format = optionalOption(args, 'format') ?? 'text';
   if (format !== 'text' && format !== 'json') {
     throw new Error(`--format must be 'text' or 'json', got: ${format}`);

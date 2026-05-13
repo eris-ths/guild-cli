@@ -9,6 +9,20 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
 
 ### Added
 
+- **Universal `--explain` flag on read verbs.** Callers append
+  `--explain` to a registered read verb to receive a one-line
+  orientation message on stderr describing what the verb returns
+  and which related verbs to reach for. Stdout output is
+  unchanged, so `--explain` composes with `--format json` and
+  shell pipelines — orientation is a sibling channel. Initial
+  coverage: `gate boot`, `gate list`, `gate pending`,
+  `gate show`, `gate chain`, `gate lore list`, `gate lore show`.
+  Adding more verbs is a two-line change (an entry in
+  `EXPLAIN_MESSAGES` + a `maybeEmitExplain(args, verb)` call after
+  `rejectUnknownFlags`). Shaped by principle 09 (orientation-
+  disclosure): instead of waiting for friction to teach, callers
+  can ask for orientation up front at the cost of one stderr line.
+
 - **`lore/traps/trap_eris_first_override_of_ai_first.md` — public
   trap disclosure.** Names the structural pattern where a
   dogfooder-of-one substrate can silently override its declared
