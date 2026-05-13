@@ -9,6 +9,17 @@ and this project adheres to the versioning policy described in [docs/POLICY.md](
 
 ### Fixed
 
+- **`gate voices <typo>` now surfaces a "did you typo the
+  name?" diagnostic instead of returning identical empty output
+  to a registered-but-quiet actor.** Pre-fix, the two cases were
+  shape-indistinguishable — a silent-fallback signal-loss named
+  by `lore/traps/trap_silent_fallback_loses_signal.md`. Text
+  mode adds a 3-line hint pointing at `gate tail` / `gate
+  register`; JSON mode wraps the output in `{utterances: [],
+  _meta: {actor_unknown: true}}` only on the typo branch.
+  Registered members and hosts with no utterances keep the
+  pre-fix shape unchanged (array form for JSON consumers, plain
+  empty-line for text).
 - **`gate boot` no longer raises the 7-line
   "inbox-enrichment-failed" warning when the actor is a host.**
   Hosts have no inbox by design (`MessageUseCases.inbox` throws
