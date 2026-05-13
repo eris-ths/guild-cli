@@ -107,3 +107,53 @@ test('gate fail on a pending request redirects to gate deny by name', () => {
     b.cleanup();
   }
 });
+
+test('gate fail on a pending request — JSON envelope carries error.recovery', () => {
+  // Structured-recovery shape: the prose hint above is mirrored by a
+  // machine-readable `error.recovery: {verb, args, reason}` slot in
+  // the JSON envelope so AI agents can dispatch the next move without
+  // parsing the prose. The text-mode test above stays untouched —
+  // the prose surface is unchanged; the structured surface is the
+  // additive new contract.
+  const b = bootstrap();
+  try {
+    const filed = run(
+      b.root,
+      [
+        'request',
+        '--action', 'recovery probe',
+        '--reason', 'recovery probe',
+        '--executor', 'alice',
+        '--format', 'json',
+      ],
+      { GUILD_ACTOR: 'eris' },
+    );
+    assert.equal(filed.status, 0);
+    const id = (JSON.parse(filed.stdout) as { id: string }).id;
+
+    const failed = run(
+      b.root,
+      ['fail', id, '--by', 'alice', '--reason', 'cancel', '--format', 'json'],
+      { GUILD_ACTOR: 'eris' },
+    );
+    assert.notEqual(failed.status, 0);
+    // The envelope is emitted to stderr (JSON line 1) then prose
+    // (stderr line 2); pick the first line that parses as JSON.
+    const envelopeLine = failed.stderr
+      .split('\n')
+      .find((ln) => ln.trim().startsWith('{'));
+    assert.ok(envelopeLine, 'JSON envelope line must be present on stderr');
+    const env = JSON.parse(envelopeLine!);
+    assert.equal(env.ok, false);
+    assert.ok(env.error.recovery, 'error.recovery must be present');
+    assert.equal(env.error.recovery.verb, 'deny');
+    assert.equal(env.error.recovery.args.id, id);
+    assert.match(
+      env.error.recovery.reason,
+      /pending/,
+      'recovery.reason must name why deny is the recovery path',
+    );
+  } finally {
+    b.cleanup();
+  }
+});

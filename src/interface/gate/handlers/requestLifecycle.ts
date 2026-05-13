@@ -31,6 +31,7 @@ import {
   normalizeActor,
 } from './internal.js';
 import { emitWriteResponse, parseFormat } from './writeFormat.js';
+import { RecoverableError } from '../../shared/errorEnvelope.js';
 
 const APPROVE_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'by',
@@ -460,10 +461,23 @@ export async function reqFail(c: C, args: ParsedArgs): Promise<number> {
     // and surface `gate deny` directly — the exact friction observed
     // 2026-05-13 (drained test-fixture pendings).
     if (priorFail.state === 'pending') {
-      throw new Error(
+      // RecoverableError carries a structured `recovery` slot so the
+      // JSON envelope's `error.recovery` field names the next verb +
+      // args directly. AI-agent consumers dispatch from the structured
+      // form; text-mode readers see the prose hint in the `error:`
+      // line as before. Both surfaces stay in lockstep — the prose
+      // and the JSON shape describe the same recovery move.
+      throw new RecoverableError(
         `Request ${id} is pending — fail is reachable only from executing.\n` +
           `  To cancel a pending request, use:\n` +
           `    gate deny ${id} --by <m> --reason <s>`,
+        {
+          verb: 'deny',
+          args: { id },
+          reason:
+            `${id} is pending; fail is reachable only from executing — ` +
+            `deny is the cancellation path for pending records.`,
+        },
       );
     }
     // See reqComplete: issue #294 / miki concern #1 — refuse fail

@@ -317,6 +317,22 @@ For day-to-day Unreleased churn, raw chronological append is fine.
   `--depth` field was previously decorative — set on the wave but read
   by nobody. Also declares `wave-status` in `verbs.ts` READ_VERBS,
   closing a pre-existing gap.
+- **`error.recovery` structured next-step in the JSON envelope.**
+  Throw sites with an obvious "use verb X instead" answer can now
+  carry the recovery in a machine-readable slot: `error.recovery: {
+  verb: string, args: Record<string,string>, reason: string }`.
+  AI-agent consumers dispatch from this directly instead of
+  parsing the prose `error:` line. Text-mode runs are unaffected
+  — the prose hint remains the human surface; the structured form
+  is its additive sibling. Wired today: `gate fail <pending-id>`
+  carries `{verb: 'deny', args: {id}, reason: '...'}`. Future
+  throw sites can opt-in by throwing the new `RecoverableError`
+  (exported from `shared/errorEnvelope.ts`) instead of `Error`.
+  Shape mirrors `BootSuggestedNext` (verb/args/reason) so
+  orchestrators that already consume `boot.suggested_next` can
+  reuse the same dispatch path. First step of the "AI-agent-
+  first delight" cluster — see `memory/eris_first_overrides.md`
+  default-pattern section for the design rubric.
 
 ### ⚠ BREAKING (JSON shape)
 

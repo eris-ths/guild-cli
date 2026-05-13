@@ -63,6 +63,64 @@ export interface EmitOptions {
   readonly prefix?: string;
   readonly field?: string;
   readonly code?: string;
+  /**
+   * Structured next-step the caller can dispatch to recover. AI-first
+   * agents read this in preference to parsing the prose `error:` line.
+   * The `→ next:` text hint in the message body is the human-facing
+   * mirror; the structured form here is its machine-readable sibling.
+   *
+   * Emitted as `error.recovery` in the JSON envelope. Text-mode runs
+   * are unaffected — the prose hint remains the human surface.
+   *
+   * Shape mirrors `BootSuggestedNext` (verb + args + reason) so
+   * orchestrators that already consume `boot.suggested_next` can
+   * dispatch error recoveries with the same code path.
+   *
+   * Pattern documented under eris_first_overrides default rubric:
+   * "shape upstream / content local" — the structured field is a
+   * pure mechanism, equally useful to any AI agent reading errors.
+   */
+  readonly recovery?: Recovery;
+}
+
+/**
+ * Structured recovery hint embedded in `error.recovery`. The caller
+ * can dispatch the suggested verb + args directly without prose-
+ * parsing.
+ */
+export interface Recovery {
+  /** The verb to dispatch (e.g. `'deny'`, `'list'`). */
+  verb: string;
+  /** Flag/positional args as a key-value map (string-only values). */
+  args: Record<string, string>;
+  /** Human-readable explanation of why this is the recovery move. */
+  reason: string;
+}
+
+/**
+ * Error subclass carrying a structured recovery hint. Throw this
+ * from handlers that have an obvious "use verb X instead" answer
+ * for the failure case; the central error envelope catches it,
+ * lifts `.recovery` into the JSON shape, and the prose message
+ * lands on stderr unchanged for text-mode readers.
+ *
+ * Usage:
+ * ```ts
+ * throw new RecoverableError(
+ *   'Request X is pending — fail is reachable only from executing.\n' +
+ *     '  To cancel a pending request, use:\n' +
+ *     '    gate deny X --by <m> --reason <s>',
+ *   { verb: 'deny', args: { id: 'X' }, reason: 'pending cancel path' },
+ * );
+ * ```
+ */
+export class RecoverableError extends Error {
+  readonly recovery: Recovery;
+  constructor(message: string, recovery: Recovery) {
+    super(message);
+    this.name = 'RecoverableError';
+    this.recovery = recovery;
+  }
 }
 
 /**
@@ -99,6 +157,21 @@ export function emitErrorEnvelope(
       errObj['code'] = derived;
     } else if (opts.code !== undefined) {
       errObj['code'] = opts.code;
+    }
+    // recovery: structured next-step. Source priority:
+    //   1. `err instanceof RecoverableError` → err.recovery wins
+    //      (the throw site authored the recovery; honour it).
+    //   2. opts.recovery → caller of emitErrorEnvelope supplied one.
+    //   3. absence → no `recovery` field on the wire.
+    // Consumers branch on field presence; absence is the no-known-
+    // recovery signal. Today only the throw sites with an obvious
+    // "use verb X instead" answer pass this — generic not-found /
+    // validation errors keep their existing prose-only surface
+    // until a wire-up sweep follows.
+    const recovery =
+      err instanceof RecoverableError ? err.recovery : opts.recovery;
+    if (recovery !== undefined) {
+      errObj['recovery'] = recovery;
     }
     const payload = { ok: false, error: errObj };
     process.stderr.write(JSON.stringify(payload) + '\n');
