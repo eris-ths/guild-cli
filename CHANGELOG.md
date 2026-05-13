@@ -95,6 +95,16 @@ For day-to-day Unreleased churn, raw chronological append is fine.
   <id> --by <m> --reason <s>` directly, so the next verb is
   one line away instead of a translation step. Pairs with the
   help-tier promotion below.
+- **`gate schema` now declares `inbox mark-read` as a
+  subcommand on the `inbox` entry.** Pre-fix, the schema's
+  `summary` claimed "mark-read as subcommand" but the
+  `input.properties` carried no `subcommand` field — an MCP
+  orchestrator reading the structured contract saw no way to
+  invoke `gate inbox mark-read`. The prose and the structured
+  contract disagreed (`trap_help_text_drift_on_new_verb`).
+  Pattern aligns with the existing `doctor` / `issues` /
+  `templates` / `lore` schema entries which carry a
+  `subcommand` enum.
 
 ### Changed
 

@@ -98,6 +98,35 @@ test('gate schema: input required fields are a subset of declared properties', (
 
 // --- issue #36 Phase 1: source: 'core' | 'plugin' discriminator ---
 
+test('gate schema --format json: inbox declares mark-read as a subcommand', (t) => {
+  // Pre-fix, the `inbox` schema's `summary` claimed "mark-read as
+  // subcommand" but the input.properties carried no `subcommand`
+  // field — an MCP orchestrator reading the structured schema saw
+  // no way to invoke `gate inbox mark-read`. The prose said one
+  // thing, the structured contract said another
+  // (trap_help_text_drift_on_new_verb). This regression pins both:
+  // mark-read appears in the subcommand enum AND the runtime
+  // dispatches it (covered by tests/interface/messageSurface.test.ts).
+  const { root, cleanup } = bootstrapMinimal('gate-schema-inbox-sub-');
+  t.after(cleanup);
+  const r = spawnSync(process.execPath, [GATE, 'schema', '--format', 'json'], {
+    cwd: root,
+    env: { ...process.env },
+    encoding: 'utf8',
+  });
+  assert.equal(r.status, 0, r.stderr);
+  const payload = JSON.parse(r.stdout);
+  const inbox = payload.verbs.find((v: { name: string }) => v.name === 'inbox');
+  assert.ok(inbox, 'inbox must be in schema');
+  const sub = inbox.input.properties.subcommand;
+  assert.ok(sub, 'inbox must declare a `subcommand` field in schema.input.properties');
+  assert.deepEqual(
+    sub.enum,
+    ['mark-read'],
+    'inbox subcommand enum must list `mark-read` (the only sub-handler)',
+  );
+});
+
 test('gate schema --format json: every verb carries source = "core" (built-in surface)', (t) => {
   // The runtime payload must always emit `source` so consumers can
   // filter built-in vs plugin verbs without cross-checking another
