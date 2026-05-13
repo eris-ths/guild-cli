@@ -822,6 +822,84 @@ test('gate boot: reviewed-authored is suppressed when a higher-priority transiti
   }
 });
 
+test('gate boot: executing wave where author≠executor does NOT surface to the author', () => {
+  // Regression for the actionable-misattribution friction observed
+  // 2026-05-13 on req 2026-05-08-0012 (author=eris, executors=[miki]).
+  // boot surfaced `→ next: gate complete <id> --by eris` to the author,
+  // but `gate complete --by <author>` errors with "not in this wave's
+  // executors" — the suggestion is unactionable. The fix tightens the
+  // executing-mine predicate so the author-only path matches only when
+  // the executor list is empty (legacy / self-execute fallback).
+  const { root, cleanup } = bootstrapWithMembers();
+  try {
+    // alice authors a wave executing-by-bob (author ≠ executor).
+    const filed = runGate(
+      root,
+      [
+        'request',
+        '--action',
+        'work for bob',
+        '--reason',
+        'author-not-executor pin',
+        '--executor',
+        'bob',
+        '--format',
+        'json',
+      ],
+      { GUILD_ACTOR: 'alice' },
+    );
+    assert.equal(filed.status, 0);
+    const id = JSON.parse(filed.stdout).id;
+    assert.equal(
+      runGate(root, ['approve', id], { GUILD_ACTOR: 'human' }).status,
+      0,
+    );
+    assert.equal(
+      runGate(root, ['execute', id], { GUILD_ACTOR: 'bob' }).status,
+      0,
+    );
+
+    // alice's boot must NOT name her as `--by` on a complete/fail of
+    // this id — she can't dispatch either.
+    const { stdout } = runGate(root, ['boot'], { GUILD_ACTOR: 'alice' });
+    const payload = JSON.parse(stdout);
+    const actionable = payload.verbs_available_now.actionable as Array<{
+      verb: string;
+      id: string;
+    }>;
+    assert.ok(
+      !actionable.some(
+        (a) => a.id === id && (a.verb === 'complete' || a.verb === 'fail'),
+      ),
+      'author-only must not appear in actionable[] complete/fail when executors list names someone else',
+    );
+    assert.notEqual(
+      payload.suggested_next?.args?.id,
+      id,
+      'author-only must not be steered toward complete/fail on a wave executing-by-someone-else',
+    );
+
+    // bob's boot, by contrast, MUST surface the actionable.
+    const { stdout: bobStdout } = runGate(root, ['boot'], {
+      GUILD_ACTOR: 'bob',
+    });
+    const bobPayload = JSON.parse(bobStdout);
+    const bobActionable = bobPayload.verbs_available_now.actionable as Array<{
+      verb: string;
+      id: string;
+    }>;
+    assert.ok(
+      bobActionable.some((a) => a.id === id && a.verb === 'complete'),
+      'assigned executor must still see complete in actionable[]',
+    );
+    assert.equal(bobPayload.suggested_next?.verb, 'complete');
+    assert.equal(bobPayload.suggested_next?.args?.id, id);
+    assert.equal(bobPayload.suggested_next?.args?.by, 'bob');
+  } finally {
+    cleanup();
+  }
+});
+
 test('computeLastAuthoredWriteAt aggregates across status_log, reviews, and thanks', async () => {
   // Direct unit test — bypass the CLI to assert the aggregation
   // independently of the boot wiring. status_log (transitions),

@@ -1010,8 +1010,10 @@ function actionableTransitions(
   const out: ActionableTransition[] = [];
   for (const r of allRequests) {
     // Executing-mine: actor is either assigned executor (anywhere in
-    // the multi-executor list, issue #230) or the author (which
-    // happens for requests filed-then-self-executed).
+    // the multi-executor list, issue #230) or — only as a legacy
+    // fallback when executors list is empty — the author (the
+    // filed-then-self-executed shape from pre-#230 records that
+    // never populated executors).
     //
     // Membership-based on `r.hasExecutor` rather than scalar
     // `r.executor?.value === lower`: that earlier shape silently
@@ -1019,9 +1021,19 @@ function actionableTransitions(
     // `--executors miki,leysia` would surface to miki and never to
     // leysia (substrate-experiment 6's attribution race regenerated
     // at the agent-loop layer). Devil review #230 blocker 1.
+    //
+    // The author-fallback is gated on `executors.length === 0`
+    // (rather than the looser `|| from === lower`) because when a
+    // wave names someone else as executor, the author CANNOT
+    // dispatch `gate complete --by <author>` — the lifecycle
+    // rejects `--by` mismatches. Surfacing the author into the
+    // actionable ladder produced a `→ next: gate complete <id> --by
+    // <author>` suggestion that always errored on dispatch (observed
+    // 2026-05-13 on req 2026-05-08-0012, author=eris, executors=[miki]).
     if (
       r.state === 'executing' &&
-      (r.hasExecutor(lower) || r.from.value === lower)
+      (r.hasExecutor(lower) ||
+        (r.executors.length === 0 && r.from.value === lower))
     ) {
       out.push({
         kind: 'executing-mine',
