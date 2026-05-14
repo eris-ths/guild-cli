@@ -1126,6 +1126,24 @@ For day-to-day Unreleased churn, raw chronological append is fine.
   invalid-state error now also names `|all` so the option is
   discoverable from the failure itself.
 
+- **`gate boot --since <ISO-timestamp>` delta surface.** Token-cost
+  lever for long sessions: agents that re-boot mid-flow now pass the
+  previous boot's `last_activity` (or any ISO-8601 UTC timestamp the
+  substrate would emit) and receive `tail`, `your_recent`, and
+  `inbox_unread` filtered to entries strictly newer than the cutoff.
+  Validation is strict — the value must match
+  `YYYY-MM-DDTHH:MM:SS(.sss)?Z` so the echoed `since` field is always
+  directly comparable to substrate timestamps; malformed input is
+  rejected with a `next:` hint pointing at the previous boot's
+  `last_activity` as the canonical chain value. Two invariants
+  preserved across the filter: (1) `status.inbox_unread` SCALAR
+  reflects the TRUE unread count, not the filtered slice, so the
+  orientation counter never undercounts; (2) `last_activity` itself
+  is NOT filtered, so the next boot can chain
+  `--since=$last_activity` without a second read. AI-agent-first
+  delight cluster #2; pure shape (rubric tier-1), no eris-specific
+  content. (#37x)
+
 ## [0.5.0] — 2026-05-06
 
 > **substrate self-improvement wave** (#207 / #208) closes the loop:

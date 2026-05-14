@@ -38,7 +38,7 @@ import type { ParsedArgs } from './parseArgs.js';
  * (`--help` does that).
  */
 export const EXPLAIN_MESSAGES: Readonly<Record<string, string>> = {
-  boot: 'session-start orientation; surfaces actor identity, recent wave activity, and the next verb to reach for.',
+  boot: 'session-start orientation; surfaces actor identity, recent wave activity, and the next verb to reach for. Pass --since <ISO-ts> (typically the prior boot\'s last_activity) for a delta-only payload.',
   next: 'one-call read-and-dispatch of the top actionable verb. Without --confirm prints the plan; with --confirm dispatches via subprocess. Auto-dispatch limited to verbs needing only --by.',
   list: 'lists requests filtered by --state/--from/--executors/--target; pair with `gate show <id>` for full body.',
   pending: 'lists requests in state=pending — the approval queue; subset of `gate list --state pending`.',

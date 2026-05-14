@@ -61,7 +61,15 @@ const BOOT_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'tail',
   'utterances',
   'session-id',
+  'since',
 ]);
+
+// Strict ISO-8601 with milliseconds, UTC. Matches what Date.toISOString()
+// emits and what the substrate stamps onto status_log / reviews /
+// inbox / created_at. Stricter than Date.parse — we reject loose
+// formats so the timestamp echoed back in payload.since is always
+// directly comparable to the substrate's own timestamps.
+const ISO_TS_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/;
 
 /**
  * gate boot [--format json|text] [--tail <N>] [--utterances <N>]
@@ -96,6 +104,25 @@ export async function bootCmd(c: C, args: ParsedArgs): Promise<number> {
   // orchestrator's explicit override is honoured even when the shell
   // exported a stale value. Validation matches resolveGuildSessionId
   // (the env-side helper) so the two resolution paths use one regex.
+  // --since <ISO-timestamp>: delta-filter for tail/your_recent/
+  // inbox_unread. Reduces token cost across a long session — a returning
+  // agent passes the previous boot's `last_activity` and gets only what
+  // changed. last_activity itself is left intact so consumers can wire
+  // the next boot's --since without round-tripping a separate read.
+  const sinceFlag = optionalOption(args, 'since');
+  let since: string | null = null;
+  if (sinceFlag !== undefined && sinceFlag.length > 0) {
+    if (!ISO_TS_RE.test(sinceFlag)) {
+      throw new Error(
+        `--since "${sinceFlag}" must be ISO-8601 UTC (e.g. ` +
+          `2026-05-14T01:02:03.456Z). next: pass the previous boot's ` +
+          `last_activity verbatim, or any ISO timestamp the substrate ` +
+          `would emit.`,
+      );
+    }
+    since = sinceFlag;
+  }
+
   const sessionIdFlag = optionalOption(args, 'session-id');
   let sessionId: string | null = null;
   let sessionIdSource: 'flag' | 'env' | null = null;
@@ -166,8 +193,16 @@ export async function bootCmd(c: C, args: ParsedArgs): Promise<number> {
     try {
       const msgs = await c.messageUC.inbox(actor);
       const unread = msgs.filter((m) => !m.read);
+      // status.inbox_unread reflects the TRUE unread count for
+      // orientation accuracy — --since filters the surfaced entries
+      // but the counter must not undercount or the agent will think
+      // there's less waiting than there is. Filter the entries array
+      // only; keep the scalar truthful.
       status.inbox_unread = unread.length;
-      for (const m of unread) {
+      const visibleUnread = since !== null
+        ? unread.filter((m) => m.at > since!)
+        : unread;
+      for (const m of visibleUnread) {
         inboxUnread.push({
           at: m.at,
           from: m.from,
@@ -205,10 +240,24 @@ export async function bootCmd(c: C, args: ParsedArgs): Promise<number> {
   // request corpus so collectUtterances isn't double-invoked on the
   // same data — it's O(N*status_log) and N grows with history.
   const allJson = allRequests.map((r) => r.toJSON() as unknown as Parameters<typeof collectUtterances>[0][number]);
-  const tail = collectUtterances(allJson, { limit: tailLimit, order: 'desc' });
-  const yourRecent = actor
+  // When --since is set, collect first then filter by `at > since`.
+  // We apply the limit AFTER the time filter so the limit governs the
+  // returned delta window, not the pre-filter pool.
+  let tail = collectUtterances(allJson, { limit: tailLimit, order: 'desc' });
+  let yourRecent = actor
     ? collectUtterances(allJson, { name: actor, limit: personalLimit, order: 'desc' })
     : null;
+  if (since !== null) {
+    const cutoff = since;
+    tail = collectUtterances(allJson, { order: 'desc' })
+      .filter((u) => u.at > cutoff)
+      .slice(0, tailLimit);
+    if (yourRecent !== null) {
+      yourRecent = collectUtterances(allJson, { name: actor!, order: 'desc' })
+        .filter((u) => u.at > cutoff)
+        .slice(0, personalLimit);
+    }
+  }
 
   // Misconfigured-cwd detection: warn ONLY when no config file was
   // found AND the fallback content_root is empty. This distinguishes
@@ -340,6 +389,7 @@ export async function bootCmd(c: C, args: ParsedArgs): Promise<number> {
     role,
     session_id: sessionId,
     session_id_source: sessionIdSource,
+    since,
     status,
     tail,
     your_recent: yourRecent,
