@@ -62,6 +62,7 @@ const BOOT_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'utterances',
   'session-id',
   'since',
+  'since-last-mine',
 ]);
 
 // Strict ISO-8601 with milliseconds, UTC. Matches what Date.toISOString()
@@ -109,7 +110,21 @@ export async function bootCmd(c: C, args: ParsedArgs): Promise<number> {
   // agent passes the previous boot's `last_activity` and gets only what
   // changed. last_activity itself is left intact so consumers can wire
   // the next boot's --since without round-tripping a separate read.
+  //
+  // --since-last-mine: sugar for "since my last authored write".
+  // Resolves to computeLastAuthoredWriteAt(actor) AFTER actor +
+  // allRequests are loaded (so the resolution lives further down).
+  // The two flags are mutually exclusive — using both is a usage
+  // error rather than a silent priority resolution.
   const sinceFlag = optionalOption(args, 'since');
+  const sinceLastMine = args.options['since-last-mine'] === true;
+  if (sinceFlag !== undefined && sinceLastMine) {
+    throw new Error(
+      `--since and --since-last-mine are mutually exclusive. ` +
+        `next: pick one — --since-last-mine is sugar for "since my last ` +
+        `authored write"; --since takes an explicit ISO timestamp.`,
+    );
+  }
   let since: string | null = null;
   if (sinceFlag !== undefined && sinceFlag.length > 0) {
     if (!ISO_TS_RE.test(sinceFlag)) {
@@ -161,6 +176,29 @@ export async function bootCmd(c: C, args: ParsedArgs): Promise<number> {
   // the expensive call (reads every state dir) so we pay it once.
   const allRequests = await c.requestUC.listAll();
   const status = collectStatus(allRequests, actor);
+
+  // --since-last-mine resolution: now that actor + allRequests are
+  // available, compute the actor's last authored write timestamp and
+  // use it as the since cutoff. Requires actor — without one there's
+  // no "mine" to anchor against.
+  if (sinceLastMine) {
+    if (!actor) {
+      throw new Error(
+        `--since-last-mine requires GUILD_ACTOR to be set ` +
+          `(or pass --session-id with an actor-bearing context). ` +
+          `next: export GUILD_ACTOR=<your-name>, or use --since <ISO-ts> ` +
+          `if you want a global-view delta without anchoring to an actor.`,
+      );
+    }
+    const lastMine = computeLastAuthoredWriteAt(actor, allRequests);
+    if (lastMine !== null) {
+      since = lastMine;
+    }
+    // lastMine === null means the actor has never authored any write.
+    // We deliberately leave `since` as null — there's no meaningful
+    // cutoff. Boot returns its full snapshot, which is the correct
+    // first-time-here behavior.
+  }
 
   // Enrich status with issues + inbox (mirrors statusCmd) so the
   // single payload is self-contained. Errors surface in `warnings[]`
@@ -457,7 +495,7 @@ export async function bootCmd(c: C, args: ParsedArgs): Promise<number> {
   if (format === 'json') {
     process.stdout.write(JSON.stringify(payload, null, 2) + '\n');
   } else {
-    process.stdout.write(renderBootText(payload, c.config.profile));
+    process.stdout.write(renderBootText(payload, c.config.profile, c.voicePlugins, c.config));
   }
   return 0;
 }

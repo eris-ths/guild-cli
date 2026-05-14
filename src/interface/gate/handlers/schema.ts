@@ -281,6 +281,19 @@ const VERBS: readonly VerbSchema[] = [
         format: formatField,
         tail: { type: 'string', description: 'utterances to include in tail (default 10)' },
         utterances: { type: 'string', description: 'your-recent utterance count (default 5)' },
+        'since-last-mine': {
+          type: 'string',
+          description:
+            'Sugar for --since pointing at "the actor\'s last authored ' +
+            'write" (#345 cluster refinement). Internally resolves to ' +
+            'computeLastAuthoredWriteAt(GUILD_ACTOR) and applies the ' +
+            'same delta-filter semantic. Mutually exclusive with --since ' +
+            '(usage error to pass both). Requires GUILD_ACTOR — without ' +
+            'one there is no "mine" to anchor against. If the actor has ' +
+            'never authored a write, the cutoff is null and boot returns ' +
+            'the full snapshot (correct first-time-here behavior). Boolean ' +
+            'flag (no value).',
+        },
         since: {
           type: 'string',
           description:

@@ -363,7 +363,7 @@ const SECTIONS: readonly Section[] = [
         tier: 'base',
         text:
           '  gate boot [--format json|text] [--tail <N>] [--utterances <N>]\n' +
-          '            [--since <ISO-ts>] [--session-id <id>]\n' +
+          '            [--since <ISO-ts> | --since-last-mine] [--session-id <id>]\n' +
           '                       Single-command session bootstrap for agents.\n' +
           '                       Returns identity + status + tail + your recent\n' +
           '                       utterances + inbox unread as one JSON payload.\n' +
@@ -376,6 +376,9 @@ const SECTIONS: readonly Section[] = [
           '                       cutoff (lexicographic). Token-cost lever for\n' +
           '                       long sessions: pass the previous boot\'s\n' +
           '                       `last_activity` to get only what changed.\n' +
+          '                       --since-last-mine is sugar: resolves to your\n' +
+          '                       last authored write internally. Requires\n' +
+          '                       GUILD_ACTOR. Mutually exclusive with --since.\n' +
           '                       `status.inbox_unread` stays truthful (full\n' +
           '                       count); only the surfaced entries are filtered.',
       },

@@ -1260,6 +1260,36 @@ For day-to-day Unreleased churn, raw chronological append is fine.
   / fail emphasis) in one keystroke. (#37x — eris-first refinement
   PR-D, builds on the `gate voice` lever)
 
+- **`gate boot` refinement: `past_cliffs` voice re-rendering +
+  `--since-last-mine` sugar.** Two `gate boot` upgrades bundled as one
+  PR — both refine the boot text-mode surface for an eris-first
+  Zeigarnik experience.
+
+  Voice plugin gains an optional `read.past_cliffs: {header?, entry?}`
+  section. When the active voice (resolved via the 4-layer order from
+  #380) carries either template, boot's text-mode `past_cliffs`
+  section re-renders through it: `header` may use `{count}`, `entry`
+  may use `{id}/{action}/{cliff}/{closed_by}/{closed_at}`. Doctrinal
+  voice fallback when no voice / no read section / no template — the
+  augment-not-replace invariant carries from the write side (principle
+  08 unchanged). JSON mode is untouched; structured `past_cliffs`
+  preserves the data shape for orchestrators that compose their own
+  narration. The 「過去の私からの手紙」 framing this section was always
+  trying to surface now actually reads as a letter when an eris voice
+  is wearing it.
+
+  Boot gains `--since-last-mine`: sugar for `--since=<actor's last
+  authored write>`. Internally resolves via
+  `computeLastAuthoredWriteAt(GUILD_ACTOR)` and applies the same
+  delta-filter semantic shipped in #375. Mutually exclusive with
+  `--since` (usage error to pass both). Requires `GUILD_ACTOR`;
+  without one, errors with a `next:` hint. Actor with no prior writes
+  → cutoff stays null and boot returns the full snapshot (correct
+  first-time-here behavior). Removes the agent-side
+  read-last-activity-then-pass-it-back-as-ISO loop ─ the substrate
+  owns the resolution. (#37x — eris-first refinement PR-B + PR-C
+  bundled)
+
 ## [0.5.0] — 2026-05-06
 
 > **substrate self-improvement wave** (#207 / #208) closes the loop:

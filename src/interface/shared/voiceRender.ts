@@ -218,6 +218,26 @@ function interpolate(template: string, vars: VoiceVars): string {
 }
 
 /**
+ * Generic `{var}` template interpolation for arbitrary string maps.
+ * Used by read-side voice rendering (e.g. boot's past_cliffs
+ * re-rendering) where variable sets are surface-specific, not the
+ * fixed write-envelope VoiceVars set.
+ *
+ * Honesty invariant carries: unknown vars render as the literal
+ * `{name}` so a typo is visible at the surface. The vars map is
+ * the substrate truth; voice cannot fabricate.
+ */
+export function interpolateGeneric(
+  template: string,
+  vars: Readonly<Record<string, string>>,
+): string {
+  return template.replace(VAR_RE, (_, key: string) => {
+    if (key in vars) return vars[key]!;
+    return `{${key}}`;
+  });
+}
+
+/**
  * Pick the first matching template for `verb` and render it. Returns
  * null when no voice is active, no entry exists for the verb, or no
  * `when` predicate matched. Callers attach the result to the JSON
