@@ -625,6 +625,52 @@ gate doctor --format json | gate repair --apply  # quarantine malformed
 gate repair [--from-doctor <path>] [--apply] [--format json|text]
 ```
 
+## Voice plugin (#345 cluster)
+
+Deployment-local personality layer. Doctrinal voice (handler prose,
+schema descriptions) stays in src/; ornamental voice rides on plugins.
+Stripping `_meta.voice` from a pipeline loses zero information — that
+invariant keeps the two layers honest under principle 08.
+
+```bash
+gate voice                  # introspect (active voice + which layer)
+gate voice <name>           # write <content_root>/.guild-voice
+gate voice off              # clear
+```
+
+Resolution order (most → least specific):
+
+1. `--voice <name>` (per-invocation; e.g. `gate schema --voice mine`)
+2. `GUILD_VOICE` env
+3. `<content_root>/.guild-voice` file (the layer `gate voice` writes)
+4. `voice.default` in `guild.config.yaml`
+
+Boot delta-filter sugar pair:
+
+```bash
+gate boot --since <ISO-ts>           # explicit cutoff
+gate boot --since-last-mine          # resolves to actor's last_authored_write_at
+```
+
+Help curation:
+
+```bash
+gate --help --essentials             # active voice's curated verb list
+gate --help --essentials --compact   # one line per verb
+```
+
+Plugin shape, all four sections optional independently:
+
+| Section | Surface |
+|---------|---------|
+| `verbs.<verb>` | `_meta.voice` on write-verb envelope + `⟶ …` stderr line in text mode |
+| `schema.verbs.<verb>` | `gate schema --voice <name>` overlay (`summary` + per-flag `description`) |
+| `essentials` | `gate --help --essentials` curated list |
+| `read.past_cliffs` | `gate boot` text-mode "past cliffs" re-render |
+
+Full contract + worked example in
+[`examples/plugins/README.md` § "Voice plugins"](./examples/plugins/README.md#voice-plugins).
+
 ## Configuration
 
 ```yaml
@@ -641,11 +687,16 @@ features:
 doctor:
   plugins: [./plugins/doc-check.mjs]      # optional, ES module paths
 
-# #36 Phase 1 — verb plugins + lifecycle hooks (require explicit trust opt-in)
+# #36 Phase 1 — verb / hook / voice plugins (require explicit trust opt-in)
 plugins:
-  trusted: false                           # MUST be true to load verbs/hooks
+  trusted: false                           # MUST be true to load anything under plugins/
   verbs:    [./plugins/verbs/my-verb.mjs]
   hooks:    [./plugins/hooks/my-policy.mjs]
+  voices:   [./plugins/voices/mine.mjs]    # ornamental voice + essentials + read overlays
+
+# #345 cluster — deployment-baseline voice (lowest-priority layer)
+voice:
+  default: mine                            # active voice when no env / .guild-voice / --voice flag
 
 paths:
   members: members
@@ -798,8 +849,9 @@ cue carries cross-verb without re-reading.
 - [`docs/POLICY.md`](./docs/POLICY.md) — versioning + plugin-stability contract
 - [`SECURITY.md`](./SECURITY.md) — plugin trust model + threat surface
 - [`examples/dogfood-session/`](./examples/dogfood-session/) — real multi-actor session
-- [`examples/plugins/`](./examples/plugins/) — verb + hook plugin walkthrough (#36 Phase 1)
-- [`README.md`](./README.md) — full documentation with design rationale
+- [`examples/plugins/`](./examples/plugins/) — verb + hook + voice plugin walkthrough
+- [`docs/eris-playbook.md`](./docs/eris-playbook.md) — substrate craft showcase
+- [`README.md`](./README.md) — entry point
 
 ---
 
