@@ -632,6 +632,22 @@ Environment:
 export interface RenderHelpOptions {
   readonly profile: GuildProfile;
   readonly all: boolean;
+  /**
+   * Curated essentials list from the active voice plugin (#345
+   * cluster mode-switch follow-up). When provided, `renderHelp`
+   * switches to a voice-driven curation: only the entries whose
+   * verb names are in `essentials.verbs` render. Tier filtering
+   * (profile / `all`) is bypassed — essentials is its own axis,
+   * orthogonal to BASE / COORDINATION / EXTRA.
+   *
+   * Null when no voice or no essentials section — `renderHelp`
+   * falls back to the profile-driven tiering.
+   */
+  readonly essentials?: {
+    readonly voiceName: string;
+    readonly verbs: readonly string[];
+    readonly note?: string;
+  } | null;
 }
 
 function tierVisible(tier: HelpTier, opts: RenderHelpOptions): boolean {
@@ -642,6 +658,12 @@ function tierVisible(tier: HelpTier, opts: RenderHelpOptions): boolean {
 }
 
 function tierBanner(opts: RenderHelpOptions): string {
+  if (opts.essentials) {
+    const noteSuffix = opts.essentials.note
+      ? ` — ${opts.essentials.note}`
+      : '';
+    return `(showing: ESSENTIALS curated by voice "${opts.essentials.voiceName}"${noteSuffix}; pass --all for the full catalog)`;
+  }
   if (opts.all) {
     return '(showing: BASE + COORDINATION + EXTRA — full catalog via --all)';
   }
@@ -651,6 +673,24 @@ function tierBanner(opts: RenderHelpOptions): string {
   return '(showing: BASE — profile=standard; pass --all for the full catalog)';
 }
 
+// First non-trivial word on the first usage line of an entry =
+// the verb name. Mirrors the regex used in `visibleVerbs()` so the
+// two paths agree on what counts as "the verb of this entry."
+const VERB_LINE_RE = /^ {2}gate ([a-z-]+(?:\s+[a-z-]+)?)/;
+
+function entryVerb(text: string): string | null {
+  for (const line of text.split('\n')) {
+    const m = line.match(VERB_LINE_RE);
+    if (m) return m[1]!.split(/\s+/)[0]!;
+  }
+  return null;
+}
+
+function essentialsVisible(text: string, essentials: NonNullable<RenderHelpOptions['essentials']>): boolean {
+  const v = entryVerb(text);
+  return v !== null && essentials.verbs.includes(v);
+}
+
 export function renderHelp(opts: RenderHelpOptions): string {
   const lines: string[] = [];
   lines.push(HEADER);
@@ -658,7 +698,9 @@ export function renderHelp(opts: RenderHelpOptions): string {
   lines.push(tierBanner(opts));
   lines.push('');
   for (const section of SECTIONS) {
-    const visible = section.entries.filter((e) => tierVisible(e.tier, opts));
+    const visible = opts.essentials
+      ? section.entries.filter((e) => essentialsVisible(e.text, opts.essentials!))
+      : section.entries.filter((e) => tierVisible(e.tier, opts));
     if (visible.length === 0) continue;
     lines.push(section.heading);
     for (const e of visible) {

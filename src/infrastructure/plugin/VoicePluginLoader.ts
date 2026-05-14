@@ -136,12 +136,40 @@ function validatePluginShape(raw: unknown): { ok: true; plugin: VoicePlugin } | 
       schema = {};
     }
   }
-  return {
-    ok: true,
-    plugin: schema !== undefined
-      ? { name: obj['name'] as string, verbs, schema }
-      : { name: obj['name'] as string, verbs },
+  // essentials section (#345 cluster mode-switch follow-up).
+  let essentials: VoicePlugin['essentials'] | undefined;
+  if (obj['essentials'] !== undefined) {
+    if (obj['essentials'] === null || typeof obj['essentials'] !== 'object') {
+      return { ok: false, reason: 'essentials must be an object when present' };
+    }
+    const eo = obj['essentials'] as Record<string, unknown>;
+    if (!Array.isArray(eo['verbs'])) {
+      return { ok: false, reason: 'essentials.verbs must be an array of verb names' };
+    }
+    const verbNames: string[] = [];
+    for (let i = 0; i < eo['verbs'].length; i++) {
+      const v = eo['verbs'][i];
+      if (typeof v !== 'string' || v.length === 0) {
+        return { ok: false, reason: `essentials.verbs[${i}] must be a non-empty string` };
+      }
+      verbNames.push(v);
+    }
+    const ess: { verbs: string[]; note?: string } = { verbs: verbNames };
+    if (eo['note'] !== undefined) {
+      if (typeof eo['note'] !== 'string') {
+        return { ok: false, reason: 'essentials.note must be a string when present' };
+      }
+      ess.note = eo['note'];
+    }
+    essentials = ess;
+  }
+  const out: { name: string; verbs: typeof verbs; schema?: typeof schema; essentials?: typeof essentials } = {
+    name: obj['name'] as string,
+    verbs,
   };
+  if (schema !== undefined) out.schema = schema;
+  if (essentials !== undefined) out.essentials = essentials;
+  return { ok: true, plugin: out as VoicePlugin };
 }
 
 /**

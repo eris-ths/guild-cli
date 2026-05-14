@@ -120,13 +120,48 @@ export async function main(argv: readonly string[]): Promise<number> {
   // informational and must never block diagnosis).
   if (!cmd || cmd === '--help' || cmd === '-h') {
     const wantAll = rest.includes('--all');
+    const wantEssentials = rest.includes('--essentials');
     let profile: 'standard' | 'swarm' = 'standard';
+    let config: GuildConfig | null = null;
     try {
-      profile = GuildConfig.load().profile;
+      config = GuildConfig.load();
+      profile = config.profile;
     } catch {
       profile = 'standard';
     }
-    process.stdout.write(renderHelp({ profile, all: wantAll }));
+    // --essentials surface (#345 cluster mode-switch follow-up):
+    // resolve the active voice, look up its essentials section, and
+    // hand the curated list to renderHelp. The voice plugin loader
+    // is async (dynamic import), so we run it here unconditionally
+    // when --essentials is asked for. Failure modes are silent:
+    //   - no active voice → falls back to profile tiering (with a banner)
+    //   - voice has no `essentials` section → same fallback
+    // Mirrors the "unknown voice → no error" silent-miss contract.
+    type EssentialsOpt = NonNullable<import('./help.js').RenderHelpOptions['essentials']>;
+    let essentials: EssentialsOpt | null = null;
+    if (wantEssentials && config !== null) {
+      try {
+        const [{ resolveActiveVoiceName }, { loadVoicePlugins }] = await Promise.all([
+          import('../shared/voiceRender.js'),
+          import('../../infrastructure/plugin/VoicePluginLoader.js'),
+        ]);
+        const resolved = resolveActiveVoiceName(config);
+        if (resolved !== null) {
+          const loaded = await loadVoicePlugins(config.voicePluginPaths);
+          const plugin = loaded.plugins.find((p) => p.name === resolved.name);
+          if (plugin?.essentials) {
+            essentials = {
+              voiceName: plugin.name,
+              verbs: plugin.essentials.verbs,
+              ...(plugin.essentials.note !== undefined ? { note: plugin.essentials.note } : {}),
+            };
+          }
+        }
+      } catch {
+        // Silent miss — fallback to profile tiering.
+      }
+    }
+    process.stdout.write(renderHelp({ profile, all: wantAll, essentials }));
     return 0;
   }
   const args = parseArgs(rest);
