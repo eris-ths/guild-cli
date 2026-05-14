@@ -1227,8 +1227,8 @@ A fresh witness on a 33-min-old wave no longer trips a false stale.
 #### `gate review-context <id>` (issue #310)
 
 Reviewer-facing bundle: action / reason / target / executors / depth
-advisory (`shallow | standard | deep`) / recommended lens set / prior
-reviews. Lets a reviewer agent drive lens selection from substrate
+advisory (`shallow | standard | deep`) / recommended lense set / prior
+reviews. Lets a reviewer agent drive lense selection from substrate
 state rather than out-of-band prompt content.
 
 ```bash
@@ -1241,7 +1241,7 @@ gate review-context 2026-05-11-0005 --format json
 # }
 ```
 
-Lens recommendation by depth: `shallow → [Logic]`, `standard → 6-lens
+Lense recommendation by depth: `shallow → [Logic]`, `standard → 6-lense
 default`, `deep → all 10 + memory MCP + state-machine + cross-check`.
 Advisory not directive (principle 02) — the reviewer is free to
 widen / narrow.

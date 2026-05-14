@@ -238,7 +238,7 @@ const SECTIONS: readonly Section[] = [
           '  gate review-context <id> [--format text|json]\n' +
           '                       Reviewer-facing bundle for a wave: action /\n' +
           '                       reason / target, executors, depth advisory,\n' +
-          '                       recommended lens set by depth, prior reviews.\n' +
+          '                       recommended lense set by depth, prior reviews.\n' +
           '                       Lets a reviewer agent drive behaviour from\n' +
           '                       substrate state instead of out-of-band prompt\n' +
           '                       content. depth=shallow→[Logic], standard→6\n' +

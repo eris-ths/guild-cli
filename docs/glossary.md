@@ -38,7 +38,7 @@ If you are reading the codebase for the first time, the [`Quick vocabulary`](./c
 - **verdict** — review outcome: `ok` (landed cleanly), `concern` (lives with the decision but you want it named), `reject` (don't do this). The word is deliberately soft — `concern` is usable, not a veto.
 - **claim** — exclusive stake on a wave: "I'm working on this." `gate claim <id> --by <m>` is refused if another actor holds the claim. Auto-released on terminal transition. See #226.
 - **witness** — non-exclusive observation: "I'm watching this." Multiple actors can witness one wave. `gate witness <id> --by <m>` is idempotent (same-actor re-witness no-op unless note/session differs). See #244 / #246.
-- **depth** — reviewer-depth advisory on a wave: `shallow | standard | deep`. Stamped at `gate request --depth <v>`. Consumed by `gate review-context` (#310) to recommend a lens set. See #221.
+- **depth** — reviewer-depth advisory on a wave: `shallow | standard | deep`. Stamped at `gate request --depth <v>`. Consumed by `gate review-context` (#310) to recommend a lense set. See #221.
 - **strict_lenses** — opt-in `guild.config.yaml` setting that flips `gate review`'s allowed-lense set from the team-chosen `lenses:` list to the bundled devil catalog. Default `false`. See `docs/verbs.md` § "Strict lense vocabulary".
 
 ## Cross-passage / time

@@ -252,7 +252,7 @@ export function collectUtterances(
     // Thank utterances: emitted for both the `by` actor (who gave)
     // and the `to` actor (who received) — either name-filter match
     // surfaces the record. Reviews are one-sided (only `by` speaks),
-    // so this is the one place the filter diverges. Lens/verdict
+    // so this is the one place the filter diverges. Lense/verdict
     // filters short-circuit the thanks loop entirely — thanks have
     // no lense/verdict, so a lense-scoped query should not carry them.
     const filteringReviewsOnly =

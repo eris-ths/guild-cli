@@ -270,7 +270,7 @@ state instead of out-of-band prompt content:
   the wave was created without `--depth`)
 - `recommended_lenses`: derived from `depth`
   - `shallow` → `[Logic]` (point-check)
-  - `standard` → 6-lens default (`Logic, Pattern, Flow, Error, Test, Input`)
+  - `standard` → 6-lense default (`Logic, Pattern, Flow, Error, Test, Input`)
   - `deep` → all 10 + extras (`memory_mcp_trap_lookup`,
     `state_machine_trace`, `prior_review_cross_check`)
 - `prior_reviews` bundled in-payload — saves a second `gate show`
