@@ -104,6 +104,33 @@ export interface VoiceSchemaOverride {
 }
 
 /**
+ * Read-side voice rendering hooks (#345 cluster Zeigarnik refinement).
+ *
+ * Where `verbs` carries ornamental narration for WRITE envelopes
+ * (one template per state-change moment), `read.<surface>` carries
+ * narration for READ surfaces that loop the operator back to their
+ * past selves — currently just `past_cliffs` on boot.
+ *
+ * `past_cliffs` re-rendering structure:
+ *   header — emitted once when the section opens; carries `{count}`
+ *   entry  — emitted per cliff; carries
+ *            {id} / {action} / {cliff} / {closed_by} / {closed_at}
+ *
+ * Both fields are optional. A plugin may carry only a header (one
+ * line per session start) or only an entry template (skip the
+ * structured row format, just show the voiced lines). Missing
+ * read section / surface / field → falls back to the doctrinal
+ * dry render in handlers (principle 08 carries forward — voice
+ * augments, never replaces).
+ */
+export interface VoiceReadSurfaces {
+  readonly past_cliffs?: {
+    readonly header?: string;
+    readonly entry?: string;
+  };
+}
+
+/**
  * Curated "Essentials" verb list (#345 cluster mode-switch follow-up).
  * The set of verbs this voice considers load-bearing for daily work
  * — the verbs eris (or whoever the voice belongs to) actually reaches
@@ -139,6 +166,7 @@ export interface VoicePlugin {
     readonly verbs?: Readonly<Record<string, VoiceSchemaOverride>>;
   };
   readonly essentials?: VoiceEssentials;
+  readonly read?: VoiceReadSurfaces;
 }
 
 /**

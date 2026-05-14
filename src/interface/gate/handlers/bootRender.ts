@@ -9,7 +9,9 @@
 // adding a new passage is a one-file change.
 
 import { isBroadcastPendingResponse } from './bootActionable.js';
-import type { GuildProfile } from '../../../infrastructure/config/GuildConfig.js';
+import type { GuildProfile, GuildConfig } from '../../../infrastructure/config/GuildConfig.js';
+import type { VoicePlugin } from '../../../application/plugin/VoicePlugin.js';
+import { resolveActiveVoice, interpolateGeneric } from '../../shared/voiceRender.js';
 import type {
   PassageOrientationProvider,
   PassageOrientationSummary,
@@ -63,7 +65,12 @@ export async function collectCrossPassage(
   return out;
 }
 
-export function renderBootText(p: BootPayload, profile: GuildProfile): string {
+export function renderBootText(
+  p: BootPayload,
+  profile: GuildProfile,
+  voicePlugins: ReadonlyArray<VoicePlugin> = [],
+  config?: Pick<GuildConfig, 'contentRoot' | 'voiceDefault'>,
+): string {
   const lines: string[] = [];
   if (p.actor) {
     const sessionTag =
@@ -264,11 +271,39 @@ export function renderBootText(p: BootPayload, profile: GuildProfile): string {
   // principle 13.
   if (p.past_cliffs && p.past_cliffs.length > 0) {
     lines.push('');
-    lines.push(`past selves left these cliffs (${p.past_cliffs.length}):`);
+    // Voice re-rendering for past_cliffs (#345 cluster Zeigarnik refinement).
+    // When the active voice provides `read.past_cliffs` templates, use
+    // them; otherwise fall back to the doctrinal dry render. Header +
+    // entry are independent — a voice may override one and not the
+    // other.
+    const activeVoice = config !== undefined
+      ? resolveActiveVoice(voicePlugins, config)
+      : null;
+    const pcVoice = activeVoice?.read?.past_cliffs;
+    const headerTpl = pcVoice?.header;
+    const entryTpl = pcVoice?.entry;
+    const count = String(p.past_cliffs.length);
+    if (headerTpl !== undefined) {
+      lines.push(interpolateGeneric(headerTpl, { count }));
+    } else {
+      lines.push(`past selves left these cliffs (${p.past_cliffs.length}):`);
+    }
     for (const c of p.past_cliffs) {
-      lines.push(`  ${c.closed_at}  ${c.id}  (closed by ${c.closed_by})`);
-      lines.push(`    action: ${c.action}`);
-      lines.push(`    cliff:  ${c.cliff}`);
+      if (entryTpl !== undefined) {
+        lines.push(
+          interpolateGeneric(entryTpl, {
+            id: c.id,
+            action: c.action,
+            cliff: c.cliff,
+            closed_by: c.closed_by,
+            closed_at: c.closed_at,
+          }),
+        );
+      } else {
+        lines.push(`  ${c.closed_at}  ${c.id}  (closed by ${c.closed_by})`);
+        lines.push(`    action: ${c.action}`);
+        lines.push(`    cliff:  ${c.cliff}`);
+      }
     }
   }
   if (p.your_recent && p.your_recent.length > 0) {

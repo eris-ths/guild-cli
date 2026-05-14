@@ -163,12 +163,45 @@ function validatePluginShape(raw: unknown): { ok: true; plugin: VoicePlugin } | 
     }
     essentials = ess;
   }
-  const out: { name: string; verbs: typeof verbs; schema?: typeof schema; essentials?: typeof essentials } = {
+  // read.past_cliffs (#345 cluster Zeigarnik refinement). Optional
+  // header + entry templates for boot's past_cliffs section.
+  let read: VoicePlugin['read'] | undefined;
+  if (obj['read'] !== undefined) {
+    if (obj['read'] === null || typeof obj['read'] !== 'object') {
+      return { ok: false, reason: 'read must be an object when present' };
+    }
+    const ro = obj['read'] as Record<string, unknown>;
+    const pcRaw = ro['past_cliffs'];
+    if (pcRaw !== undefined) {
+      if (pcRaw === null || typeof pcRaw !== 'object') {
+        return { ok: false, reason: 'read.past_cliffs must be an object when present' };
+      }
+      const pc = pcRaw as Record<string, unknown>;
+      const out: { header?: string; entry?: string } = {};
+      if (pc['header'] !== undefined) {
+        if (typeof pc['header'] !== 'string' || pc['header'].length === 0) {
+          return { ok: false, reason: 'read.past_cliffs.header must be a non-empty string' };
+        }
+        out.header = pc['header'];
+      }
+      if (pc['entry'] !== undefined) {
+        if (typeof pc['entry'] !== 'string' || pc['entry'].length === 0) {
+          return { ok: false, reason: 'read.past_cliffs.entry must be a non-empty string' };
+        }
+        out.entry = pc['entry'];
+      }
+      read = { past_cliffs: out };
+    } else {
+      read = {};
+    }
+  }
+  const out: { name: string; verbs: typeof verbs; schema?: typeof schema; essentials?: typeof essentials; read?: typeof read } = {
     name: obj['name'] as string,
     verbs,
   };
   if (schema !== undefined) out.schema = schema;
   if (essentials !== undefined) out.essentials = essentials;
+  if (read !== undefined) out.read = read;
   return { ok: true, plugin: out as VoicePlugin };
 }
 
