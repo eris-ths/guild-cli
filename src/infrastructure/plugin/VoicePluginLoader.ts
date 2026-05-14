@@ -12,6 +12,7 @@ import {
   VoicePlugin,
   VoicePluginLoadError,
   VoicePluginLoadResult,
+  VoiceSchemaOverride,
   VoiceTemplate,
   VoiceWhen,
 } from '../../application/plugin/VoicePlugin.js';
@@ -87,9 +88,59 @@ function validatePluginShape(raw: unknown): { ok: true; plugin: VoicePlugin } | 
     }
     verbs[verbName] = r.templates;
   }
+  // schema overrides (#345 cluster #5) — optional, sparse, augment-only.
+  // Validated strictly here so a malformed `schema` block fails the
+  // whole plugin rather than silently dropping overrides at render time.
+  let schema: VoicePlugin['schema'] | undefined;
+  if (obj['schema'] !== undefined) {
+    if (obj['schema'] === null || typeof obj['schema'] !== 'object') {
+      return { ok: false, reason: 'schema must be an object when present' };
+    }
+    const schemaObj = obj['schema'] as Record<string, unknown>;
+    const schemaVerbsRaw = schemaObj['verbs'];
+    if (schemaVerbsRaw !== undefined) {
+      if (schemaVerbsRaw === null || typeof schemaVerbsRaw !== 'object') {
+        return { ok: false, reason: 'schema.verbs must be an object keyed by verb name' };
+      }
+      const schemaVerbs: Record<string, VoiceSchemaOverride> = {};
+      for (const [verbName, override] of Object.entries(schemaVerbsRaw)) {
+        if (override === null || typeof override !== 'object') {
+          return { ok: false, reason: `schema.verbs.${verbName} must be an object` };
+        }
+        const ov = override as Record<string, unknown>;
+        const out: { summary?: string; input?: Record<string, string> } = {};
+        if (ov['summary'] !== undefined) {
+          if (typeof ov['summary'] !== 'string') {
+            return { ok: false, reason: `schema.verbs.${verbName}.summary must be a string` };
+          }
+          out.summary = ov['summary'];
+        }
+        if (ov['input'] !== undefined) {
+          if (ov['input'] === null || typeof ov['input'] !== 'object') {
+            return { ok: false, reason: `schema.verbs.${verbName}.input must be an object` };
+          }
+          const inputRaw = ov['input'] as Record<string, unknown>;
+          const inputOut: Record<string, string> = {};
+          for (const [flag, desc] of Object.entries(inputRaw)) {
+            if (typeof desc !== 'string') {
+              return { ok: false, reason: `schema.verbs.${verbName}.input.${flag} must be a string` };
+            }
+            inputOut[flag] = desc;
+          }
+          out.input = inputOut;
+        }
+        schemaVerbs[verbName] = out;
+      }
+      schema = { verbs: schemaVerbs };
+    } else {
+      schema = {};
+    }
+  }
   return {
     ok: true,
-    plugin: { name: obj['name'] as string, verbs },
+    plugin: schema !== undefined
+      ? { name: obj['name'] as string, verbs, schema }
+      : { name: obj['name'] as string, verbs },
   };
 }
 

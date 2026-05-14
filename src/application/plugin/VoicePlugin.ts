@@ -85,15 +85,39 @@ export interface VoiceTemplate {
 }
 
 /**
+ * Schema-description overrides keyed by verb name (#345 cluster #5).
+ * `gate schema --voice <name>` overlays these strings onto the base
+ * schema's `description` fields before emitting. Augment-not-replace:
+ * any field a voice does NOT override falls through to the doctrinal
+ * description held in handlers (principle 08 unchanged).
+ *
+ *   summary       — replaces the verb's top-level `summary` field
+ *   input.<flag>  — replaces the verb's input property `description`
+ *                   for the named flag (e.g. `cliff`, `note`, `by`)
+ *
+ * Both maps are sparse — only the keys the voice cares about appear.
+ * Missing entries cleanly fall through to upstream-neutral prose.
+ */
+export interface VoiceSchemaOverride {
+  readonly summary?: string;
+  readonly input?: Readonly<Record<string, string>>;
+}
+
+/**
  * Plugin module's default export.
  *
  * `verbs` is a sparse map: only verbs the voice cares about appear.
- * v1 honours `complete` only; entries for other keys are tolerated
- * (forward-compatible) but unused.
+ * `schema` (optional) carries voice-flavored description overrides
+ * surfaced by `gate schema --voice <name>` (#345 cluster #5). Both
+ * sections are independent — a plugin may carry only one, only the
+ * other, or both.
  */
 export interface VoicePlugin {
   readonly name: string;
   readonly verbs: Readonly<Record<string, readonly VoiceTemplate[]>>;
+  readonly schema?: {
+    readonly verbs?: Readonly<Record<string, VoiceSchemaOverride>>;
+  };
 }
 
 /**
