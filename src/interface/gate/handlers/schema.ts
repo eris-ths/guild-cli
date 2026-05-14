@@ -453,6 +453,31 @@ const VERBS: readonly VerbSchema[] = [
             },
           },
         },
+        past_cliffs: {
+          type: 'array',
+          description:
+            'Forward-pointing close notes the actor (or one of their wave ' +
+            'executors) left on completed requests (#37x). ' +
+            'Most-recent-terminal-first, capped at 5. Each entry surfaces ' +
+            'id, action (context), cliff prose, closing actor (closed_by), ' +
+            'and closed_at. Null when no actor is resolved (global-view ' +
+            "boot — there's no self to attach 'past selves' to). Empty " +
+            'array when the actor has no recent cliff-stamped closures. ' +
+            "Honours --since: cliffs older than the cutoff are filtered " +
+            'out alongside tail / your_recent. Zeigarnik continuity for ' +
+            "gate, mirroring agora's cliff/invitation pattern.",
+          items: {
+            type: 'object',
+            properties: {
+              id: idStr,
+              action: str,
+              cliff: str,
+              closed_by: str,
+              closed_at: str,
+            },
+            required: ['id', 'action', 'cliff', 'closed_by', 'closed_at'],
+          },
+        },
         verbs_available_now: {
           type: 'object',
           description:
@@ -1584,6 +1609,20 @@ const VERBS: readonly VerbSchema[] = [
         id: idStr,
         by: str,
         note: str,
+        cliff: {
+          type: 'string',
+          description:
+            'Forward-pointing hint for whoever picks up after this completion: ' +
+            '"next agent should...". Sibling of --note (which captures what ' +
+            'just happened). Lineage: borrows agora\'s cliff/invitation ' +
+            'semantic and ports the forward half. Optional; absence is ' +
+            'the common case. v1 scope: completed-only — fail/deny carry ' +
+            'forward intent in their reasons already. Stored on the ' +
+            'terminal status_log entry; projected to the top-level ' +
+            '`cliff` field on the JSON envelope. Surfaced by `gate boot` ' +
+            'under `past_cliffs` for the authoring / executing actor on ' +
+            'subsequent sessions (Zeigarnik continuity).',
+        },
         format: formatField,
         'dry-run': dryRunField,
       },

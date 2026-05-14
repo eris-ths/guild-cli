@@ -1144,6 +1144,27 @@ For day-to-day Unreleased churn, raw chronological append is fine.
   delight cluster #2; pure shape (rubric tier-1), no eris-specific
   content. (#37x)
 
+- **`gate complete --cliff <s>` forward-pointing close note + boot
+  `past_cliffs` surface.** Zeigarnik continuity for gate: a completing
+  actor can stamp "next agent should..." prose onto the terminal
+  request, and `gate boot` resurfaces those cliffs the next session
+  under `past_cliffs` for the authoring / executing actor. Mirrors
+  agora's `cliff/invitation` semantic across passages but ports only
+  the forward half — `--note` already covers "what happened," so the
+  asymmetry is intentional. v1 scope: completed-only (fail/deny carry
+  forward intent in their reasons already). Persistence: cliff lands
+  on the terminal `status_log` entry and projects to the top-level
+  `cliff` field on the JSON envelope (mirroring the `completion_note`
+  projection pattern). Hydrate is strict — a cliff stamped on a
+  non-completed entry is dropped via `onMalformed` rather than
+  silently accepted. Boot surface: `past_cliffs` lists the actor's
+  newest 5 cliff-stamped closures (authored OR executed), filterable
+  by `--since`, null when no actor is resolved (global-view boot has
+  no self to attach "past selves" to). AI-agent-first delight
+  cluster #6; pure shape (rubric tier-1), no eris-specific content.
+  Text-mode boot adds a `past selves left these cliffs:` section that
+  renders only when entries exist (principle 13 voice budget). (#37x)
+
 ## [0.5.0] — 2026-05-06
 
 > **substrate self-improvement wave** (#207 / #208) closes the loop:

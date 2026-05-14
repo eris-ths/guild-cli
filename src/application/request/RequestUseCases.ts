@@ -249,7 +249,7 @@ export class RequestUseCases {
     by: string,
     note?: string,
     invokedBy?: string,
-    opts?: { dryRun?: boolean },
+    opts?: { dryRun?: boolean; cliff?: string },
   ): Promise<Request> {
     // Per-executor slice closure (#294) makes `complete` the canonical
     // parallel-friendly verb: two executors closing their own slices on
@@ -259,10 +259,15 @@ export class RequestUseCases {
     // unwitness. Refusal cases (terminal-wave reject, double-close
     // refusal, member-check) throw DomainError, NOT VersionConflict,
     // so retry never loops on a genuine refusal.
+    //
+    // Cliff (#37x): forward-pointing close note travels through here on
+    // `opts.cliff`. Threaded through to the domain layer where it
+    // attaches to the terminal status_log entry (direct path) or the
+    // wave-terminal entry on slice closure of the final slice.
     return retryOnVersionConflict('complete', id, async () => {
       const req = await this.loadOrThrow(id);
       const actor = await assertActor(by, '--by', this.deps.members);
-      req.complete(actor, note, invokedBy);
+      req.complete(actor, note, invokedBy, opts?.cliff);
       if (!opts?.dryRun) await this.deps.requests.save(req);
       return req;
     });

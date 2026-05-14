@@ -257,6 +257,20 @@ export function renderBootText(p: BootPayload, profile: GuildProfile): string {
       }
     }
   }
+  // past_cliffs (#37x): forward-pointing close notes the actor's past
+  // selves left on completed requests. Mirrors agora's cliff/invitation
+  // pattern across passages — the section only renders when at least
+  // one cliff exists, keeping the common (no-cliff) boot quiet per
+  // principle 13.
+  if (p.past_cliffs && p.past_cliffs.length > 0) {
+    lines.push('');
+    lines.push(`past selves left these cliffs (${p.past_cliffs.length}):`);
+    for (const c of p.past_cliffs) {
+      lines.push(`  ${c.closed_at}  ${c.id}  (closed by ${c.closed_by})`);
+      lines.push(`    action: ${c.action}`);
+      lines.push(`    cliff:  ${c.cliff}`);
+    }
+  }
   if (p.your_recent && p.your_recent.length > 0) {
     lines.push('');
     lines.push(`your recent (${p.your_recent.length}):`);
