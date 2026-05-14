@@ -20,6 +20,11 @@ const VALID_WHEN: ReadonlySet<VoiceWhen> = new Set([
   'default',
   'cliff_present',
   'cliff_absent',
+  'with_note',
+  'without_note',
+  'verdict_ok',
+  'verdict_concern',
+  'verdict_reject',
 ]);
 
 function validateTemplates(raw: unknown): { ok: true; templates: VoiceTemplate[] } | { ok: false; reason: string } {

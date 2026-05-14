@@ -134,7 +134,9 @@ export async function reqApprove(c: C, args: ParsedArgs): Promise<number> {
         `'gate fast-track').\n`,
     );
   }
-  emitWriteResponse(parseFormat(args), r, `✓ approved: ${id}`, c.config);
+  emitWriteResponse(parseFormat(args), r, `✓ approved: ${id}`, c.config, [], {
+    voice: renderVoice(c.voicePlugins, 'approve', r),
+  });
   return 0;
 }
 
@@ -167,7 +169,9 @@ export async function reqDeny(c: C, args: ParsedArgs): Promise<number> {
   }
   const r = await c.requestUC.deny(id, by, reason, invokedBy);
   await fireAfterHook(c.hookSubscriptions, 'deny', r, by);
-  emitWriteResponse(parseFormat(args), r, `✓ denied: ${id}`, c.config);
+  emitWriteResponse(parseFormat(args), r, `✓ denied: ${id}`, c.config, [], {
+    voice: renderVoice(c.voicePlugins, 'deny', r),
+  });
   return 0;
 }
 
@@ -280,7 +284,9 @@ export async function reqExecute(c: C, args: ParsedArgs): Promise<number> {
         `${assignedList}); --executor records intent, not access.\n`,
     );
   }
-  emitWriteResponse(parseFormat(args), r, `✓ executing: ${id}`, c.config);
+  emitWriteResponse(parseFormat(args), r, `✓ executing: ${id}`, c.config, [], {
+    voice: renderVoice(c.voicePlugins, 'execute', r),
+  });
   return 0;
 }
 
@@ -521,7 +527,11 @@ export async function reqFail(c: C, args: ParsedArgs): Promise<number> {
     emitSliceClose(r, by, 'fail', c.config, parseFormat(args), []);
     return 0;
   }
-  emitWriteResponse(parseFormat(args), r, `✓ failed: ${id}`, c.config);
+  // Voice on fail: wave-terminal only — slice-only mirrors complete's
+  // honesty rule (a slice failure does NOT mean the wave failed).
+  emitWriteResponse(parseFormat(args), r, `✓ failed: ${id}`, c.config, [], {
+    voice: renderVoice(c.voicePlugins, 'fail', r),
+  });
   return 0;
 }
 
