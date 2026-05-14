@@ -1244,6 +1244,22 @@ For day-to-day Unreleased churn, raw chronological append is fine.
   content-root lock would be over-conservative). (#37x — eris-first
   refinement, follow-up to the AI-agent-first delight cluster)
 
+- **Voice plugin `essentials` section + `gate --help --essentials`
+  curation.** Voice plugin gains an optional `essentials: {verbs:
+  [...], note?: string}` section carrying a per-mode curated verb
+  list — the verbs the voice (and the operator wearing it) considers
+  load-bearing for daily work. `gate --help --essentials` reads the
+  active voice (resolved via the 4-layer order shipped alongside
+  `gate voice`) and renders only those verbs, orthogonal to the
+  profile-driven BASE/COORDINATION/EXTRA tiering. The banner names
+  the curating voice and surfaces the optional `note` so readers
+  see whose curation they're looking through. Silent fallback when
+  no voice is active or the active voice has no essentials section
+  — `--help` falls back to the profile tier. Mode IS the curation:
+  `gate voice devil` swaps to a devil-mode essentials (review / deny
+  / fail emphasis) in one keystroke. (#37x — eris-first refinement
+  PR-D, builds on the `gate voice` lever)
+
 ## [0.5.0] — 2026-05-06
 
 > **substrate self-improvement wave** (#207 / #208) closes the loop:

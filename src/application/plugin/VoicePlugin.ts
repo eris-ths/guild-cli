@@ -104,13 +104,33 @@ export interface VoiceSchemaOverride {
 }
 
 /**
+ * Curated "Essentials" verb list (#345 cluster mode-switch follow-up).
+ * The set of verbs this voice considers load-bearing for daily work
+ * — the verbs eris (or whoever the voice belongs to) actually reaches
+ * for. Surfaced by `gate --help --essentials`, orthogonal to the
+ * profile-driven BASE / COORDINATION / EXTRA tiering.
+ *
+ * Per-mode curation: `gate voice devil` activates devil-mode's
+ * essentials (review/deny/fail emphasis); `gate voice ship` swaps to
+ * ship-mode's (boot/next/complete emphasis). The mode-switch ritual
+ * IS the curation switch — eris's "手の伸びる verb" tracks her cognitive
+ * mode in one keystroke.
+ *
+ * `note` is optional prose surfaced alongside the list — a chance
+ * for the voice to explain its curation logic in a sentence.
+ */
+export interface VoiceEssentials {
+  readonly verbs: readonly string[];
+  readonly note?: string;
+}
+
+/**
  * Plugin module's default export.
  *
- * `verbs` is a sparse map: only verbs the voice cares about appear.
- * `schema` (optional) carries voice-flavored description overrides
- * surfaced by `gate schema --voice <name>` (#345 cluster #5). Both
- * sections are independent — a plugin may carry only one, only the
- * other, or both.
+ * Sections are all sparse — a plugin may carry any subset:
+ *   `verbs`       — ornamental templates for write envelopes
+ *   `schema`      — description overrides for `gate schema --voice`
+ *   `essentials`  — curated verb list for `gate --help --essentials`
  */
 export interface VoicePlugin {
   readonly name: string;
@@ -118,6 +138,7 @@ export interface VoicePlugin {
   readonly schema?: {
     readonly verbs?: Readonly<Record<string, VoiceSchemaOverride>>;
   };
+  readonly essentials?: VoiceEssentials;
 }
 
 /**
