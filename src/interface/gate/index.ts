@@ -2,6 +2,7 @@ import { buildContainer } from '../shared/container.js';
 import { GuildConfig } from '../../infrastructure/config/GuildConfig.js';
 import { loadVerbPlugins } from '../../infrastructure/plugin/VerbPluginLoader.js';
 import { loadHookPlugins } from '../../infrastructure/plugin/HookPluginLoader.js';
+import { loadVoicePlugins } from '../../infrastructure/plugin/VoicePluginLoader.js';
 import { parseArgs, optionalOption, HelpRequested } from '../shared/parseArgs.js';
 import { renderVerbHelp } from '../shared/verbHelp.js';
 import { nearestCommand } from '../shared/nearestCommand.js';
@@ -146,6 +147,11 @@ export async function main(argv: readonly string[]): Promise<number> {
   // resulting subscription map and load errors to handlers and
   // doctor respectively.
   const hookPluginLoad = await loadHookPlugins(config.hookPluginPaths);
+  // Voice plugins (#345 — second dogfood validation of principle 15).
+  // Loaded with the other plugin kinds; the container exposes them
+  // so handlers can call `renderVoice()` at write-verb fire points
+  // without re-discovering plugins per request.
+  const voicePluginLoad = await loadVoicePlugins(config.voicePluginPaths);
   const c = buildContainer({
     verbPlugins: verbPluginLoad.plugins,
     verbPluginErrors: verbPluginLoad.errors,
@@ -153,6 +159,9 @@ export async function main(argv: readonly string[]): Promise<number> {
     hookSubscriptions: hookPluginLoad.subscriptions,
     hookPluginErrors: hookPluginLoad.errors,
     hookPluginsLoaded: hookPluginLoad.pluginsLoaded,
+    voicePlugins: voicePluginLoad.plugins,
+    voicePluginErrors: voicePluginLoad.errors,
+    voicePluginsLoaded: voicePluginLoad.pluginsLoaded,
   });
   try {
     // #200: <write-verb> --help must not block on the lock. Help is

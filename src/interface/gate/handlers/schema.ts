@@ -127,6 +127,31 @@ const writeResponseSchema: JsonSchema = {
         'orchestrators, not a directive. null when the lifecycle has no obvious next step.',
       ...suggestedNextSchema,
     },
+    _meta: {
+      type: 'object',
+      description:
+        'Optional metadata block carrying surface-level annotations that ' +
+        'augment but never replace the structured payload. Consumers may ' +
+        'ignore `_meta` entirely; nothing in it carries facts the rest ' +
+        "of the envelope doesn't already carry.",
+      properties: {
+        voice: {
+          type: 'string',
+          description:
+            'Ornamental-voice narration string (#345 — second dogfood ' +
+            'validation of principle 15). Present only when a voice ' +
+            'plugin is loaded, `GUILD_VOICE=<name>` picks it, and a ' +
+            'template matched the current request snapshot. Distinct ' +
+            'from the doctrinal voice held in `message` and ' +
+            '`suggested_next.reason` (principle 08, voice-as-doctrine ' +
+            '— that voice is intentionally NOT pluggable). Ornamental ' +
+            'voice is the second layer: deployment-local personality ' +
+            'that augments envelopes without claiming new facts. ' +
+            'Stripping `_meta.voice` from a pipeline loses no ' +
+            'information.',
+        },
+      },
+    },
   },
   required: ['ok', 'id', 'state', 'message', 'suggested_next'],
 };

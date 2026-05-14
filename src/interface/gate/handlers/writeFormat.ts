@@ -41,6 +41,21 @@ export interface WriteResponse {
   state: string;
   message: string;
   suggested_next: SuggestedNext | null;
+  /**
+   * Ornamental-voice metadata (#345 — second dogfood validation of
+   * principle 15). Optional. Present only when a voice plugin is
+   * loaded, `GUILD_VOICE=<name>` picks it, and a template matched
+   * the current request snapshot. Carries ornamental narration
+   * separate from the doctrinal voice held in `message` and
+   * `suggested_next.reason` (principle 08, voice-as-doctrine).
+   *
+   * Consumers may ignore `_meta` entirely; it never carries facts
+   * the structured payload doesn't already carry. Voice can be
+   * stripped from a pipeline without information loss.
+   */
+  _meta?: {
+    voice?: string;
+  };
 }
 
 export interface SuggestedNext {
@@ -235,15 +250,20 @@ export function buildWriteResponse(
   req: Request,
   message: string,
   config: GuildConfig,
+  opts?: { voice?: string | null },
 ): WriteResponse {
   const envActor = resolveGuildActor() ?? null;
-  return {
+  const out: WriteResponse = {
     ok: true,
     id: req.id.value,
     state: req.state,
     message,
     suggested_next: deriveSuggestedNext(req, config, envActor),
   };
+  if (opts?.voice !== undefined && opts.voice !== null) {
+    out._meta = { voice: opts.voice };
+  }
+  return out;
 }
 
 /**
@@ -259,12 +279,20 @@ export function emitWriteResponse(
   message: string,
   config: GuildConfig,
   textLines: readonly string[] = [],
+  opts?: { voice?: string | null },
 ): void {
   if (format === 'json') {
-    const payload = buildWriteResponse(req, message, config);
+    const payload = buildWriteResponse(req, message, config, opts);
     process.stdout.write(JSON.stringify(payload, null, 2) + '\n');
     return;
   }
   process.stdout.write(message + '\n');
   for (const line of textLines) process.stdout.write(line + '\n');
+  // Ornamental voice in text mode: a single stderr line below the
+  // structured output. stderr (not stdout) so JSON-piped consumers
+  // who also enable text-mode rendering by accident don't see voice
+  // mingle with parseable payload. Suppressed when null.
+  if (opts?.voice !== undefined && opts.voice !== null) {
+    process.stderr.write(`(voice: ${opts.voice})\n`);
+  }
 }

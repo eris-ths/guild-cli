@@ -1165,6 +1165,33 @@ For day-to-day Unreleased churn, raw chronological append is fine.
   Text-mode boot adds a `past selves left these cliffs:` section that
   renders only when entries exist (principle 13 voice budget). (#37x)
 
+- **Voice plugin infrastructure: ornamental-voice surface as the
+  second dogfood validation of principle 15.** Introduces a third
+  plugin kind (`plugins.voices`) alongside the existing verb/hook
+  plugins. A voice plugin attaches OPTIONAL personality narration to
+  write-verb JSON envelopes via a new `_meta.voice` field, distinct
+  from the doctrinal voice held in handlers (principle 08 — that
+  voice is intentionally NOT pluggable). Two-layer model preserved
+  by construction: doctrinal voice carries lore in `message` /
+  `suggested_next.reason` / schema descriptions; ornamental voice
+  carries personality and CANNOT replace doctrinal prose. Stripping
+  `_meta.voice` from a pipeline loses zero information — that
+  invariant is what keeps the two layers honest. Activation:
+  `GUILD_VOICE=<name>` env picks one loaded plugin by name; unset or
+  no match → no `_meta` field emitted (silent miss, never error).
+  Plugin shape: `{name, verbs: {<verb>: [{when, template}, ...]}}`
+  with `when ∈ {default, cliff_present, cliff_absent}` and
+  `{id} / {action} / {by} / {cliff}` template variables sourced from
+  the substrate (voice cannot invent facts). v1 scope: `gate
+  complete` fires voice on wave-terminal completion only; slice-only
+  closes do not emit voice (narrating a slice as "completed" would
+  be a false claim). Trust model: shares `plugins.trusted: true`
+  consent gate with verb/hook plugins. Doctor surfaces voice plugin
+  load failures as `area: 'plugin'` findings, same channel as the
+  other plugin kinds. Text-mode renders ornamental voice on stderr
+  (`(voice: …)` line) so JSON-piped consumers stay clean. (#37x —
+  cluster #1)
+
 ## [0.5.0] — 2026-05-06
 
 > **substrate self-improvement wave** (#207 / #208) closes the loop:
