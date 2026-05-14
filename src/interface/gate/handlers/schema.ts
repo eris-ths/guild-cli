@@ -5,7 +5,7 @@ import {
 } from '../../shared/parseArgs.js';
 import { C } from './internal.js';
 
-const SCHEMA_KNOWN_FLAGS: ReadonlySet<string> = new Set(['format', 'verb']);
+const SCHEMA_KNOWN_FLAGS: ReadonlySet<string> = new Set(['format', 'verb', 'voice']);
 
 /**
  * gate schema [--verb <name>] [--format json|text]
@@ -2000,7 +2000,25 @@ const VERBS: readonly VerbSchema[] = [
     name: 'schema',
     category: 'meta',
     summary: 'this introspection payload',
-    input: { type: 'object', properties: { verb: str, format: formatField } },
+    input: {
+      type: 'object',
+      properties: {
+        verb: str,
+        format: formatField,
+        voice: {
+          type: 'string',
+          description:
+            'Voice-flavored description overlay (#345 cluster #5). When set ' +
+            "to a loaded voice plugin's `name`, overlays the plugin's " +
+            '`schema.verbs.<verb>.summary` / `.input.<flag>` strings onto the ' +
+            'doctrinal descriptions before emitting. Augment-only: a field ' +
+            'not overridden falls through verbatim. Unknown name → silent ' +
+            'miss (no error, no overlay). Mirrors the write-envelope ' +
+            '`GUILD_VOICE` semantic but kept per-invocation so a reader can ' +
+            'switch voices without exporting an env var.',
+        },
+      },
+    },
     output: { type: 'object' },
   },
   {
@@ -2078,13 +2096,23 @@ export async function schemaCmd(c: C, args: ParsedArgs): Promise<number> {
   if (verbFilter && verbs.length === 0) {
     throw new Error(`unknown verb: ${verbFilter}`);
   }
+  // --voice <name> overlay (#345 cluster #5). Looks up the named voice
+  // plugin and applies its `schema.verbs.<verb>.summary` / `.input.<flag>`
+  // overrides onto each VerbSchema. Augment-not-replace: any field not
+  // overridden falls through to the doctrinal description held in
+  // handlers (principle 08 unchanged). Unknown voice name → no error,
+  // no overlay (silent miss, mirroring write-envelope --voice semantics).
+  const voiceName = optionalOption(args, 'voice');
+  const overlaidVerbs = voiceName
+    ? applyVoiceSchemaOverlay(verbs, voiceName, c.voicePlugins)
+    : verbs;
   const payload = {
     $schema: 'http://json-schema.org/draft-07/schema#',
     // semver so consumers can pin a major and tolerate additions.
     // Bump the major only for breaking changes to the schema payload
     // itself (not to individual verb schemas).
     version: '0.1.0',
-    verbs: verbs.map((v) => ({
+    verbs: overlaidVerbs.map((v) => ({
       name: v.name,
       category: v.category,
       // `source` defaults to 'core' when the VerbSchema entry omits
@@ -2103,7 +2131,7 @@ export async function schemaCmd(c: C, args: ParsedArgs): Promise<number> {
     process.stdout.write(JSON.stringify(payload, null, 2) + '\n');
   } else {
     const lines: string[] = [];
-    for (const v of verbs) {
+    for (const v of overlaidVerbs) {
       const req = v.input.required?.join(', ') ?? '';
       // `source` is rendered only for plugin verbs — every built-in
       // verb is `core` and a `[core]` tag on every line would just
@@ -2120,3 +2148,56 @@ export async function schemaCmd(c: C, args: ParsedArgs): Promise<number> {
 }
 
 export { VERBS };
+
+/**
+ * Overlay voice-flavored description overrides from the named voice
+ * plugin onto the verb schemas (#345 cluster #5).
+ *
+ * Strict augment-only: a field NOT covered by an override falls
+ * through to the doctrinal description verbatim. Voice cannot delete
+ * doctrinal prose; it can only paint a flavored layer on top.
+ *
+ * Unknown voice name → returns the verbs array unchanged (silent
+ * miss, mirroring `_meta.voice` semantics on write envelopes).
+ *
+ * Pure synchronous; no I/O.
+ */
+function applyVoiceSchemaOverlay(
+  verbs: readonly VerbSchema[],
+  voiceName: string,
+  voicePlugins: ReadonlyArray<import('../../../application/plugin/VoicePlugin.js').VoicePlugin>,
+): VerbSchema[] {
+  const plugin = voicePlugins.find((p) => p.name === voiceName);
+  const overrides = plugin?.schema?.verbs;
+  if (!overrides) {
+    // Either plugin not loaded or it has no schema section — return
+    // the doctrinal verbs unchanged. Mirrors the write-envelope
+    // silent-miss contract: unknown voice never errors.
+    return verbs.map((v) => v);
+  }
+  return verbs.map((v) => {
+    const ov = overrides[v.name];
+    if (!ov) return v;
+    let next: VerbSchema = v;
+    if (ov.summary !== undefined) {
+      next = { ...next, summary: ov.summary };
+    }
+    if (ov.input !== undefined) {
+      // Walk the input schema's properties and replace descriptions
+      // where the override map has a matching key. Properties NOT in
+      // the override map keep their doctrinal description intact.
+      const baseProps = (v.input.properties ?? {}) as Record<string, JsonSchema>;
+      const nextProps: Record<string, JsonSchema> = {};
+      for (const [key, propSchema] of Object.entries(baseProps)) {
+        const newDesc = ov.input[key];
+        if (newDesc !== undefined && typeof propSchema === 'object' && propSchema !== null) {
+          nextProps[key] = { ...propSchema, description: newDesc };
+        } else {
+          nextProps[key] = propSchema;
+        }
+      }
+      next = { ...next, input: { ...next.input, properties: nextProps } };
+    }
+    return next;
+  });
+}

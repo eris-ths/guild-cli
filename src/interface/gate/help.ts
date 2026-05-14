@@ -565,11 +565,17 @@ const SECTIONS: readonly Section[] = [
       {
         tier: 'base',
         text:
-          "  gate schema [--verb <name>] [--format json|text]\n" +
+          "  gate schema [--verb <name>] [--voice <name>] [--format json|text]\n" +
           "                       Introspection: JSON Schema for every verb's\n" +
           '                       inputs and outputs. Consumed by LLM tool layers.\n' +
           '                       Output is exhaustive regardless of profile or\n' +
-          '                       --all — orchestrators see every verb.',
+          '                       --all — orchestrators see every verb.\n' +
+          '                       --voice <name> overlays a loaded voice\n' +
+          "                       plugin's schema overrides (summary +\n" +
+          '                       per-flag descriptions) onto the doctrinal\n' +
+          "                       descriptions. Augment-only — unmatched fields\n" +
+          '                       fall through verbatim. Unknown name → no\n' +
+          '                       overlay, no error.',
       },
       {
         tier: 'base',

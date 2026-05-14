@@ -1210,6 +1210,21 @@ For day-to-day Unreleased churn, raw chronological append is fine.
   verb — the augment-not-replace invariant carries from PR 1
   unchanged. (#37x — cluster #1 continuation)
 
+- **`gate schema --voice <name>` voice-flavored description overlay.**
+  Voice plugin shape gains an optional `schema` section carrying
+  per-verb `summary` + per-flag `input.<flag>` description overrides;
+  `gate schema --voice <plugin-name>` overlays them onto the doctrinal
+  schema before emitting. Augment-only — any field a voice does NOT
+  override falls through verbatim, so principle 08 (voice-as-doctrine,
+  doctrinal voice held in handlers) is preserved as the substrate
+  floor. Unknown voice name → silent miss (no error, no overlay),
+  mirroring the `_meta.voice` semantic on write envelopes. Activation
+  is per-invocation (a flag, not env) so a reader can switch voices
+  without exporting `GUILD_VOICE` — useful for AI agents that want
+  to inspect what eris's schema reads like before committing to that
+  voice for the whole shell. (#37x — cluster #5, second half of the
+  voice-plugin landing pair)
+
 ## [0.5.0] — 2026-05-06
 
 > **substrate self-improvement wave** (#207 / #208) closes the loop:
