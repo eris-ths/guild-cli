@@ -292,7 +292,15 @@ export function emitWriteResponse(
   // structured output. stderr (not stdout) so JSON-piped consumers
   // who also enable text-mode rendering by accident don't see voice
   // mingle with parseable payload. Suppressed when null.
+  //
+  // Marker design (#382 dogfood-driven, polish PR-A2): use `⟶ ` (U+27F6)
+  // as the voice line prefix instead of the v1 `(voice: …)` form.
+  // Dogfood reflection found `(voice: …)` reading as a debug label
+  // rather than a voice-line; the arrow marker signals "this is the
+  // voiced echo of what just happened" without the parenthetical
+  // hedge. Single character, monospace-safe, distinct from any
+  // existing gate stderr prefix.
   if (opts?.voice !== undefined && opts.voice !== null) {
-    process.stderr.write(`(voice: ${opts.voice})\n`);
+    process.stderr.write(`⟶ ${opts.voice}\n`);
   }
 }

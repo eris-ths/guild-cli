@@ -115,7 +115,7 @@ test('gate voice: GUILD_VOICE env masks file layer (introspect surfaces hint)', 
     const r = runGate(root, ['voice'], { GUILD_VOICE: 'override-mode' });
     assert.match(r.stdout, /voice: override-mode/);
     assert.match(r.stdout, /source: env/);
-    assert.match(r.stdout, /higher-priority layer in effect/);
+    assert.match(r.stdout, /masking lower layers/);
     assert.match(r.stdout, /unset GUILD_VOICE/);
   } finally { cleanup(); }
 });

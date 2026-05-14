@@ -1290,6 +1290,40 @@ For day-to-day Unreleased churn, raw chronological append is fine.
   owns the resolution. (#37x — eris-first refinement PR-B + PR-C
   bundled)
 
+- **Voice polish bundle: dogfood-driven 4-fix pack.** Touch-feel pass
+  through the cluster shipped in #380-#382 surfaced four refinements;
+  bundled here so they ship together.
+
+  **P0** `gate voice` masking hint fires only when an env source is
+  winning. The pre-fix code emitted "higher-priority layer in effect"
+  on any non-file resolution including `config`, but `config` is the
+  BOTTOM layer — nothing was masking it, so the hint was misleading.
+  Hint now keyed to `source === 'env'` only.
+
+  **P1** `gate fast-track` fires ornamental voice on its `complete`
+  segment. v1 wired voice through `gate complete` direct only;
+  fast-track is the daily-use shortcut and was silent on the most
+  common write surface. Same template (`verbs.complete`) fires on
+  both paths now — eris's voice doesn't go quiet on the chained
+  flow.
+
+  **P2** text-mode voice marker changes from `(voice: …)` to
+  `⟶ …` (U+27F6). The parenthetical form read as a debug label
+  during dogfood; the arrow signals "voiced echo of what just
+  happened" without the hedge. stderr-only as before, so JSON-piped
+  consumers stay unaffected.
+
+  **P3** `gate --help --essentials --compact` renders one usage line
+  per verb instead of the full multi-line entry. Multi-line was
+  defensible for tier rendering (BASE/COORDINATION/EXTRA where the
+  audience is "everyone") but contradicted the essentials framing
+  ("the verbs I reach for, at a glance"). `--compact` is opt-in;
+  bare `--essentials` keeps the existing multi-line output, and
+  `--compact` without `--essentials` is a noop on the tier surface.
+
+  Existing voice envelope assertions updated for the new marker.
+  (#37x — eris-first refinement polish PR, dogfood-driven)
+
 ## [0.5.0] — 2026-05-06
 
 > **substrate self-improvement wave** (#207 / #208) closes the loop:

@@ -179,9 +179,10 @@ test('voice: text-mode renders voice on stderr (one line)', () => {
       ['complete', id, '--by', 'alice', '--cliff', 'pickup', '--format', 'text'],
       { GUILD_VOICE: 'test' });
     assert.equal(r.status, 0);
-    // stdout: doctrinal "✓ completed: <id>"; stderr: ornamental "(voice: ...)"
+    // stdout: doctrinal "✓ completed: <id>"; stderr: ornamental "⟶ ..."
+    // (#382 polish: arrow marker replaces the v1 `(voice: …)` debug-style label)
     assert.match(r.stdout, /✓ completed:/);
-    assert.match(r.stderr, /\(voice: do X :: cliff = pickup\)/);
+    assert.match(r.stderr, /⟶ do X :: cliff = pickup/);
   } finally {
     cleanup();
   }
