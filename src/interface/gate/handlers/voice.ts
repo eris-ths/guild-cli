@@ -67,18 +67,19 @@ export async function voiceCmd(c: C, args: ParsedArgs): Promise<number> {
       process.stdout.write(`  next: gate voice <name>  (writes ${VOICE_MODE_FILE})\n`);
     } else {
       process.stdout.write(`voice: ${resolved.name} (source: ${resolved.source})\n`);
-      if (resolved.source !== 'file') {
-        // Surface the layer that's currently winning so the operator
-        // sees why `gate voice <other>` won't take effect until they
-        // unset the higher layer. Voice resolution is the load-bearing
-        // discoverability story here — without this hint, a confused
-        // user sets `.guild-voice` and wonders why GUILD_VOICE keeps
-        // overriding it.
+      // Mask-detection: only fires when a HIGHER-priority layer is
+      // winning over a (potentially expected) lower layer. Source
+      // priority: env > file > config. So the hint applies ONLY when
+      // source === 'env' (env can mask file + config); source === 'file'
+      // can mask config but the operator just SET that file via this
+      // verb, so the hint is noise. source === 'config' is the bottom
+      // — nothing to mask. The pre-fix code fired the hint on every
+      // non-file source, which surfaced misleading "higher-priority
+      // layer" text on a config-only resolution.
+      if (resolved.source === 'env') {
         process.stdout.write(
-          `  hint: higher-priority layer in effect; unset to let .guild-voice / config win.\n` +
-            (resolved.source === 'env'
-              ? '        $ unset GUILD_VOICE\n'
-              : '        # remove `voice.default:` from guild.config.yaml\n'),
+          `  hint: GUILD_VOICE env is masking lower layers. unset to let .guild-voice / config win.\n` +
+            '        $ unset GUILD_VOICE\n',
         );
       }
     }

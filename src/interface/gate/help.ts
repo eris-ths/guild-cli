@@ -651,6 +651,14 @@ export interface RenderHelpOptions {
     readonly verbs: readonly string[];
     readonly note?: string;
   } | null;
+  /**
+   * Render the essentials list as one line per verb instead of the
+   * full multi-line entry (#382 dogfood-driven, polish PR-A3).
+   * Trade-off: loses per-verb detail but gives a one-screen overview
+   * of "the verbs I reach for". Only meaningful under --essentials —
+   * a noop on the profile tier surface where multi-line is intended.
+   */
+  readonly compact?: boolean;
 }
 
 function tierVisible(tier: HelpTier, opts: RenderHelpOptions): boolean {
@@ -700,6 +708,7 @@ export function renderHelp(opts: RenderHelpOptions): string {
   lines.push('');
   lines.push(tierBanner(opts));
   lines.push('');
+  const wantCompact = opts.essentials !== null && opts.essentials !== undefined && opts.compact === true;
   for (const section of SECTIONS) {
     const visible = opts.essentials
       ? section.entries.filter((e) => essentialsVisible(e.text, opts.essentials!))
@@ -707,7 +716,20 @@ export function renderHelp(opts: RenderHelpOptions): string {
     if (visible.length === 0) continue;
     lines.push(section.heading);
     for (const e of visible) {
-      lines.push(e.text);
+      if (wantCompact) {
+        // 1-line-per-verb projection: take the first usage line of
+        // each entry (the line starting `  gate <verb>`) and emit
+        // just that. Multi-line entries collapse to their headline.
+        // The full description stays available via `gate schema
+        // --verb <name>` — essentials --compact is an overview, not
+        // a substitute for the detail.
+        const firstUsage = e.text
+          .split('\n')
+          .find((line) => /^ {2}gate [a-z]/.test(line));
+        lines.push(firstUsage ?? e.text);
+      } else {
+        lines.push(e.text);
+      }
     }
     lines.push('');
   }

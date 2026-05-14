@@ -121,6 +121,7 @@ export async function main(argv: readonly string[]): Promise<number> {
   if (!cmd || cmd === '--help' || cmd === '-h') {
     const wantAll = rest.includes('--all');
     const wantEssentials = rest.includes('--essentials');
+    const wantCompact = rest.includes('--compact');
     let profile: 'standard' | 'swarm' = 'standard';
     let config: GuildConfig | null = null;
     try {
@@ -161,7 +162,7 @@ export async function main(argv: readonly string[]): Promise<number> {
         // Silent miss — fallback to profile tiering.
       }
     }
-    process.stdout.write(renderHelp({ profile, all: wantAll, essentials }));
+    process.stdout.write(renderHelp({ profile, all: wantAll, essentials, compact: wantCompact }));
     return 0;
   }
   const args = parseArgs(rest);

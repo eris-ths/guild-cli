@@ -35,6 +35,7 @@ import {
   normalizeActor,
 } from './internal.js';
 import { emitWriteResponse, parseFormat } from './writeFormat.js';
+import { renderVoice } from '../../shared/voiceRender.js';
 
 // Known flags per write-verb. Silent-ignore of unknown flags (e.g.
 // `--executr noir` instead of `--executor noir`) would let a typo
@@ -594,12 +595,20 @@ export async function reqFastTrack(c: C, args: ParsedArgs): Promise<number> {
     extraLines.push(`→ auto-review pending for: ${reviewer}`);
     extraLines.push(`  ${tpl}`);
   }
+  // Ornamental voice on fast-track: dogfood-driven addition (#382
+  // follow-up). fast-track is the daily-use shortcut; with the v1
+  // wire-up only firing on `gate complete` direct invocation, the
+  // most common write surface was silent. Voice fires on the
+  // `complete` segment of the chain — same semantic as gate complete
+  // proper. (#37x — eris-first refinement polish PR-A1)
+  const voice = renderVoice(c.voicePlugins, 'complete', completed, c.config);
   emitWriteResponse(
     parseFormat(args),
     completed,
     `✓ fast-tracked: ${id} (pending→completed)`,
     c.config,
     extraLines,
+    { voice },
   );
   return 0;
 }
