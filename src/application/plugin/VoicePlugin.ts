@@ -24,26 +24,56 @@
 // follow in a sibling PR once the plumbing proves out.
 
 /**
- * Predicate keys evaluated against the post-mutation Request. v1 set
- * is small + explicit so the contract is auditable; new keys are
+ * Predicate keys evaluated against the post-mutation Request +
+ * (for `review`) the just-appended review. Set is intentionally
+ * small + explicit so the contract is auditable; new keys are
  * additive within 0.x per `docs/POLICY.md` § "Plugin stability".
  *
  *   default          — always matches; intended as the last entry in
  *                      a verb's array.
+ *
+ *   # close-note dimension (status_log[-1].cliff / .note)
  *   cliff_present    — terminal status_log entry has a non-empty cliff
- *                      (i.e. the closer left a forward-pointing hint).
+ *                      (the closer left a forward-pointing hint).
+ *                      Meaningful on `complete` only — other terminals
+ *                      don't accept --cliff in v1.
  *   cliff_absent     — terminal status_log entry has no cliff.
+ *   with_note        — status_log[-1].note is non-empty.
+ *   without_note     — status_log[-1].note is empty.
+ *
+ *   # review-verdict dimension (reviews[-1].verdict on `review` verb)
+ *   verdict_ok       — most-recent review's verdict is "ok".
+ *   verdict_concern  — most-recent review's verdict is "concern".
+ *   verdict_reject   — most-recent review's verdict is "reject".
  */
-export type VoiceWhen = 'default' | 'cliff_present' | 'cliff_absent';
+export type VoiceWhen =
+  | 'default'
+  | 'cliff_present'
+  | 'cliff_absent'
+  | 'with_note'
+  | 'without_note'
+  | 'verdict_ok'
+  | 'verdict_concern'
+  | 'verdict_reject';
 
 /**
  * One narration template, gated by its `when` predicate.
  *
- * `template` supports `{var}` interpolation; v1 variables:
+ * `template` supports `{var}` interpolation; supported variables:
  *   {id}       — req.id.value
  *   {action}   — req.action
- *   {by}       — terminal status_log entry's `by` (closing actor)
- *   {cliff}    — terminal cliff prose; empty string when absent
+ *   {by}       — for terminal transitions, status_log[-1].by; for
+ *                `review`, the just-appended review's `by`. Empty
+ *                string when neither is present.
+ *   {note}     — status_log[-1].note. Used by approve / execute /
+ *                deny / fail / complete to surface the actor's
+ *                free-form prose. Empty when absent.
+ *   {cliff}    — status_log[-1].cliff. Meaningful on `complete` only;
+ *                empty elsewhere.
+ *   {verdict}  — reviews[-1].verdict on `review` verb; empty
+ *                elsewhere.
+ *   {lense}    — reviews[-1].lense on `review` verb; empty elsewhere.
+ *   {comment}  — reviews[-1].comment on `review` verb; empty elsewhere.
  *
  * Variables that are not in the supported set render as the literal
  * `{varname}` text so a typo in the voice file fails loudly at the

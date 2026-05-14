@@ -39,24 +39,57 @@ export function resolveActiveVoice(
 
 /**
  * Variables an ornamental template may interpolate. Sourced from the
- * post-mutation Request snapshot — never from caller imagination.
- * Voice cannot invent facts; that's the principle 08 invariant the
- * two-layer model preserves.
+ * post-mutation Request snapshot (+ for `review`, the just-appended
+ * review entry) — never from caller imagination. Voice cannot invent
+ * facts; that's the principle 08 invariant the two-layer model
+ * preserves.
+ *
+ * Fields that don't apply to the current verb render as the empty
+ * string. E.g. `cliff` is empty on a `deny` envelope, `verdict` is
+ * empty everywhere except `review`. Templates can branch via `when`
+ * predicates to avoid surfacing the empty form.
  */
 interface VoiceVars {
   readonly id: string;
   readonly action: string;
   readonly by: string;
+  readonly note: string;
   readonly cliff: string;
+  readonly verdict: string;
+  readonly lense: string;
+  readonly comment: string;
 }
 
-function deriveVars(req: Request): VoiceVars {
+const SUPPORTED_VARS: ReadonlySet<keyof VoiceVars> = new Set([
+  'id',
+  'action',
+  'by',
+  'note',
+  'cliff',
+  'verdict',
+  'lense',
+  'comment',
+]);
+
+function deriveVars(req: Request, verb: string): VoiceVars {
   const last = req.statusLog[req.statusLog.length - 1];
+  // For `review` the salient surface is the just-appended review; for
+  // every other write verb it's the status_log entry. We pick the
+  // appropriate source per verb so `{by}` resolves to "the reviewer"
+  // on review and "the transition actor" elsewhere — same intuition
+  // a human reader would have.
+  const lastReview = verb === 'review'
+    ? req.reviews[req.reviews.length - 1]
+    : undefined;
   return {
     id: req.id.value,
     action: req.action,
-    by: last?.by ?? '',
+    by: lastReview?.by.value ?? last?.by ?? '',
+    note: last?.note ?? '',
     cliff: last?.cliff ?? '',
+    verdict: lastReview?.verdict ?? '',
+    lense: lastReview?.lense ?? '',
+    comment: lastReview?.comment ?? '',
   };
 }
 
@@ -68,6 +101,16 @@ function matchWhen(when: VoiceWhen, vars: VoiceVars): boolean {
       return vars.cliff.length > 0;
     case 'cliff_absent':
       return vars.cliff.length === 0;
+    case 'with_note':
+      return vars.note.length > 0;
+    case 'without_note':
+      return vars.note.length === 0;
+    case 'verdict_ok':
+      return vars.verdict === 'ok';
+    case 'verdict_concern':
+      return vars.verdict === 'concern';
+    case 'verdict_reject':
+      return vars.verdict === 'reject';
   }
 }
 
@@ -75,8 +118,8 @@ const VAR_RE = /\{([a-z_]+)\}/g;
 
 function interpolate(template: string, vars: VoiceVars): string {
   return template.replace(VAR_RE, (_, key: string) => {
-    if (key === 'id' || key === 'action' || key === 'by' || key === 'cliff') {
-      return vars[key];
+    if (SUPPORTED_VARS.has(key as keyof VoiceVars)) {
+      return vars[key as keyof VoiceVars];
     }
     // Unknown var renders as the literal `{name}` so a typo in the
     // voice file fails loudly at the surface rather than silently
@@ -103,7 +146,7 @@ export function renderVoice(
   if (plugin === null) return null;
   const templates = plugin.verbs[verb];
   if (!templates || templates.length === 0) return null;
-  const vars = deriveVars(req);
+  const vars = deriveVars(req, verb);
   for (const t of templates) {
     if (matchWhen(t.when, vars)) return interpolate(t.template, vars);
   }

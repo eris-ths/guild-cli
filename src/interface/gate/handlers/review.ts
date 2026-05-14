@@ -14,6 +14,7 @@ import {
   normalizeActor,
 } from './internal.js';
 import { emitWriteResponse, parseFormat } from './writeFormat.js';
+import { renderVoice } from '../../shared/voiceRender.js';
 import {
   fireBeforeHook,
   fireAfterHook,
@@ -226,6 +227,8 @@ export async function reqReview(c: C, args: ParsedArgs): Promise<number> {
     updated,
     `✓ review recorded: ${id} [${displayLense}/${displayVerdict}]`,
     c.config,
+    [],
+    { voice: renderVoice(c.voicePlugins, 'review', updated) },
   );
   return 0;
 }

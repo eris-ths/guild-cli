@@ -1192,6 +1192,24 @@ For day-to-day Unreleased churn, raw chronological append is fine.
   (`(voice: …)` line) so JSON-piped consumers stay clean. (#37x —
   cluster #1)
 
+- **Voice plugin extension: all write verbs now fire ornamental
+  voice.** Sibling PR to the infrastructure landing — voice templates
+  may now be authored against `approve` / `deny` / `execute` /
+  `complete` / `fail` / `review` (the full write-verb surface).
+  Template variables `{note}`, `{verdict}`, `{lense}`, `{comment}`
+  join the existing `{id}` / `{action}` / `{by}` / `{cliff}`; `{by}`
+  resolves to the just-appended review's reviewer on `review`, the
+  terminal status_log entry's actor everywhere else (matches a human
+  reader's intuition: "by" means the actor of the salient event).
+  New `when` predicates: `verdict_ok` / `verdict_concern` /
+  `verdict_reject` (review verb), `with_note` / `without_note`
+  (every write verb). `fail` mirrors `complete`'s honesty rule —
+  voice fires on wave-terminal only; slice-only closures are not
+  narrated (per-slice failure is not the wave failing). Doctrinal
+  voice (`message` / `suggested_next.reason`) unchanged across every
+  verb — the augment-not-replace invariant carries from PR 1
+  unchanged. (#37x — cluster #1 continuation)
+
 ## [0.5.0] — 2026-05-06
 
 > **substrate self-improvement wave** (#207 / #208) closes the loop:
