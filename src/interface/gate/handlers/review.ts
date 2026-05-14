@@ -228,7 +228,7 @@ export async function reqReview(c: C, args: ParsedArgs): Promise<number> {
     `✓ review recorded: ${id} [${displayLense}/${displayVerdict}]`,
     c.config,
     [],
-    { voice: renderVoice(c.voicePlugins, 'review', updated) },
+    { voice: renderVoice(c.voicePlugins, 'review', updated, c.config) },
   );
   return 0;
 }

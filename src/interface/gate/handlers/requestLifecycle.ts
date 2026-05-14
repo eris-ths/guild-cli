@@ -135,7 +135,7 @@ export async function reqApprove(c: C, args: ParsedArgs): Promise<number> {
     );
   }
   emitWriteResponse(parseFormat(args), r, `✓ approved: ${id}`, c.config, [], {
-    voice: renderVoice(c.voicePlugins, 'approve', r),
+    voice: renderVoice(c.voicePlugins, 'approve', r, c.config),
   });
   return 0;
 }
@@ -170,7 +170,7 @@ export async function reqDeny(c: C, args: ParsedArgs): Promise<number> {
   const r = await c.requestUC.deny(id, by, reason, invokedBy);
   await fireAfterHook(c.hookSubscriptions, 'deny', r, by);
   emitWriteResponse(parseFormat(args), r, `✓ denied: ${id}`, c.config, [], {
-    voice: renderVoice(c.voicePlugins, 'deny', r),
+    voice: renderVoice(c.voicePlugins, 'deny', r, c.config),
   });
   return 0;
 }
@@ -285,7 +285,7 @@ export async function reqExecute(c: C, args: ParsedArgs): Promise<number> {
     );
   }
   emitWriteResponse(parseFormat(args), r, `✓ executing: ${id}`, c.config, [], {
-    voice: renderVoice(c.voicePlugins, 'execute', r),
+    voice: renderVoice(c.voicePlugins, 'execute', r, c.config),
   });
   return 0;
 }
@@ -447,7 +447,7 @@ export async function reqComplete(c: C, args: ParsedArgs): Promise<number> {
   // never on slice-only. Slice-only is a multi-executor intermediate
   // state — narrating it as "completed" would be a false claim about
   // wave state (principle 08's voice-must-stay-honest invariant).
-  const voice = renderVoice(c.voicePlugins, 'complete', r);
+  const voice = renderVoice(c.voicePlugins, 'complete', r, c.config);
   emitWriteResponse(parseFormat(args), r, `✓ completed: ${id}`, c.config, extraLines, { voice });
   return 0;
 }
@@ -530,7 +530,7 @@ export async function reqFail(c: C, args: ParsedArgs): Promise<number> {
   // Voice on fail: wave-terminal only — slice-only mirrors complete's
   // honesty rule (a slice failure does NOT mean the wave failed).
   emitWriteResponse(parseFormat(args), r, `✓ failed: ${id}`, c.config, [], {
-    voice: renderVoice(c.voicePlugins, 'fail', r),
+    voice: renderVoice(c.voicePlugins, 'fail', r, c.config),
   });
   return 0;
 }

@@ -73,4 +73,10 @@ export const WRITE_VERBS: ReadonlySet<string> = new Set([
 export const LOCK_EXEMPT_VERBS: ReadonlySet<string> = new Set([
   'doctor',
   'repair',
+  // `voice` writes the .guild-voice mode marker (config-shaped, not
+  // substrate-data-shaped). It does not touch any persisted request /
+  // review / issue record, so taking the substrate lock would be
+  // over-conservative. Same maintenance-tier reasoning as doctor /
+  // repair — the verb is orthogonal to the lock's purpose.
+  'voice',
 ]);

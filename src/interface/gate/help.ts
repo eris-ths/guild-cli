@@ -382,6 +382,19 @@ const SECTIONS: readonly Section[] = [
       {
         tier: 'base',
         text:
+          '  gate voice [<name> | off] [--format json|text]\n' +
+          '                       Mode-switch for the voice plugin layer.\n' +
+          '                       Bare `gate voice` shows the active voice +\n' +
+          '                       which layer resolved it. `gate voice <name>`\n' +
+          '                       writes <content_root>/.guild-voice so the\n' +
+          '                       deployment picks up <name> until you change\n' +
+          '                       it. `gate voice off` clears the marker.\n' +
+          '                       Resolution: --voice flag > GUILD_VOICE env\n' +
+          '                       > .guild-voice file > voice.default config.',
+      },
+      {
+        tier: 'base',
+        text:
           '  gate next [--confirm] [--format json|text]\n' +
           '                       One-call read-and-dispatch of the top actionable\n' +
           '                       verb. Without --confirm: prints the plan (verb /\n' +

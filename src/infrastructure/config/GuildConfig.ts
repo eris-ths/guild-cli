@@ -147,6 +147,15 @@ export interface GuildConfigProps {
    * handlers (principle 08).
    */
   voicePluginPaths: readonly string[];
+  /**
+   * Deployment-baseline default voice (#345 cluster #5 follow-up).
+   * Read from `voice.default: <name>` in `guild.config.yaml`. Used as
+   * the lowest-priority layer in the 4-layer voice resolution:
+   *   --voice flag > GUILD_VOICE env > .guild-voice file > config.voice.default
+   * Null when the config doesn't declare one — the resolver then
+   * returns null and ornamental voice stays off.
+   */
+  voiceDefault: string | null;
   profile: GuildProfile;
   features: GuildFeatures;
   gate: GateConfig;
@@ -172,6 +181,7 @@ export class GuildConfig implements GuildConfigProps {
     readonly verbPluginPaths: readonly string[],
     readonly hookPluginPaths: readonly string[],
     readonly voicePluginPaths: readonly string[],
+    readonly voiceDefault: string | null,
     readonly profile: GuildProfile,
     readonly features: GuildFeatures,
     readonly gate: GateConfig,
@@ -294,6 +304,21 @@ export class GuildConfig implements GuildConfigProps {
           'Add `trusted: true` under `plugins:` in guild.config.yaml to enable.',
       );
     }
+    // voice.default (#345 cluster mode-switch follow-up). Lowest-priority
+    // layer in the 4-layer voice resolution; gives a deployment a
+    // sensible baseline without forcing every shell to export
+    // GUILD_VOICE or every invocation to pass --voice.
+    const voiceRaw = raw.voice ?? {};
+    let voiceDefault: string | null = null;
+    if (typeof voiceRaw.default === 'string' && voiceRaw.default.length > 0) {
+      voiceDefault = voiceRaw.default;
+    } else if (voiceRaw.default !== undefined) {
+      onMalformed(
+        configPath,
+        `voice.default must be a non-empty string when present, got ${JSON.stringify(voiceRaw.default)}. ` +
+          'Ignoring; voice resolution falls through to GUILD_VOICE / .guild-voice / off.',
+      );
+    }
     // Profile + features (#231). The two interact: `profile: swarm`
     // flips the default of `features.worktree_required_for_parallel`
     // to true, but an explicit `features:` block always wins so a
@@ -362,7 +387,7 @@ export class GuildConfig implements GuildConfigProps {
       }
     }
     const gate: GateConfig = { strictLenses };
-    return new GuildConfig(root, contentRoot, paths, hostNames, lenses, doctorPlugins, verbPluginPaths, hookPluginPaths, voicePluginPaths, profile, features, gate, onMalformed, configPath);
+    return new GuildConfig(root, contentRoot, paths, hostNames, lenses, doctorPlugins, verbPluginPaths, hookPluginPaths, voicePluginPaths, voiceDefault, profile, features, gate, onMalformed, configPath);
   }
 
   static default(
@@ -386,6 +411,7 @@ export class GuildConfig implements GuildConfigProps {
       [],
       [],
       [],
+      null,
       'standard',
       { worktreeRequiredForParallel: false, selfApprove: 'warn' },
       { strictLenses: false },
