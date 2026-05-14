@@ -1,12 +1,15 @@
 # Plugin examples
 
-End-to-end examples for the two extension surfaces shipped under
-[#36](https://github.com/eris-ths/guild-cli/issues/36) Phase 1:
+End-to-end examples for the three extension surfaces:
 
 - **Verb plugins** — register new `gate <verb>` commands without
   forking the core dispatcher
 - **Hook plugins** — observe / veto the request lifecycle with
   `before:` / `after:` callbacks
+- **Voice plugins** — attach deployment-local personality to
+  write-verb responses, schema descriptions, `--help` curation,
+  and `gate boot`'s read surfaces — without forking, without
+  touching the substrate's neutral voice
 
 > **Field-by-field schema reference**: see
 > [`docs/plugin-schema.md`](../../docs/plugin-schema.md) for the
@@ -173,6 +176,118 @@ the end of the chain.
   multi-event subscription, write to a side-effect file
 - [`hooks/policy-no-self-approve.mjs`](hooks/policy-no-self-approve.mjs)
   — `before:` flavour, conditional veto
+
+## Voice plugins
+
+Voice plugins are **pure data** (no `run` function). They attach
+optional personality to surfaces a write verb or `gate boot`
+already renders — augment-only, the doctrinal voice held in
+handlers (principle 08) is never replaced. Stripping `_meta.voice`
+from a pipeline loses zero information.
+
+```js
+// plugins/voices/mine.mjs
+export default {
+  name: 'mine',                                  // [a-z][a-z0-9-]*
+  verbs: {
+    complete: [
+      { when: 'cliff_present', template: '{action} 閉じた。 次の手: 「{cliff}」' },
+      { when: 'default',        template: '{action} 完。' },
+    ],
+    review: [
+      { when: 'verdict_ok',      template: '{lense} 異存なし。' },
+      { when: 'verdict_concern', template: '{lense} 懸念 — {comment}' },
+      { when: 'verdict_reject',  template: '{lense} 通せない — {comment}' },
+    ],
+  },
+  // Optional sections — each independent. A plugin may carry any subset.
+  essentials: {
+    verbs: ['boot', 'next', 'voice', 'fast-track', 'complete', 'review'],
+    note: 'my daily',
+  },
+  schema: {
+    verbs: {
+      complete: {
+        summary: 'my-flavored summary for complete',
+        input: { cliff: '次に拾う者へのメッセージ' },
+      },
+    },
+  },
+  read: {
+    past_cliffs: {
+      header: '── 過去から {count} 通の手紙:',
+      entry:  '   ✧ {action} → 「{cliff}」',
+    },
+  },
+};
+```
+
+**Activation** — 4-layer resolution, most specific wins:
+
+1. `--voice <name>` (per-invocation; e.g. `gate schema --voice mine`)
+2. `GUILD_VOICE` env (session)
+3. `<content_root>/.guild-voice` file (cwd-stable; written by `gate voice <name>`)
+4. `voice.default: <name>` in `guild.config.yaml` (deployment baseline)
+
+**`gate voice` verb** is the lever for layer 3:
+
+```bash
+gate voice                  # introspect (active voice + which layer)
+gate voice mine             # write .guild-voice
+gate voice off              # clear
+```
+
+Set is permissive on whether the named voice is currently loaded —
+mirrors the silent-miss contract on the rest of the cluster.
+
+**Sections**:
+
+| Section | Surface | Notes |
+|---------|---------|-------|
+| `verbs.<verb>` | `_meta.voice` on write-verb JSON envelope; `⟶ …` line on stderr in text mode | Wired for `approve` / `deny` / `execute` / `complete` (incl. fast-track's complete segment) / `fail` / `review` |
+| `essentials` | `gate --help --essentials` (multi-line) / `--essentials --compact` (one line / verb) | Orthogonal to the BASE / COORDINATION / EXTRA tiering; pass `--all` for the full catalog |
+| `schema` | `gate schema --voice <name>` overlays `summary` + per-flag `description` | Per-invocation flag; doesn't touch the layer-3 file |
+| `read.past_cliffs` | `gate boot --format text` "past cliffs" section | JSON mode unaffected; structured `past_cliffs` preserves the data shape |
+
+**Template variables** (sourced from substrate state — voice cannot invent facts):
+
+| Variable | Source |
+|----------|--------|
+| `{id}` | `req.id.value` |
+| `{action}` | `req.action` |
+| `{by}` | terminal status_log entry's actor (review: the just-appended review's actor) |
+| `{note}` | `status_log[-1].note` |
+| `{cliff}` | `status_log[-1].cliff` (completed entries only) |
+| `{verdict}` / `{lense}` / `{comment}` | `reviews[-1].*` on review verb |
+| `{count}` / `{closed_by}` / `{closed_at}` | read-surface vars (`read.past_cliffs.entry`) |
+
+Unknown vars render as literal `{name}` — typo loudness is the invariant.
+
+**`when` predicates**:
+
+| Predicate | Matches when |
+|-----------|--------------|
+| `default` | always (use as the last entry per verb) |
+| `cliff_present` / `cliff_absent` | terminal entry's cliff is / isn't set |
+| `with_note` / `without_note` | terminal entry's note is / isn't set |
+| `verdict_ok` / `verdict_concern` / `verdict_reject` | review's verdict |
+
+First matching `when` per array wins. Predicate set is intentionally small — additive within 0.x.
+
+**Honesty invariants** (carry over from the write-verb landing):
+
+- Doctrinal voice (the verb's `message`, `suggested_next.reason`,
+  schema description, etc.) is **never** replaced by voice plugin
+  content. Voice augments; never substitutes. Principle 08 stands.
+- `_meta.voice` carries personality, not facts. Variables come from
+  substrate state; templates cannot reach outside the supported set.
+- `fail` / `complete` voice fires on **wave-terminal only**, never on
+  slice-only closures. Narrating a slice as "completed" would be a
+  false claim about wave state.
+
+**Working example**: a runnable voice plugin lives under
+[`voices/eris-sample.mjs`](./voices/eris-sample.mjs) (added 2026-05-14)
+demonstrating all four sections.
 
 ## Diagnostics
 
