@@ -596,6 +596,30 @@ const VERBS: readonly VerbSchema[] = [
     },
   },
   {
+    name: 'voice',
+    category: 'admin',
+    summary:
+      'mode-switch lever for the 4-layer voice resolution. set / read / clear the deployment-local voice mode marker (.guild-voice). per-invocation --voice flags layer on top; this verb writes the persistent middle tier so an operator can flip "今この気分" in one keystroke instead of re-exporting GUILD_VOICE.',
+    input: {
+      type: 'object',
+      properties: {
+        format: formatField,
+      },
+    },
+    output: {
+      type: 'object',
+      description:
+        'Three modes: (1) no positional → introspect ({active, source, file_path}); ' +
+        '(2) `gate voice <name>` → write .guild-voice to <content_root>; ' +
+        '(3) `gate voice off` → delete .guild-voice. Resolution priority ' +
+        '(low→high): config.voice.default < .guild-voice file < GUILD_VOICE ' +
+        'env < per-invocation --voice flag. Name validation matches the ' +
+        'plugin name regex; the verb is permissive on whether the named ' +
+        'voice is currently loaded (silent-miss contract carried over from ' +
+        'write-envelope ornamental voice).',
+    },
+  },
+  {
     name: 'suggest',
     category: 'read',
     summary:

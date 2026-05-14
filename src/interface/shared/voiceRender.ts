@@ -17,20 +17,107 @@
 // Pure synchronous — no I/O — so handlers can call inline before
 // emitWriteResponse without growing the await surface.
 
+import { readFileSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
 import type { Request } from '../../domain/request/Request.js';
 import type { VoicePlugin, VoiceWhen } from '../../application/plugin/VoicePlugin.js';
+import type { GuildConfig } from '../../infrastructure/config/GuildConfig.js';
 
 /**
- * Resolve the active voice plugin from env + loaded set. Public so
- * the handler can short-circuit when no voice is active (avoid
- * touching the Request just to ask "is voice on?").
+ * Filename of the per-deployment voice mode marker (#345 mode-switch
+ * cluster). Lives at `<content_root>/.guild-voice`. One-line file:
+ * the voice name to activate. Written by `gate voice <name>`, cleared
+ * by `gate voice off`. Trimmed before use; empty file is treated as
+ * "no mode set" (falls through to env / config / null).
+ *
+ * Centralised here so the verb handler + resolver agree on the path.
+ */
+export const VOICE_MODE_FILE = '.guild-voice';
+
+/**
+ * Source layer that resolved the active voice. Surfaced so callers
+ * (e.g. `gate voice` introspection) can explain WHERE the current
+ * mode came from. Mirrors `BootPayload.session_id_source`.
+ *
+ *   env    — GUILD_VOICE environment variable
+ *   file   — <content_root>/.guild-voice
+ *   config — voice.default in guild.config.yaml
+ *
+ * Per-invocation `--voice` flags (e.g. `gate schema --voice eris`)
+ * are resolved at the handler boundary, not here — so the source
+ * shown via this helper is the SESSION-level resolution.
+ */
+export type VoiceSource = 'env' | 'file' | 'config';
+
+export interface ResolvedVoiceName {
+  readonly name: string;
+  readonly source: VoiceSource;
+}
+
+/**
+ * Resolve the active voice NAME across the 4-layer priority order
+ * (most specific → least specific):
+ *   1. `--voice <name>` flag                 (per-invocation; resolved upstream)
+ *   2. GUILD_VOICE env                       — this function, source='env'
+ *   3. <content_root>/.guild-voice file      — source='file'
+ *   4. voice.default in guild.config.yaml    — source='config'
+ *
+ * Returns null when no layer carries a value. Pure-ish: reads env
+ * + filesystem but does not mutate. The file read is a hot path
+ * (every write verb fires voice), so we existsSync first to avoid
+ * raising ENOENT on the no-mode common case.
+ */
+export function resolveActiveVoiceName(
+  config: Pick<GuildConfig, 'contentRoot' | 'voiceDefault'>,
+  env: NodeJS.ProcessEnv = process.env,
+): ResolvedVoiceName | null {
+  const fromEnv = env['GUILD_VOICE'];
+  if (typeof fromEnv === 'string' && fromEnv.length > 0) {
+    return { name: fromEnv, source: 'env' };
+  }
+  const filePath = join(config.contentRoot, VOICE_MODE_FILE);
+  if (existsSync(filePath)) {
+    try {
+      const raw = readFileSync(filePath, 'utf8').trim();
+      if (raw.length > 0) {
+        return { name: raw, source: 'file' };
+      }
+    } catch {
+      // Read failure is non-fatal — voice resolution falls through
+      // to the next layer. The verb handler will surface real read
+      // errors when explicitly invoked.
+    }
+  }
+  if (config.voiceDefault !== null && config.voiceDefault.length > 0) {
+    return { name: config.voiceDefault, source: 'config' };
+  }
+  return null;
+}
+
+/**
+ * Resolve the active voice plugin via the 4-layer name resolution +
+ * plugin lookup. Public so handlers can short-circuit when no voice
+ * is active (avoid touching the Request just to ask "is voice on?").
+ *
+ * Back-compat overload: when called with just `voicePlugins`, falls
+ * back to the legacy env-only resolution. The 2-arg form (plugins +
+ * config) honours the full 4-layer order. Existing call sites that
+ * only have plugins keep working; new sites pass config too.
  */
 export function resolveActiveVoice(
   voicePlugins: ReadonlyArray<VoicePlugin>,
+  config?: Pick<GuildConfig, 'contentRoot' | 'voiceDefault'>,
   env: NodeJS.ProcessEnv = process.env,
 ): VoicePlugin | null {
-  const name = env['GUILD_VOICE'];
-  if (typeof name !== 'string' || name.length === 0) return null;
+  let name: string | null = null;
+  if (config !== undefined) {
+    const resolved = resolveActiveVoiceName(config, env);
+    name = resolved?.name ?? null;
+  } else {
+    const fromEnv = env['GUILD_VOICE'];
+    if (typeof fromEnv === 'string' && fromEnv.length > 0) name = fromEnv;
+  }
+  if (name === null) return null;
   for (const p of voicePlugins) {
     if (p.name === name) return p;
   }
@@ -140,9 +227,10 @@ export function renderVoice(
   voicePlugins: ReadonlyArray<VoicePlugin>,
   verb: string,
   req: Request,
+  config?: Pick<GuildConfig, 'contentRoot' | 'voiceDefault'>,
   env: NodeJS.ProcessEnv = process.env,
 ): string | null {
-  const plugin = resolveActiveVoice(voicePlugins, env);
+  const plugin = resolveActiveVoice(voicePlugins, config, env);
   if (plugin === null) return null;
   const templates = plugin.verbs[verb];
   if (!templates || templates.length === 0) return null;

@@ -34,6 +34,7 @@ import { doctorCmd } from './handlers/doctor.js';
 import { repairCmd } from './handlers/repair.js';
 import { bootCmd } from './handlers/boot.js';
 import { nextCmd } from './handlers/next.js';
+import { voiceCmd } from './handlers/voice.js';
 import { schemaCmd } from './handlers/schema.js';
 import { resumeCmd } from './handlers/resume.js';
 import { restCmd } from './handlers/rest.js';
@@ -295,6 +296,8 @@ async function dispatch(
       return await bootCmd(c, args);
     case 'next':
       return await nextCmd(c, args);
+    case 'voice':
+      return await voiceCmd(c, args);
     case 'suggest':
       return await suggestCmd(c, args);
     case 'flow-suggest':

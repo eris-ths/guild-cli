@@ -1225,6 +1225,25 @@ For day-to-day Unreleased churn, raw chronological append is fine.
   voice for the whole shell. (#37x — cluster #5, second half of the
   voice-plugin landing pair)
 
+- **`gate voice` mode-switch verb + 4-layer voice resolution.**
+  Lowers the burden of switching between voice plugins ("今この気分")
+  from "edit env / config" down to a one-keystroke verb. Resolution
+  order (least → most specific):
+  `config.voice.default < <content_root>/.guild-voice file <
+  GUILD_VOICE env < per-invocation --voice flag`. The new
+  `.guild-voice` file (single-line voice name) is the cwd-stable
+  middle tier — written by `gate voice <name>`, cleared by
+  `gate voice off`, inspected by bare `gate voice`. Introspect output
+  surfaces the active layer and emits a hint when a higher-priority
+  layer is masking the file ("$ unset GUILD_VOICE"). New optional
+  `voice.default: <name>` in `guild.config.yaml` provides the
+  deployment-baseline lowest tier. Set is permissive on whether the
+  named voice is currently loaded — mirrors the silent-miss contract
+  established by `_meta.voice` on write envelopes. Lock-exempt (the
+  marker file is config-shaped, not substrate-data-shaped, so the
+  content-root lock would be over-conservative). (#37x — eris-first
+  refinement, follow-up to the AI-agent-first delight cluster)
+
 ## [0.5.0] — 2026-05-06
 
 > **substrate self-improvement wave** (#207 / #208) closes the loop:
