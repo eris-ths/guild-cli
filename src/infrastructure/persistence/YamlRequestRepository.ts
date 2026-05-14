@@ -438,6 +438,22 @@ function hydrate(
         // non-empty string. Pre-#231 entries simply lack the field.
         if (typeof so['executing_at_cwd'] === 'string' && so['executing_at_cwd'].length > 0)
           entry.executingAtCwd = so['executing_at_cwd'] as string;
+        // cliff (#37x): forward-pointing close note. Hydrated only on
+        // `completed` entries that carry a non-empty string. Pre-#37x
+        // records simply lack the field; entries in other states must
+        // not carry one (we filter rather than auto-strip — a stray
+        // cliff outside `completed` is a hand-edit signal worth
+        // surfacing via onMalformed if it ever appears).
+        if (typeof so['cliff'] === 'string' && so['cliff'].length > 0) {
+          if (entry.state === 'completed') {
+            entry.cliff = so['cliff'] as string;
+          } else {
+            onMalformed(
+              source,
+              `status_log[${i}] carries cliff="..." on state=${entry.state}; v1 cliff is completed-only, field dropped`,
+            );
+          }
+        }
         statusLog.push(entry);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);

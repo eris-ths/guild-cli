@@ -92,6 +92,26 @@ export interface StatusLogEntry {
   at: string;
   note?: string;
   /**
+   * Forward-pointing hint left by the actor closing the request:
+   * "next agent picking this up should...". Sibling of `note` (which
+   * captures "what just happened"). v1 scope: only set on `completed`
+   * transitions via `gate complete --cliff`; `fail`/`deny` carry
+   * forward intent in their reasons already.
+   *
+   * Lineage: borrows agora's cliff/invitation semantic (Play.ts
+   * `SuspensionEntry`) and ports the forward half. agora is a pair
+   * (cliff = what happened, invitation = what next) because
+   * suspension is mid-thread; gate completion is terminal so only
+   * the forward half is meaningful — `note` already covers
+   * "what happened". The asymmetry is intentional.
+   *
+   * Absent on every non-terminal entry and on pre-#37x records.
+   * Projected to the top-level `cliff` field by `toJSON` (mirrors
+   * the `completion_note` projection pattern) so external consumers
+   * see it without walking the status_log.
+   */
+  cliff?: string;
+  /**
    * Actual invoker when different from `by`. Mirrors inbox.read_by:
    * `by` is to whom the act is attributed (the member on record);
    * `invoked_by` is who actually ran the CLI command. Typically this
@@ -843,18 +863,29 @@ export class Request {
     this.transition('executing', by, note, invokedBy, cwd);
   }
 
-  complete(by: MemberName, note?: string, invokedBy?: string): void {
+  complete(
+    by: MemberName,
+    note?: string,
+    invokedBy?: string,
+    cliff?: string,
+  ): void {
     // Issue #294: when `by` is one of the assigned executors, route
     // through the per-slice path so the wave-terminal transition is
     // derived from "all slices closed" rather than fired directly.
     // The fallback (executor not in the list) preserves pre-#294
     // behavior: stamping the wave-level transition immediately, which
     // is what records-with-no-executor-list have always done.
+    //
+    // Cliff (#37x): forward-pointing close note. Per-slice closure
+    // stamps `cliff` on the wave-level terminal entry when the LAST
+    // slice closes (handled inside applySliceClosure). Direct
+    // (non-slice) completion stamps cliff straight onto the
+    // transition entry.
     if (this.hasExecutor(by.value)) {
-      this.completeSlice(by, note, invokedBy);
+      this.completeSlice(by, note, invokedBy, cliff);
       return;
     }
-    this.transition('completed', by, note, invokedBy);
+    this.transition('completed', by, note, invokedBy, undefined, cliff);
   }
 
   fail(by: MemberName, reason: string, invokedBy?: string): void {
@@ -884,8 +915,13 @@ export class Request {
    * callers that pre-checked via `hasExecutor` reach this method
    * already.
    */
-  completeSlice(by: MemberName, note?: string, invokedBy?: string): void {
-    this.applySliceClosure(by, 'completed', note, invokedBy);
+  completeSlice(
+    by: MemberName,
+    note?: string,
+    invokedBy?: string,
+    cliff?: string,
+  ): void {
+    this.applySliceClosure(by, 'completed', note, invokedBy, cliff);
   }
 
   /**
@@ -897,6 +933,8 @@ export class Request {
    * any-fail-wave-fail picks `failed`.
    */
   failSlice(by: MemberName, reason: string, invokedBy?: string): void {
+    // No cliff on fail (v1 scope): forward-pointing intent lives in
+    // the failure reason already.
     this.applySliceClosure(by, 'failed', reason, invokedBy);
   }
 
@@ -910,6 +948,7 @@ export class Request {
     sliceStatus: 'completed' | 'failed',
     note: string | undefined,
     invokedBy: string | undefined,
+    cliff?: string,
   ): void {
     // Refuse slice closure on a wave that has already reached a terminal
     // state (#294 devil review §Correctness 2). Without this guard, a
@@ -1018,6 +1057,14 @@ export class Request {
         by,
         anyFailed ? 'wave failed (any-fail-wave-fail)' : 'wave completed (all slices closed)',
         invokedBy,
+        undefined,
+        // Cliff (#37x) rides on the wave-terminal entry only when the
+        // wave is `completed`; on a failed wave the per-slice failure
+        // reasons already carry forward intent (no cliff on fail in
+        // v1). The closing actor's cliff naturally attaches to the
+        // wave-terminal close, since that's the moment the picker-up
+        // signal becomes load-bearing.
+        targetState === 'completed' ? cliff : undefined,
       );
     }
   }
@@ -1456,6 +1503,7 @@ export class Request {
     note?: string,
     invokedBy?: string,
     cwd?: string,
+    cliff?: string,
   ): void {
     assertTransition(this.props.state, to);
     this.props.state = to;
@@ -1485,6 +1533,16 @@ export class Request {
     // bloat the log without giving the check anything to read.
     if (to === 'executing' && cwd !== undefined && cwd.length > 0) {
       entry.executingAtCwd = cwd;
+    }
+    // Cliff only lands on `completed` transitions in v1. Stamped here
+    // (rather than at the call site) so the sanitize + presence
+    // contract sits next to `note`'s identical handling — one place
+    // to read the "empty cliff drops the field" rule.
+    if (to === 'completed' && cliff !== undefined) {
+      const sanitized = sanitizeText(cliff, 'cliff');
+      if (sanitized.length > 0) {
+        entry.cliff = sanitized;
+      }
     }
     this.props.statusLog.push(entry);
     // Auto-release the cross-session claim (issue #226) when the
@@ -1694,6 +1752,16 @@ export class Request {
       else if (last.state === 'denied') out['deny_reason'] = last.note;
       else if (last.state === 'failed') out['failure_reason'] = last.note;
     }
+    // Cliff (#37x): forward-pointing close note projects to top level
+    // when the terminal status_log entry carries one. Mirrors the
+    // completion_note projection above so external consumers see
+    // `cliff` without walking status_log. Only emits on `completed`
+    // in v1 (the only transition that accepts cliff); the if is kept
+    // strict so adding cliff to fail/deny later requires an explicit
+    // opt-in here, not silent inheritance.
+    if (last && last.state === 'completed' && last.cliff !== undefined) {
+      out['cliff'] = last.cliff;
+    }
     return out;
   }
 
@@ -1735,6 +1803,10 @@ function statusLogEntryToJSON(e: StatusLogEntry): Record<string, unknown> {
   if (e.note !== undefined) out['note'] = e.note;
   if (e.invokedBy !== undefined) out['invoked_by'] = e.invokedBy;
   if (e.executingAtCwd !== undefined) out['executing_at_cwd'] = e.executingAtCwd;
+  // cliff (#37x): forward-pointing close note on `completed` entries
+  // only. Domain rules already enforce completed-only at stamp time;
+  // emitting unconditionally here keeps serializer dumb.
+  if (e.cliff !== undefined) out['cliff'] = e.cliff;
   return out;
 }
 

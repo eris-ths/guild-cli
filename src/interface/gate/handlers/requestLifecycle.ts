@@ -56,6 +56,7 @@ const EXECUTE_KNOWN_FLAGS: ReadonlySet<string> = new Set([
 const COMPLETE_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'by',
   'note',
+  'cliff',
   'dry-run',
   'format',
 ]);
@@ -367,6 +368,11 @@ export async function reqComplete(c: C, args: ParsedArgs): Promise<number> {
     requireOption(args, 'by', '<m>', 'GUILD_ACTOR'),
   );
   const note = optionalOption(args, 'note');
+  // --cliff (#37x): optional forward-pointing hint for the next agent
+  // picking up after this completion. Plumbed through to the use case
+  // which routes it to the domain layer (lands on the terminal
+  // status_log entry — or the wave-terminal entry for slice closure).
+  const cliff = optionalOption(args, 'cliff');
   const invokedBy = resolveInvokedBy(by, 'complete', id);
   // Load the wave once and run rejectIfNonMember + dry-run / live
   // branches against the same snapshot. Round-2 N3: previously dry-run
@@ -391,7 +397,7 @@ export async function reqComplete(c: C, args: ParsedArgs): Promise<number> {
   if (isDryRun(args)) {
     if (!priorComplete) throw new Error(`Request not found: ${id}`);
     const fromState = priorComplete.state;
-    const r = await c.requestUC.complete(id, by, note, invokedBy, { dryRun: true });
+    const r = await c.requestUC.complete(id, by, note, invokedBy, { dryRun: true, ...(cliff !== undefined ? { cliff } : {}) });
     emitDryRunPreview({ verb: 'complete', id, by, fromState, toState: r.state, after: r, format: parseFormat(args) });
     return 0;
   }
@@ -400,7 +406,7 @@ export async function reqComplete(c: C, args: ParsedArgs): Promise<number> {
     if (veto) return emitHookVeto('complete', id, veto);
   }
   const priorState = priorComplete?.state;
-  const r = await c.requestUC.complete(id, by, note, invokedBy);
+  const r = await c.requestUC.complete(id, by, note, invokedBy, cliff !== undefined ? { cliff } : undefined);
   await fireAfterHook(c.hookSubscriptions, 'complete', r, by);
   // Issue #294: slice-only vs wave-terminal output split.
   //   - Wave terminal: state changed (e.g. executing → completed).

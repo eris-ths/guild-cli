@@ -229,6 +229,28 @@ export interface BootPayload {
     always_readable: readonly string[];
   };
   suggested_next: BootSuggestedNextOrPendingResponse | null;
+  /**
+   * Forward-pointing cliffs left on completed requests the actor
+   * authored or executed (#37x). Most-recent-terminal-first, capped at
+   * 5. Each entry surfaces the request id, the closing actor's cliff
+   * prose, and minimal context (action + closed-by + at) so the reader
+   * sees "what my past selves wanted whoever picks this up to do."
+   *
+   * Zeigarnik continuity for gate, mirroring agora's cliff/invitation
+   * pattern across passages. Empty when the actor has no recent
+   * cliff-stamped closures — readers should gate the text rendering on
+   * `length > 0`.
+   *
+   * Null when no actor is resolved (the global-view boot). The
+   * "past selves left these" framing requires a self to attach to.
+   */
+  past_cliffs: ReadonlyArray<{
+    id: string;
+    action: string;
+    cliff: string;
+    closed_by: string;
+    closed_at: string;
+  }> | null;
   lore_stats: {
     available: boolean;
     principles: number;

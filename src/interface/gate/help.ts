@@ -148,7 +148,16 @@ const SECTIONS: readonly Section[] = [
       },
       {
         tier: 'base',
-        text: '  gate complete <id> --by <m> [--note <s>] [--dry-run]',
+        text:
+          '  gate complete <id> --by <m> [--note <s>] [--cliff <s>] [--dry-run]\n' +
+          '                       --cliff "next agent should..." leaves a\n' +
+          '                       forward-pointing hint for whoever picks up\n' +
+          '                       after this completion. Surfaced under\n' +
+          '                       `past_cliffs` in `gate boot` for the\n' +
+          '                       authoring / executing actor next session\n' +
+          '                       (Zeigarnik continuity). Sibling of --note\n' +
+          '                       (what just happened); --cliff is forward-\n' +
+          '                       pointing (what next).',
       },
       {
         tier: 'base',

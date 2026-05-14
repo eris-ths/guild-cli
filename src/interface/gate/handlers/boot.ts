@@ -369,6 +369,48 @@ export async function bootCmd(c: C, args: ParsedArgs): Promise<number> {
   const crossPassage = await collectCrossPassage(c.config);
   const activeOverlappingTargets = computeActiveOverlappingTargets(allRequests);
 
+  // past_cliffs (#37x): forward-pointing close notes the actor (or one
+  // of their wave executors) left on completed requests. Read-only
+  // surface — boot lists, the reader chooses what to follow up on.
+  // Scope: authored OR executed by the actor. The cliff is on the
+  // terminal status_log entry; the closing actor is the entry's `by`.
+  // Cap at 5 newest by closed_at to keep boot lean per principle 13.
+  let pastCliffs: BootPayload['past_cliffs'] = null;
+  if (actor) {
+    const lower = actor.toLowerCase();
+    const entries: Array<{
+      id: string;
+      action: string;
+      cliff: string;
+      closed_by: string;
+      closed_at: string;
+    }> = [];
+    for (const r of allRequests) {
+      if (r.state !== 'completed') continue;
+      const last = r.statusLog[r.statusLog.length - 1];
+      if (!last || last.cliff === undefined) continue;
+      const wasMine =
+        r.from.value === lower ||
+        r.hasExecutor(lower);
+      if (!wasMine) continue;
+      entries.push({
+        id: r.id.value,
+        action: r.action,
+        cliff: last.cliff,
+        closed_by: last.by,
+        closed_at: last.at,
+      });
+    }
+    entries.sort((a, b) => (a.closed_at < b.closed_at ? 1 : -1));
+    // Honour --since for past_cliffs too: the delta-filter semantic
+    // applies — a returning agent only cares about cliffs closed
+    // after their last boot.
+    const filtered = since !== null
+      ? entries.filter((e) => e.closed_at > since!)
+      : entries;
+    pastCliffs = filtered.slice(0, 5);
+  }
+
   // Lore stats: count principles + traps shipped with this package.
   // Cheap (one fs scan, already cached by FsLoreRepository) and lets
   // the boot text surface a one-line discoverability hint for the
@@ -407,6 +449,7 @@ export async function bootCmd(c: C, args: ParsedArgs): Promise<number> {
     cross_passage: crossPassage,
     active_overlapping_targets: activeOverlappingTargets,
     suggested_next: suggestedNext,
+    past_cliffs: pastCliffs,
     verbs_available_now: verbsAvailableNow,
     lore_stats: loreStats,
   };
