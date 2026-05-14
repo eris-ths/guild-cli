@@ -256,6 +256,21 @@ const VERBS: readonly VerbSchema[] = [
         format: formatField,
         tail: { type: 'string', description: 'utterances to include in tail (default 10)' },
         utterances: { type: 'string', description: 'your-recent utterance count (default 5)' },
+        since: {
+          type: 'string',
+          description:
+            'Delta-filter timestamp (ISO-8601 UTC, e.g. ' +
+            '2026-05-14T01:02:03.456Z). When set, `tail`, `your_recent`, ' +
+            'and `inbox_unread` only contain entries strictly newer than ' +
+            'this value (lexicographic compare on the `at` string). ' +
+            'Reduces token cost across a long session — pass the previous ' +
+            "boot's `last_activity` to get only what's new. The " +
+            '`status.inbox_unread` SCALAR reflects the true unread count ' +
+            '(not the filtered slice), so the counter stays truthful. ' +
+            '`last_activity` itself is NOT filtered so the next boot can ' +
+            'chain --since without a second read. Rejected with a "next: " ' +
+            'hint when the value is not strict ISO-8601 UTC.',
+        },
         'session-id': {
           type: 'string',
           description:
@@ -297,6 +312,14 @@ const VERBS: readonly VerbSchema[] = [
             'Names which input populated `session_id`: "flag" when ' +
             '--session-id was supplied on this invocation, "env" when ' +
             'GUILD_SESSION_ID was the source, null when neither.',
+        },
+        since: {
+          type: 'string',
+          description:
+            'Echoes the --since input value verbatim when a delta ' +
+            'filter was applied. Null when no filter; payload is the ' +
+            'full snapshot. Useful for an agent to confirm what cutoff ' +
+            'the substrate actually used before chaining the next boot.',
         },
         status: { type: 'object' },
         tail: { type: 'array' },

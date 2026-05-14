@@ -354,13 +354,21 @@ const SECTIONS: readonly Section[] = [
         tier: 'base',
         text:
           '  gate boot [--format json|text] [--tail <N>] [--utterances <N>]\n' +
+          '            [--since <ISO-ts>] [--session-id <id>]\n' +
           '                       Single-command session bootstrap for agents.\n' +
           '                       Returns identity + status + tail + your recent\n' +
           '                       utterances + inbox unread as one JSON payload.\n' +
           '                       GUILD_ACTOR optional (global view if unset).\n' +
           '                       Defaults: --tail 5 --utterances 5 (lean for\n' +
           '                       hot-path session start; pass higher N for deeper\n' +
-          '                       history).',
+          '                       history).\n' +
+          '                       --since <ISO-ts> trims tail / your_recent /\n' +
+          '                       inbox_unread to entries strictly newer than the\n' +
+          '                       cutoff (lexicographic). Token-cost lever for\n' +
+          '                       long sessions: pass the previous boot\'s\n' +
+          '                       `last_activity` to get only what changed.\n' +
+          '                       `status.inbox_unread` stays truthful (full\n' +
+          '                       count); only the surfaced entries are filtered.',
       },
       {
         tier: 'base',

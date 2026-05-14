@@ -176,6 +176,18 @@ export interface BootPayload {
   role: 'member' | 'host' | 'unknown' | null;
   session_id: string | null;
   session_id_source: 'flag' | 'env' | null;
+  /**
+   * Delta-filter timestamp (--since). When set, `tail`, `your_recent`,
+   * and `inbox_unread` only contain entries whose `at` is strictly
+   * greater than `since` (ISO-8601 lexicographic compare). Null when
+   * no filter was applied — payload is the full snapshot.
+   *
+   * Typical agent usage: pass the previous boot's `last_activity` so
+   * successive boots within one session return only what's new.
+   * `last_activity` itself is NOT filtered — readers can always see
+   * the most recent activity timestamp for next-call wiring.
+   */
+  since: string | null;
   status: StatusSummary;
   tail: ReturnType<typeof collectUtterances>;
   your_recent: ReturnType<typeof collectUtterances> | null;
