@@ -65,7 +65,7 @@ recent (1):
 
 ── 過去の私から 2 通残ってる:
    ✧ build session-id propagation  →  「next: pen-test the timing surface」
-   ✧ wire HookPlugin schema check   →  「明日 user lens でもう一度」
+   ✧ wire HookPlugin schema check   →  「明日 user lense でもう一度」
 ```
 
 Two things from this boot:
@@ -106,7 +106,7 @@ mechanical change. Eris reads the substrate's recommendation:
 ```bash
 $ gate review-context 2026-05-14-0003 --format text
 target: src/auth/session-store.ts
-depth: deep   →   recommended lens set: devil, layer, cognitive, user,
+depth: deep   →   recommended lense set: devil, layer, cognitive, user,
                   composition, perf, auth-access, supply-chain,
                   data-flow, error-surface
 
@@ -114,7 +114,7 @@ prior reviews: none yet
 ```
 
 10 lenses (`docs/lenses.md` for the full names). Deep means **read
-through every lens at least once** before approving. Eris switches
+through every lense at least once** before approving. Eris switches
 mode:
 
 ```bash
@@ -156,7 +156,7 @@ $ gate execute 2026-05-14-0003 --by eris
 (Implementation happens. The substrate doesn't watch the code edit;
 it watches the records.)
 
-Implementation done. Now the multi-lens review pass. For a `depth: deep`
+Implementation done. Now the multi-lense review pass. For a `depth: deep`
 auth-touching change, single-pass review is the trap. Eris opens
 the change in `devil`:
 
@@ -216,7 +216,7 @@ $ gate boot --format text | tail -3
 ── 過去の私から 3 通残ってる:
    ✧ rotate auth session token storage  →  「verify migration window ≤ 50ms ...」
    ✧ build session-id propagation       →  「next: pen-test the timing surface」
-   ✧ wire HookPlugin schema check        →  「明日 user lens でもう一度」
+   ✧ wire HookPlugin schema check        →  「明日 user lense でもう一度」
 ```
 
 Three cliffs visible at re-entry. The next agent — eris or other —
@@ -254,7 +254,7 @@ cross-passage: 1 devil-review session (2026-05-14-002, lense: supply-chain)
 ```
 
 The transcript reads as **how the decision was formed** — who
-proposed, who reviewed, through which lens, what the closure
+proposed, who reviewed, through which lense, what the closure
 intended next. No reconstruction needed. The record outlived the
 session.
 
@@ -275,9 +275,9 @@ those who want them named:
   eris kept the loud notice rather than disabling it, because the
   *signal* is the point. The substrate names the asymmetry; eris
   carries the discipline.
-- **Lens depth respected.** `depth: deep` on a touch-of-auth change
+- **Lense depth respected.** `depth: deep` on a touch-of-auth change
   doesn't mean "more lines of review" — it means "the recommended
-  10-lens set was read at least once." `gate review-context` makes
+  10-lense set was read at least once." `gate review-context` makes
   the substrate name what would otherwise be implicit.
 - **Cliff as load-bearing prose.** Not a comment, not a TODO. The
   cliff is forward-pointing intent the next agent picks up at
