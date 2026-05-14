@@ -38,6 +38,10 @@ import {
 } from '../../application/plugin/VerbPlugin.js';
 import type { HookSubscriptions } from '../../application/plugin/HookBus.js';
 import type { HookPluginLoadError } from '../../application/plugin/HookPlugin.js';
+import type {
+  VoicePlugin,
+  VoicePluginLoadError,
+} from '../../application/plugin/VoicePlugin.js';
 
 export interface Container {
   config: GuildConfig;
@@ -111,6 +115,20 @@ export interface Container {
    * `area: 'plugin'` findings, same channel as verb plugin errors.
    */
   hookPluginErrors: readonly HookPluginLoadError[];
+  /**
+   * Voice plugins (#345 — second dogfood validation of principle 15).
+   * Empty array when no plugins are listed under `plugins.voices` or
+   * `plugins.trusted: true` is absent. The active voice is picked at
+   * runtime via `GUILD_VOICE=<name>` env; the container only holds
+   * what was loaded, not which is active. Render via
+   * `interface/shared/voiceRender.ts` at write-verb fire points.
+   */
+  voicePlugins: readonly VoicePlugin[];
+  /**
+   * Per-path voice plugin load errors. Surfaced via `gate doctor` as
+   * `area: 'plugin'` findings, same channel as verb/hook plugin errors.
+   */
+  voicePluginErrors: readonly VoicePluginLoadError[];
 }
 
 export interface BuildContainerOpts {
@@ -156,6 +174,15 @@ export interface BuildContainerOpts {
    * loader. Mirrors `verbPluginsLoaded`.
    */
   hookPluginsLoaded?: ReadonlyArray<{ path: string; status: 'loaded' | 'error' }>;
+  /**
+   * Pre-loaded voice plugins (#345). main() loads via
+   * `loadVoicePlugins`. Defaults to `[]`.
+   */
+  voicePlugins?: readonly VoicePlugin[];
+  /** Per-path voice plugin load errors. Defaults to `[]`. */
+  voicePluginErrors?: readonly VoicePluginLoadError[];
+  /** Per-path voice plugin load outcome (loaded | error). Defaults to `[]`. */
+  voicePluginsLoaded?: ReadonlyArray<{ path: string; status: 'loaded' | 'error' }>;
 }
 
 export function buildContainer(opts: BuildContainerOpts = {}): Container {
@@ -214,6 +241,7 @@ export function buildContainer(opts: BuildContainerOpts = {}): Container {
         pluginsLoaded: [
           ...(opts.verbPluginsLoaded ?? []),
           ...(opts.hookPluginsLoaded ?? []),
+          ...(opts.voicePluginsLoaded ?? []),
         ],
         errors: [
           ...(opts.verbPluginErrors ?? []).map((e) => ({
@@ -223,6 +251,10 @@ export function buildContainer(opts: BuildContainerOpts = {}): Container {
           ...(opts.hookPluginErrors ?? []).map((e) => ({
             path: e.path,
             reason: `hook plugin: ${e.reason}`,
+          })),
+          ...(opts.voicePluginErrors ?? []).map((e) => ({
+            path: e.path,
+            reason: `voice plugin: ${e.reason}`,
           })),
         ],
       },
@@ -247,5 +279,7 @@ export function buildContainer(opts: BuildContainerOpts = {}): Container {
     verbPluginErrors: opts.verbPluginErrors ?? [],
     hookSubscriptions: opts.hookSubscriptions ?? new Map(),
     hookPluginErrors: opts.hookPluginErrors ?? [],
+    voicePlugins: opts.voicePlugins ?? [],
+    voicePluginErrors: opts.voicePluginErrors ?? [],
   };
 }

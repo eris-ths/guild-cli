@@ -137,6 +137,16 @@ export interface GuildConfigProps {
    * for the full event list and contract.
    */
   hookPluginPaths: readonly string[];
+  /**
+   * Absolute paths of voice plugins to load at CLI startup (#345 —
+   * second dogfood validation of principle 15 plugins-default-extension,
+   * ornamental-voice surface). Same `plugins.trusted: true` consent
+   * gate as verb/hook plugins. Each plugin attaches optional
+   * personality narration to write-verb JSON envelopes via the
+   * `_meta.voice` field, distinct from the doctrinal voice held in
+   * handlers (principle 08).
+   */
+  voicePluginPaths: readonly string[];
   profile: GuildProfile;
   features: GuildFeatures;
   gate: GateConfig;
@@ -161,6 +171,7 @@ export class GuildConfig implements GuildConfigProps {
     readonly doctorPlugins: readonly string[],
     readonly verbPluginPaths: readonly string[],
     readonly hookPluginPaths: readonly string[],
+    readonly voicePluginPaths: readonly string[],
     readonly profile: GuildProfile,
     readonly features: GuildFeatures,
     readonly gate: GateConfig,
@@ -264,6 +275,25 @@ export class GuildConfig implements GuildConfigProps {
           'Add `trusted: true` under `plugins:` in guild.config.yaml to enable.',
       );
     }
+    // Voice plugins (#345 — ornamental-voice surface). Shares the
+    // `plugins.trusted` consent gate with verb/hook plugins. Voice
+    // plugins attach optional personality narration via `_meta.voice`
+    // on write envelopes; they cannot mutate substrate state and
+    // cannot veto transitions, but they run as full Node code in
+    // process — same trust model as verb/hook (the YAML alone is not
+    // consent).
+    const voicePluginPaths = Array.isArray(pluginsRaw.voices) && verbPluginsTrusted
+      ? pluginsRaw.voices
+          .filter((x: unknown): x is string => typeof x === 'string')
+          .map((x: string) => resolveUnder(root, x))
+      : [];
+    if (Array.isArray(pluginsRaw.voices) && pluginsRaw.voices.length > 0 && !verbPluginsTrusted) {
+      onMalformed(
+        configPath,
+        'plugins.voices present but plugins.trusted is not true — voice plugins will NOT be loaded. ' +
+          'Add `trusted: true` under `plugins:` in guild.config.yaml to enable.',
+      );
+    }
     // Profile + features (#231). The two interact: `profile: swarm`
     // flips the default of `features.worktree_required_for_parallel`
     // to true, but an explicit `features:` block always wins so a
@@ -332,7 +362,7 @@ export class GuildConfig implements GuildConfigProps {
       }
     }
     const gate: GateConfig = { strictLenses };
-    return new GuildConfig(root, contentRoot, paths, hostNames, lenses, doctorPlugins, verbPluginPaths, hookPluginPaths, profile, features, gate, onMalformed, configPath);
+    return new GuildConfig(root, contentRoot, paths, hostNames, lenses, doctorPlugins, verbPluginPaths, hookPluginPaths, voicePluginPaths, profile, features, gate, onMalformed, configPath);
   }
 
   static default(
@@ -352,6 +382,7 @@ export class GuildConfig implements GuildConfigProps {
       },
       [...DEFAULT_HOSTS],
       [...DEFAULT_LENSES],
+      [],
       [],
       [],
       [],

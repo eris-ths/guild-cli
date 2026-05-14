@@ -32,6 +32,7 @@ import {
 } from './internal.js';
 import { emitWriteResponse, parseFormat } from './writeFormat.js';
 import { RecoverableError } from '../../shared/errorEnvelope.js';
+import { renderVoice } from '../../shared/voiceRender.js';
 
 const APPROVE_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'by',
@@ -436,7 +437,12 @@ export async function reqComplete(c: C, args: ParsedArgs): Promise<number> {
     emitSliceClose(r, by, 'complete', c.config, parseFormat(args), extraLines);
     return 0;
   }
-  emitWriteResponse(parseFormat(args), r, `✓ completed: ${id}`, c.config, extraLines);
+  // Ornamental voice (#345): fires only on wave-terminal completion,
+  // never on slice-only. Slice-only is a multi-executor intermediate
+  // state — narrating it as "completed" would be a false claim about
+  // wave state (principle 08's voice-must-stay-honest invariant).
+  const voice = renderVoice(c.voicePlugins, 'complete', r);
+  emitWriteResponse(parseFormat(args), r, `✓ completed: ${id}`, c.config, extraLines, { voice });
   return 0;
 }
 
