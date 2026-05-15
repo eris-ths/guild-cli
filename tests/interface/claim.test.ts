@@ -82,7 +82,7 @@ function newRequest(root: string, from: string, executor?: string): string {
     'json',
   ];
   if (executor !== undefined) {
-    args.push('--executor', executor);
+    args.push('--executors', executor);
   }
   const r = run(root, args);
   assert.equal(r.status, 0, `request failed: ${r.stderr}`);

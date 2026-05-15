@@ -221,7 +221,7 @@ test('gate approve --format json: suggested_next pre-fills `by` when only one ex
       'a',
       '--reason',
       'r',
-      '--executor',
+      '--executors',
       'bob',
       '--format',
       'json',
@@ -296,9 +296,9 @@ test('gate execute: mismatch notice DOES fire when an unrelated actor runs the w
   );
 });
 
-// ── JSON back-compat (toRenderJSON) ──────────────────────────────
+// ── JSON shape (v0.6 #239: deprecated `executor` alias removed) ─
 
-test('gate show --format json: emits BOTH `executors` and deprecated `executor` (back-compat)', (t) => {
+test('gate show --format json: emits only `executors`; deprecated `executor` alias removed in v0.6 (#239)', (t) => {
   const { root, cleanup } = bootstrap();
   t.after(cleanup);
   for (const n of ['alice', 'miki', 'leysia']) {
@@ -325,16 +325,13 @@ test('gate show --format json: emits BOTH `executors` and deprecated `executor` 
 
   const show = run(root, ['show', id, '--format', 'json']);
   const j = JSON.parse(show.stdout) as Record<string, unknown>;
-  // Issue #294: structured form for freshly-created records.
   assert.deepEqual(j['executors'], [
     { name: 'miki', status: 'pending' },
     { name: 'leysia', status: 'pending' },
   ]);
-  // Back-compat alias (Devil blocker 2): tool wirings reading
-  // `jq .executor` continue to work, getting the first-of-list
-  // value. To be removed in v0.7.0 of guild-cli per the deprecation
-  // timeline noted on `Request.toRenderJSON`.
-  assert.equal(j['executor'], 'miki');
+  // The deprecated `executor` alias was removed in v0.6 (#239 cut).
+  // Consumers must read `executors`.
+  assert.equal(j['executor'], undefined);
 });
 
 test('YAML on disk does NOT carry the deprecated `executor` alias (persistence stays clean)', async (t) => {

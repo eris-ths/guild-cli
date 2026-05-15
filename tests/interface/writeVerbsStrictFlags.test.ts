@@ -309,7 +309,7 @@ test('smoke: known-good invocations still work (register + request)', (t) => {
     'a',
     '--reason',
     'r',
-    '--executor',
+    '--executors',
     'alice',
   ]);
   assert.equal(req.status, 0, `known-good request should succeed: ${req.stderr}`);

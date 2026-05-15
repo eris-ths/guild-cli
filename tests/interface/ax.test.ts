@@ -77,7 +77,7 @@ test('boot.suggested_next: pending-as-executor → approve', () => {
   try {
     runGate(
       root,
-      ['request', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executor', 'bob'],
+      ['request', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executors', 'bob'],
       { GUILD_ACTOR: 'alice' },
     );
     const { stdout } = runGate(root, ['boot'], { GUILD_ACTOR: 'bob' });
@@ -95,7 +95,7 @@ test('boot.suggested_next: approved-for-me → execute', () => {
   try {
     runGate(
       root,
-      ['request', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executor', 'bob'],
+      ['request', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executors', 'bob'],
       { GUILD_ACTOR: 'alice' },
     );
     runGate(root, ['approve', rid(1), '--by', 'alice']);
@@ -115,14 +115,14 @@ test('boot.suggested_next: executing-by-me → complete (takes priority)', () =>
   try {
     runGate(
       root,
-      ['request', '--from', 'alice', '--action', 'A', '--reason', 'r', '--executor', 'bob'],
+      ['request', '--from', 'alice', '--action', 'A', '--reason', 'r', '--executors', 'bob'],
       { GUILD_ACTOR: 'alice' },
     );
     runGate(root, ['approve', rid(1), '--by', 'alice']);
     runGate(root, ['execute', rid(1), '--by', 'bob']);
     runGate(
       root,
-      ['request', '--from', 'alice', '--action', 'B', '--reason', 'r', '--executor', 'bob'],
+      ['request', '--from', 'alice', '--action', 'B', '--reason', 'r', '--executors', 'bob'],
       { GUILD_ACTOR: 'alice' },
     );
     runGate(root, ['approve', rid(2), '--by', 'alice']);
@@ -237,7 +237,7 @@ test('show --fields: trims JSON to requested keys', () => {
   try {
     runGate(
       root,
-      ['request', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executor', 'bob'],
+      ['request', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executors', 'bob'],
       { GUILD_ACTOR: 'alice' },
     );
     // Issue #230: the on-record / wire-form key is now `executors`
@@ -281,7 +281,7 @@ test('suggest --format json: returns the same triple as boot, no orientation pay
   try {
     runGate(
       root,
-      ['request', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executor', 'bob'],
+      ['request', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executors', 'bob'],
       { GUILD_ACTOR: 'alice' },
     );
     const bootOut = JSON.parse(runGate(root, ['boot'], { GUILD_ACTOR: 'bob' }).stdout);
@@ -321,7 +321,7 @@ test('suggest --format text: compact two-line form for humans', () => {
   try {
     runGate(
       root,
-      ['request', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executor', 'bob'],
+      ['request', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executors', 'bob'],
       { GUILD_ACTOR: 'alice' },
     );
     const { stdout } = runGate(
@@ -352,7 +352,7 @@ test('boot.verbs_available_now: actionable lists all valid transitions', () => {
   try {
     runGate(
       root,
-      ['request', '--from', 'alice', '--action', 't1', '--reason', 'r', '--executor', 'bob'],
+      ['request', '--from', 'alice', '--action', 't1', '--reason', 'r', '--executors', 'bob'],
       { GUILD_ACTOR: 'alice' },
     );
     runGate(root, ['approve', rid(1), '--by', 'alice']);
@@ -409,7 +409,7 @@ test('boot.verbs_available_now: requires_other_actor surfaces pending blockers',
   try {
     runGate(
       root,
-      ['request', '--from', 'alice', '--action', 'pending', '--reason', 'r', '--executor', 'alice'],
+      ['request', '--from', 'alice', '--action', 'pending', '--reason', 'r', '--executors', 'alice'],
       { GUILD_ACTOR: 'alice' },
     );
     const { stdout } = runGate(root, ['boot'], { GUILD_ACTOR: 'alice' });
@@ -437,7 +437,7 @@ test('boot.verbs_available_now: host self-approval doesnt double-list as blocker
     // human is the host; have human file + name self executor
     runGate(
       root,
-      ['request', '--from', 'human', '--action', 'self', '--reason', 'r', '--executor', 'human'],
+      ['request', '--from', 'human', '--action', 'self', '--reason', 'r', '--executors', 'human'],
       { GUILD_ACTOR: 'human' },
     );
     const { stdout } = runGate(root, ['boot'], { GUILD_ACTOR: 'human' });
@@ -468,7 +468,7 @@ test('boot.status.unresponded: counts unresponded concerns for the actor', () =>
     // completes → carol records a devil/concern verdict.
     runGate(
       root,
-      ['request', '--from', 'alice', '--action', 'rushed', '--reason', 'r', '--executor', 'bob'],
+      ['request', '--from', 'alice', '--action', 'rushed', '--reason', 'r', '--executors', 'bob'],
       { GUILD_ACTOR: 'alice' },
     );
     const id = rid(1);
@@ -522,7 +522,7 @@ test('boot.verbs_available_now: executor (≠author) doesnt double-list as block
   try {
     runGate(
       root,
-      ['request', '--from', 'alice', '--action', 'cross', '--reason', 'r', '--executor', 'bob'],
+      ['request', '--from', 'alice', '--action', 'cross', '--reason', 'r', '--executors', 'bob'],
       { GUILD_ACTOR: 'alice' },
     );
     const { stdout } = runGate(root, ['boot'], { GUILD_ACTOR: 'bob' });
@@ -554,7 +554,7 @@ test('write response suggested_next carries actor_resolved', () => {
   try {
     const created = runGate(
       root,
-      ['request', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executor', 'alice', '--format', 'json'],
+      ['request', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executors', 'alice', '--format', 'json'],
       { GUILD_ACTOR: 'alice' },
     );
     const payload = JSON.parse(created.stdout);
@@ -575,7 +575,7 @@ test('boot.verbs_available_now: actionable entries carry id + reason', () => {
   try {
     runGate(
       root,
-      ['request', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executor', 'bob'],
+      ['request', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executors', 'bob'],
       { GUILD_ACTOR: 'alice' },
     );
     const { stdout } = runGate(root, ['boot'], { GUILD_ACTOR: 'bob' });
@@ -614,7 +614,7 @@ test('voices --with-calibration: aligns verdicts against terminal outcomes', () 
       const id = rid(n);
       runGate(
         root,
-        ['request', '--from', 'alice', '--action', `t${n}`, '--reason', 'r', '--executor', 'alice'],
+        ['request', '--from', 'alice', '--action', `t${n}`, '--reason', 'r', '--executors', 'alice'],
         { GUILD_ACTOR: 'alice' },
       );
       runGate(root, ['approve', id, '--by', 'alice']);
@@ -760,7 +760,7 @@ test('voices calibration: verdict=concern + state=failed counts as aligned', () 
       const id = rid(n);
       runGate(
         root,
-        ['request', '--from', 'alice', '--action', `t${n}`, '--reason', 'r', '--executor', 'alice'],
+        ['request', '--from', 'alice', '--action', `t${n}`, '--reason', 'r', '--executors', 'alice'],
         { GUILD_ACTOR: 'alice' },
       );
       runGate(root, ['approve', id, '--by', 'alice']);
@@ -807,7 +807,7 @@ test('voices calibration: verdict=concern + state=completed stays excluded (soft
       const id = rid(n);
       runGate(
         root,
-        ['request', '--from', 'alice', '--action', `t${n}`, '--reason', 'r', '--executor', 'alice'],
+        ['request', '--from', 'alice', '--action', `t${n}`, '--reason', 'r', '--executors', 'alice'],
         { GUILD_ACTOR: 'alice' },
       );
       runGate(root, ['approve', id, '--by', 'alice']);
@@ -846,7 +846,7 @@ test('thank: records appreciation with by/to/reason on the request', () => {
   try {
     runGate(
       root,
-      ['fast-track', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executor', 'bob'],
+      ['fast-track', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executors', 'bob'],
       { GUILD_ACTOR: 'alice' },
     );
     const { status } = runGate(
@@ -897,7 +897,7 @@ test('thank: reason is optional', () => {
   try {
     runGate(
       root,
-      ['fast-track', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executor', 'bob'],
+      ['fast-track', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executors', 'bob'],
       { GUILD_ACTOR: 'alice' },
     );
     const { status } = runGate(root, ['thank', 'bob', '--for', rid(1)], {
@@ -957,7 +957,7 @@ test('thank --dry-run: preview without persist', () => {
   try {
     runGate(
       root,
-      ['fast-track', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executor', 'bob'],
+      ['fast-track', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executors', 'bob'],
       { GUILD_ACTOR: 'alice' },
     );
     const { stdout, status } = runGate(
@@ -990,7 +990,7 @@ test('suggest --format text: advisory footer goes to stderr, stdout stays compos
   try {
     runGate(
       root,
-      ['request', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executor', 'bob'],
+      ['request', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executors', 'bob'],
       { GUILD_ACTOR: 'alice' },
     );
     const { stdout, stderr } = runGate(
@@ -1045,7 +1045,7 @@ test('thank: appears in gate tail as a directional utterance', () => {
   try {
     runGate(
       root,
-      ['fast-track', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executor', 'bob'],
+      ['fast-track', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executors', 'bob'],
       { GUILD_ACTOR: 'alice' },
     );
     runGate(root, ['thank', 'bob', '--for', rid(1), '--reason', 'nice'], {
@@ -1068,7 +1068,7 @@ test('voices <name>: surfaces thanks in BOTH directions (given and received)', (
   try {
     runGate(
       root,
-      ['fast-track', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executor', 'bob'],
+      ['fast-track', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executors', 'bob'],
       { GUILD_ACTOR: 'alice' },
     );
     // alice thanks bob (bob receives)
@@ -1098,7 +1098,7 @@ test('voices: lense/verdict filters DO NOT surface thanks (reviews only)', () =>
   try {
     runGate(
       root,
-      ['fast-track', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executor', 'bob'],
+      ['fast-track', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executors', 'bob'],
       { GUILD_ACTOR: 'alice' },
     );
     runGate(root, ['thank', 'bob', '--for', rid(1), '--reason', 'nice'], {
@@ -1120,7 +1120,7 @@ test('transcript: thanks appear as their own prose paragraph + in summary', () =
   try {
     runGate(
       root,
-      ['fast-track', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executor', 'bob'],
+      ['fast-track', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executors', 'bob'],
       { GUILD_ACTOR: 'alice' },
     );
     runGate(root, ['thank', 'bob', '--for', rid(1), '--reason', 'elegant'], {
@@ -1149,7 +1149,7 @@ test('transcript: narrative prose names filer, action, executor, reviews', () =>
         'request', '--from', 'alice',
         '--action', 'refactor parser',
         '--reason', 'cut p99 latency',
-        '--executor', 'bob',
+        '--executors', 'bob',
         '--auto-review', 'alice',
       ],
       { GUILD_ACTOR: 'alice' },
@@ -1180,7 +1180,7 @@ test('transcript --format json: summary carries structured fields', () => {
   try {
     runGate(
       root,
-      ['request', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executor', 'bob'],
+      ['request', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executors', 'bob'],
       { GUILD_ACTOR: 'alice' },
     );
     runGate(root, ['approve', rid(1), '--by', 'alice']);
@@ -1239,7 +1239,7 @@ test('show --plain --fields <key>: emits raw value, no JSON quoting', () => {
   try {
     runGate(
       root,
-      ['request', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executor', 'bob'],
+      ['request', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executors', 'bob'],
       { GUILD_ACTOR: 'alice' },
     );
     const { stdout } = runGate(root, ['show', rid(1), '--fields', 'state', '--plain']);
@@ -1296,7 +1296,7 @@ test('approve --dry-run: emits preview envelope, does NOT persist', () => {
   try {
     runGate(
       root,
-      ['request', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executor', 'bob'],
+      ['request', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executors', 'bob'],
       { GUILD_ACTOR: 'alice' },
     );
     const { stdout, status } = runGate(
@@ -1391,7 +1391,7 @@ test('suggest --format text keeps advisory footer for gate verbs', () => {
       "--from", "alice",
       "--action", "do thing",
       "--reason", "r",
-      "--executor", "bob",
+      "--executors", "bob",
     ], { GUILD_ACTOR: "alice" });
     const out = runGate(root, ["suggest", "--format", "text"], { GUILD_ACTOR: "bob" });
     assert.equal(out.status, 0);

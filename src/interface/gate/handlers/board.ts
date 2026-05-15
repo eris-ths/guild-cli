@@ -100,7 +100,7 @@ export async function boardCmd(c: C, args: ParsedArgs): Promise<number> {
       // toRenderJSON: emit the deprecated `executor` alias for back-
       // compat with tool wirings reading the singleton key (issue
       // #230). Persistence still writes only `executors`.
-      payload[state] = items.map((r) => r.toRenderJSON());
+      payload[state] = items.map((r) => r.toJSON());
     }
     if (forFilter !== undefined) {
       payload['_meta'] = {

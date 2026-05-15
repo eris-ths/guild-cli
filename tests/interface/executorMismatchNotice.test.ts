@@ -46,7 +46,7 @@ function setupAliceBobRequest(root: string, opts: { withExecutor?: 'bob' | undef
   run(GATE, root, ['register', '--name', 'alice']);
   run(GATE, root, ['register', '--name', 'bob']);
   const requestArgs = ['request', '--action', 'do x', '--reason', 'for y', '--format', 'json'];
-  if (opts.withExecutor) requestArgs.push('--executor', opts.withExecutor);
+  if (opts.withExecutor) requestArgs.push('--executors', opts.withExecutor);
   const r = run(GATE, root, requestArgs, 'alice');
   assert.equal(r.status, 0, `request failed: ${r.stderr}`);
   const id = (JSON.parse(r.stdout) as { id: string }).id;

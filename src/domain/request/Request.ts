@@ -462,15 +462,13 @@ export class Request {
     from: string;
     action: string;
     reason: string;
-    /** Single-executor convenience; mutually exclusive with `executors`.
-     *  Both forms feed the same internal array — present here so legacy
-     *  call sites that build one executor at a time (issues promote,
-     *  fast-track default-to-self) keep their existing surface. */
-    executor?: string;
-    /** Multiple executors (issue #230). Order preserved; duplicates
-     *  rejected; empty array allowed (= no executor assigned). When
-     *  both `executor` and `executors` are passed, `create` throws —
-     *  the interface layer should never let both through. */
+    /** Executor(s) — array form is the only accepted input as of v0.6
+     *  (issue #239). Order preserved; duplicates rejected; empty array
+     *  allowed (= no executor assigned). The pre-v0.6 singular
+     *  `executor?: string` form is gone; the only on-disk legacy
+     *  surface is `YamlRequestRepository.hydrate` which still accepts
+     *  the legacy `executor: <string>` YAML field for records-outlive-
+     *  writers (records written before #230 remain readable). */
     executors?: readonly string[];
     target?: string;
     /** Reviewer-depth advisory; rejected at create time if not in
@@ -542,17 +540,7 @@ export class Request {
       thanks: [],
       statusLog: [initialEntry],
     };
-    // Executor(s): single + multiple are mutually exclusive at the
-    // domain boundary so a confused caller (interface bug) can't
-    // silently land both into the aggregate. The interface layer is
-    // expected to reject the combination first — this is the second
-    // line of defence.
-    if (input.executor !== undefined && input.executors !== undefined) {
-      throw new DomainError(
-        '--executor and --executors are mutually exclusive',
-        'executor',
-      );
-    }
+    // Executor(s): array-only input as of v0.6 (issue #239).
     if (input.executors !== undefined) {
       const seen = new Set<string>();
       const list: ExecutorRecord[] = [];
@@ -574,8 +562,6 @@ export class Request {
       // Empty array is allowed — same as omitting the field. Persist
       // the field only when non-empty, matching how `with` behaves.
       if (list.length > 0) props.executors = list;
-    } else if (input.executor !== undefined) {
-      props.executors = [{ name: MemberName.of(input.executor), status: 'pending' }];
     }
     if (input.autoReview !== undefined) {
       props.autoReview = MemberName.of(input.autoReview);
@@ -1781,29 +1767,6 @@ export class Request {
     return out;
   }
 
-  /**
-   * Render-side JSON projection. Same shape as `toJSON` PLUS the
-   * deprecated `executor` (= `executors[0]`) back-compat key for tool
-   * wirings that read the singleton directly (e.g. `gate show --format
-   * json | jq .executor`). Keeping persistence (`toJSON`, called by
-   * the YAML repo) and rendering (this) as separate methods makes it
-   * structurally impossible to pollute the on-disk record with the
-   * deprecated alias — a single option-flag would have left that mode
-   * one wrong default away. See toJSON for the spec rationale.
-   *
-   * TODO: remove the deprecated `executor` JSON key in v0.7.0 of
-   * guild-cli, kept for back-compat per #230 review (Devil verdict
-   * blocker 2). Multi-executor consumers should already read from
-   * `executors`.
-   */
-  toRenderJSON(): Record<string, unknown> {
-    const base = this.toJSON();
-    const execList = this.props.executors ?? [];
-    if (execList.length > 0) {
-      base['executor'] = execList[0]!.name.value;
-    }
-    return base;
-  }
 }
 
 // Serialize a status_log entry with the wire-level field names

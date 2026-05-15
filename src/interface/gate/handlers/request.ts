@@ -46,7 +46,6 @@ const REQUEST_CREATE_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'from',
   'action',
   'reason',
-  'executor',
   'executors',
   'target',
   'depth',
@@ -76,7 +75,6 @@ const FAST_TRACK_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'from',
   'action',
   'reason',
-  'executor',
   'executors',
   'auto-review',
   'note',
@@ -266,24 +264,11 @@ export async function reqCreate(c: C, args: ParsedArgs): Promise<number> {
     input.templateVersion = templateMeta.version;
     input.gateRequiredAcknowledged = true;
   }
-  const executor = optionalOption(args, 'executor');
   const executorsRaw = optionalOption(args, 'executors');
   const target = optionalOption(args, 'target');
   const depth = optionalOption(args, 'depth');
   const autoReview = optionalOption(args, 'auto-review');
   const withPartners = parseWithList(optionalOption(args, 'with'));
-  // Mutual-exclusion: --executor (singular) and --executors (plural)
-  // share semantics; allowing both would invite ambiguity ("which one
-  // wins?") and let a typo go silent. Reject up front with a flag-
-  // shaped message — same treatment as --reason vs positional reason
-  // collisions elsewhere. Issue #230.
-  if (executor !== undefined && executorsRaw !== undefined) {
-    process.stderr.write(
-      `error: --executor and --executors are mutually exclusive (got both). ` +
-        `Use --executors a,b,c for multiple, or --executor <m> for one.\n`,
-    );
-    return 1;
-  }
   if (executorsRaw !== undefined) {
     const parsed = parseExecutorsList(executorsRaw);
     if (parsed.error) {
@@ -291,16 +276,6 @@ export async function reqCreate(c: C, args: ParsedArgs): Promise<number> {
       return 1;
     }
     if (parsed.list.length > 0) input.executors = parsed.list;
-  }
-  if (executor !== undefined) {
-    // Deprecation: `--executor` (singular) was kept for back-compat
-    // through the v0.6 cycle (#230). Removal scheduled for v0.7.0
-    // (#239). Surface a notice so explicit callers migrate to
-    // `--executors` ahead of the cut.
-    process.stderr.write(
-      `notice: --executor (singular) is deprecated and will be removed in v0.7.0; use --executors <name> instead. (issue #239)\n`,
-    );
-    input.executor = executor;
   }
   if (target !== undefined) input.target = target;
   // Worktree-isolation gating (#231). Two effects, both keyed on
@@ -482,49 +457,32 @@ export async function reqFastTrack(c: C, args: ParsedArgs): Promise<number> {
   const action = requireOption(args, 'action', '"..."');
   let reason = requireOption(args, 'reason', '"..."');
   if (reason === '-') reason = (await readStdin()).trim();
-  const executorOpt = optionalOption(args, 'executor');
   const executorsRaw = optionalOption(args, 'executors');
   const autoReview = optionalOption(args, 'auto-review');
   const note = optionalOption(args, 'note');
   const withPartners = parseWithList(optionalOption(args, 'with'));
-  // Same mutual-exclusion as `gate request`. Fast-track defaults the
-  // single-executor case to `from` (self-execute) when neither flag
-  // is supplied; the multi-executor case must be explicit.
-  if (executorOpt !== undefined && executorsRaw !== undefined) {
-    process.stderr.write(
-      `error: --executor and --executors are mutually exclusive (got both).\n`,
-    );
-    return 1;
-  }
-  let executorsList: readonly string[] | undefined;
+  // Fast-track defaults to self-execute when --executors is omitted:
+  // the author is the sole executor. Explicit `--executors a,b`
+  // overrides for multi-executor waves (rare in fast-track, valid
+  // for compress-pattern flows).
+  let executorsList: readonly string[];
   if (executorsRaw !== undefined) {
     const parsed = parseExecutorsList(executorsRaw);
     if (parsed.error) {
       process.stderr.write(`error: --executors ${parsed.error}\n`);
       return 1;
     }
-    if (parsed.list.length > 0) executorsList = parsed.list;
+    executorsList = parsed.list.length > 0 ? parsed.list : [from];
+  } else {
+    executorsList = [from];
   }
-  // Single-executor surface: explicit --executor wins, else default
-  // to the author for the self-execute happy path.
-  if (executorOpt !== undefined) {
-    // Deprecation notice — same policy as reqCreate (#239). Only warn
-    // on explicit user input, not the implicit `from` fallback.
-    process.stderr.write(
-      `notice: --executor (singular) is deprecated and will be removed in v0.7.0; use --executors <name> instead. (issue #239)\n`,
-    );
-  }
-  const executor = executorsList === undefined
-    ? (executorOpt ?? from)
-    : undefined;
 
   const createInput: Parameters<typeof c.requestUC.create>[0] = {
     from,
     action,
     reason,
+    executors: executorsList,
   };
-  if (executor !== undefined) createInput.executor = executor;
-  if (executorsList !== undefined) createInput.executors = executorsList;
   if (autoReview !== undefined) createInput.autoReview = autoReview;
   if (withPartners.length > 0) createInput.with = withPartners;
   // Same env-driven session stamp as `gate request` — fast-track is a
@@ -545,9 +503,9 @@ export async function reqFastTrack(c: C, args: ParsedArgs): Promise<number> {
   // record. With --executors a,b the substrate genuinely doesn't know
   // which one ran the work — pick the first as the on-record actor
   // (deterministic, explicit in the assignment list) and let the
-  // status_log + invoked_by capture the rest. Single-executor stays
-  // exactly as before.
-  const execActor = executor ?? executorsList?.[0] ?? from;
+  // status_log + invoked_by capture the rest. Single-executor defaults
+  // to the author (see executorsList construction above).
+  const execActor = executorsList[0] ?? from;
   // `execActor` may legitimately differ from `from`; when it does we
   // don't emit a second notice here — the env actor vs executor
   // mismatch is the same delegation already surfaced above.

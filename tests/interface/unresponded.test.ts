@@ -77,7 +77,7 @@ test('unresponded: surfaces concern with no follow-up', (t) => {
     '--from', 'alice',
     '--action', 'has a concern',
     '--reason', 'r',
-    '--executor', 'alice',
+    '--executors', 'alice',
   ]);
   const id = extractId(created.stdout)!;
   runGate(root, [
@@ -109,7 +109,7 @@ test('unresponded: filters out concerns that have a follow-up referencing them',
     '--from', 'alice',
     '--action', 'first',
     '--reason', 'r',
-    '--executor', 'alice',
+    '--executors', 'alice',
   ]);
   const id = extractId(created.stdout)!;
   runGate(root, [
@@ -125,7 +125,7 @@ test('unresponded: filters out concerns that have a follow-up referencing them',
     '--from', 'alice',
     '--action', `addresses ${id}`,
     '--reason', `responding to ${id}'s concern`,
-    '--executor', 'alice',
+    '--executors', 'alice',
   ]);
   const out = runGate(
     root,
@@ -150,7 +150,7 @@ test('unresponded: --for overrides GUILD_ACTOR', (t) => {
     '--from', 'alice',
     '--action', 'a',
     '--reason', 'r',
-    '--executor', 'alice',
+    '--executors', 'alice',
   ]);
   const id = extractId(created.stdout)!;
   runGate(root, [
@@ -198,7 +198,7 @@ test('unresponded: text output names --max-age-days at the point of consumption'
     '--from', 'alice',
     '--action', 'something to review',
     '--reason', 'r',
-    '--executor', 'alice',
+    '--executors', 'alice',
   ]);
   const id = extractId(created.stdout)!;
   runGate(root, ['register', '--name', 'bob', '--category', 'professional']);

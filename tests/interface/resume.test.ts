@@ -92,7 +92,7 @@ test('gate resume: mid-execution → executing loop + complete suggestion', () =
       '--from', 'claude',
       '--action', 'do the thing',
       '--reason', 'because',
-      '--executor', 'claude',
+      '--executors', 'claude',
     ]);
     // Discover the just-minted id rather than hardcoding a date —
     // `gate request` generates `<today>-<seq>` and the test must
@@ -128,7 +128,7 @@ test('gate resume: pending review → pending_review loop + review suggestion wi
       '--from', 'alice',
       '--action', 'ship',
       '--reason', 'now',
-      '--executor', 'alice',
+      '--executors', 'alice',
       '--auto-review', 'bob',
     ]);
     const list = runGate(root, ['list', '--state', 'pending']);
@@ -284,7 +284,7 @@ test('gate resume: utterance vs transition are labeled distinctly in prose', () 
       '--from', 'alice',
       '--action', 'ship',
       '--reason', 'now',
-      '--executor', 'alice',
+      '--executors', 'alice',
     ]);
     const { stdout } = runGate(root, ['resume', '--format', 'text'], {
       GUILD_ACTOR: 'alice',
