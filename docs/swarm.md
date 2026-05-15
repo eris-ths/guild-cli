@@ -268,30 +268,50 @@ fixes:
 ### Worktree-ledger blindspot
 
 When SubAgent isolation uses a Claude Code worktree
-(`.claude/worktrees/agent-*`), the SubAgent's `gate witness` /
-`gate complete` against the parent wave id **fails silently or with
-not-found**: the ledger lives in the parent session's substrate, not
-in the worktree's git tree.
+(`.claude/worktrees/agent-*`), the SubAgent's cwd is outside the
+parent session's substrate tree. By default `gate` walks up from cwd
+to find `guild.config.yaml`; if the parent substrate lives at a
+different filesystem path, the walk-up may find the wrong config (or
+none) and the SubAgent's writes never reach the ledger.
 
-Two consequences:
+**The bridge (#308 Layer A): `GUILD_CONFIG` env override.** When set
+to an absolute path, `gate` skips the cwd walk-up and uses that
+config directly. The orchestrator exports it before spawning the
+SubAgent; every `gate` invocation in the SubAgent's shell writes to
+the parent substrate without per-call boilerplate.
 
-1. Per-slice progress witness from inside the worktree is not
-   possible. The SubAgent should report progress in its final
-   report; the parent stamps `gate witness` / `gate complete` on
-   return.
-2. The SubAgent brief MUST surface this. Otherwise each SubAgent
-   individually discovers it ("ledger not visible — can't stamp")
-   and the same friction recurs every wave.
-
-Recommended brief snippet:
+```bash
+# Orchestrator side, before launching the SubAgent
+export GUILD_CONFIG=/abs/path/to/parent/guild.config.yaml
+export GUILD_WAVE_ID=2026-05-15-0001     # the wave the SubAgent owns
+export GUILD_ACTOR=noir                  # the SubAgent's name
+# launch SubAgent (it inherits these env vars)
+```
 
 ```
-Note: the gate wave record lives in the PARENT session's
-substrate, not in this worktree. `gate witness` / `gate complete`
-against the wave id WILL NOT reach the ledger from here. Do not
-attempt; report progress in your final result message and the
-parent will stamp on your behalf.
+# SubAgent brief snippet
+The parent wave substrate is reachable via:
+  - GUILD_CONFIG = $GUILD_CONFIG
+  - GUILD_WAVE_ID = $GUILD_WAVE_ID
+  - GUILD_ACTOR = $GUILD_ACTOR
+Call `gate witness $GUILD_WAVE_ID --by $GUILD_ACTOR --note "..."` at
+slice boundaries (start, midpoint, end) so the orchestrator sees
+your progress without polling.
 ```
+
+**Automated activity surfacing.** For SubAgents under Claude Code,
+`examples/plugins/harness-wirings/claude-code/` carries a `PostToolUse`
+hook that calls `gate witness` automatically on every tool call
+(throttled to one call per 30s, dedup-safe per #246). Install
+opt-in via `.claude/settings.json`; the script no-ops when
+`GUILD_WAVE_ID` is unset so global installation is safe.
+
+For harnesses other than Claude Code, an explicit `gate witness`
+call inside the SubAgent's prompt at slice boundaries is the
+portable equivalent. Cross-harness automation is the second-harness
+threshold per [principle 15](../lore/principles/15-plugins-as-default-extension.md):
+when two harnesses ship convergent wirings, the bus moves into
+core.
 
 ### Failure mode: worktree-only ("ceremony swarm")
 

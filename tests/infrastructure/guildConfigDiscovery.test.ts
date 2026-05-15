@@ -95,3 +95,70 @@ test('GuildConfig.load: walks up parents to find .gate-sessions/ from a nested c
     cleanup();
   }
 });
+
+// -------------------- GUILD_CONFIG env override (#308 Layer A) --------------------
+
+test('GuildConfig.load: GUILD_CONFIG env overrides cwd walk-up', () => {
+  const { dir, cleanup } = setupRepo();
+  try {
+    // Substrate at <dir>/parent — what the orchestrator owns.
+    const parent = join(dir, 'parent');
+    mkdirSync(parent);
+    writeFileSync(
+      join(parent, 'guild.config.yaml'),
+      'content_root: .\nhost_names: [eris]\n',
+    );
+    // Worktree at <dir>/elsewhere — no walk-up reaches the parent.
+    const worktree = join(dir, 'elsewhere');
+    mkdirSync(worktree);
+    const prev = process.env['GUILD_CONFIG'];
+    process.env['GUILD_CONFIG'] = join(parent, 'guild.config.yaml');
+    try {
+      const cfg = GuildConfig.load(worktree);
+      assert.equal(cfg.configFile, join(parent, 'guild.config.yaml'));
+      assert.equal(cfg.contentRoot, parent);
+      assert.deepEqual(cfg.hostNames, ['eris']);
+    } finally {
+      if (prev === undefined) delete process.env['GUILD_CONFIG'];
+      else process.env['GUILD_CONFIG'] = prev;
+    }
+  } finally {
+    cleanup();
+  }
+});
+
+test('GuildConfig.load: GUILD_CONFIG with nonexistent path throws DomainError', () => {
+  const prev = process.env['GUILD_CONFIG'];
+  process.env['GUILD_CONFIG'] = '/nonexistent/guild.config.yaml';
+  try {
+    assert.throws(
+      () => GuildConfig.load(),
+      /GUILD_CONFIG="\/nonexistent\/guild.config.yaml" does not exist/,
+    );
+  } finally {
+    if (prev === undefined) delete process.env['GUILD_CONFIG'];
+    else process.env['GUILD_CONFIG'] = prev;
+  }
+});
+
+test('GuildConfig.load: empty GUILD_CONFIG falls back to walk-up (treated as unset)', () => {
+  const { dir, cleanup } = setupRepo();
+  try {
+    writeFileSync(
+      join(dir, 'guild.config.yaml'),
+      'content_root: .\nhost_names: [nao]\n',
+    );
+    const prev = process.env['GUILD_CONFIG'];
+    process.env['GUILD_CONFIG'] = '';
+    try {
+      const cfg = GuildConfig.load(dir);
+      // empty string is treated as unset; walk-up finds the local config
+      assert.equal(cfg.configFile, join(dir, 'guild.config.yaml'));
+    } finally {
+      if (prev === undefined) delete process.env['GUILD_CONFIG'];
+      else process.env['GUILD_CONFIG'] = prev;
+    }
+  } finally {
+    cleanup();
+  }
+});

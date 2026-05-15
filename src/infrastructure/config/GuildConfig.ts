@@ -200,7 +200,40 @@ export class GuildConfig implements GuildConfigProps {
     cwd: string = process.cwd(),
     onMalformed: OnMalformed = defaultOnMalformed,
   ): GuildConfig {
-    const configPath = findConfig(cwd);
+    // GUILD_CONFIG env var override (#308 Layer A bridge). When set,
+    // skip the cwd walk-up and use the named guild.config.yaml directly.
+    // This unblocks the "worktree at <path-A>, substrate at <path-B>"
+    // case where the orchestrator's substrate is not in the worktree's
+    // git ancestry — most notably Claude Code SubAgents running in
+    // `.claude/worktrees/agent-X/` against a parent substrate that
+    // lives outside the repo tree. The orchestrator exports
+    // GUILD_CONFIG=<abs path> before spawning the SubAgent; every
+    // `gate` invocation in that shell writes to the parent substrate
+    // without a flag boilerplate at every call site.
+    //
+    // Resolution priority: GUILD_CONFIG env > findConfig(cwd) walk-up
+    //   > GuildConfig.default(cwd) fallback.
+    //
+    // Validation: the path must exist and be a regular file. A missing
+    // or unreadable GUILD_CONFIG throws rather than silently falling
+    // back to walk-up — silent fallback here would be a worse failure
+    // mode (the SubAgent writes to a stale substrate without realising).
+    const envConfig = process.env['GUILD_CONFIG'];
+    let configPath: string | null;
+    if (envConfig !== undefined && envConfig.length > 0) {
+      const resolvedEnv = resolve(envConfig);
+      if (!existsSync(resolvedEnv)) {
+        throw new DomainError(
+          `GUILD_CONFIG="${envConfig}" does not exist (resolved: ${resolvedEnv}).\n` +
+            `  next: export GUILD_CONFIG=<absolute path to guild.config.yaml>, ` +
+            `or unset to fall back to cwd walk-up.`,
+          'GUILD_CONFIG',
+        );
+      }
+      configPath = resolvedEnv;
+    } else {
+      configPath = findConfig(cwd);
+    }
     if (!configPath) {
       // Default: treat cwd as guild root
       return GuildConfig.default(cwd, onMalformed);
