@@ -1,11 +1,11 @@
 // scripts/lore-scope.sh smoke test (#326).
 //
 // What this pins:
-//   * `solo` filter → 13 principles (the unannotated set), and the
+//   * `solo` filter → 14 principles (the unannotated set), and the
 //     one annotated 'swarm' principle (14) is NOT in the result.
-//   * `swarm` filter → all 14 (the 13 default-'all' + principle 14
+//   * `swarm` filter → all 15 (the 14 default-'all' + principle 14
 //     which explicitly carries applies_to: swarm).
-//   * `all` filter → all 14.
+//   * `all` filter → all 15.
 //   * Invalid audience exits non-zero (POSIX usage convention).
 //
 // Why a subprocess test (and not unit-testing a parser): the script is
@@ -53,14 +53,14 @@ function lines(stdout: string): string[] {
     .filter((s) => s.length > 0);
 }
 
-test('lore-scope.sh solo includes 13 unannotated principles and excludes 14', () => {
+test('lore-scope.sh solo includes 14 unannotated principles and excludes 14-', () => {
   const out = run('solo');
   assert.equal(out.status, 0, `solo should exit 0; stderr=${out.stderr}`);
   const files = lines(out.stdout).map((p) => basename(p));
   assert.equal(
     files.length,
-    13,
-    `expected 13 solo principles, got ${files.length}: ${files.join(', ')}`,
+    14,
+    `expected 14 solo principles, got ${files.length}: ${files.join(', ')}`,
   );
   const annotated = files.filter((f) => f.startsWith('14-'));
   assert.equal(
@@ -70,14 +70,14 @@ test('lore-scope.sh solo includes 13 unannotated principles and excludes 14', ()
   );
 });
 
-test('lore-scope.sh swarm includes principle 14 plus all 13 unannotated', () => {
+test('lore-scope.sh swarm includes principle 14 plus all 14 unannotated', () => {
   const out = run('swarm');
   assert.equal(out.status, 0, `swarm should exit 0; stderr=${out.stderr}`);
   const files = lines(out.stdout).map((p) => basename(p));
   assert.equal(
     files.length,
-    14,
-    `expected 14 swarm principles, got ${files.length}: ${files.join(', ')}`,
+    15,
+    `expected 15 swarm principles, got ${files.length}: ${files.join(', ')}`,
   );
   const annotated = files.filter((f) => f.startsWith('14-'));
   assert.equal(
@@ -91,19 +91,19 @@ test('lore-scope.sh all returns every principle', () => {
   const out = run('all');
   assert.equal(out.status, 0, `all should exit 0; stderr=${out.stderr}`);
   const files = lines(out.stdout);
-  assert.equal(files.length, 14, `expected 14 'all' principles, got ${files.length}`);
+  assert.equal(files.length, 15, `expected 15 'all' principles, got ${files.length}`);
 });
 
 test('lore-scope.sh passage:devil includes universal principles (applies_to: all is the floor)', () => {
   const out = run('passage:devil');
   assert.equal(out.status, 0, `passage:devil should exit 0; stderr=${out.stderr}`);
   const files = lines(out.stdout).map((p) => basename(p));
-  // All 13 universal (no frontmatter = 'all') principles match.
+  // All 14 universal (no frontmatter = 'all') principles match.
   // Principle 14 (swarm-only) does not.
   assert.equal(
     files.length,
-    13,
-    `expected 13 universal principles for passage:devil, got ${files.length}: ${files.join(', ')}`,
+    14,
+    `expected 14 universal principles for passage:devil, got ${files.length}: ${files.join(', ')}`,
   );
   assert.equal(
     files.filter((f) => f.startsWith('14-')).length,

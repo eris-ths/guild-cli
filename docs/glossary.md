@@ -26,7 +26,7 @@ If you are reading the codebase for the first time, the [`Quick vocabulary`](./c
 ## Lore / thinking
 
 - **lore** — `lore/principles/` (numbered axioms) + `lore/traps/` (operational patterns not yet principle-grade). The "thinking around the code" — not the code itself, not user docs.
-- **principle** — numbered, named, load-bearing axiom. 14 ship as of 2026-05-12. Promotion bar: *felt-not-just-read*, two independent dogfood observations. See [`lore/README.md`](../lore/README.md).
+- **principle** — numbered, named, load-bearing axiom. 15 ship as of 2026-05-15. Promotion bar: *felt-not-just-read*, two independent dogfood observations. See [`lore/README.md`](../lore/README.md).
 - **trap** — a reusable operational pattern flagged for future review. Lives at `lore/traps/<trap_name>.md` with `relevant_until: <date> | indefinite` frontmatter. Quarantined (not deleted) when expired via `gate doctor sweep-traps`. See [`lore/traps/README.md`](../lore/traps/README.md).
 - **felt-not-just-read** — the graduation bar from trap to principle: the pattern is named consistently from independent observations, not just read from someone else's notes.
 - **advisory** — a record field that downstream consumers MAY read to alter behaviour, but enforcement is not built into the substrate. Pinned by [principle 02](../lore/principles/02-advisory-not-directive.md). Examples: `Request.depth` (consumed by `gate review-context` #310), issue `severity`, `auto_review`. The "stamped but unread" audit lives at [#344](https://github.com/eris-ths/guild-cli/issues/344).
