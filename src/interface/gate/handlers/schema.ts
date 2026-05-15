@@ -325,6 +325,25 @@ const VERBS: readonly VerbSchema[] = [
             'surfaces `hints.session_id_unset: true` so the feature is ' +
             'discoverable without forcing a value.',
         },
+        by: {
+          type: 'string',
+          description:
+            'Identity override for this invocation. Boot consults ' +
+            'GUILD_ACTOR by default; `--by <actor>` lets callers without ' +
+            'env (cold scripts, CI) resolve identity without exporting. ' +
+            'Lifecycle verbs all take `--by`; aligning boot removes the ' +
+            'cross-verb surprise where the same caller had to switch ' +
+            'channels between env (for boot) and flag (for everything ' +
+            'else). Precedence: --by > --as > GUILD_ACTOR env.',
+        },
+        as: {
+          type: 'string',
+          description:
+            'Prose-natural alias for --by. Same semantics; pick whichever ' +
+            'reads better at the call site. `gate boot --as eris` reads as ' +
+            'a role assumption; `gate boot --by eris` matches lifecycle-verb ' +
+            'muscle memory.',
+        },
       },
     },
     output: {
@@ -942,6 +961,14 @@ const VERBS: readonly VerbSchema[] = [
         since: {
           type: 'string',
           description: 'window size as <int><s|m|h|d>; default 7d',
+        },
+        limit: {
+          type: 'string',
+          description:
+            'truncate the rendered list to the most-recent N entries after sort. ' +
+            '`totals.entries_counted` continues to reflect pre-truncation total ' +
+            'so callers can detect whether more existed past the cap. Sibling ' +
+            '`gate voices --limit` shares this convention.',
         },
         format: formatField,
       },

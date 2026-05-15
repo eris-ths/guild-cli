@@ -76,7 +76,7 @@ const SECTIONS: readonly Section[] = [
         tier: 'base',
         text:
           '  gate request --from <m> --action <a> --reason <r>\n' +
-          '                 [--executor <m>] [--target <s>] [--auto-review <m>]\n' +
+          '                 [--executors a[,b,...]] [--target <s>] [--auto-review <m>]\n' +
           '                 [--with <n1>[,<n2>...]] [--depth shallow|standard|deep]',
       },
       {
@@ -94,7 +94,7 @@ const SECTIONS: readonly Section[] = [
         tier: 'base',
         text:
           '  gate list --state <state> [--for <m>] [--from <m>]\n' +
-          '                            [--executor <m>] [--auto-review <m>]',
+          '                            [--executors a[,b,...]] [--auto-review <m>]',
       },
       {
         tier: 'base',
@@ -185,7 +185,7 @@ const SECTIONS: readonly Section[] = [
         tier: 'base',
         text:
           '  gate fast-track --from <m> --action <a> --reason <r>\n' +
-          '                  [--executor <m>] [--auto-review <m>] [--note <s>]\n' +
+          '                  [--executors a[,b,...]] [--auto-review <m>] [--note <s>]\n' +
           '                  [--with <n1>[,<n2>...]]',
       },
     ],
@@ -278,7 +278,7 @@ const SECTIONS: readonly Section[] = [
       {
         tier: 'extra',
         text:
-          '  gate issues promote <id> --from <m> [--executor <m>] [--auto-review <m>]\n' +
+          '  gate issues promote <id> --from <m> [--executors a[,b,...]] [--auto-review <m>]\n' +
           '                                      [--action <a>] [--reason <r>]',
       },
     ],
@@ -364,10 +364,12 @@ const SECTIONS: readonly Section[] = [
         text:
           '  gate boot [--format json|text] [--tail <N>] [--utterances <N>]\n' +
           '            [--since <ISO-ts> | --since-last-mine] [--session-id <id>]\n' +
+          '            [--by <actor> | --as <actor>]\n' +
           '                       Single-command session bootstrap for agents.\n' +
           '                       Returns identity + status + tail + your recent\n' +
           '                       utterances + inbox unread as one JSON payload.\n' +
-          '                       GUILD_ACTOR optional (global view if unset).\n' +
+          '                       GUILD_ACTOR optional (global view if unset);\n' +
+          '                       --by / --as override env for one-shot identity.\n' +
           '                       Defaults: --tail 5 --utterances 5 (lean for\n' +
           '                       hot-path session start; pass higher N for deeper\n' +
           '                       history).\n' +

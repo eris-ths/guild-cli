@@ -52,10 +52,17 @@ export async function reqVoices(c: C, args: ParsedArgs): Promise<number> {
   maybeEmitExplain(args, 'voices');
   const name = args.positional[0];
   if (!name) {
-    throw new Error(
-      'Usage: gate voices <name> [--lense <l>] [--verdict <v>] ' +
-        '[--format json|text]',
-    );
+    // No-arg discovery: which actors actually have utterances to show?
+    // Pre-fix this bounced with bare Usage and forced the operator to
+    // re-grep `members/` themselves — silent-fallback signal-loss against
+    // the discovery question (trap_silent_fallback_loses_signal). We
+    // count per-actor utterances across the substrate so a cold reader
+    // can pick a name from the list directly.
+    const format = optionalOption(args, 'format') ?? 'text';
+    if (format !== 'text' && format !== 'json') {
+      throw new Error(`--format must be 'text' or 'json', got: ${format}`);
+    }
+    return emitVoicesIndex(c, format);
   }
 
   const lenseFilterRaw = optionalOption(args, 'lense');
@@ -202,6 +209,81 @@ export async function reqVoices(c: C, args: ParsedArgs): Promise<number> {
 }
 
 const TAIL_KNOWN_FLAGS: ReadonlySet<string> = new Set(['limit', 'format']);
+
+/**
+ * Bare `gate voices` (no positional): per-actor utterance counts so a
+ * cold reader can pick a name from a real list instead of guessing.
+ * Counts include both authored requests and reviews — i.e. anything
+ * `collectUtterances(.., {name: X})` would surface.
+ */
+async function emitVoicesIndex(c: C, format: string): Promise<number> {
+  const allJson = await loadAllRequestsAsJson(c);
+  const counts = new Map<string, number>();
+  for (const r of allJson) {
+    const author =
+      typeof r['from'] === 'string' && r['from'].length > 0
+        ? (r['from'] as string)
+        : null;
+    if (author) counts.set(author, (counts.get(author) ?? 0) + 1);
+    const reviews = Array.isArray(r['reviews']) ? r['reviews'] : [];
+    for (const rv of reviews) {
+      if (typeof rv !== 'object' || rv === null) continue;
+      const by = (rv as Record<string, unknown>)['by'];
+      if (typeof by === 'string' && by.length > 0) {
+        counts.set(by, (counts.get(by) ?? 0) + 1);
+      }
+    }
+  }
+  const members = await c.memberUC.list();
+  const memberNames = new Set(members.map((m) => m.name.value));
+  const hostNames = new Set(c.config.hostNames.map((h) => h.toLowerCase()));
+  const rows = [...counts.entries()]
+    .map(([actor, n]) => ({
+      actor,
+      utterances: n,
+      kind: memberNames.has(actor.toLowerCase())
+        ? 'member'
+        : hostNames.has(actor.toLowerCase())
+          ? 'host'
+          : 'historical',
+    }))
+    .sort((a, b) =>
+      b.utterances !== a.utterances
+        ? b.utterances - a.utterances
+        : a.actor < b.actor
+          ? -1
+          : 1,
+    );
+  if (format === 'json') {
+    process.stdout.write(
+      JSON.stringify({ index: rows, total_actors: rows.length }, null, 2) +
+        '\n',
+    );
+    return 0;
+  }
+  if (rows.length === 0) {
+    process.stdout.write(
+      '(no utterances on this content_root yet)\n' +
+        '  next: gate register     # add an actor\n' +
+        '        gate fast-track   # leave a first utterance\n',
+    );
+    return 0;
+  }
+  process.stdout.write(
+    `voices index — ${rows.length} actor${rows.length === 1 ? '' : 's'} with utterances\n\n`,
+  );
+  const widest = rows.reduce((w, r) => Math.max(w, r.actor.length), 0);
+  for (const r of rows) {
+    const pad = r.actor.padEnd(widest);
+    process.stdout.write(
+      `  ${pad}  ${String(r.utterances).padStart(4)}  ${r.kind}\n`,
+    );
+  }
+  process.stdout.write(
+    `\n  next: gate voices <name>     # narrative walk for one actor\n`,
+  );
+  return 0;
+}
 
 export async function reqTail(c: C, args: ParsedArgs): Promise<number> {
   // Strict-reject unknown flags. `gate tail` has a small surface
