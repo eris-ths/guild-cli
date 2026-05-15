@@ -32,7 +32,9 @@
     "guild": "node bin/guild.mjs",
     "agora": "node bin/agora.mjs",
     "devil": "node bin/devil.mjs",
-    "ctx": "node bin/ctx.mjs"
+    "ctx": "node bin/ctx.mjs",
+    "changelog:release": "node scripts/changelog-release.mjs",
+    "changelog:preview": "node scripts/changelog-release.mjs --dry-run"
   },
   "dependencies": {
     "yaml": "^2.5.0"

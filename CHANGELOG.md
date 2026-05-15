@@ -6,20 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to the versioning policy described in [docs/POLICY.md](./docs/POLICY.md).
 
 <!--
-Convention for the `## [Unreleased]` block:
-APPEND new entries to the END of each section (Fixed / Changed /
-Added / Removed / Deprecated / Security). Do NOT insert at the top.
+New entries DO NOT belong in the `## [Unreleased]` block below.
 
-Why: top-insertion makes every concurrently-open PR collide on the
-same anchor (HEAD's "next line" after the section heading). Appending
-to the end lets concurrent PRs merge without textual conflict —
-git's three-way merge resolves "two PRs appended" automatically when
-their content doesn't overlap.
+Drop a fragment file under `.changelog/next/<category>-<slug>.md`
+instead. The release script at `scripts/changelog-release.mjs`
+collects fragments at release time and rewrites the [Unreleased]
+block into a `## [<version>] - <date>` heading. See
+`.changelog/README.md` for the format.
 
-At release time, the `## [Unreleased]` block is renamed to the
-version heading; ordering within the section can be tidied during
-that same edit if a curator wants reverse-chronological prose.
-For day-to-day Unreleased churn, raw chronological append is fine.
+Why fragments: every PR adding to one shared `[Unreleased]` block
+collided on the section anchor — even the previous "append to end"
+rule produced duplicate `### Fixed` sub-headings inside one
+[Unreleased] when two PRs raced. Per-PR filenames make textual
+conflicts impossible.
+
+The block below is the pre-fragment backlog. Future PRs MUST NOT
+edit it directly — the release script folds it into the next
+versioned block alongside collected fragments.
 -->
 
 ## [Unreleased]
