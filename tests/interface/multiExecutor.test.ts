@@ -99,14 +99,12 @@ test('gate request --executors a,b: writes executors array (multi)', (t) => {
     { name: 'miki', status: 'pending' },
     { name: 'leysia', status: 'pending' },
   ]);
-  // Devil review #230 blocker 2: render-side keeps the deprecated
-  // `executor` key (= first-of-list) for back-compat with tool
-  // wirings reading the singleton directly. Persistence (YAML) does
-  // NOT carry this alias — verified separately in the repo test.
-  assert.equal(payload['executor'], 'miki');
+  // v0.6 (#239): deprecated `executor` (singular) JSON alias was
+  // removed; consumers must read `executors`. Verified absence here.
+  assert.equal(payload['executor'], undefined);
 });
 
-test('gate request --executor (singular) still works as a back-compat alias', (t) => {
+test('gate request --executors single name still writes single-entry array', (t) => {
   const { root, cleanup } = bootstrap();
   t.after(cleanup);
   registerAll(root, ['alice', 'bob']);
@@ -121,7 +119,7 @@ test('gate request --executor (singular) still works as a back-compat alias', (t
       'a',
       '--reason',
       'r',
-      '--executor',
+      '--executors',
       'bob',
       '--format',
       'json',
@@ -129,39 +127,9 @@ test('gate request --executor (singular) still works as a back-compat alias', (t
   );
   assert.equal(r.status, 0, `request failed: ${r.stderr}`);
   const id = (JSON.parse(r.stdout) as { id: string }).id;
-
-  // The on-record file uses the new wire form even when input was singular.
   const showJson = run(root, ['show', id, '--format', 'json']);
   const payload = JSON.parse(showJson.stdout) as Record<string, unknown>;
   assert.deepEqual(payload['executors'], [{ name: 'bob', status: 'pending' }]);
-});
-
-test('gate request --executor and --executors together: exit 1, flag-shaped error', (t) => {
-  const { root, cleanup } = bootstrap();
-  t.after(cleanup);
-  registerAll(root, ['alice', 'miki', 'leysia']);
-
-  const r = run(
-    root,
-    [
-      'request',
-      '--from',
-      'alice',
-      '--action',
-      'a',
-      '--reason',
-      'r',
-      '--executor',
-      'miki',
-      '--executors',
-      'leysia',
-    ],
-  );
-  assert.equal(r.status, 1);
-  assert.match(
-    r.stderr,
-    /--executor and --executors are mutually exclusive/,
-  );
 });
 
 test('gate request --executors with duplicate entry: exit 1, names the duplicate', (t) => {
@@ -295,7 +263,7 @@ test('gate list --executor <name>: matches when name is in the multi-executor ar
       'no leysia',
       '--reason',
       'r',
-      '--executor',
+      '--executors',
       'bob',
       '--format',
       'json',

@@ -1600,16 +1600,16 @@ const VERBS: readonly VerbSchema[] = [
             'with --from-agora the play\'s suspension `cliff` is used ' +
             'as reason (override by passing --reason explicitly).',
         ),
-        executor: strOpt('single executor (mutually exclusive with --executors)'),
         executors: strOpt(
           'comma-separated executor list, whitespace-trimmed per entry, ' +
             'e.g. "miki, leysia" or "miki,leysia" (issue #230, ' +
-            'multi-executor; mutually exclusive with --executor). Each name ' +
-            'must match /^[a-z][a-z0-9_-]{0,31}$/; duplicates and empty ' +
-            'entries rejected. Under profile=swarm, supplying >1 executor ' +
-            'auto-stamps requires_worktree_isolation: true on the record so ' +
-            'a later `gate execute` from the same physical cwd is refused ' +
-            '(issue #231).',
+            'multi-executor). Each name must match ' +
+            '/^[a-z][a-z0-9_-]{0,31}$/; duplicates and empty entries ' +
+            'rejected. Under profile=swarm, supplying >1 executor ' +
+            'auto-stamps requires_worktree_isolation: true on the record ' +
+            'so a later `gate execute` from the same physical cwd is ' +
+            'refused (issue #231). The pre-v0.6 singular `--executor` ' +
+            'alias was removed in v0.6 (#239 cut).',
         ),
         target: str,
         depth: {
@@ -1967,10 +1967,10 @@ const VERBS: readonly VerbSchema[] = [
         from: str,
         action: str,
         reason: str,
-        executor: str,
         executors: strOpt(
           'comma-separated executor list, whitespace-trimmed per entry ' +
-            '(issue #230); mutually exclusive with --executor.',
+            '(issue #230). Defaults to [from] when omitted ' +
+            '(self-execute happy path).',
         ),
         'auto-review': str,
         with: strOpt('comma-separated dialogue partners (pair-mode)'),

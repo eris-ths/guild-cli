@@ -212,7 +212,7 @@ test('state-transition kinds win over broadcast-pending-response (priority-tail)
       '--from', 'alice',
       '--action', 'do-thing',
       '--reason', 'because',
-      '--executor', 'bob',
+      '--executors', 'bob',
     ],
     { GUILD_ACTOR: 'alice' },
   );

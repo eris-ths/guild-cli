@@ -116,7 +116,7 @@ test('approve --dry-run --format text emits a one-line stderr notice', (t) => {
   t.after(cleanup);
   runGate(
     root,
-    ['request', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executor', 'bob'],
+    ['request', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executors', 'bob'],
     { GUILD_ACTOR: 'alice' },
   );
   const today = new Date().toISOString().slice(0, 10);
@@ -149,7 +149,7 @@ test('approve --dry-run --format json suppresses the stderr notice', (t) => {
   t.after(cleanup);
   runGate(
     root,
-    ['request', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executor', 'bob'],
+    ['request', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executors', 'bob'],
     { GUILD_ACTOR: 'alice' },
   );
   const today = new Date().toISOString().slice(0, 10);
@@ -172,7 +172,7 @@ test('review --dry-run --format text also emits the notice (annotation verb)', (
   t.after(cleanup);
   runGate(
     root,
-    ['request', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executor', 'bob'],
+    ['request', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executors', 'bob'],
     { GUILD_ACTOR: 'alice' },
   );
   const today = new Date().toISOString().slice(0, 10);

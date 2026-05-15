@@ -81,7 +81,7 @@ function seedBoard(root: string): void {
     root,
     [
       'request',
-      '--executor',
+      '--executors',
       'claude',
       '--action',
       'pending-B',
@@ -94,7 +94,7 @@ function seedBoard(root: string): void {
     root,
     [
       'request',
-      '--executor',
+      '--executors',
       'sentinel',
       '--action',
       'approved-C',
@@ -110,7 +110,7 @@ function seedBoard(root: string): void {
     root,
     [
       'request',
-      '--executor',
+      '--executors',
       'claude',
       '--action',
       'executing-D',

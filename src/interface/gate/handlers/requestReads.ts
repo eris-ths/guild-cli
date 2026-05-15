@@ -140,7 +140,7 @@ export async function reqList(
     const payload: Record<string, unknown> = {
       // toRenderJSON keeps the deprecated `executor` alias visible
       // alongside the new `executors` array (issue #230 back-compat).
-      requests: items.map((r) => r.toRenderJSON()),
+      requests: items.map((r) => r.toJSON()),
       _meta: {
         state,
         verb,
@@ -228,7 +228,7 @@ export async function reqShow(c: C, args: ParsedArgs): Promise<number> {
     // a documented selector; preserve it by emitting the deprecated
     // alias on the render path. Persistence still writes only the new
     // `executors` key.
-    const payload = r.toRenderJSON();
+    const payload = r.toJSON();
     const key = keep[0]!;
     if (!(key in payload)) {
       // Missing field: emit nothing, exit 1 so shell `[ -z "$v" ]`
@@ -255,7 +255,7 @@ export async function reqShow(c: C, args: ParsedArgs): Promise<number> {
     // toRenderJSON: include the deprecated `executor` alias so the
     // documented `--fields state,executor` shape keeps working. See
     // toRenderJSON for the deprecation timeline.
-    let payload: Record<string, unknown> = r.toRenderJSON();
+    let payload: Record<string, unknown> = r.toJSON();
     if (fields !== undefined) {
       const keep = fields
         .split(',')

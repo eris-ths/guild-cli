@@ -93,7 +93,7 @@ test('completed with auto-review not yet done → review suggested WITHOUT verdi
       from: 'alice',
       action: 'a',
       reason: 'r',
-      executor: 'alice',
+      executors: ['alice'],
       autoReview: 'bob',
     });
     r.approve(MemberName.of('human'));
@@ -122,7 +122,7 @@ test('completed with auto-review already done → suggested_next is null', () =>
       from: 'alice',
       action: 'a',
       reason: 'r',
-      executor: 'alice',
+      executors: ['alice'],
       autoReview: 'bob',
     });
     r.approve(MemberName.of('human'));
@@ -163,7 +163,7 @@ test('actor_resolved is true when GUILD_ACTOR matches suggested args.by', () => 
       from: 'alice',
       action: 'a',
       reason: 'r',
-      executor: 'alice',
+      executors: ['alice'],
     });
     r.approve(MemberName.of('human'));
     // approved → execute, args.by=alice
@@ -242,7 +242,7 @@ test('completed with auto-review done AND concern present → chain advisory', (
       from: 'alice',
       action: 'a',
       reason: 'r',
-      executor: 'alice',
+      executors: ['alice'],
       autoReview: 'bob',
     });
     r.approve(MemberName.of('human'));
@@ -274,7 +274,7 @@ test('completed with auto-review done AND ok verdict → still null', () => {
       from: 'alice',
       action: 'a',
       reason: 'r',
-      executor: 'alice',
+      executors: ['alice'],
       autoReview: 'bob',
     });
     r.approve(MemberName.of('human'));
@@ -306,7 +306,7 @@ test('terminal states (denied/failed) return null', () => {
       from: 'alice',
       action: 'a',
       reason: 'r',
-      executor: 'alice',
+      executors: ['alice'],
     });
     failed.approve(MemberName.of('human'));
     failed.execute(MemberName.of('alice'));

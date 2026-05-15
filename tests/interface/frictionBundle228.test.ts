@@ -190,7 +190,7 @@ test('#228(3): gate request hints fast-track when author == executor', (t) => {
     '--from', 'alice',
     '--action', 'self-do',
     '--reason', 'just me',
-    '--executor', 'alice',
+    '--executors', 'alice',
   ]);
   assert.equal(r.status, 0, r.stderr);
   assert.match(r.stdout, /suggested_next:.*fast-track/);
@@ -209,7 +209,7 @@ test('#228(3): self-wave detection survives whitespace padding on --from', (t) =
     '--from', 'alice ',          // trailing space
     '--action', 'self-do',
     '--reason', 'just me',
-    '--executor', 'alice',
+    '--executors', 'alice',
   ]);
   assert.equal(r.status, 0, r.stderr);
   assert.match(r.stdout, /suggested_next:.*fast-track/,
@@ -226,7 +226,7 @@ test('#228(3): gate request does NOT hint fast-track when executor differs', (t)
     '--from', 'alice',
     '--action', 'cross',
     '--reason', 'r',
-    '--executor', 'bob',
+    '--executors', 'bob',
   ]);
   assert.equal(r.status, 0, r.stderr);
   assert.equal(/fast-track/.test(r.stdout), false,

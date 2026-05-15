@@ -70,7 +70,7 @@ test('show text: 0 refs → "no outbound id references detected"', (t) => {
     'solo action without any id refs',
     '--reason',
     'a record that references no one else',
-    '--executor',
+    '--executors',
     'alice',
   ]);
   const id = extractId(created.stdout + created.stderr);
@@ -103,7 +103,7 @@ test('show text: N refs → lists the ids', (t) => {
     'first',
     '--reason',
     'standalone',
-    '--executor',
+    '--executors',
     'alice',
   ]);
   const firstId = extractId(first.stdout)!;
@@ -115,7 +115,7 @@ test('show text: N refs → lists the ids', (t) => {
     'second',
     '--reason',
     'standalone',
-    '--executor',
+    '--executors',
     'alice',
   ]);
   const secondId = extractId(second.stdout)!;
@@ -128,7 +128,7 @@ test('show text: N refs → lists the ids', (t) => {
     `depends on ${firstId}`,
     '--reason',
     `builds on ${firstId} and ${secondId}`,
-    '--executor',
+    '--executors',
     'alice',
   ]);
   const thirdId = extractId(third.stdout)!;
@@ -162,7 +162,7 @@ test('show text: concern marker line — no concerns recorded', (t) => {
     '--from', 'alice',
     '--action', 'no concerns yet',
     '--reason', 'baseline',
-    '--executor', 'alice',
+    '--executors', 'alice',
   ]);
   const id = extractId(created.stdout)!;
   const shown = runGate(root, ['show', id, '--format', 'text']);
@@ -188,7 +188,7 @@ test('show text: concern marker line — concern recorded', (t) => {
     '--from', 'alice',
     '--action', 'gets a concern',
     '--reason', 'baseline',
-    '--executor', 'alice',
+    '--executors', 'alice',
   ]);
   const id = extractId(created.stdout)!;
   runGate(root, [
@@ -232,7 +232,7 @@ test('show text: short-form (0004) is NOT detected', (t) => {
     'mentions 0004 informally',
     '--reason',
     'short-form (0004) should not count as a real reference',
-    '--executor',
+    '--executors',
     'alice',
   ]);
   const id = extractId(created.stdout)!;
@@ -267,7 +267,7 @@ test('show text: self-id is excluded from hint', (t) => {
     'first',
     '--reason',
     'standalone',
-    '--executor',
+    '--executors',
     'alice',
   ]);
   const id = extractId(created.stdout)!;
@@ -282,7 +282,7 @@ test('show text: self-id is excluded from hint', (t) => {
     `alludes to ${id} in action`,
     '--reason',
     `discusses ${id}`,
-    '--executor',
+    '--executors',
     'alice',
   ]);
   const secondId = extractId(second.stdout)!;

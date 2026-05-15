@@ -176,7 +176,7 @@ test('Request rejects invalid executor name', () => {
         from: 'alice',
         action: 'x',
         reason: 'y',
-        executor: '../bob',
+        executors: ['../bob'],
       }),
     DomainError,
   );
@@ -206,21 +206,6 @@ test('Request.create accepts --executors a,b and stores them in order', () => {
   assert.equal(r.hasExecutor('miki'), true);
   assert.equal(r.hasExecutor('leysia'), true);
   assert.equal(r.hasExecutor('alice'), false);
-});
-
-test('Request.create rejects --executor + --executors combined', () => {
-  assert.throws(
-    () =>
-      Request.create({
-        id: RequestId.generate(d, 1),
-        from: 'alice',
-        action: 'a',
-        reason: 'r',
-        executor: 'miki',
-        executors: ['leysia'],
-      }),
-    DomainError,
-  );
 });
 
 test('Request.create rejects duplicate --executors entries', () => {
@@ -257,7 +242,7 @@ test('Request.toJSON: emits executors array (single-executor input), no legacy k
     from: 'alice',
     action: 'a',
     reason: 'r',
-    executor: 'bob',
+    executors: ['bob'],
   });
   // Spec: persistence always uses new-form `executors:` regardless of
   // which input flag was used. The legacy `executor:` key MUST NOT
@@ -270,41 +255,6 @@ test('Request.toJSON: emits executors array (single-executor input), no legacy k
   // `executor:` scalar key.
   assert.deepEqual(r.toJSON()['executors'], [{ name: 'bob', status: 'pending' }]);
   assert.equal(r.toJSON()['executor'], undefined);
-});
-
-test('Request.toRenderJSON: emits BOTH `executors` and deprecated `executor` (JSON back-compat)', () => {
-  // Devil review #230 blocker 2: tool wirings reading `gate show
-  // --format json | jq .executor` were a documented surface. The
-  // render-side projection keeps the deprecated alias visible
-  // alongside the new array key. Persistence (toJSON) stays clean.
-  const r = Request.create({
-    id: RequestId.generate(d, 1),
-    from: 'alice',
-    action: 'a',
-    reason: 'r',
-    executors: ['miki', 'leysia'],
-  });
-  const j = r.toRenderJSON();
-  // Issue #294: post-create executors emit as structured records.
-  assert.deepEqual(j['executors'], [
-    { name: 'miki', status: 'pending' },
-    { name: 'leysia', status: 'pending' },
-  ]);
-  // Deprecated alias = first-of-list. Multi-executor consumers should
-  // already be reading `executors`; this key is back-compat only.
-  assert.equal(j['executor'], 'miki');
-});
-
-test('Request.toRenderJSON: omits both keys when no executor assigned', () => {
-  const r = Request.create({
-    id: RequestId.generate(d, 1),
-    from: 'alice',
-    action: 'a',
-    reason: 'r',
-  });
-  const j = r.toRenderJSON();
-  assert.equal(j['executors'], undefined);
-  assert.equal(j['executor'], undefined);
 });
 
 test('Request.toJSON: emits executors array (multi)', () => {
@@ -359,7 +309,7 @@ test('Request.execute(cwd): stamps executing_at_cwd on the status_log entry', ()
     from: 'alice',
     action: 'a',
     reason: 'r',
-    executor: 'miki',
+    executors: ['miki'],
   });
   r.approve(MemberName.of('alice'));
   r.execute(MemberName.of('miki'), undefined, undefined, '/tmp/worktree-A');
@@ -374,7 +324,7 @@ test('Request.execute(): no cwd → executing_at_cwd absent (back-compat)', () =
     from: 'alice',
     action: 'a',
     reason: 'r',
-    executor: 'miki',
+    executors: ['miki'],
   });
   r.approve(MemberName.of('alice'));
   r.execute(MemberName.of('miki'));
