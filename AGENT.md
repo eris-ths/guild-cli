@@ -118,7 +118,7 @@ pending ─ approve ─▶ approved ─ execute ─▶ executing ─ complete �
 
 ```bash
 gate request --from <m> --action "..." --reason "..." \
-             [--executor <m> | --executors a,b,c] \
+             [--executors a[,b,c]] \
              [--auto-review <m>] [--with <m>[,<m>...]] \
              [--target <s>] [--depth shallow|standard|deep] \
              [--from-agora <play_id>] [--template <name>]
@@ -128,21 +128,22 @@ gate execute <id> --by <m> [--cwd <path>]                  # cwd stamped on the 
 gate complete <id> --by <m> [--note "..."]
 gate fail <id> --by <m> --reason "..."
 gate fast-track --from <m> --action "..." --reason "..." \
-                [--executor <m> | --executors a,b,c] [--with ...]
+                [--executors a[,b,c]] [--with ...]
 gate thank <to> --for <id> [--by <m>] [--reason <s>]       # gratitude (no verdict, no calibration)
 ```
 
-`--executor <m>` records **intent**, not access — anyone with substrate
+`--executors` records **intent**, not access — anyone with substrate
 access may run `gate execute`. When the actor differs from the assignee
 the substrate captures both, and `gate execute` emits a `notice:` so
 the mismatch is visible at the surface that did it. See
 [issue #168](https://github.com/eris-ths/guild-cli/issues/168) for the
 design rationale.
 
-`--executors a,b,c` records **multiple executors** for parallel waves
-(#230). Mutually exclusive with `--executor`. Under `profile: swarm`,
-parallel waves additionally require worktree isolation (`gate execute`
-refuses same-cwd collisions, #231).
+`--executors a[,b,c]` accepts one or many executors for single or
+parallel waves (#230). The singular `--executor <m>` is still accepted
+as a deprecated alias (removed at v0.7 per [#239](https://github.com/eris-ths/guild-cli/issues/239)).
+Under `profile: swarm`, parallel waves additionally require worktree
+isolation (`gate execute` refuses same-cwd collisions, #231).
 
 `--depth shallow|standard|deep` is an **advisory** that the substrate
 carries to reviewer agents (#221). Default = `standard` (current
@@ -318,7 +319,7 @@ gate issues add --from <m> --severity <low|med|high> --area <a> "text"
 gate issues list [--state <s>]
 gate issues resolve|defer|start|reopen <id> --by <m>   # --by required; appends state_log
 gate issues note <id> --by <m> --text "..."          # append annotation
-gate issues promote <id> --from <m> [--executor <m>] [--auto-review <m>] [--action <s>] [--reason <s>]
+gate issues promote <id> --from <m> [--executors a[,b,c]] [--auto-review <m>] [--action <s>] [--reason <s>]
 ```
 
 State transitions append to `state_log: [{state, by, at, invoked_by?}]`
@@ -746,7 +747,7 @@ per-record YAML schema, hydrate tolerance, and backward-compat rules.
 ## Environment
 
 `GUILD_ACTOR=<name>` — default for `--from` / `--by` / `--for`.
-Explicit flags always win. `--executor` and `--auto-review` are never env-filled.
+Explicit flags always win. `--executors` and `--auto-review` are never env-filled.
 
 If `GUILD_ACTOR` is unset, the CLI falls back to a `.guild-actor`
 file: walks up from `cwd` (same ancestor pattern as

@@ -24,14 +24,17 @@ import {
   optionalOption,
   rejectUnknownFlags,
 } from '../../shared/parseArgs.js';
-import { C } from './internal.js';
+import { C, parseOptionalIntOption } from './internal.js';
 import { parseDuration } from './lenseStats.js';
 import { resolveGuildActor } from '../../shared/resolveGuildActor.js';
 
+// limit: sibling gate-voices accepts --limit; aligning here removes a
+// cross-verb inconsistency. Applied post-sort so the most-recent N survive.
 const DECISIONS_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'for',
   'since',
   'format',
+  'limit',
 ]);
 
 /**
@@ -132,6 +135,13 @@ export async function decisionsCmd(c: C, args: ParsedArgs): Promise<number> {
   // a director would scan when answering "what did I just do?".
   rows.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
 
+  const limit = parseOptionalIntOption(args, 'limit');
+  // entries_counted reflects pre-truncation total so the caller can tell
+  // whether more existed past --limit (don't lie about source size).
+  const totalRowsBeforeLimit = rows.length;
+  const truncatedRows =
+    limit !== undefined && limit >= 0 ? rows.slice(0, limit) : rows;
+
   const byTransition: Record<DecisionKind, number> = {
     approve: 0,
     deny: 0,
@@ -145,10 +155,10 @@ export async function decisionsCmd(c: C, args: ParsedArgs): Promise<number> {
     window: { since: cutoffIso, duration: sinceRaw },
     filter: { actor: forActor },
     totals: {
-      entries_counted: rows.length,
+      entries_counted: totalRowsBeforeLimit,
       by_transition: byTransition,
     },
-    decisions: rows,
+    decisions: truncatedRows,
   };
 
   if (format === 'json') {

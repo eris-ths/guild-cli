@@ -56,6 +56,10 @@ export {
 } from './bootActionable.js';
 export type { BootSuggestedNext } from './bootTypes.js';
 
+// by / as: identity override aliases. Lifecycle verbs all take --by,
+// so accepting it on boot too removes the cross-verb surprise where
+// the same caller had to switch between env (boot) and flag (others).
+// Precedence: --by > --as > GUILD_ACTOR env.
 const BOOT_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'format',
   'tail',
@@ -63,6 +67,8 @@ const BOOT_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'session-id',
   'since',
   'since-last-mine',
+  'by',
+  'as',
 ]);
 
 // Strict ISO-8601 with milliseconds, UTC. Matches what Date.toISOString()
@@ -98,8 +104,24 @@ export async function bootCmd(c: C, args: ParsedArgs): Promise<number> {
   const tailLimit = parseOptionalIntOption(args, 'tail') ?? 5;
   const personalLimit = parseOptionalIntOption(args, 'utterances') ?? 5;
 
+  // --by / --as override env. Either flag is fine; --by matches the
+  // lifecycle convention, --as reads more naturally in prose. Empty
+  // string is rejected the same way unset env is.
+  const byFlag = optionalOption(args, 'by');
+  const asFlag = optionalOption(args, 'as');
+  if (byFlag !== undefined && asFlag !== undefined) {
+    throw new Error(
+      `--by and --as are aliases — pick one. next: drop one of them.`,
+    );
+  }
+  const flagActor = byFlag ?? asFlag;
   const envActor = resolveGuildActor();
-  const actor = envActor && envActor.length > 0 ? envActor : null;
+  const actor =
+    flagActor && flagActor.length > 0
+      ? flagActor
+      : envActor && envActor.length > 0
+        ? envActor
+        : null;
 
   // Boot-context session_id (#249 slice 2). Flag wins over env so an
   // orchestrator's explicit override is honoured even when the shell

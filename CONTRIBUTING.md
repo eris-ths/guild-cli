@@ -83,6 +83,15 @@ exists to make those questions visible at the point of decision.
 
 ## Other expectations
 
+- **Release notes go in `.changelog/next/`, not in `CHANGELOG.md`.**
+  Drop one file per PR: `.changelog/next/<category>-<slug>.md` where
+  `<category>` is `fixed`/`changed`/`added`/`removed`/`deprecated`/
+  `security`/`breaking`. The release script
+  (`npm run changelog:release -- <version>`) collects fragments at
+  release time and rewrites the `[Unreleased]` block. See
+  `.changelog/README.md` for the format. Editing `CHANGELOG.md`'s
+  `[Unreleased]` block directly causes textual conflicts when
+  multiple PRs race.
 - **No domain-layer changes without a minor-version note** — see
   POLICY.md.
 - **Tests run on Node 20 and 22** — the CI matrix exercises both;
