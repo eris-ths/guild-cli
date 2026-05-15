@@ -131,7 +131,7 @@ GUILD_ACTOR=nao node "$GATE" issues add --from nao --severity low \
   -- "DB migration を ship blocking にするか、次回議題"
 
 # Action item (executor named; cross-reference in reason)
-GUILD_ACTOR=sari node "$GATE" request --from sari --executor sari \
+GUILD_ACTOR=sari node "$GATE" request --from sari --executors sari \
   --action "DB migration 完了まで 3日見積もり、毎朝進捗共有" \
   --reason "ローンチ blocker として 2026-04-18-0002 に紐づく"
 ```
@@ -292,7 +292,7 @@ node "$GATE" register --name dev --display-name "dev owner"
 
 # The incident as a request; state transitions map to detection/
 # triage/mitigation/resolution.
-GUILD_ACTOR=sre node "$GATE" request --executor sre \
+GUILD_ACTOR=sre node "$GATE" request --executors sre \
   --action "INC-2026-04-18: 503 spike (14:02-14:47)" \
   --reason "14:02 UTC 0.1% → 47%. 14:05 pager. 14:47 rollback で復旧"
 GUILD_ACTOR=sre node "$GATE" approve 2026-04-18-0001 --by sre \
@@ -314,7 +314,7 @@ GUILD_ACTOR=sre node "$GATE" review 2026-04-18-0001 \
   "顧客影響 45分、SLO 超過 5分、status page 更新 7分 gap"
 
 # Action items as new requests; process question as issue
-GUILD_ACTOR=db node "$GATE" request --from db --executor db \
+GUILD_ACTOR=db node "$GATE" request --from db --executors db \
   --action "負荷試験に connection leak 検出を追加 (2026-04-18-0001 INC から)" \
   --reason "coverage gap を埋める"
 GUILD_ACTOR=dev node "$GATE" issues add --from dev --severity high --area process \

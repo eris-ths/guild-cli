@@ -51,7 +51,7 @@ boot, returning only `suggested_next` without the heavy context.
 ### G2: self-approved small work
 
 ```bash
-gate fast-track --from <you> --action "..." --reason "..." [--executor <you>]
+gate fast-track --from <you> --action "..." --reason "..." [--executors <you>]
 ```
 
 `fast-track` is the create→complete one-shot for work where the
@@ -82,7 +82,7 @@ gate review <id> --by <critic> --lense devil --verdict <ok|concern|reject>
 ```bash
 gate issues add --from <you> --severity <l> --area <a> "<text>"
 # ... later, when commitment to act forms ...
-gate issues promote <issue-id> --from <you> [--executor <them>] [--auto-review <reviewer>]
+gate issues promote <issue-id> --from <you> [--executors <them>] [--auto-review <reviewer>]
 ```
 
 Issues are *lightweight observations* — `gate issues add` is the
@@ -396,7 +396,7 @@ agora resume <play-id>
 agora move <play-id> --text "<root cause confirmed: ...>"
 
 # Phase 3: commit to fix (gate — judgment-shaped)
-gate issues promote <issue-id> --from <you> [--executor <you>] \
+gate issues promote <issue-id> --from <you> [--executors <you>] \
   [--auto-review <critic>]
 
 # Phase 4a: routine fix → gate review only

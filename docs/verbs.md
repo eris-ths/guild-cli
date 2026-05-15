@@ -628,7 +628,7 @@ request's `reason` field. Use it when a defect has graduated from
 "noted" to "going to fix this right now":
 
 ```
-$ gate issues promote i-2026-04-14-002 --from kiri --executor kiri --auto-review noir
+$ gate issues promote i-2026-04-14-002 --from kiri --executors kiri --auto-review noir
 ✓ promoted i-2026-04-14-002 → 2026-04-14-008 (issue resolved)
 ```
 
