@@ -112,7 +112,7 @@ test('gate lore list --type trap narrows to traps', (t) => {
 test('gate lore list --applies-to swarm shows principle 14 plus universal entries', (t) => {
   // applies_to: swarm is explicit on principle 14; principles without
   // an explicit applies_to are universal (`all`) and surface here too.
-  // Matches the tools/lore-scope.sh semantics.
+  // Matches the scripts/lore-scope.sh semantics.
   const { root, cleanup } = bootstrap();
   t.after(cleanup);
   const r = runGate(root, ['lore', 'list', '--applies-to', 'swarm'], {

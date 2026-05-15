@@ -1,4 +1,4 @@
-// tools/lore-scope.sh smoke test (#326).
+// scripts/lore-scope.sh smoke test (#326).
 //
 // What this pins:
 //   * `solo` filter → 13 principles (the unannotated set), and the
@@ -21,10 +21,10 @@ import { resolve, dirname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
-// Compiled location is `<repo>/dist/tests/tools/loreScope.test.js`, so
+// Compiled location is `<repo>/dist/tests/scripts/loreScope.test.js`, so
 // the repo root is three directory levels up from `here`.
 const REPO_ROOT = resolve(here, '..', '..', '..');
-const SCRIPT = resolve(REPO_ROOT, 'tools', 'lore-scope.sh');
+const SCRIPT = resolve(REPO_ROOT, 'scripts', 'lore-scope.sh');
 
 // On Windows, .sh files can't be executed directly — the OS doesn't
 // read shebangs. GitHub Actions windows-latest runners ship Git Bash on

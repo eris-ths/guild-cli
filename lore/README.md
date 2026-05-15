@@ -53,12 +53,12 @@ Value vocabulary:
 | `passage:devil`| specific to the `devil` passage                            |
 | `passage:ctx`  | specific to the `ctx` passage                              |
 
-Filter principles by audience with `tools/lore-scope.sh`:
+Filter principles by audience with `scripts/lore-scope.sh`:
 
 ```sh
-./tools/lore-scope.sh solo            # principles where applies_to is 'all' (or absent)
-./tools/lore-scope.sh swarm           # principles applying under swarm (includes 'all')
-./tools/lore-scope.sh passage:devil   # principles relevant to the devil passage
+./scripts/lore-scope.sh solo            # principles where applies_to is 'all' (or absent)
+./scripts/lore-scope.sh swarm           # principles applying under swarm (includes 'all')
+./scripts/lore-scope.sh passage:devil   # principles relevant to the devil passage
 ```
 
 The `all` default makes the audience filter inclusive by design: a
