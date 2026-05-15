@@ -7,6 +7,7 @@ import {
   rejectUnknownFlags,
 } from '../../../../interface/shared/parseArgs.js';
 import { GuildConfig } from '../../../../infrastructure/config/GuildConfig.js';
+import { parseFormat } from '../../../../interface/shared/parseFormat.js';
 
 const SHOW_KNOWN_FLAGS: ReadonlySet<string> = new Set(['format']);
 
@@ -39,11 +40,7 @@ export async function showReview(deps: ShowDeps, args: ParsedArgs): Promise<numb
   }
   parseReviewId(reviewId); // domain format check (throws DomainError)
 
-  const format = optionalOption(args, 'format') ?? 'text';
-  if (format !== 'json' && format !== 'text') {
-    process.stderr.write(`error: --format must be 'json' or 'text', got: ${format}\n`);
-    return 1;
-  }
+  const format = parseFormat(args);
 
   const review = await deps.reviews.findById(reviewId);
   if (!review) throw new DevilReviewNotFound(reviewId);

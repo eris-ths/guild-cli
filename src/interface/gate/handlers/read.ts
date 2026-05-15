@@ -13,6 +13,7 @@ import { parseLense } from '../../../domain/shared/Lense.js';
 import { parseVerdict } from '../../../domain/shared/Verdict.js';
 import { DomainError } from '../../../domain/shared/DomainError.js';
 import { compareSequenceIds } from '../../../domain/shared/compareSequenceIds.js';
+import { parseFormat } from '../../shared/parseFormat.js';
 import {
   collectUtterances,
   renderUtterance,
@@ -58,10 +59,7 @@ export async function reqVoices(c: C, args: ParsedArgs): Promise<number> {
     // the discovery question (trap_silent_fallback_loses_signal). We
     // count per-actor utterances across the substrate so a cold reader
     // can pick a name from the list directly.
-    const format = optionalOption(args, 'format') ?? 'text';
-    if (format !== 'text' && format !== 'json') {
-      throw new Error(`--format must be 'text' or 'json', got: ${format}`);
-    }
+    const format = parseFormat(args);
     return emitVoicesIndex(c, format);
   }
 
@@ -72,10 +70,7 @@ export async function reqVoices(c: C, args: ParsedArgs): Promise<number> {
   const verdictFilter =
     verdictFilterRaw !== undefined ? parseVerdict(verdictFilterRaw) : undefined;
   const limit = parseOptionalIntOption(args, 'limit');
-  const format = optionalOption(args, 'format') ?? 'json';
-  if (format !== 'json' && format !== 'text') {
-    throw new Error(`--format must be 'json' or 'text', got: ${format}`);
-  }
+  const format = parseFormat(args, 'json');
 
   const allJson = await loadAllRequestsAsJson(c);
 
@@ -324,10 +319,7 @@ export async function reqTail(c: C, args: ParsedArgs): Promise<number> {
   }
   const limit = n ?? 20;
 
-  const format = optionalOption(args, 'format') ?? 'text';
-  if (format !== 'json' && format !== 'text') {
-    throw new Error(`--format must be 'json' or 'text', got: ${format}`);
-  }
+  const format = parseFormat(args);
 
   const allJson = await loadAllRequestsAsJson(c);
   const utterances = collectUtterances(allJson, {
@@ -380,10 +372,7 @@ export async function reqWhoami(c: C, args: ParsedArgs): Promise<number> {
   // line. JSON path emits the same data with snake_case fields so
   // orchestrators can reflect on identity / role / actor_source /
   // recent utterances without parsing prose.
-  const format = optionalOption(args, 'format') ?? 'text';
-  if (format !== 'json' && format !== 'text') {
-    throw new Error(`--format must be 'json' or 'text', got: ${format}`);
-  }
+  const format = parseFormat(args);
   const resolved = resolveGuildActorWithSource();
   if (!resolved) {
     if (format === 'json') {
@@ -505,10 +494,7 @@ const CHAIN_KNOWN_FLAGS: ReadonlySet<string> = new Set(['format']);
 export async function reqChain(c: C, args: ParsedArgs): Promise<number> {
   rejectUnknownFlags(args, CHAIN_KNOWN_FLAGS, 'chain');
   maybeEmitExplain(args, 'chain');
-  const format = optionalOption(args, 'format') ?? 'text';
-  if (format !== 'text' && format !== 'json') {
-    throw new Error(`--format must be 'text' or 'json', got: ${format}`);
-  }
+  const format = parseFormat(args);
   const rootId = args.positional[0];
   if (!rootId) {
     throw new Error('Usage: gate chain <request-id | issue-id>');

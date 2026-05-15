@@ -8,6 +8,7 @@ import { GuildConfig } from '../../../../infrastructure/config/GuildConfig.js';
 import { resolvePlayForVerb } from './resolvePlay.js';
 import { parsePlayId } from '../../domain/Play.js';
 import { DomainError } from '../../../../domain/shared/DomainError.js';
+import { parseFormat } from '../../../../interface/shared/parseFormat.js';
 
 const CLIFF_KNOWN_FLAGS: ReadonlySet<string> = new Set(['game', 'format']);
 
@@ -61,11 +62,7 @@ export async function cliffOf(deps: CliffDeps, args: ParsedArgs): Promise<number
   const playId = parsePlayId(positional);
 
   const gameFilter = optionalOption(args, 'game');
-  const format = optionalOption(args, 'format') ?? 'text';
-  if (format !== 'json' && format !== 'text') {
-    process.stderr.write(`error: --format must be 'json' or 'text', got: ${format}\n`);
-    return 1;
-  }
+  const format = parseFormat(args);
 
   // resolvePlayForVerb throws PlayIdAmbiguous on cross-game collision
   // (#205); the entry-point's outer catch surfaces it through

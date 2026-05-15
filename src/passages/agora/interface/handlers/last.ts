@@ -7,6 +7,7 @@ import {
   requireOption,
 } from '../../../../interface/shared/parseArgs.js';
 import { GuildConfig } from '../../../../infrastructure/config/GuildConfig.js';
+import { parseFormat } from '../../../../interface/shared/parseFormat.js';
 
 const LAST_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'by',
@@ -74,11 +75,7 @@ export async function lastPlay(deps: LastDeps, args: ParsedArgs): Promise<number
   }
 
   const includeConcluded = args.options['include-concluded'] === true;
-  const format = optionalOption(args, 'format') ?? 'text';
-  if (format !== 'json' && format !== 'text') {
-    process.stderr.write(`error: --format must be 'json' or 'text', got: ${format}\n`);
-    return 1;
-  }
+  const format = parseFormat(args);
 
   let plays: Play[] = await deps.plays.listAll();
   // started_by is the canonical "whose play is this" field.

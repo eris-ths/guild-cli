@@ -15,6 +15,7 @@ import {
 import { GuildConfig } from '../../../../infrastructure/config/GuildConfig.js';
 import { DomainError } from '../../../../domain/shared/DomainError.js';
 import { emitErrorEnvelope } from '../../../../interface/shared/errorEnvelope.js';
+import { parseFormat } from '../../../../interface/shared/parseFormat.js';
 
 const CONCLUDE_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'synthesis',
@@ -90,11 +91,7 @@ export async function concludeReview(
     : [];
 
   const by = requireOption(args, 'by', '<m>', 'GUILD_ACTOR');
-  const format = optionalOption(args, 'format') ?? 'text';
-  if (format !== 'json' && format !== 'text') {
-    process.stderr.write(`error: --format must be 'json' or 'text', got: ${format}\n`);
-    return 1;
-  }
+  const format = parseFormat(args);
 
   const review = await deps.reviews.findById(reviewId);
   if (!review) throw new DevilReviewNotFound(reviewId);

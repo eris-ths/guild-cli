@@ -27,6 +27,7 @@ import {
 import { C, parseOptionalIntOption } from './internal.js';
 import { parseDuration } from './lenseStats.js';
 import { resolveGuildActor } from '../../shared/resolveGuildActor.js';
+import { parseFormat } from '../../shared/parseFormat.js';
 
 // limit: sibling gate-voices accepts --limit; aligning here removes a
 // cross-verb inconsistency. Applied post-sort so the most-recent N survive.
@@ -81,15 +82,12 @@ export async function decisionsCmd(c: C, args: ParsedArgs): Promise<number> {
   const forActor = optionalOption(args, 'for') ?? resolveGuildActor() ?? null;
   if (!forActor) {
     throw new Error(
-      'gate decisions: --for <actor> is required when GUILD_ACTOR is not set.' +
+      '--for <actor> is required when GUILD_ACTOR is not set.' +
         '\n  next: pass --for <name>, or `export GUILD_ACTOR=<you>` once per shell.',
     );
   }
   const sinceRaw = optionalOption(args, 'since') ?? '7d';
-  const format = optionalOption(args, 'format') ?? 'text';
-  if (format !== 'text' && format !== 'json') {
-    throw new Error(`--format must be 'text' or 'json', got: ${format}`);
-  }
+  const format = parseFormat(args);
 
   const now = new Date();
   const sinceMs = parseDuration(sinceRaw);

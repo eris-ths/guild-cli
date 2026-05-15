@@ -7,6 +7,7 @@ import {
   rejectUnknownFlags,
 } from '../../../../interface/shared/parseArgs.js';
 import { GuildConfig } from '../../../../infrastructure/config/GuildConfig.js';
+import { parseFormat } from '../../../../interface/shared/parseFormat.js';
 
 const OPEN_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'type',
@@ -64,11 +65,7 @@ export async function openReview(deps: OpenDeps, args: ParsedArgs): Promise<numb
   const type = parseTargetType(typeRaw);
 
   const by = requireOption(args, 'by', '<m>', 'GUILD_ACTOR');
-  const format = optionalOption(args, 'format') ?? 'text';
-  if (format !== 'json' && format !== 'text') {
-    process.stderr.write(`error: --format must be 'json' or 'text', got: ${format}\n`);
-    return 1;
-  }
+  const format = parseFormat(args);
 
   // Allocate sequence: rev-YYYY-MM-DD-NNN. The dateKey comes from the
   // runtime clock — same source pattern as agora play and gate
@@ -119,10 +116,14 @@ export async function openReview(deps: OpenDeps, args: ParsedArgs): Promise<numb
         `        or devil ingest ${review.id} --from <ultrareview|claude-security|scg> <input>\n`,
     );
   }
-  const configSegment =
-    deps.config.configFile === null
-      ? 'config: none — cwd used as fallback root'
-      : `config: ${deps.config.configFile}`;
-  process.stderr.write(`notice: wrote ${where_written} (${configSegment})\n`);
+  // path-disclosure line: text-mode only. JSON consumers already have
+  // `where_written` / `config_file` in the stdout envelope.
+  if (format !== 'json') {
+    const configSegment =
+      deps.config.configFile === null
+        ? 'config: none — cwd used as fallback root'
+        : `config: ${deps.config.configFile}`;
+    process.stderr.write(`notice: wrote ${where_written} (${configSegment})\n`);
+  }
   return 0;
 }

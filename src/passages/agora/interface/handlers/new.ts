@@ -4,6 +4,7 @@ import { ParsedArgs, optionalOption, requireOption, rejectUnknownFlags } from '.
 import { GuildConfig } from '../../../../infrastructure/config/GuildConfig.js';
 import { sanitizeError } from '../../../../interface/shared/sanitizeError.js';
 import { emitErrorEnvelope } from '../../../../interface/shared/errorEnvelope.js';
+import { parseFormat } from '../../../../interface/shared/parseFormat.js';
 
 const NEW_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'slug',
@@ -48,11 +49,7 @@ export async function newGame(deps: NewGameDeps, args: ParsedArgs): Promise<numb
   const title = optionalOption(args, 'title') ?? slug;
   const description = optionalOption(args, 'description');
   const by = requireOption(args, 'by', '<m>', 'GUILD_ACTOR');
-  const format = optionalOption(args, 'format') ?? 'text';
-  if (format !== 'json' && format !== 'text') {
-    process.stderr.write(`error: --format must be 'json' or 'text', got: ${format}\n`);
-    return 1;
-  }
+  const format = parseFormat(args);
 
   let game: Game;
   try {
@@ -127,13 +124,19 @@ export async function newGame(deps: NewGameDeps, args: ParsedArgs): Promise<numb
         `  next: agora play --slug ${game.slug}  (or agora list to see all games)\n`,
     );
   }
-  // Stderr notice mirrors gate register's path-disclosure line shape
-  // (principle 09): one canonical line surface across all create-style
-  // verbs in any passage.
-  const configSegment =
-    deps.config.configFile === null
-      ? 'config: none — cwd used as fallback root'
-      : `config: ${deps.config.configFile}`;
-  process.stderr.write(`notice: wrote ${where_written} (${configSegment})\n`);
+  // Stderr notice mirrors the path-disclosure line shape used across
+  // create-style verbs in agora / devil / ctx (principle 09). Suppressed
+  // in JSON mode because `where_written` and `config_file` are already
+  // emitted in the stdout envelope above — re-printing them on stderr
+  // is pure context pollution for the AI consumer. Text-mode readers
+  // still get the disclosure since the stdout `✓ created` line doesn't
+  // carry the path.
+  if (format !== 'json') {
+    const configSegment =
+      deps.config.configFile === null
+        ? 'config: none — cwd used as fallback root'
+        : `config: ${deps.config.configFile}`;
+    process.stderr.write(`notice: wrote ${where_written} (${configSegment})\n`);
+  }
   return 0;
 }

@@ -4,6 +4,7 @@ import {
   rejectUnknownFlags,
 } from '../../../../interface/shared/parseArgs.js';
 import { DomainError } from '../../../../domain/shared/DomainError.js';
+import { parseFormat } from '../../../../interface/shared/parseFormat.js';
 
 const SCHEMA_KNOWN_FLAGS: ReadonlySet<string> = new Set(['format', 'verb']);
 
@@ -437,11 +438,7 @@ const VERBS: readonly VerbSchema[] = [
 export async function schemaCmd(args: ParsedArgs): Promise<number> {
   rejectUnknownFlags(args, SCHEMA_KNOWN_FLAGS, 'schema');
   const verbFilter = optionalOption(args, 'verb');
-  const format = optionalOption(args, 'format') ?? 'json';
-  if (format !== 'json' && format !== 'text') {
-    process.stderr.write(`error: --format must be 'json' or 'text', got: ${format}\n`);
-    return 1;
-  }
+  const format = parseFormat(args, 'json');
   const verbs = verbFilter ? VERBS.filter((v) => v.name === verbFilter) : VERBS;
   if (verbFilter && verbs.length === 0) {
     // Throw rather than write+return so the entry-point envelope

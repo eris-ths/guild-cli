@@ -5,6 +5,7 @@ import {
   rejectUnknownFlags,
 } from '../../shared/parseArgs.js';
 import { C, parseOptionalIntOption } from './internal.js';
+import { parseFormat } from '../../shared/parseFormat.js';
 import {
   DEFAULT_MAX_AGE_DAYS,
   UnrespondedConcernsEntry,
@@ -59,10 +60,7 @@ export async function unrespondedCmd(
   // silently falling back to the 30-day default would be the
   // exact fail-open shape this guard exists to prevent.
   rejectUnknownFlags(args, UNRESPONDED_KNOWN_FLAGS, 'unresponded');
-  const format = optionalOption(args, 'format') ?? 'text';
-  if (format !== 'json' && format !== 'text') {
-    throw new Error(`--format must be 'json' or 'text', got: ${format}`);
-  }
+  const format = parseFormat(args);
 
   const explicit = optionalOption(args, 'for');
   const envActor = resolveGuildActor();

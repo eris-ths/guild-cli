@@ -22,6 +22,7 @@ import {
   DiagnosticFinding,
 } from '../../../domain/diagnostic/DiagnosticReport.js';
 import { RepairResult } from '../../../application/repair/RepairUseCases.js';
+import { parseFormat } from '../../shared/parseFormat.js';
 
 /**
  * #306 — `--with-doctor` augments the resume payload with a
@@ -177,10 +178,7 @@ interface ResumePayload {
 
 export async function resumeCmd(c: C, args: ParsedArgs): Promise<number> {
   rejectUnknownFlags(args, RESUME_KNOWN_FLAGS, 'resume');
-  const format = optionalOption(args, 'format') ?? 'json';
-  if (format !== 'json' && format !== 'text') {
-    throw new Error(`--format must be 'json' or 'text', got: ${format}`);
-  }
+  const format = parseFormat(args, 'json');
   const withDoctor = args.options['with-doctor'] === true;
   const autoRepair = args.options['auto-repair'] === true;
   if (autoRepair && !withDoctor) {

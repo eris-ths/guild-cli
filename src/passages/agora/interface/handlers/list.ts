@@ -8,6 +8,7 @@ import {
   rejectUnknownFlags,
 } from '../../../../interface/shared/parseArgs.js';
 import { GuildConfig } from '../../../../infrastructure/config/GuildConfig.js';
+import { parseFormat } from '../../../../interface/shared/parseFormat.js';
 
 const LIST_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'game',
@@ -55,11 +56,7 @@ export async function listAgora(deps: ListDeps, args: ParsedArgs): Promise<numbe
     );
     return 1;
   }
-  const format = optionalOption(args, 'format') ?? 'text';
-  if (format !== 'json' && format !== 'text') {
-    process.stderr.write(`error: --format must be 'json' or 'text', got: ${format}\n`);
-    return 1;
-  }
+  const format = parseFormat(args);
 
   // Games: omitted when --game is set (narrowed to a single game's
   // plays; the games list would be one row, not useful).

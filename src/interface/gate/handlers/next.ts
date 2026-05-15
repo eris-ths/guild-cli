@@ -43,6 +43,7 @@ import {
 // re-exports today; import directly from the derivation module so
 // `gate next` reads the same actionable ladder bootCmd assembles.
 import { deriveVerbsAvailableNow } from './bootActionable.js';
+import { parseFormat } from '../../shared/parseFormat.js';
 
 const NEXT_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'confirm',
@@ -87,10 +88,7 @@ interface Plan {
 export async function nextCmd(c: C, args: ParsedArgs): Promise<number> {
   rejectUnknownFlags(args, NEXT_KNOWN_FLAGS, 'next');
   maybeEmitExplain(args, 'next');
-  const format = optionalOption(args, 'format') ?? 'text';
-  if (format !== 'json' && format !== 'text') {
-    throw new Error(`--format must be 'json' or 'text', got: ${format}`);
-  }
+  const format = parseFormat(args);
   const confirm = args.options['confirm'] === true;
 
   const envActor = resolveGuildActor();
@@ -100,7 +98,7 @@ export async function nextCmd(c: C, args: ParsedArgs): Promise<number> {
     // but `next` is specifically about actor-scoped actionable work.
     // Refuse rather than auto-dispatch a meaningless suggestion.
     process.stderr.write(
-      'gate next: GUILD_ACTOR is not set. ' +
+      'error: GUILD_ACTOR is not set. ' +
         'Set it before asking gate next what to do — the actionable ' +
         'ladder is actor-scoped.\n' +
         '  next: export GUILD_ACTOR=<your-name>\n',
@@ -122,7 +120,7 @@ export async function nextCmd(c: C, args: ParsedArgs): Promise<number> {
       : 'unknown';
   if (role === 'unknown') {
     process.stderr.write(
-      `gate next: GUILD_ACTOR=${actor} is not a registered member or host. ` +
+      `error: GUILD_ACTOR=${actor} is not a registered member or host. ` +
         `gate boot would suggest registering — run that first.\n` +
         `  next: gate register --name ${actor}\n`,
     );
@@ -190,7 +188,7 @@ export async function nextCmd(c: C, args: ParsedArgs): Promise<number> {
   if (!canAuto) {
     emitPlan(plan, format, true);
     process.stderr.write(
-      `gate next: '${top.verb}' needs caller-supplied args and won't be ` +
+      `error: '${top.verb}' needs caller-supplied args and won't be ` +
         `auto-dispatched. Run the command shown above with your inputs filled in.\n`,
     );
     return 1;

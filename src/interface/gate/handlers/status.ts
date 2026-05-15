@@ -6,6 +6,7 @@ import {
 } from '../../shared/parseArgs.js';
 import { Request } from '../../../domain/request/Request.js';
 import { C, warnIfMisconfiguredCwd } from './internal.js';
+import { parseFormat } from '../../shared/parseFormat.js';
 
 const STATUS_KNOWN_FLAGS: ReadonlySet<string> = new Set(['for', 'format']);
 
@@ -173,11 +174,7 @@ function renderStatusText(s: StatusSummary): string {
 export async function statusCmd(c: C, args: ParsedArgs): Promise<number> {
   rejectUnknownFlags(args, STATUS_KNOWN_FLAGS, 'status');
   const actor = optionalOption(args, 'for') ?? resolveGuildActor() ?? null;
-  const format = optionalOption(args, 'format') ?? 'json';
-  if (format !== 'json' && format !== 'text') {
-    process.stderr.write(`error: --format must be 'json' or 'text', got: ${format}\n`);
-    return 1;
-  }
+  const format = parseFormat(args, 'json');
 
   const all = await c.requestUC.listAll();
   const summary = collectStatus(all, actor);

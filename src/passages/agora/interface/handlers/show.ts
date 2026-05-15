@@ -10,6 +10,7 @@ import { GuildConfig } from '../../../../infrastructure/config/GuildConfig.js';
 import { emitErrorEnvelope } from '../../../../interface/shared/errorEnvelope.js';
 import { DomainError } from '../../../../domain/shared/DomainError.js';
 import { resolvePlayForVerb } from './resolvePlay.js';
+import { parseFormat } from '../../../../interface/shared/parseFormat.js';
 
 const SHOW_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'game',
@@ -57,11 +58,7 @@ export async function showAgora(deps: ShowDeps, args: ParsedArgs): Promise<numbe
     return 1;
   }
   const gameFilter = optionalOption(args, 'game');
-  const format = optionalOption(args, 'format') ?? 'text';
-  if (format !== 'json' && format !== 'text') {
-    process.stderr.write(`error: --format must be 'json' or 'text', got: ${format}\n`);
-    return 1;
-  }
+  const format = parseFormat(args);
 
   if (PLAY_ID_PATTERN.test(arg)) {
     return await showPlay(deps, arg, gameFilter, format);

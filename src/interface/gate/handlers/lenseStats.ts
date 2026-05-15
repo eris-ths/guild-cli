@@ -34,6 +34,7 @@ import {
 } from '../../shared/parseArgs.js';
 import { C } from './internal.js';
 import { YamlDevilReviewRepository } from '../../../passages/devil/infrastructure/YamlDevilReviewRepository.js';
+import { parseFormat } from '../../shared/parseFormat.js';
 
 const LENSE_STATS_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'for',
@@ -79,10 +80,7 @@ export async function lenseStatsCmd(c: C, args: ParsedArgs): Promise<number> {
   rejectUnknownFlags(args, LENSE_STATS_KNOWN_FLAGS, 'lense-stats');
   const forActor = optionalOption(args, 'for') ?? null;
   const sinceRaw = optionalOption(args, 'since') ?? '7d';
-  const format = optionalOption(args, 'format') ?? 'text';
-  if (format !== 'text' && format !== 'json') {
-    throw new Error(`--format must be 'text' or 'json', got: ${format}`);
-  }
+  const format = parseFormat(args);
 
   const now = new Date();
   const sinceMs = parseDuration(sinceRaw);

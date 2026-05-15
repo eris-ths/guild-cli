@@ -234,5 +234,5 @@ test('gate issues list --format bogus errors', (t) => {
     { GUILD_ACTOR: 'alice' },
   );
   assert.notEqual(r.status, 0);
-  assert.match(r.stderr, /--format must be 'text' or 'json'/);
+  assert.match(r.stderr, /--format must be 'json' or 'text'/);
 });

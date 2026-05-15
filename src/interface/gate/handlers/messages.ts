@@ -13,6 +13,7 @@ import {
   normalizeActor,
 } from './internal.js';
 import { InboxMessage } from '../../../application/ports/NotificationPort.js';
+import { parseFormat } from '../../shared/parseFormat.js';
 
 /**
  * Serialise an InboxMessage for `gate inbox --format json`. snake_case
@@ -174,10 +175,7 @@ export async function msgInbox(c: C, args: ParsedArgs): Promise<number> {
   rejectUnknownFlags(args, INBOX_KNOWN_FLAGS, 'inbox');
   const forName = requireOption(args, 'for', '<m>', 'GUILD_ACTOR');
   const unreadOnly = args.options['unread'] === true;
-  const format = optionalOption(args, 'format') ?? 'text';
-  if (format !== 'text' && format !== 'json') {
-    throw new Error(`--format must be 'text' or 'json', got: ${format}`);
-  }
+  const format = parseFormat(args);
   const messages = await c.messageUC.inbox(forName);
   const filtered = unreadOnly
     ? messages.filter((m) => !m.read)

@@ -12,6 +12,7 @@ import {
 } from '../../../../interface/shared/parseArgs.js';
 import { GuildConfig } from '../../../../infrastructure/config/GuildConfig.js';
 import { resolvePlayForVerb } from './resolvePlay.js';
+import { parseFormat } from '../../../../interface/shared/parseFormat.js';
 
 const MOVE_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'by',
@@ -51,11 +52,7 @@ export async function moveOnPlay(deps: MoveDeps, args: ParsedArgs): Promise<numb
   }
   const text = requireOption(args, 'text', '"..."');
   const by = requireOption(args, 'by', '<m>', 'GUILD_ACTOR');
-  const format = optionalOption(args, 'format') ?? 'text';
-  if (format !== 'json' && format !== 'text') {
-    process.stderr.write(`error: --format must be 'json' or 'text', got: ${format}\n`);
-    return 1;
-  }
+  const format = parseFormat(args);
 
   const gameFilter = optionalOption(args, 'game');
   const play = await resolvePlayForVerb(deps.plays, playId, gameFilter);

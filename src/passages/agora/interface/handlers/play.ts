@@ -8,6 +8,7 @@ import {
   rejectUnknownFlags,
 } from '../../../../interface/shared/parseArgs.js';
 import { GuildConfig } from '../../../../infrastructure/config/GuildConfig.js';
+import { parseFormat } from '../../../../interface/shared/parseFormat.js';
 
 const PLAY_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'slug',
@@ -44,11 +45,7 @@ export async function startPlay(deps: PlayDeps, args: ParsedArgs): Promise<numbe
 
   const slug = requireOption(args, 'slug', '<game-slug>');
   const by = requireOption(args, 'by', '<m>', 'GUILD_ACTOR');
-  const format = optionalOption(args, 'format') ?? 'text';
-  if (format !== 'json' && format !== 'text') {
-    process.stderr.write(`error: --format must be 'json' or 'text', got: ${format}\n`);
-    return 1;
-  }
+  const format = parseFormat(args);
 
   const game = await deps.games.findBySlug(slug);
   if (!game) {
@@ -103,10 +100,15 @@ export async function startPlay(deps: PlayDeps, args: ParsedArgs): Promise<numbe
         `        or agora suspend ${play.id} --game ${play.game} --cliff "..." --invitation "..."  (leave a cliff)\n`,
     );
   }
-  const configSegment =
-    deps.config.configFile === null
-      ? 'config: none — cwd used as fallback root'
-      : `config: ${deps.config.configFile}`;
-  process.stderr.write(`notice: wrote ${where_written} (${configSegment})\n`);
+  // path-disclosure line: text-mode only. JSON consumers already have
+  // `where_written` / `config_file` in the stdout envelope, so re-emitting
+  // them on stderr is pure context pollution.
+  if (format !== 'json') {
+    const configSegment =
+      deps.config.configFile === null
+        ? 'config: none — cwd used as fallback root'
+        : `config: ${deps.config.configFile}`;
+    process.stderr.write(`notice: wrote ${where_written} (${configSegment})\n`);
+  }
   return 0;
 }

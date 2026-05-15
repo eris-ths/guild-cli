@@ -6,6 +6,7 @@ import {
 import { notFoundMessage } from '../../shared/notFoundHint.js';
 import { C } from './internal.js';
 import { Request } from '../../../domain/request/Request.js';
+import { parseFormat } from '../../shared/parseFormat.js';
 
 const SUMMARIZE_KNOWN_FLAGS: ReadonlySet<string> = new Set(['format']);
 
@@ -42,10 +43,7 @@ export async function summarizeCmd(c: C, args: ParsedArgs): Promise<number> {
   rejectUnknownFlags(args, SUMMARIZE_KNOWN_FLAGS, 'summarize');
   const id = args.positional[0];
   if (!id) throw new Error('Usage: gate summarize <id> [--format text|json]');
-  const format = optionalOption(args, 'format') ?? 'text';
-  if (format !== 'text' && format !== 'json') {
-    throw new Error(`--format must be 'text' or 'json', got: ${format}`);
-  }
+  const format = parseFormat(args);
   const r = await c.requestUC.show(id);
   if (!r) {
     process.stderr.write(notFoundMessage('request', id));
