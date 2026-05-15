@@ -206,6 +206,14 @@ export interface RequestProps {
    * Same shape as `promotedFrom` (the issue→request equivalent). Issue
    * #232 — surfaces "this request came out of <play>" without forcing
    * the operator to remember to mention the id in prose.
+   *
+   * Advisory (principle 02) — ambient by design. Currently read only
+   * by `gate show` for display (`requestReads.ts`); the schema
+   * description previously promised `gate chain`-style navigation
+   * would lift this, but no consumer ships today. Audited
+   * 2026-05-15 in #344 and reframed as cold-reader audit material:
+   * the agora→gate bridge itself was the value, the back-reference
+   * is bonus.
    */
   sourceAgoraPlay?: string;
   /**
@@ -231,7 +239,15 @@ export interface RequestProps {
    * if you stamped a template, the version and gate-acknowledgement
    * round-trip with it). Pre-#235 records lack all three fields and
    * hydrate as undefined (template-less). Byte-stable round-trip for
-   * non-template records. */
+   * non-template records.
+   *
+   * Advisory (principle 02) — ambient by design (this field and the
+   * two below). Currently read only by `gate show` for the
+   * `(v<N>) [gate-ack]` badge in `requestReads.ts`. The value carries
+   * principle-04 audit weight (records-outlive-writers): a future
+   * reader can tell which template body the request was authored
+   * against even after the template skeleton drifts. No further
+   * runtime consumer needed. Audited 2026-05-15 in #344. */
   template?: string;
   /** Template version (#235). Currently always 1; bumps if a template's
    *  intended_use or skeleton meaningfully changes. Paired with

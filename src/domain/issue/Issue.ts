@@ -204,7 +204,24 @@ export interface IssueStateLogEntry {
 export interface IssueProps {
   id: IssueId;
   from: MemberName;
+  /**
+   * Advisory (principle 02) — ambient by design.
+   * Stamped on creation and displayed in `gate issues show`, but no
+   * verb reads the stored value to alter behavior. The behavior-side
+   * consumer is `gate flow-suggest --severity <s>`, which takes the
+   * value from the CLI flag (the invocation), not from the stored
+   * issue. The stored field is cold-reader audit material — a future
+   * reader can see "this issue was filed as high-severity" even if
+   * no runtime branch fires on it. Audited 2026-05-15 in #344.
+   */
   severity: IssueSeverity;
+  /**
+   * Advisory (principle 02) — ambient by design.
+   * Same shape as `severity` above: stamped on creation, displayed
+   * in `gate issues show`, behavior consumer (`gate flow-suggest
+   * --area <a>`) reads from the CLI flag, not the stored value.
+   * Cold-reader audit material. Audited 2026-05-15 in #344.
+   */
   area: string;
   text: string;
   state: IssueState;

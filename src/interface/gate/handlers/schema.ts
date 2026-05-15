@@ -1537,10 +1537,11 @@ const VERBS: readonly VerbSchema[] = [
             '(#232). Lifts the play\'s most-recent suspension cliff into ' +
             '--reason and invitation into --action; either flag may still ' +
             'be passed explicitly to override the corresponding lift. ' +
-            'Stamps source_agora_play on the record so `gate chain`-style ' +
-            'walks see the agora→gate edge. Refuses on concluded plays ' +
-            'and on plays with no suspension on record (state=playing, ' +
-            'never suspended).',
+            'Stamps source_agora_play on the record as ambient ' +
+            'audit material (advisory per principle 02; #344 audit ' +
+            'confirmed cold-reader-only consumer in `gate show` today). ' +
+            'Refuses on concluded plays and on plays with no suspension ' +
+            'on record (state=playing, never suspended).',
         ),
         game: strOpt(
           'agora game slug; only meaningful with --from-agora (#232). ' +
