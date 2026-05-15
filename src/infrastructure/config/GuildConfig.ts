@@ -165,6 +165,14 @@ export interface GuildConfigProps {
 const DEFAULT_HOSTS = ['eris', 'nao'] as const;
 
 /**
+ * Module-private one-shot guard for the `GUILD_CONFIG=""` empty-but-
+ * set stderr nudge. Set on first emission; subsequent loads in the
+ * same process skip the emit. See the comment at the call site in
+ * `GuildConfig.load()` for the per-process semantics rationale.
+ */
+let emptyGuildConfigNudgeFired = false;
+
+/**
  * GuildConfig — file-based config with path safety.
  *
  * All resolved paths must live under `contentRoot`. This is the single
@@ -237,11 +245,18 @@ export class GuildConfig implements GuildConfigProps {
       // silent fallback to cwd walk-up here is the footgun mode
       // where the caller thinks they're clearing the override but
       // is actually letting walk-up decide the substrate.
-      if (envConfig === '') {
+      //
+      // Deduped at module scope per Node process: `GuildConfig.load()`
+      // fires multiple times in one invocation (top-level + at least
+      // one plugin loader). Without dedup the nudge surfaces twice
+      // and looks noisy. A new process re-emits the nudge because
+      // the operator may have changed shells / scripts between.
+      if (envConfig === '' && !emptyGuildConfigNudgeFired) {
         process.stderr.write(
           'guild-cli: GUILD_CONFIG is set but empty — treating as unset, falling back to cwd walk-up.\n' +
             '  Hint: `unset GUILD_CONFIG` to clear cleanly, or set to an absolute path to a guild.config.yaml.\n',
         );
+        emptyGuildConfigNudgeFired = true;
       }
       configPath = findConfig(cwd);
     }
