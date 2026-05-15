@@ -30,7 +30,7 @@ If you are reading the codebase for the first time, the [`Quick vocabulary`](./c
 - **trap** — a reusable operational pattern flagged for future review. Lives at `lore/traps/<trap_name>.md` with `relevant_until: <date> | indefinite` frontmatter. Quarantined (not deleted) when expired via `gate doctor sweep-traps`. See [`lore/traps/README.md`](../lore/traps/README.md).
 - **felt-not-just-read** — the graduation bar from trap to principle: the pattern is named consistently from independent observations, not just read from someone else's notes.
 - **advisory** — a record field that downstream consumers MAY read to alter behaviour, but enforcement is not built into the substrate. Pinned by [principle 02](../lore/principles/02-advisory-not-directive.md). Examples: `Request.depth` (consumed by `gate review-context` #310), issue `severity`, `auto_review`. The "stamped but unread" audit lives at [#344](https://github.com/eris-ths/guild-cli/issues/344).
-- **applies_to** — optional YAML frontmatter on `lore/principles/*.md` declaring audience scope. Values: `all` (default), `swarm`, `passage:<gate|agora|devil|ctx>`. Filter via `tools/lore-scope.sh`. See [`lore/README.md`](../lore/README.md) § "`applies_to:` frontmatter convention".
+- **applies_to** — optional YAML frontmatter on `lore/principles/*.md` declaring audience scope. Values: `all` (default), `swarm`, `passage:<gate|agora|devil|ctx>`. Filter via `scripts/lore-scope.sh`. See [`lore/README.md`](../lore/README.md) § "`applies_to:` frontmatter convention".
 
 ## Review / judgment
 
