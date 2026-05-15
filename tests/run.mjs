@@ -63,18 +63,27 @@ if (files.length === 0) {
 // Parallelize across files. Most tests in this suite spend their
 // wall time in `spawnSync(gate.mjs)` — i.e. process startup + I/O
 // — so concurrency well above the runner's vCPU count still pays
-// off. Empirical: on a 4 vCPU GitHub `ubuntu-latest` runner, the
-// suite halves at `--test-concurrency=4` and trims another ~30%
-// at 8 (point of diminishing returns).
+// off. Empirical (2026-05-15 measurement on a 10-core M-series mac
+// running the 173-test suite):
 //
-// Override via env (`TEST_CONCURRENCY=1` for serial reproductions,
-// higher for local 8+ vCPU laptops). Default 4 — the floor that
-// matches the standard GitHub Actions Linux runner.
+//   --test-concurrency=4   → 513s   (previous default)
+//   --test-concurrency=8   → ~310s
+//   --test-concurrency=12  → 224s
+//   --test-concurrency=20  → 159s
+//
+// The suite is subprocess-spawn-bound (119/173 tests `spawnSync` a
+// fresh `gate.mjs`), not CPU-bound, so oversubscription pays even
+// on 4 vCPU CI. Default raised from 4 → 8 — safe on the 4 vCPU
+// GitHub `ubuntu-latest` runner and still halves wall time vs the
+// old default.
+//
+// Override via env: `TEST_CONCURRENCY=1` for serial reproductions,
+// higher (12-20) for local 8+ vCPU laptops.
 const concurrencyEnv = process.env['TEST_CONCURRENCY'];
 const concurrency =
   concurrencyEnv && /^\d+$/.test(concurrencyEnv) && Number(concurrencyEnv) > 0
     ? concurrencyEnv
-    : '4';
+    : '8';
 
 const result = spawnSync(
   process.execPath,
