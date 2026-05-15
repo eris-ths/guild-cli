@@ -52,7 +52,7 @@ What `gate` does instead:
   refuses to be visible to the scored party, which is the shape
   this principle demands.
 - **Prefer detectors at the aggregate, not the individual.**
-  `mcp/plugins/self-loop-check.mjs` reports patterns across recent
+  `examples/mcp/plugins/self-loop-check.mjs` reports patterns across recent
   records; it does not flag individuals. Aggregate signals inform
   cultural choices; individual signals become surveillance.
 

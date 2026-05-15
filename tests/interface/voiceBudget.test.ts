@@ -25,7 +25,7 @@
 // Scope:
 //   Scans every executable layer:
 //     `src/application/**`, `src/domain/**`, `src/infrastructure/**`,
-//     `src/interface/**`, and `mcp/plugins/**`.
+//     `src/interface/**`, and `examples/mcp/plugins/**`.
 //   Deliberately does NOT scan `lore/`, `docs/`, `CONTRIBUTING.md`,
 //   `CHANGELOG.md`, or `tests/` — those are metadata layers; principle
 //   08 specifically names voice in the running code, not in surrounding
@@ -55,7 +55,7 @@ const SCAN_ROOTS: readonly string[] = [
   'src/domain',
   'src/infrastructure',
   'src/interface',
-  'mcp/plugins',
+  'examples/mcp/plugins',
 ];
 
 interface BudgetEntry {
@@ -117,7 +117,7 @@ const VOICE_BUDGET: readonly BudgetEntry[] = [
   {
     phrase: 'DETECTOR, not an enforcer',
     budget: 1,
-    allowed_files: ['mcp/plugins/self-loop-check.mjs'],
+    allowed_files: ['examples/mcp/plugins/self-loop-check.mjs'],
     rationale:
       'principle 07 phrasing applied at a plugin. budget 1: each ' +
       'plugin should name its own detector posture in its own words; ' +
@@ -177,7 +177,7 @@ function walk(absDir: string): string[] {
     entries = readdirSync(absDir);
   } catch {
     // Missing scan root is non-fatal — repo layout may legitimately
-    // omit one of the directories (e.g. mcp/plugins on a slim install).
+    // omit one of the directories (e.g. examples/mcp/plugins on a slim install).
     return out;
   }
   for (const name of entries) {
