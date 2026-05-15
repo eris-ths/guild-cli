@@ -47,9 +47,10 @@ interface Section {
 // BASE (14): request, approve, execute, complete, fail, review,
 //            show, list, tail, boot, register, doctor, fast-track,
 //            schema
-// COORDINATION (5): claim, witness, unwitness, wave-status,
-//                   slice-complete (slice-complete is forthcoming
-//                   and intentionally absent from the help body).
+// COORDINATION (6): claim, witness, unwitness, wave-status,
+//                   swarm-status, slice-complete (slice-complete is
+//                   forthcoming and intentionally absent from the
+//                   help body).
 
 const SECTIONS: readonly Section[] = [
   {
@@ -231,6 +232,24 @@ const SECTIONS: readonly Section[] = [
           '                       executor progress, claim/witness occupancy,\n' +
           '                       and aggregate state. Companion to claim /\n' +
           '                       witness for swarm coordination.',
+      },
+      {
+        tier: 'coordination',
+        text:
+          '  gate swarm-status [--orchestrating <actor>] [--for <actor>]\n' +
+          '                    [--format text|json]\n' +
+          '                       Cross-wave director / participant view.\n' +
+          '                       Composes wave-status across all active waves\n' +
+          '                       into one envelope so a director never has to\n' +
+          '                       chain 1+N+N×M sub-reads. Returns waves, distinct\n' +
+          '                       executor count, and a flat alerts array\n' +
+          '                       (stale_executor / overlapping_target /\n' +
+          '                       attribution_risk). --orchestrating filters to\n' +
+          '                       waves authored by <actor> ("what swarm am I\n' +
+          '                       conducting?"); --for filters to waves where\n' +
+          '                       <actor> participates anywhere. When neither is\n' +
+          '                       set and GUILD_ACTOR is in env, defaults to\n' +
+          '                       --orchestrating=$GUILD_ACTOR.',
       },
       {
         tier: 'coordination',

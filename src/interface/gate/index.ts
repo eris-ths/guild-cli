@@ -51,6 +51,7 @@ import { suggestCmd } from './handlers/suggest.js';
 import { flowSuggestCmd } from './handlers/flowSuggest.js';
 import { transcriptCmd } from './handlers/transcript.js';
 import { waveStatusCmd } from './handlers/waveStatus.js';
+import { swarmStatusCmd } from './handlers/swarmStatus.js';
 import { lenseStatsCmd } from './handlers/lenseStats.js';
 import { reviewContextCmd } from './handlers/reviewContext.js';
 import { decisionsCmd } from './handlers/decisions.js';
@@ -100,6 +101,7 @@ const KNOWN_COMMANDS = [
   'wake',
   'farewell',
   'wave-status',
+  'swarm-status',
   'lense-stats',
   'review-context',
   'decisions',
@@ -342,6 +344,8 @@ async function dispatch(
       return await transcriptCmd(c, args);
     case 'wave-status':
       return await waveStatusCmd(c, args);
+    case 'swarm-status':
+      return await swarmStatusCmd(c, args);
     case 'lense-stats':
       return await lenseStatsCmd(c, args);
     case 'review-context':

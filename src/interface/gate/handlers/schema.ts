@@ -837,6 +837,98 @@ const VERBS: readonly VerbSchema[] = [
     },
   },
   {
+    name: 'swarm-status',
+    category: 'read',
+    summary:
+      "cross-wave director / participant view (#346). Closes the principle-14 loop: composes wave-status across all active waves into one envelope so the director never has to compose 1 + N + N×M sub-reads. Returns waves, distinct-executor count, and a flat alerts array (stale_executor / overlapping_target / attribution_risk). Read-only; live picture not a stored snapshot.",
+    input: {
+      type: 'object',
+      properties: {
+        orchestrating: {
+          type: 'string',
+          description:
+            'director-centric scope: keep only waves where this actor is the `from` author. "what swarm am I conducting?" When neither this nor --for is set and GUILD_ACTOR is in the env, defaults to orchestrating=GUILD_ACTOR (reported as scope.for_source="env").',
+        },
+        for: {
+          type: 'string',
+          description:
+            'participant-centric scope: keep waves where this actor is from / executor / auto-review / with-partner. "what swarm am I part of?" Composes with --orchestrating via AND when both are set.',
+        },
+        format: formatField,
+      },
+    },
+    output: {
+      type: 'object',
+      properties: {
+        as_of: str,
+        scope: {
+          type: 'object',
+          properties: {
+            orchestrating: { type: 'string', description: 'echoed --orchestrating; null when unset' },
+            for: { type: 'string', description: 'echoed --for; null when unset' },
+            for_source: {
+              type: 'string',
+              enum: ['flag', 'env'],
+              description: 'whether the scope came from a flag or from GUILD_ACTOR; null when no scope applied',
+            },
+          },
+        },
+        summary: {
+          type: 'object',
+          properties: {
+            active_waves: { type: 'integer' },
+            distinct_executors: { type: 'integer' },
+            alerts: { type: 'integer' },
+          },
+        },
+        waves: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              id: str,
+              state: str,
+              from: str,
+              age_ms: { type: 'integer', description: 'ms since wave was approved; null when never approved' },
+              age_band: { type: 'string', enum: ['fresh', 'in-progress', 'stale'] },
+              approved_at: { type: 'string', description: 'ISO timestamp of first approved entry; null when never approved' },
+              executors: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    name: str,
+                    slice_status: { type: 'string', enum: ['pending', 'completed', 'failed', 'unknown'] },
+                    last_attributable_at: { type: 'string', description: 'most recent ISO timestamp attributable to this executor; null when none' },
+                    activity_band: {
+                      type: 'string',
+                      enum: ['fresh', 'in-progress', 'stale', 'active'],
+                    },
+                    claim_held: { type: 'boolean' },
+                    witness_session: { type: 'string', description: 'null when no session_id was stamped on the witness' },
+                  },
+                },
+              },
+              wave_stale_effective: { type: 'boolean', description: 'true when every executor reads as stale (#309 semantics)' },
+            },
+          },
+        },
+        alerts: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              kind: { type: 'string', enum: ['stale_executor', 'overlapping_target', 'attribution_risk'] },
+              wave_id: str,
+              actor: str,
+              why: str,
+            },
+          },
+        },
+      },
+    },
+  },
+  {
     name: 'lense-stats',
     category: 'read',
     summary:
