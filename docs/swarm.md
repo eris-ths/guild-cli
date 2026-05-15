@@ -240,11 +240,15 @@ fixes:
   Per-slice closure is not first-class on the substrate. Follow-up
   to #230 (see issue tracker — `gate slice-complete` / per-executor
   status field).
-- **In-flight slice status not visible** — `gate boot` and the
-  overlap surface (#234) detect cross-request overlap but don't
-  expose per-executor progress inside a single wave. A future
-  `gate wave-status <id>` read verb composes per-executor latest
-  witness + last write; tracked separately.
+- **In-flight slice status visible at two scales** — `gate
+  wave-status <id>` returns per-executor progress inside one wave
+  (witness notes, claim/witness occupancy, freshness band).
+  `gate swarm-status [--orchestrating <m>] [--for <m>]` (#346)
+  returns the same shape composed *across* every active wave in
+  scope, so a director conducting multiple waves never has to chain
+  `board` + per-wave `wave-status` reads. Alerts surface
+  `stale_executor` / `overlapping_target` / `attribution_risk` as a
+  flat array — one read closes the principle-14 loop.
 - **Judgment trail is half** — the substrate captures who-did-what
   (operational) but not why-this-option-not-that (judgment). The
   per-slice agora play is the right home for the judgment layer;
