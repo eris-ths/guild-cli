@@ -76,3 +76,39 @@ test('GUILD_CONFIG unset (env var absent) emits no nudge', (t) => {
   assert.equal(r.status, 0, `expected exit 0, got ${r.status}\n${r.stderr}`);
   assert.doesNotMatch(r.stderr ?? '', /GUILD_CONFIG is set but empty/);
 });
+
+// -------------------- bogus path → clean error envelope (no stack trace) --------------------
+
+test('GUILD_CONFIG=/nonexistent prints clean error: line, no Node stack trace', (t) => {
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  const r = runGate(root, ['voices'], { GUILD_CONFIG: '/nonexistent/guild.config.yaml' });
+  assert.notEqual(r.status, 0, 'bogus path must exit non-zero');
+  // Clean error envelope: starts with `error: ` and carries the
+  // DomainError message verbatim.
+  assert.match(r.stderr, /^error: GUILD_CONFIG=/m);
+  assert.match(r.stderr, /does not exist/);
+  // Must NOT surface as a raw Node "Unhandled promise rejection"
+  // stack trace — that's the regression the bin-level catch
+  // handler closes (handleMainError in bin/_lib/).
+  assert.doesNotMatch(r.stderr, /at file:\/\/.*bin\/gate\.mjs/);
+  assert.doesNotMatch(r.stderr, /Node\.js v\d+/);
+});
+
+// -------------------- nudge dedup --------------------
+
+test('GUILD_CONFIG="" emits the nudge exactly once per process (dedup)', (t) => {
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  const r = runGate(root, ['voices'], { GUILD_CONFIG: '' });
+  assert.equal(r.status, 0, `expected exit 0, got ${r.status}\n${r.stderr}`);
+  // GuildConfig.load() fires multiple times per invocation (top-
+  // level + plugin loaders). The module-private flag ensures the
+  // stderr nudge surfaces exactly once.
+  const matches = r.stderr.match(/GUILD_CONFIG is set but empty/g);
+  assert.equal(
+    matches === null ? 0 : matches.length,
+    1,
+    `expected nudge to fire exactly once, got ${matches === null ? 0 : matches.length}`,
+  );
+});

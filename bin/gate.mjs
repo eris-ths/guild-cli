@@ -10,6 +10,7 @@
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { checkDistFreshness } from './_lib/checkDistFreshness.mjs';
+import { handleMainError } from './_lib/handleMainError.mjs';
 // Make stdout/stderr blocking so large payloads (e.g. `gate schema --format
 // json`, `gate boot` on busy substrates) drain before the trailing
 // `process.exit` truncates them. Pipe writes are async by default; on
@@ -51,4 +52,6 @@ try {
   }
   throw err;
 }
-main(process.argv.slice(2)).then((code) => process.exit(code));
+main(process.argv.slice(2))
+  .then((code) => process.exit(code))
+  .catch(handleMainError('gate'));
