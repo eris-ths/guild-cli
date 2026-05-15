@@ -150,11 +150,23 @@ test('GuildConfig.load: empty GUILD_CONFIG falls back to walk-up (treated as uns
     );
     const prev = process.env['GUILD_CONFIG'];
     process.env['GUILD_CONFIG'] = '';
+    // Capture stderr to verify the footgun-nudge fires.
+    const origStderr = process.stderr.write.bind(process.stderr);
+    let captured = '';
+    process.stderr.write = ((s: string | Uint8Array) => {
+      captured += typeof s === 'string' ? s : Buffer.from(s).toString();
+      return true;
+    }) as typeof process.stderr.write;
     try {
       const cfg = GuildConfig.load(dir);
       // empty string is treated as unset; walk-up finds the local config
       assert.equal(cfg.configFile, join(dir, 'guild.config.yaml'));
+      // ...AND a one-line nudge surfaces the footgun (caller likely
+      // wanted to clear the override but used `=` instead of `unset`).
+      assert.match(captured, /GUILD_CONFIG is set but empty/);
+      assert.match(captured, /unset GUILD_CONFIG/);
     } finally {
+      process.stderr.write = origStderr;
       if (prev === undefined) delete process.env['GUILD_CONFIG'];
       else process.env['GUILD_CONFIG'] = prev;
     }

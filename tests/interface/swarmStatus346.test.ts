@@ -229,3 +229,26 @@ test('#346: unknown flag rejected (schema-as-contract drift guard)', (t) => {
   assert.notEqual(r.status, 0);
   assert.match(r.stderr, /unknown flag.*bogus/);
 });
+
+// -------------------- legacy / no-executor rendering --------------------
+
+test('#346: waves with no executors render on a single line + summary hint fires', (t) => {
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  // Two pending waves, both without executors (the pre-#230 / freshly-
+  // filed-pending shape).
+  for (let i = 0; i < 2; i += 1) {
+    runGate(root, [
+      'request', '--from', 'alice',
+      '--action', `work ${i}`, '--reason', 'r',
+    ]);
+  }
+  const r = runGate(root, ['swarm-status', '--format', 'text']);
+  assert.equal(r.status, 0, r.stderr);
+  // Summary-line hint surfaces the "this looks like swarm but isn't" case.
+  assert.match(r.stdout, /no executor-stamped activity/);
+  // Single-line rendering: each wave line ends with "(no executors)" and
+  // there is no separate indented "(no executors assigned)" sub-line.
+  assert.match(r.stdout, /\(no executors\)/);
+  assert.doesNotMatch(r.stdout, /\(no executors assigned\)/);
+});
