@@ -34,6 +34,7 @@ import {
   rejectUnknownFlags,
 } from '../../shared/parseArgs.js';
 import { maybeEmitExplain } from '../../shared/explain.js';
+import { parseFormat } from '../../shared/parseFormat.js';
 import {
   VOICE_MODE_FILE,
   resolveActiveVoiceName,
@@ -45,10 +46,7 @@ const VOICE_KNOWN_FLAGS: ReadonlySet<string> = new Set(['format']);
 export async function voiceCmd(c: C, args: ParsedArgs): Promise<number> {
   rejectUnknownFlags(args, VOICE_KNOWN_FLAGS, 'voice');
   maybeEmitExplain(args, 'voice');
-  const format = optionalOption(args, 'format') ?? 'text';
-  if (format !== 'json' && format !== 'text') {
-    throw new Error(`--format must be 'json' or 'text', got: ${format}`);
-  }
+  const format = parseFormat(args);
 
   const arg = args.positional[0];
   const filePath = join(c.config.contentRoot, VOICE_MODE_FILE);

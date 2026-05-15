@@ -1,5 +1,6 @@
 import { promises as fs } from 'node:fs';
 import { join, basename } from 'node:path';
+import { parseFormat } from '../../shared/parseFormat.js';
 import {
   ParsedArgs,
   optionalOption,
@@ -82,11 +83,7 @@ export async function doctorCmd(c: C, args: ParsedArgs): Promise<number> {
     return await sweepTrapsCmd(c, args);
   }
   rejectUnknownFlags(args, DOCTOR_KNOWN_FLAGS, 'doctor');
-  const format = optionalOption(args, 'format') ?? 'text';
-  if (format !== 'json' && format !== 'text') {
-    process.stderr.write(`error: --format must be 'json' or 'text', got: ${format}\n`);
-    return 1;
-  }
+  const format = parseFormat(args);
   const report = await c.diagnosticUC.run();
   const summaryOnly =
     args.options['summary'] === true || args.positional[0] === 'summary';
@@ -243,13 +240,7 @@ async function sweepTrapsCmd(c: C, args: ParsedArgs): Promise<number> {
 
   const apply = args.options['apply'] === true;
   const revive = optionalOption(args, 'revive');
-  const format = optionalOption(args, 'format') ?? 'text';
-  if (format !== 'json' && format !== 'text') {
-    process.stderr.write(
-      `error: --format must be 'json' or 'text', got: ${format}\n`,
-    );
-    return 1;
-  }
+  const format = parseFormat(args);
   if (apply && revive !== undefined) {
     process.stderr.write(
       'error: --apply and --revive are mutually exclusive.\n' +

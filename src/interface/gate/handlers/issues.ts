@@ -7,6 +7,7 @@ import {
 import { notFoundMessage } from '../../shared/notFoundHint.js';
 import { resolveGuildSessionId } from '../../shared/resolveGuildSessionId.js';
 import { parseExecutorsList } from './request.js';
+import { parseFormat } from '../../shared/parseFormat.js';
 import {
   C,
   readStdin,
@@ -147,10 +148,7 @@ export async function issuesCmd(c: C, args: ParsedArgs): Promise<number> {
   if (sub === 'list') {
     rejectUnknownFlags(args, ISSUES_LIST_KNOWN_FLAGS, 'issues list');
     const stateRaw = optionalOption(args, 'state');
-    const format = optionalOption(args, 'format') ?? 'text';
-    if (format !== 'text' && format !== 'json') {
-      throw new Error(`--format must be 'text' or 'json', got: ${format}`);
-    }
+    const format = parseFormat(args);
 
     // `--state all` is sugar for "every state, no filter". Implemented
     // here rather than in IssueUseCases because the use case is
@@ -225,10 +223,7 @@ export async function issuesCmd(c: C, args: ParsedArgs): Promise<number> {
         'Usage: gate issues show <id> [--format text|json]',
       );
     }
-    const format = optionalOption(args, 'format') ?? 'text';
-    if (format !== 'text' && format !== 'json') {
-      throw new Error(`--format must be 'text' or 'json', got: ${format}`);
-    }
+    const format = parseFormat(args);
     const issue = await c.issueUC.find(id);
     if (!issue) {
       process.stderr.write(notFoundMessage('issue', id));

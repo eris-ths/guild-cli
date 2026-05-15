@@ -4,6 +4,7 @@ import {
   rejectUnknownFlags,
 } from '../../shared/parseArgs.js';
 import { C } from './internal.js';
+import { parseFormat } from '../../shared/parseFormat.js';
 
 const SCHEMA_KNOWN_FLAGS: ReadonlySet<string> = new Set(['format', 'verb', 'voice']);
 
@@ -2227,10 +2228,7 @@ const VERBS: readonly VerbSchema[] = [
 
 export async function schemaCmd(c: C, args: ParsedArgs): Promise<number> {
   rejectUnknownFlags(args, SCHEMA_KNOWN_FLAGS, 'schema');
-  const format = optionalOption(args, 'format') ?? 'json';
-  if (format !== 'json' && format !== 'text') {
-    throw new Error(`--format must be 'json' or 'text', got: ${format}`);
-  }
+  const format = parseFormat(args, 'json');
   const verbFilter = optionalOption(args, 'verb');
   // Plugin verbs (#36 Phase 1 step 4) are spliced into the schema
   // payload as siblings of built-ins. They carry `source: 'plugin'`

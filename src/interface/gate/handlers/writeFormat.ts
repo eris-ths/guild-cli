@@ -1,19 +1,19 @@
 import { resolveGuildActor } from '../../shared/resolveGuildActor.js';
 import { Request } from '../../../domain/request/Request.js';
 import { GuildConfig } from '../../../infrastructure/config/GuildConfig.js';
-import { ParsedArgs, optionalOption } from '../../shared/parseArgs.js';
+import { ParsedArgs } from '../../shared/parseArgs.js';
+import { parseFormat as parseFormatShared } from '../../shared/parseFormat.js';
 
 /**
- * Shared `--format <json|text>` parser so every write handler validates
- * the value identically. Text is the default to keep the `✓ ...`
- * muscle memory intact for humans; agents opt into json explicitly.
+ * Re-export of the shared `--format` parser. Kept as a named export
+ * here for backwards-compatibility with the many gate write-handlers
+ * that import it from this module; new code should pull from
+ * `interface/shared/parseFormat.js` directly. Text is the default to
+ * keep the `✓ ...` muscle memory intact for humans; agents opt into
+ * json explicitly.
  */
 export function parseFormat(args: ParsedArgs): 'json' | 'text' {
-  const raw = optionalOption(args, 'format') ?? 'text';
-  if (raw !== 'json' && raw !== 'text') {
-    throw new Error(`--format must be 'json' or 'text', got: ${raw}`);
-  }
-  return raw;
+  return parseFormatShared(args);
 }
 
 /**

@@ -22,6 +22,7 @@ import { notFoundMessage } from '../../shared/notFoundHint.js';
 import { C } from './internal.js';
 import { Request } from '../../../domain/request/Request.js';
 import { RequestDepth } from '../../../domain/request/RequestDepth.js';
+import { parseFormat } from '../../shared/parseFormat.js';
 
 const REVIEW_CONTEXT_KNOWN_FLAGS: ReadonlySet<string> = new Set(['format']);
 
@@ -112,10 +113,7 @@ export async function reviewContextCmd(c: C, args: ParsedArgs): Promise<number> 
   if (!id) {
     throw new Error('Usage: gate review-context <id> [--format text|json]');
   }
-  const format = optionalOption(args, 'format') ?? 'text';
-  if (format !== 'text' && format !== 'json') {
-    throw new Error(`--format must be 'text' or 'json', got: ${format}`);
-  }
+  const format = parseFormat(args);
   const r = await c.requestUC.show(id);
   if (!r) {
     process.stderr.write(notFoundMessage('request', id));

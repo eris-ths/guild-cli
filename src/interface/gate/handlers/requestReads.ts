@@ -23,6 +23,7 @@ import { notFoundMessage } from '../../shared/notFoundHint.js';
 import { Request } from '../../../domain/request/Request.js';
 import { formatDelta, pushMultilineField } from '../voices.js';
 import { C, truncateCodePoints } from './internal.js';
+import { parseFormat } from '../../shared/parseFormat.js';
 
 // `gate list` and `gate pending` share `reqList`. pending only takes
 // `--for`; list adds the four narrowing filters. The list set is the
@@ -110,10 +111,7 @@ export async function reqList(
   // the state being listed (informational for both list and pending) and
   // any active filter so a JSON consumer sees what the stderr notice
   // shows to humans.
-  const format = optionalOption(args, 'format') ?? 'text';
-  if (format !== 'json' && format !== 'text') {
-    throw new Error(`--format must be 'json' or 'text', got: ${format}`);
-  }
+  const format = parseFormat(args);
 
   // The "filtered by GUILD_ACTOR=..." stderr notice exists so a *human*
   // reading text output knows why their result set is implicitly
@@ -202,7 +200,7 @@ export async function reqShow(c: C, args: ParsedArgs): Promise<number> {
   const plain = args.options['plain'] === true;
   const format = optionalOption(args, 'format') ?? (plain ? 'plain' : 'json');
   if (format !== 'json' && format !== 'text' && format !== 'plain') {
-    throw new Error(`--format must be 'json' or 'text', got: ${format}`);
+    throw new Error(`--format must be 'json', 'text', or 'plain', got: ${format}`);
   }
   const r = await c.requestUC.show(id);
   if (!r) {

@@ -28,6 +28,7 @@ import {
 import { GuildConfig } from '../../../../infrastructure/config/GuildConfig.js';
 import { emitErrorEnvelope } from '../../../../interface/shared/errorEnvelope.js';
 import { DomainError } from '../../../../domain/shared/DomainError.js';
+import { parseFormat } from '../../../../interface/shared/parseFormat.js';
 
 const ENTRY_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'persona',
@@ -109,11 +110,7 @@ export async function entryOnReview(
   const text = requireOption(args, 'text', '"..."');
 
   const by = requireOption(args, 'by', '<m>', 'GUILD_ACTOR');
-  const format = optionalOption(args, 'format') ?? 'text';
-  if (format !== 'json' && format !== 'text') {
-    process.stderr.write(`error: --format must be 'json' or 'text', got: ${format}\n`);
-    return 1;
-  }
+  const format = parseFormat(args);
 
   // Catalog resolution. Throw structured errors so the dispatcher
   // surfaces them as named failures rather than generic message text.

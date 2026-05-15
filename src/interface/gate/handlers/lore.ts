@@ -22,6 +22,7 @@ import {
 import { maybeEmitExplain } from '../../shared/explain.js';
 import { LoreType } from '../../../infrastructure/lore/LoreRepository.js';
 import { C, truncateCodePoints } from './internal.js';
+import { parseFormat } from '../../shared/parseFormat.js';
 
 const LORE_LIST_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'type',
@@ -67,10 +68,7 @@ function loreList(c: C, args: ParsedArgs): number {
   const typeRaw = optionalOption(args, 'type');
   const appliesTo = optionalOption(args, 'applies-to');
   const relevantUntilRaw = optionalOption(args, 'relevant-until');
-  const format = optionalOption(args, 'format') ?? 'text';
-  if (format !== 'text' && format !== 'json') {
-    throw new Error(`--format must be 'text' or 'json', got: ${format}`);
-  }
+  const format = parseFormat(args);
   let type: LoreType | undefined;
   if (typeRaw !== undefined) {
     if (typeRaw !== 'principle' && typeRaw !== 'trap') {
@@ -147,10 +145,7 @@ function loreShow(c: C, args: ParsedArgs): number {
       'Usage: gate lore show <name> [--format text|json]',
     );
   }
-  const format = optionalOption(args, 'format') ?? 'text';
-  if (format !== 'text' && format !== 'json') {
-    throw new Error(`--format must be 'text' or 'json', got: ${format}`);
-  }
+  const format = parseFormat(args);
   const entry = c.loreUC.find(name);
   if (!entry) {
     // Custom not-found message — `notFoundMessage` ships with a typed

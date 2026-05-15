@@ -4,6 +4,7 @@ import {
   requireOption,
   rejectUnknownFlags,
 } from '../../shared/parseArgs.js';
+import { parseFormat } from '../../shared/parseFormat.js';
 import { C } from './internal.js';
 import {
   suggestFlow,
@@ -44,11 +45,8 @@ export async function flowSuggestCmd(
   const severityRaw = requireOption(args, 'severity', '<low|med|high>');
   const area = requireOption(args, 'area', '<copy|doc|style|bug|auth|...>');
   const scope = optionalOption(args, 'scope');
-  const format = optionalOption(args, 'format') ?? 'json';
+  const format = parseFormat(args, 'json');
 
-  if (format !== 'json' && format !== 'text') {
-    throw new Error(`--format must be 'json' or 'text', got: ${format}`);
-  }
   if (!SEVERITIES.has(severityRaw)) {
     // The check fires AFTER format validation so a `--format xml` typo
     // still surfaces the format error first (more likely the operator

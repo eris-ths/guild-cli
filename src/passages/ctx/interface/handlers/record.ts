@@ -1,5 +1,6 @@
 import { CtxUseCases } from '../../application/CtxUseCases.js';
 import { GuildConfig } from '../../../../infrastructure/config/GuildConfig.js';
+import { parseFormat } from '../../../../interface/shared/parseFormat.js';
 import {
   ParsedArgs,
   optionalOption,
@@ -53,11 +54,7 @@ export async function recordCtx(
   const fact = requireOption(args, 'fact', '"..."');
   const tags = parseTagList(optionalOption(args, 'tag'));
   const by = requireOption(args, 'by', '<m>', 'GUILD_ACTOR');
-  const format = optionalOption(args, 'format') ?? 'text';
-  if (format !== 'json' && format !== 'text') {
-    process.stderr.write(`error: --format must be 'json' or 'text', got: ${format}\n`);
-    return 1;
-  }
+  const format = parseFormat(args);
 
   const ctx = await deps.uc.record({ by, fact, tags });
 

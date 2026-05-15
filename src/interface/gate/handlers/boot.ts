@@ -43,6 +43,7 @@ import {
   computeLastAuthoredWriteAt,
 } from './bootActionable.js';
 import { collectCrossPassage, renderBootText } from './bootRender.js';
+import { parseFormat } from '../../shared/parseFormat.js';
 
 // Re-exports for external consumers (suggest.ts + tests/boot.test.ts).
 // The split moved these out of this file; the re-exports keep the
@@ -90,10 +91,7 @@ const ISO_TS_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/;
 export async function bootCmd(c: C, args: ParsedArgs): Promise<number> {
   rejectUnknownFlags(args, BOOT_KNOWN_FLAGS, 'boot');
   maybeEmitExplain(args, 'boot');
-  const format = optionalOption(args, 'format') ?? 'json';
-  if (format !== 'json' && format !== 'text') {
-    throw new Error(`--format must be 'json' or 'text', got: ${format}`);
-  }
+  const format = parseFormat(args, 'json');
   // Default tail=5 (was 10) to keep `gate boot` lean — agents call
   // boot at every session start, so the orientation payload is on the
   // hot path. 5 covers "what just happened" without flooding the JSON

@@ -136,9 +136,12 @@ test('agora new: JSON mode emits snake_case envelope with where_written + config
   for (const key of Object.keys(payload)) {
     assert.ok(!/[A-Z]/.test(key), `envelope key "${key}" must be snake_case`);
   }
-  // Stderr notice fires in JSON mode too — humans reading stderr see
-  // the path even when stdout is machine-bound. Same shape as text.
-  assert.match(r.stderr, /^notice: wrote /);
+  // JSON mode: stderr notice is suppressed because the path
+  // (`where_written`) and config file (`config_file`) are already in
+  // the structured stdout envelope; re-emitting them on stderr is pure
+  // context pollution for AI consumers. Text-mode callers still get
+  // the disclosure (verified by the prior test).
+  assert.doesNotMatch(r.stderr, /^notice: wrote /m);
 });
 
 test('agora new: --description optional; omitted when empty; preserved when provided', (t) => {

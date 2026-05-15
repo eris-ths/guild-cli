@@ -8,6 +8,7 @@ import {
 import { C } from './internal.js';
 import { MemberName } from '../../../domain/member/MemberName.js';
 import { parseMemberCategory } from '../../../domain/member/MemberCategory.js';
+import { parseFormat } from '../../shared/parseFormat.js';
 
 const REGISTER_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'name',
@@ -53,10 +54,7 @@ export async function reqRegister(c: C, args: ParsedArgs): Promise<number> {
   const category = optionalOption(args, 'category') ?? 'professional';
   const displayName = optionalOption(args, 'display-name');
   const dryRun = args.options['dry-run'] === true || args.options['dry-run'] === '';
-  const format = optionalOption(args, 'format') ?? 'text';
-  if (format !== 'json' && format !== 'text') {
-    throw new Error(`--format must be 'json' or 'text', got: ${format}`);
-  }
+  const format = parseFormat(args);
 
   // Host assignment is intentionally a guild.config.yaml concern,
   // not a CLI-drive-by. Block it here with an explicit message

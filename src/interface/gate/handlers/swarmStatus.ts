@@ -28,6 +28,7 @@ import {
   WaveStatusPayload,
 } from './waveStatus.js';
 import { computeActiveOverlappingTargets } from './bootActionable.js';
+import { parseFormat } from '../../shared/parseFormat.js';
 
 const SWARM_STATUS_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'orchestrating',
@@ -110,10 +111,7 @@ export async function swarmStatusCmd(
   args: ParsedArgs,
 ): Promise<number> {
   rejectUnknownFlags(args, SWARM_STATUS_KNOWN_FLAGS, 'swarm-status');
-  const format = optionalOption(args, 'format') ?? 'text';
-  if (format !== 'text' && format !== 'json') {
-    throw new Error(`--format must be 'text' or 'json', got: ${format}`);
-  }
+  const format = parseFormat(args);
   const orchestratingFlag = optionalOption(args, 'orchestrating') ?? null;
   const explicitFor = optionalOption(args, 'for') ?? null;
   // GUILD_ACTOR fallback: when neither flag is set and env is set, default

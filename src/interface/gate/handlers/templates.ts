@@ -14,6 +14,7 @@ import {
   rejectUnknownFlags,
 } from '../../shared/parseArgs.js';
 import { C } from './internal.js';
+import { parseFormat } from '../../shared/parseFormat.js';
 
 const TEMPLATES_LIST_KNOWN_FLAGS: ReadonlySet<string> = new Set(['format']);
 const TEMPLATES_SHOW_KNOWN_FLAGS: ReadonlySet<string> = new Set(['format']);
@@ -51,10 +52,7 @@ function shiftPositional(args: ParsedArgs): ParsedArgs {
 
 async function templatesList(c: C, args: ParsedArgs): Promise<number> {
   rejectUnknownFlags(args, TEMPLATES_LIST_KNOWN_FLAGS, 'templates list');
-  const format = optionalOption(args, 'format') ?? 'text';
-  if (format !== 'json' && format !== 'text') {
-    throw new Error(`--format must be 'json' or 'text', got: ${format}`);
-  }
+  const format = parseFormat(args);
   const items = c.templateUC.list();
   const exists = c.templateUC.registryExists();
   const dir = c.templateUC.registryDir();
@@ -125,10 +123,7 @@ async function templatesShow(c: C, args: ParsedArgs): Promise<number> {
       'Usage: gate templates show <name> [--format json|text]',
     );
   }
-  const format = optionalOption(args, 'format') ?? 'text';
-  if (format !== 'json' && format !== 'text') {
-    throw new Error(`--format must be 'json' or 'text', got: ${format}`);
-  }
+  const format = parseFormat(args);
   const t = c.templateUC.show(name);
   if (!t) {
     const available = c.templateUC.list().map((s) => s.name);

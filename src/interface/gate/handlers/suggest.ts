@@ -6,6 +6,7 @@ import {
 } from '../../shared/parseArgs.js';
 import { C } from './internal.js';
 import { deriveBootSuggestedNext, BootSuggestedNext } from './boot.js';
+import { parseFormat } from '../../shared/parseFormat.js';
 
 const SUGGEST_KNOWN_FLAGS: ReadonlySet<string> = new Set(['format']);
 
@@ -37,10 +38,7 @@ interface SuggestPayload {
 
 export async function suggestCmd(c: C, args: ParsedArgs): Promise<number> {
   rejectUnknownFlags(args, SUGGEST_KNOWN_FLAGS, 'suggest');
-  const format = optionalOption(args, 'format') ?? 'json';
-  if (format !== 'json' && format !== 'text') {
-    throw new Error(`--format must be 'json' or 'text', got: ${format}`);
-  }
+  const format = parseFormat(args, 'json');
 
   const envActor = resolveGuildActor();
   const actor = envActor && envActor.length > 0 ? envActor : null;

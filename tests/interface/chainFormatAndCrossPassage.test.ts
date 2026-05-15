@@ -132,7 +132,7 @@ test('gate chain --format unknown is rejected with a clear error', (t) => {
   const reqId = seedGateRequestMentioning(root, playId);
   const r = runBin(GATE, root, ['chain', reqId, '--format', 'yaml']);
   assert.notEqual(r.status, 0);
-  assert.match(r.stderr, /--format must be 'text' or 'json'/);
+  assert.match(r.stderr, /--format must be 'json' or 'text'/);
 });
 
 test('agora play id present in multiple games surfaces every match', (t) => {
