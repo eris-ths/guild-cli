@@ -142,6 +142,15 @@ test('GuildConfig.load: GUILD_CONFIG with nonexistent path throws DomainError', 
 });
 
 test('GuildConfig.load: empty GUILD_CONFIG falls back to walk-up (treated as unset)', () => {
+  // Behavior-only verification: empty string is treated as unset and
+  // walk-up resolves the local config. The stderr nudge that fires
+  // alongside this fallback is verified by a CLI subprocess test
+  // (see tests/interface/guildConfigEmpty.test.ts) — capturing it
+  // here via `process.stderr.write` monkey-patch interacted with the
+  // test runner's worker stdio on Windows + Node 20 and produced
+  // CI hangs. The split keeps the unit test cheap and cross-platform-
+  // safe while preserving the message-wording assertion at a layer
+  // that owns its own process boundary.
   const { dir, cleanup } = setupRepo();
   try {
     writeFileSync(
@@ -152,7 +161,6 @@ test('GuildConfig.load: empty GUILD_CONFIG falls back to walk-up (treated as uns
     process.env['GUILD_CONFIG'] = '';
     try {
       const cfg = GuildConfig.load(dir);
-      // empty string is treated as unset; walk-up finds the local config
       assert.equal(cfg.configFile, join(dir, 'guild.config.yaml'));
     } finally {
       if (prev === undefined) delete process.env['GUILD_CONFIG'];

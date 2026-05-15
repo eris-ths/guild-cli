@@ -268,6 +268,16 @@ function renderText(p: SwarmStatusPayload): string {
       `${p.summary.distinct_executors} distinct executor(s)  ` +
       `${p.summary.alerts} alert(s)`,
   );
+  // Eris-axis nuance: "active waves" without any executor-stamped
+  // activity is the legacy / pre-#230 shape — the surface should
+  // not advertise "swarm picture" at face value for that case. Add
+  // a one-line hint so a reader scanning the summary knows what
+  // they're looking at before walking the per-wave list.
+  if (p.summary.active_waves > 0 && p.summary.distinct_executors === 0) {
+    lines.push(
+      '  (no executor-stamped activity — likely pre-#230 records or freshly-filed pending)',
+    );
+  }
   lines.push('');
 
   if (p.waves.length === 0) {
@@ -278,11 +288,17 @@ function renderText(p: SwarmStatusPayload): string {
   lines.push('waves:');
   for (const w of p.waves) {
     const ageBadge = w.age_band !== 'fresh' ? `  [${w.age_band}]` : '';
-    lines.push(`  ${w.id}  [${w.state}]  from=${w.from}${ageBadge}`);
+    // No-executors waves render on ONE line — the previous shape
+    // emitted a separate `    (no executors assigned)` indented line
+    // per wave, which produced visually heavy blocks for substrates
+    // dominated by pre-#230 records. Inline tag is tighter and
+    // doesn't fight for attention with executor-bearing waves
+    // (which need their own per-executor block).
     if (w.executors.length === 0) {
-      lines.push('    (no executors assigned)');
+      lines.push(`  ${w.id}  [${w.state}]  from=${w.from}${ageBadge}  (no executors)`);
       continue;
     }
+    lines.push(`  ${w.id}  [${w.state}]  from=${w.from}${ageBadge}`);
     for (const e of w.executors) {
       const tags: string[] = [e.slice_status];
       if (e.claim_held) tags.push('claim');

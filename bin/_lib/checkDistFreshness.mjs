@@ -62,7 +62,10 @@ export function checkDistFreshness(srcDir, distDir) {
     process.stderr.write(
       'guild-cli: dist/ is stale relative to src/ (some src files modified after the last build).\n' +
         '  Run: npm run build  (rebuild before re-running)\n' +
-        '  Hint: this commonly fires after a `git pull`. The current run will continue against the stale dist.\n',
+        '  Hint: this commonly fires after a `git pull`, after switching\n' +
+        '        worktrees on this repo, or after a branch checkout that\n' +
+        '        touched src/. The current run will continue against the\n' +
+        '        stale dist.\n',
     );
   }
 }

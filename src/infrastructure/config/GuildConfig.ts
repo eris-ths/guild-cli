@@ -232,6 +232,17 @@ export class GuildConfig implements GuildConfigProps {
       }
       configPath = resolvedEnv;
     } else {
+      // Empty string is treated as unset (caller did `GUILD_CONFIG=`
+      // to clear the override). Emit a one-line stderr nudge —
+      // silent fallback to cwd walk-up here is the footgun mode
+      // where the caller thinks they're clearing the override but
+      // is actually letting walk-up decide the substrate.
+      if (envConfig === '') {
+        process.stderr.write(
+          'guild-cli: GUILD_CONFIG is set but empty — treating as unset, falling back to cwd walk-up.\n' +
+            '  Hint: `unset GUILD_CONFIG` to clear cleanly, or set to an absolute path to a guild.config.yaml.\n',
+        );
+      }
       configPath = findConfig(cwd);
     }
     if (!configPath) {
