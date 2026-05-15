@@ -13,7 +13,7 @@ export interface LoreFilter {
    * For principles: filter by `applies_to` frontmatter. `all` (the
    * default scope for principles without an explicit `applies_to`)
    * is treated as universal — it surfaces regardless of the filter
-   * value. This matches the `tools/lore-scope.sh` semantics.
+   * value. This matches the `scripts/lore-scope.sh` semantics.
    */
   readonly appliesTo?: string;
   /**
