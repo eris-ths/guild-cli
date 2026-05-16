@@ -103,11 +103,47 @@ export async function decisionsCmd(c: C, args: ParsedArgs): Promise<number> {
   // is "how many distinct decisions did I make?", not "how many
   // status_log entries did I write?". Keep the latest entry per
   // tuple (later note wins; later `at` wins ties).
+  //
+  // Slice-closure re-kinding (asteria dogfood 2026-05-16 finding D1):
+  // The slice-close stamp is `state: executing` on disk because the
+  // wave is still mid-flight when the slice closes (other executors
+  // may still be running). From the actor's POV, however, that
+  // stamp IS their `fail`/`complete` decision — the slice-fail reason
+  // they passed via `--reason X` lives on this stamp, not on the
+  // later wave-cascade `failed`/`completed` entry (which carries an
+  // auto-derived "wave ..." note). Re-kind the slice-close entry to
+  // the executor's terminal status so the note lands where the actor
+  // wrote it. Mirror move: skip the wave-cascade entry when its note
+  // matches the domain-emitted pattern (Request.ts:1060), because
+  // that entry is the wave's consequence, not the actor's decision.
+  const CASCADE_NOTE_RE =
+    /^wave failed \(any-fail-wave-fail\)$|^wave completed \(all slices closed\)$/;
   const dedup = new Map<string, DecisionRow>();
   for (const r of requests) {
     const j = r.toJSON() as Record<string, unknown>;
     const id = String(j['id']);
     const log = Array.isArray(j['status_log']) ? j['status_log'] : [];
+    // Per-actor executor record lookup. When the calling actor
+    // appears in executors[] with a terminal status, the slice-close
+    // stamp (executing entry whose `at` matches `completed_at`) is
+    // really their fail/complete decision.
+    const execEntries = Array.isArray(j['executors']) ? j['executors'] : [];
+    let actorExec: { status: string; completedAt: string; note: string | null } | null = null;
+    for (const ex of execEntries) {
+      if (typeof ex !== 'object' || ex === null) continue;
+      const exRec = ex as Record<string, unknown>;
+      const name = typeof exRec['name'] === 'string' ? exRec['name'] : null;
+      const status = typeof exRec['status'] === 'string' ? exRec['status'] : null;
+      const completedAt = typeof exRec['completed_at'] === 'string' ? exRec['completed_at'] : null;
+      if (name === forActor && status !== null && completedAt !== null) {
+        actorExec = {
+          status,
+          completedAt,
+          note: typeof exRec['note'] === 'string' ? exRec['note'] : null,
+        };
+        break;
+      }
+    }
     for (const e of log) {
       if (typeof e !== 'object' || e === null) continue;
       const rec = e as Record<string, unknown>;
@@ -117,13 +153,39 @@ export async function decisionsCmd(c: C, args: ParsedArgs): Promise<number> {
       if (at === null || by === null || state === null) continue;
       if (by !== forActor) continue;
       if (at < cutoffIso) continue;
-      const kind = STATE_TO_KIND[state];
-      if (!kind) continue;
       const note = typeof rec['note'] === 'string' ? (rec['note'] as string) : null;
+      // Slice-close re-kinding: `state: executing` whose `at` matches
+      // the actor's `executors[].completed_at` IS their slice fail /
+      // complete decision (not a redundant execute stamp).
+      let kind = STATE_TO_KIND[state];
+      let effectiveNote = note;
+      if (
+        state === 'executing' &&
+        actorExec !== null &&
+        at === actorExec.completedAt &&
+        (actorExec.status === 'failed' || actorExec.status === 'completed')
+      ) {
+        kind = actorExec.status === 'failed' ? 'fail' : 'complete';
+        // The slice-close stamp's note IS the actor's terminal reason;
+        // prefer it. Fall back to executor.note if for some reason the
+        // stamp lacks one (defensive).
+        effectiveNote = note ?? actorExec.note;
+      }
+      // Skip wave-cascade entries: their notes are domain-auto and
+      // would otherwise overwrite the actor's slice-close note via the
+      // "later wins" dedup rule (slice-close and cascade differ by 1 ms).
+      if (
+        (state === 'failed' || state === 'completed') &&
+        note !== null &&
+        CASCADE_NOTE_RE.test(note)
+      ) {
+        continue;
+      }
+      if (!kind) continue;
       const key = `${id}|${kind}`;
       const cur = dedup.get(key);
       if (cur === undefined || at >= cur.at) {
-        dedup.set(key, { at, request_id: id, transition: kind, note });
+        dedup.set(key, { at, request_id: id, transition: kind, note: effectiveNote });
       }
     }
   }

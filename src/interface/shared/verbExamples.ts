@@ -22,7 +22,7 @@ export const VERB_EXAMPLES: Record<string, Record<string, string>> = {
     complete: 'complete <id>',
     fail: 'fail <id> --reason "<why>"',
     'fast-track': 'fast-track --action "<what>" --reason "<why>"',
-    review: 'review <id> --lense layer --verdict ok --comment "<note>"',
+    review: 'review <id> --lense layer --verdict ok --note "<comment>"',
     thank: 'thank <to> --for <id>',
     message: 'message --to <m> --text "<body>"',
     broadcast: 'broadcast --text "<body>"',

@@ -507,6 +507,29 @@ export async function reqFail(c: C, args: ParsedArgs): Promise<number> {
         },
       );
     }
+    // approved → fail mirrors pending → fail: the domain layer would
+    // throw "Illegal state transition: approved → failed" without a
+    // recovery hint, leaving the cold-session caller to deduce that
+    // `gate execute` is the bridge. Surface the verb directly — same
+    // structured `recovery` slot + prose discipline as the pending
+    // branch, so JSON consumers can dispatch the next move without
+    // pattern-matching on state-machine prose (asteria dogfood
+    // 2026-05-16 finding B1).
+    if (priorFail.state === 'approved') {
+      throw new RecoverableError(
+        `Request ${id} is approved — fail is reachable only from executing.\n` +
+          `  Transition to executing first, then fail:\n` +
+          `    gate execute ${id} --by <m>\n` +
+          `    gate fail ${id} --by <m> --reason <s>`,
+        {
+          verb: 'execute',
+          args: { id },
+          reason:
+            `${id} is approved; fail is reachable only from executing — ` +
+            `execute is the bridge step before failing.`,
+        },
+      );
+    }
     // See reqComplete: issue #294 / miki concern #1 — refuse fail
     // when wave has executors and `by` is not one of them. Same
     // typo-safety rationale as complete: a misspelt `--by` would

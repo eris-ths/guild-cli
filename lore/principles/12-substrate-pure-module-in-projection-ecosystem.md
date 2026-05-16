@@ -110,8 +110,9 @@ This principle was written aware of its own gravity — once a
 record exists in `lore/principles/`, it is read later as
 inheritance. Readers who arrive at this file because grep
 surfaced it are asked to read this section before treating the
-content above as binding. The substrate ledger inside
-`substrate/agora/plays/whole-repo-review/2026-05-04-001.yaml`
-holds the three-voice conversation (eris / noir / asteria) from
-which this writing emerged; it is the trace of a specific reading
-on a specific date, not a universal claim.
+content above as binding. The writing emerged from a three-voice
+conversation (eris / noir / asteria) reading the May-2026 repo
+shape against the (then private) `yori-code` substrate; the trace
+of that reading is held in the authors' working substrate, not
+shipped here. Treat the content above as the trace of a specific
+reading on a specific date, not a universal claim.

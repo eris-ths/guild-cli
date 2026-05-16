@@ -120,7 +120,12 @@ export async function main(argv: readonly string[]): Promise<number> {
   // back to a standard-profile view so `gate --help` keeps working
   // even on a misconfigured root (the help payload is purely
   // informational and must never block diagnosis).
-  if (!cmd || cmd === '--help' || cmd === '-h') {
+  // `gate help` is accepted as a sugar alias for `gate --help` because
+  // the reflex "what does this CLI do? — gate help" is universal across
+  // tools (asteria dogfood 2026-05-16: AI agents hit this first). The
+  // bare `help` was previously rejected with `unknown command`, which
+  // wasted a tool-call round. Aligns with `gate --help` / `-h`.
+  if (!cmd || cmd === '--help' || cmd === '-h' || cmd === 'help') {
     const wantAll = rest.includes('--all');
     const wantEssentials = rest.includes('--essentials');
     const wantCompact = rest.includes('--compact');

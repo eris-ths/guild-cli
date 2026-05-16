@@ -92,6 +92,29 @@ function buildTranscript(r: Request): TranscriptPayload {
   const log = Array.isArray(j['status_log'])
     ? (j['status_log'] as Array<Record<string, unknown>>)
     : [];
+  // Slice-close map: executor name → { status, completed_at, note }.
+  // Used to re-phrase the second `executing` stamp (the slice-close
+  // append from #294's per-executor closure) as "closed her slice"
+  // rather than yet another "moved it to executing" sentence. Same
+  // re-kinding logic as `gate decisions` (eris touch-feel 2026-05-16
+  // finding 4.4 / asteria dogfood finding D1).
+  const execRecords = Array.isArray(j['executors']) ? (j['executors'] as Array<Record<string, unknown>>) : [];
+  const sliceCloseByAt = new Map<string, { status: 'completed' | 'failed'; by: string; note: string | null }>();
+  for (const ex of execRecords) {
+    if (typeof ex !== 'object' || ex === null) continue;
+    const name = typeof ex['name'] === 'string' ? ex['name'] : null;
+    const status = typeof ex['status'] === 'string' ? ex['status'] : null;
+    const completedAt = typeof ex['completed_at'] === 'string' ? ex['completed_at'] : null;
+    if (name === null || completedAt === null) continue;
+    if (status !== 'completed' && status !== 'failed') continue;
+    sliceCloseByAt.set(completedAt, {
+      status: status as 'completed' | 'failed',
+      by: name,
+      note: typeof ex['note'] === 'string' ? ex['note'] : null,
+    });
+  }
+  const CASCADE_NOTE_RE =
+    /^wave failed \(any-fail-wave-fail\)$|^wave completed \(all slices closed\)$/;
   const reviews = Array.isArray(j['reviews'])
     ? (j['reviews'] as Array<Record<string, unknown>>)
     : [];
@@ -127,7 +150,7 @@ function buildTranscript(r: Request): TranscriptPayload {
     const state = String(entry['state'] ?? '');
     const by = String(entry['by'] ?? '');
     const at = String(entry['at'] ?? '');
-    const note = entry['note'] ? ` (note: "${entry['note']}")` : '';
+    const rawNote = typeof entry['note'] === 'string' ? (entry['note'] as string) : null;
     const invokedBy = entry['invoked_by']
       ? ` [invoked by ${entry['invoked_by']}]`
       : '';
@@ -137,6 +160,38 @@ function buildTranscript(r: Request): TranscriptPayload {
       continue;
     }
     const delta = prevAt ? ` (${humanDelta(prevAt, at)} later)` : '';
+    // Slice-close re-phrase: an `executing` stamp whose `at` matches
+    // an executor's `completed_at` is that executor's terminal slice
+    // closure, not a second "moved it to executing" event. Surface as
+    // "closed her slice as completed/failed" so the cold reader sees
+    // one judgment, not two.
+    const sliceClose = state === 'executing' ? sliceCloseByAt.get(at) : undefined;
+    if (sliceClose !== undefined && sliceClose.by === by) {
+      const closeNote = sliceClose.note !== null ? ` (note: "${sliceClose.note}")` : '';
+      lifecycle.push(
+        `${capitalise(by)} closed their slice as ${sliceClose.status}${delta}${invokedBy}${closeNote}`,
+      );
+      prevAt = at;
+      continue;
+    }
+    // Wave-cascade re-phrase: the terminal `failed`/`completed` entry
+    // with the domain-auto note (Request.ts:1060) is the wave's
+    // consequence, not an authored decision. Lift it to subject-less
+    // prose so the actor isn't credited with writing the auto-text.
+    if (
+      (state === 'failed' || state === 'completed') &&
+      rawNote !== null &&
+      CASCADE_NOTE_RE.test(rawNote)
+    ) {
+      const phrase =
+        state === 'completed'
+          ? 'The wave completed (all slices closed)'
+          : 'The wave failed (any-fail-wave-fail)';
+      lifecycle.push(`${phrase}${delta}`);
+      prevAt = at;
+      continue;
+    }
+    const note = rawNote !== null ? ` (note: "${rawNote}")` : '';
     lifecycle.push(
       `${capitalise(by)} moved it to ${state}${delta}${invokedBy}${note}`,
     );
