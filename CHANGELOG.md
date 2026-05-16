@@ -27,6 +27,412 @@ versioned block alongside collected fragments.
 
 ## [Unreleased]
 
+_Add entries by dropping a file under `.changelog/next/` (see `.changelog/README.md`). The release script collects them into a versioned block at `npm run changelog:release -- <ver>`._
+
+## [0.6.0] - 2026-05-16
+
+### ⚠ BREAKING
+
+- **BREAKING (v0.6 cut, closes #239): `--executor` (singular) and the
+  `executor` JSON alias are removed.** The multi-executor surface
+  introduced in #230 carried both forms for a v0.6 deprecation
+  window; 330 commits later the singular form is gone:
+  - `gate request --executor <m>` → use `gate request --executors <m>`
+  - `gate fast-track --executor <m>` → use `gate fast-track --executors <m>` (omit for self-execute)
+  - `gate issues promote <id> --executor <m>` → `--executors <m>`
+  - `gate show --format json | jq .executor` → read `.executors[].name`
+  - `CreateRequestInput.executor: string` (domain/application) → use
+    `executors: readonly string[]` (the only form accepted as input)
+  Hydrate is unchanged: YAML records written before #230 with the
+  legacy `executor: <string>` field still load via
+  `YamlRequestRepository.hydrate` (records-outlive-writers per
+  principle 04). Only the *input* surface is removed.
+
+- **`Request.toRenderJSON()` removed.** It was a back-compat
+  shim that copied `toJSON()` and added the deprecated `executor`
+  key; callers (`gate show / list / board`, dry-run preview) now
+  call `toJSON()` directly. The render-vs-persistence split was
+  there to keep the deprecated alias from polluting on-disk
+  records — with the alias gone, the separation has no reason to
+  exist.
+
+## Migration
+
+If you have shell scripts using `--executor <m>`, replace with
+`--executors <m>` (same value, plural flag). If you have tooling
+parsing `gate show --format json | jq .executor`, switch to
+`.executors[].name` — the field has been `executors[]` (an array
+of `{name, status}` objects since #294) for the entire v0.5.x
+range; the singular alias was the only thing keeping the old
+shape compatible.
+
+`agent-loop / SubAgent` callers already use `--executors` as of
+PR #382 (the `executors-singular-to-plural-in-examples` sweep), so
+no action is required there.
+
+### Changed
+
+- **Advisory fields classified ambient-by-design now name that status at
+  the declaration site (#344 audit close-out).** Touched 4 fields per
+  the 2026-05-15 audit: `Issue.severity`, `Issue.area`,
+  `Request.sourceAgoraPlay`, `Request.template` (representing the
+  template / templateVersion / gateRequiredAcknowledged trio).
+  Each gets a one-paragraph comment naming the audit, its consumer
+  (display-only or cold-reader audit), and why no further consumer
+  is needed. `schema.ts` description for `from-agora` softened — it
+  previously promised `gate chain`-style navigation that did not ship.
+
+- **`gate decisions` no longer mis-attributes slice-fail/complete
+  reasons to the `executing` row.** Issue surfaced by asteria's
+  dogfood run (2026-05-16, finding D1): running `gate fail <id>
+  --by X --reason "msg"` produced a `decisions` payload where the
+  fail row carried the cascade auto-note (`wave failed (any-fail-
+  wave-fail)`) while the **execute** row carried the actor's
+  `--reason` text. Root cause: per-#294 slice-closure writes a
+  second `executing` status_log stamp (with the slice note) that
+  the dedupe walk collapsed into the execute row via "later wins".
+  Fix: detect slice-close stamps (executing entry whose `at`
+  matches the executor record's `completed_at`) and re-kind them
+  to fail/complete; skip wave-cascade entries whose auto-notes
+  match the domain-emitted patterns from `Request.ts:1060`.
+
+- **`gate transcript` prose reads naturally on slice-closure
+  waves.** Same root cause as the decisions fix (eris touch-feel
+  2026-05-16 finding 4.4). Before:
+  `Asteria moved it to executing (90ms later). Asteria moved it
+  to executing (87ms later) (note: "slice done"). Asteria moved
+  it to completed (0ms later) (note: "wave completed (all slices
+  closed)").`
+  After:
+  `Asteria moved it to executing (90ms later). Asteria closed
+  their slice as completed (87ms later) (note: "slice done").
+  The wave completed (all slices closed) (0ms later).`
+  Cold readers see one judgement per executor, plus the wave-level
+  consequence as subject-less prose (no actor credited with
+  writing the auto-text).
+
+- **`gate fail` on an approved wave now surfaces the `gate execute`
+  bridge.** asteria finding B1: pending → fail returned a
+  RecoverableError with a `gate deny` recovery hint and the JSON
+  envelope's `error.recovery` field; approved → fail returned the
+  domain layer's raw `Illegal state transition: approved → failed`
+  with no recovery shape at all. Same prose + structured-recovery
+  discipline now applies — JSON consumers can dispatch the
+  `execute` move without pattern-matching on state-machine prose.
+
+- **`gate help` is now a sugar alias for `gate --help`.** The bare
+  `help` was previously rejected as `unknown command`, costing one
+  tool-call round-trip for the universal "what does this CLI do?"
+  reflex (asteria finding A1). Aligns with `gate --help` / `-h`.
+
+- **`boot.session_id_source: "unset"` replaces `null`.** Enum is
+  now `['flag', 'env', 'unset']`. asteria finding A2 — null
+  required readers to know whether it meant "not present yet" or
+  "error". The explicit `"unset"` token is principle 10 (schema-
+  as-contract / output specificity) applied at the value layer.
+  Schema enum updated; tests adjusted.
+
+- **`gate lore show <number>` resolves to the slug.** Numeric input
+  (`gate lore show 11`) now matches the unique principle/trap with
+  that number prefix (`11-ai-first-human-as-projection`). Cold
+  readers reach for the number first; the slug-only requirement
+  cost a round-trip (eris touch-feel finding 4.6). Ambiguous or
+  non-numeric input falls through to the previous "not found"
+  hint unchanged.
+
+- **`--note` / `--reason` / `--action` / stake-note fields now
+  declare `maxLength` in `gate schema`.** Free-form text fields
+  (`MAX_TEXT = 4096`) and stake fields (`MAX_STAKE_NOTE = 80`)
+  ship their domain caps via the schema envelope so AI consumers
+  pre-validate before composing long payloads. asteria finding F1
+  ("`--note` cap not advertised → silent truncate risk on long
+  handoff messages"). Applied to gate's primary write verbs
+  (approve, deny, execute, complete, fail, claim, witness);
+  others inherit the same caps but advertise them less
+  prominently — sweep-out is a follow-up.
+
+- **`gate review` help example uses `--note` (the canonical flag)
+  instead of `--comment` (the deprecated alias).** Drift surfaced
+  by eris touch-feel finding 4.5: the same verb runs a deprecation
+  notice when `--comment` is used, but the canonical example still
+  showed it as the first surface. Aligned.
+
+- **Lore broken citations removed.** Principle 12 cited
+  `substrate/agora/plays/whole-repo-review/2026-05-04-001.yaml`
+  (dir doesn't exist in repo); principle 04 cited
+  `alexandria/orientation/PHILOSOPHY.md` (dir doesn't exist).
+  Both were dangling references — the irony of principle 04
+  (records-outlive-writers) carrying a citation that didn't
+  outlive its writer was not lost. Principle 12 kept the
+  three-voice framing but removed the file pin; principle 04 lost
+  the alexandria bullet entirely (asteria findings 1 & 2).
+
+- **Docs and `gate --help` examples now consistently use
+  `--executors a[,b,c]` rather than the deprecated `--executor <m>`.**
+  The singular flag is still accepted as a back-compat alias (removed
+  at v0.7 per #239). Filter-side `gate list --executor <name>` keeps
+  its semantically-singular spelling — only the create-side examples
+  (request / fast-track / issues promote) have been swept.
+
+- **`gate next` setup-failure errors now flow through the structured
+  JSON error envelope** instead of plain-text `error: <msg>` on
+  stderr. Three sites (GUILD_ACTOR not set / actor not registered /
+  --confirm but verb needs extra args) used to write
+  `process.stderr.write('error: ...')` + `return 1`, bypassing the
+  outer-catch's `emitErrorEnvelope` helper. JSON consumers got plain
+  text where every other gate verb gives them
+  `{"ok":false,"error":{"message":"...","field":"...","code":"..."}}`.
+  After this PR, the first two throw `DomainError(field='GUILD_ACTOR')`
+  and route through the standard envelope; the third (post-plan-emit
+  failure) emits the plan with `dispatched: false` and confines the
+  prose hint to text mode.
+
+- **`gate next --confirm` on a verb-needing-args now emits `dispatched: false`**
+  in the plan envelope (was `dispatched: true` — misleading, since
+  nothing was dispatched). Consumers branching on `dispatched` to
+  decide retry semantics were getting false positives.
+
+  Follow-up to #400's success-path notice gating: same eris-first
+  cleanup applied to error paths.
+
+- **`mcp/` moved to `examples/mcp/`.** The directory held a worked
+  example of MCP integration (`gate_mcp.py`) plus two example hook
+  plugins (`mcp/plugins/{doc-check,self-loop-check}.mjs`) — none of
+  it is core substrate, so its top-level position misled cold readers
+  about what was load-bearing. The move brings the repo root one
+  step closer to the 11 → 8 dir target named in #385. Voice-budget
+  test allowlist and principle 03 reference paths updated to match.
+
+- **Shared `--format` validator (`src/interface/shared/parseFormat.ts`)
+  replaces 55 inline `if format !== json && format !== text` blocks
+  across gate / agora / devil / ctx handlers.** Drift surface
+  collapses to a single source of truth; the validation message
+  ("`--format must be 'json' or 'text', got: <raw>`") is now uniform
+  across passages (previously several handlers had the reversed-order
+  "text or json" variant). Helper throws `DomainError(field='format')`
+  so JSON-mode callers now receive the structured envelope
+  (`{"ok":false,"error":{"field":"format","code":"validation_error",…}}`)
+  instead of plain text — consistent with how every OTHER error in
+  the same handler renders. Single-format verbs (`gate boot`,
+  `gate schema`, `gate status`, etc.) pass `'json'` as the default
+  via `parseFormat(args, 'json')`. Net: −134 LOC across 55 files.
+
+- **`notice: wrote <path>` stderr line is suppressed in JSON mode
+  for `agora new`, `agora play`, `devil open`.** The path and
+  config-file are already in the stdout JSON envelope
+  (`where_written` + `config_file`); re-emitting them on stderr was
+  pure context pollution for AI consumers — every successful create
+  burned two extra lines of tool-result context for information the
+  caller already had structured. Text-mode readers still get the
+  disclosure (the stdout `✓ created` line does not carry the path).
+  `ctx record` already had the notice correctly gated inside its
+  text-mode `else` branch.
+
+- **Error prefix unified to `error: <msg>` across `gate next`,
+  `gate self-pattern`, `gate decisions`.** Three handlers used a
+  passage-verb-named prefix (`gate next: GUILD_ACTOR is not set…`),
+  which on the `throw new Error` path produced the doubled prologue
+  `error: gate self-pattern: …` once the outer-catch added its own
+  `error:` envelope. Machine consumers that grep for `^error:` now
+  match every error from every verb; prose hints retain the
+  `next: <command>` recovery line below for the human reader.
+
+- **Four post-2026-05-15-touch-feel polish fixes.** None blocked any
+  current workflow; each closes a small papercut surfaced during the
+  end-of-day dogfood pass.
+
+  1. **`bin/_lib/checkDistFreshness.mjs`** — stale-dist warning now
+     names *"after switching worktrees on this repo"* alongside the
+     existing *"after a `git pull`"* cause. Worktree exit followed by
+     `./bin/gate.mjs` in the parent is a regular trigger and the
+     prior hint missed it.
+
+  2. **`GuildConfig.load()`** — `GUILD_CONFIG=""` (set-but-empty) now
+     emits a one-line stderr nudge before falling back to walk-up.
+     The previous behavior silently treated empty as unset, which is
+     the footgun mode where the caller thinks they're clearing the
+     override but is in fact letting walk-up decide the substrate.
+
+  3. **`gate swarm-status` text rendering** — waves with no executors
+     render on a single line (`<id> [state] from=<from> (no executors)`)
+     rather than emitting a separate indented `(no executors assigned)`
+     sub-line. Substrates dominated by pre-#230 records (or freshly-
+     filed pending waves) no longer present visually heavy two-line
+     blocks per wave.
+
+  4. **`gate swarm-status` summary hint** — when `active_waves > 0` but
+     `distinct_executors == 0`, a one-line hint surfaces
+     `(no executor-stamped activity — likely pre-#230 records or
+     freshly-filed pending)`. The previous summary line read as
+     "swarm picture" at face value, misleading the reader for the
+     legacy-substrate case.
+
+- **Success-path stderr notices now suppressed in JSON mode** for
+  `gate approve`, `gate execute`, `gate review`, `gate thank`. The
+  notices (self-approve / executor-assignment mismatch / self-review
+  / `--comment` deprecation hint / self-thank) carry information that
+  JSON consumers can already detect structurally from the envelope
+  (`by` / `from` / `executors[].name` fields), so re-emitting prose
+  on stderr was pure context pollution for AI consumers. Text-mode
+  readers still get the disclosure unchanged.
+  - `gate approve --by X` where `X == request.from`, profile-feature
+    `selfApprove: warn` → notice (text only)
+  - `gate execute --by X` where `X` is not in the assigned executors
+    list → notice (text only); message updated from
+    `--executor records intent` to `--executors records intent`
+    (singular flag was removed in #398)
+  - `gate review --by X` where `X == request.from` → ⚠ self-review
+    (text only)
+  - `gate review --comment <s>` → deprecation hint (text only)
+  - `gate thank X --to X` → self-thank notice (text only)
+
+  Audit follow-up to #397 (which handled `notice: wrote <path>` in
+  agora new/play, devil open). Same eris-first principle: stderr on
+  success paths should not carry prose that's already in the JSON
+  envelope.
+
+  Out of scope (kept as-is):
+  - `gate message` self-message / inactive-recipient notices: this
+    verb has no JSON output mode at all, so stderr is the only
+    signal channel.
+  - `gate next` setup-failure notices: those are error paths, not
+    success-path notices; they need a separate parity refactor
+    (route through `emitErrorEnvelope` for JSON consumers) covered
+    by a future PR.
+  - `errorEnvelope.ts` JSON-on-stderr write: that's the contract
+    (JSON consumers parse stderr for the envelope), not pollution.
+  - `(explain: ...)`: opt-in via `--explain`, caller asked for it.
+  - `⟶ <voice>`: text-mode-only ornament by design (#382).
+
+- **Test runner default concurrency raised from 4 → 8** (override via
+  `TEST_CONCURRENCY=<N>`). The suite is subprocess-spawn-bound (~119
+  of 173 tests `spawnSync` a fresh `gate.mjs`), not CPU-bound, so
+  oversubscription pays even on the 4-vCPU GitHub `ubuntu-latest`
+  runner. Local measurement on a 10-core mac: 4 → 513s, 8 → ~310s,
+  12 → 224s, 20 → 159s. The doc-comment block in `tests/run.mjs` carries
+  the table so future tuning has a baseline.
+
+- **`tools/lore-scope.sh` moved to `scripts/lore-scope.sh`.** Top-level
+  `tools/` held a single shell script that paralleled `scripts/`
+  without a meaningful distinction. Merging removes a one-script
+  directory and brings the root listing down 1 (part of #385's
+  cold-reader discoverability pass). Test file moved
+  `tests/tools/` → `tests/scripts/` to match. Doc refs in
+  `lore/README.md`, `docs/glossary.md`, and source comments updated.
+
+- **`writeFormat.ts:parseFormat` re-export shim removed.** PR #397
+  introduced `src/interface/shared/parseFormat.ts` as the canonical
+  parser and left a single-line re-export in `writeFormat.ts` so the
+  9 write-side handlers that pull `parseFormat` from there didn't
+  need touching in the same PR. This PR finishes the move: those 9
+  handlers now import from `../../shared/parseFormat.js` directly,
+  the shim is gone. Single import path for one symbol — no
+  divergence risk if either side changes signature.
+
+### Added
+
+- **`.changelog/next/` fragment system replaces concurrent writes to
+  `CHANGELOG.md`'s `[Unreleased]` block.** Each PR drops one file at
+  `.changelog/next/<category>-<slug>.md`; at release time
+  `npm run changelog:release -- <version>` collects fragments,
+  groups by category, and rewrites the `[Unreleased]` block. Per-PR
+  filenames make textual conflicts impossible — the previous "append
+  to end of section" convention still produced duplicate `### Fixed`
+  sub-headings when PRs raced. See `.changelog/README.md` for the
+  format.
+
+- **`gate decisions --limit <N>`** truncates the rendered decision
+  list to the most-recent N entries after sort. `totals.entries_counted`
+  continues to reflect pre-truncation total so callers can detect
+  whether more decisions existed past the cap. Sibling
+  `gate voices --limit` already had this; aligning the flag surface
+  removes a cross-verb inconsistency.
+
+- **`gate swarm-status` — cross-wave director / participant view
+  (#346).** Closes the principle-14 loop: composes `wave-status`
+  across all active waves into one envelope so a director never has
+  to chain 1 + N + N×M sub-reads to compose the swarm picture.
+  Returns waves (with per-executor freshness bands per #309),
+  distinct-executor count, and a flat `alerts[]` array surfacing
+  `stale_executor` / `overlapping_target` / `attribution_risk`.
+  Dual scope flags: `--orchestrating <actor>` (director-centric, "what
+  swarm am I conducting?") and `--for <actor>` (participant-centric,
+  "what swarm am I part of?"). GUILD_ACTOR env defaults to
+  `orchestrating=$GUILD_ACTOR` with `scope.for_source="env"` reported
+  in the payload. Sibling of `gate wave-status` (per-wave) and
+  `gate decisions` (per-actor history). 8 tests under
+  `tests/interface/swarmStatus346.test.ts`.
+
+- **`GUILD_CONFIG` env var override for cross-tree substrate access
+  (#308 Layer A).** When set to an absolute path, `gate` skips the
+  cwd walk-up and uses the named `guild.config.yaml` directly.
+  Unblocks the "worktree at <path-A>, substrate at <path-B>" case
+  where the orchestrator's substrate is not in the worktree's git
+  ancestry — most notably Claude Code SubAgents running in
+  `.claude/worktrees/agent-X/` against a parent substrate that
+  lives outside the repo tree. Resolution priority:
+  `GUILD_CONFIG` env > `findConfig(cwd)` walk-up > cwd fallback.
+  A nonexistent path errors loudly rather than silently falling
+  back (silent fallback here would let a SubAgent write to a
+  stale substrate without realising).
+
+- **Claude Code `PostToolUse` → `gate witness` example wiring**
+  shipped under `examples/plugins/harness-wirings/claude-code/`.
+  Surfaces SubAgent tool-use as throttled witness updates on the
+  parent wave so `gate wave-status` / `gate swarm-status` show
+  fresh activity without polling. Source 3 of the #308 Layer A
+  bundle (per principle 15 routing: harness-specific wirings live
+  in `examples/`, not in core).
+
+- **Principle 15 promoted: "Plugins are the default extension surface;
+  core owns substrate identity."** Names the long-implicit order
+  asymmetry between core and plugin routing — plugin-first for
+  surface / style / cross-cutting; core only for substrate identity
+  (domain semantics, lifecycle, principle-11 director-axis reads).
+  Promotion observations: #308 design re-route (core daemon →
+  plugin composition) and the voice plugin cluster (#377–#383)
+  shipping `VoicePlugin` as a fourth plugin type rather than as a
+  core feature. Glossary count updated 14 → 15.
+
+### Fixed
+
+- **`bin/*.mjs` entries now catch unhandled errors and render them in
+  the standard `error: <msg>` envelope instead of raw Node stack
+  traces.** Surfaced by `GUILD_CONFIG=/nonexistent` printing an
+  `at file:///…/bin/gate.mjs:54:1 { field: 'GUILD_CONFIG' }` stack
+  with a `Node.js v23.6.1` footer — unprofessional for what is user
+  error. The shared helper `bin/_lib/handleMainError.mjs` detects
+  DomainError-shaped throws (presence of `.field` property) and
+  prints clean `error: <msg>` + exit 1; unexpected internal throws
+  still surface their stack with a `<bin>: internal error (please
+  file an issue …)` preamble. Fired from gate / guild / agora /
+  devil / ctx — all five entry-points.
+
+- **`GUILD_CONFIG=""` stderr nudge now fires exactly once per
+  process** instead of twice. `GuildConfig.load()` is called
+  multiple times in one invocation (top-level + at least one
+  plugin loader); the prior implementation re-emitted on each.
+  Module-private one-shot guard `emptyGuildConfigNudgeFired`
+  preserves per-process emission semantics so a fresh shell still
+  gets the warning, but a single CLI run no longer doubles it.
+
+- **`gate boot --by <actor>` (and `--as` alias) now resolves identity
+  for one invocation, overriding `GUILD_ACTOR`.** Pre-fix the
+  muscle-memory `gate boot --by eris` bounced with
+  `unknown flag: --by` because boot only consulted env. Lifecycle
+  verbs all take `--by`; aligning boot removes the cross-verb
+  surprise.
+
+- **`gate voices` (no positional) now emits a per-actor utterance
+  index instead of a bare usage error.** Pre-fix the no-arg invocation
+  returned `Usage: gate voices <name>` with no way to discover *which*
+  actors had utterances to walk — a silent-fallback signal-loss
+  against the discovery question (`trap_silent_fallback_loses_signal`).
+  Index counts both authored requests and reviews, labels each row
+  `member` / `host` / `historical`, and sorts by activity desc.
+
+<!-- carried over from pre-fragment [Unreleased] -->
+
 ### Fixed
 
 - **`gate tail 0` no longer falsely claims the content_root is
