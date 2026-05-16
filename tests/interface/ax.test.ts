@@ -1165,7 +1165,12 @@ test('transcript: narrative prose names filer, action, executor, reviews', () =>
     assert.match(stdout, /Alice filed/);
     assert.match(stdout, /refactor parser/);
     assert.match(stdout, /bob as executor/);
-    assert.match(stdout, /Bob moved it to completed/);
+    // Slice-close re-phrase (#400-era polish + eris touch-feel
+    // 2026-05-16 finding 4.4): single-executor `complete` shows up
+    // as the slice closure, not as "moved it to executing" + "moved
+    // it to completed". Cold reader sees the actor's terminal
+    // judgement directly.
+    assert.match(stdout, /Bob closed their slice as completed/);
     assert.match(stdout, /devil lense/);
     assert.match(stdout, /verdict of ok/);
     assert.match(stdout, /LGTM/);

@@ -64,5 +64,3 @@ preserves the trail of thinking, not just the latest conclusion.
 - `principles/03-legibility-costs.md` — legibility is what makes
   records-outliving-writers work; this principle names *why* we
   pay legibility's costs.
-- `alexandria/orientation/PHILOSOPHY.md` — same-agent-over-time
-  coordination is this principle at a different layer.

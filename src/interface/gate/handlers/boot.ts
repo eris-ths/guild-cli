@@ -160,7 +160,7 @@ export async function bootCmd(c: C, args: ParsedArgs): Promise<number> {
 
   const sessionIdFlag = optionalOption(args, 'session-id');
   let sessionId: string | null = null;
-  let sessionIdSource: 'flag' | 'env' | null = null;
+  let sessionIdSource: 'flag' | 'env' | 'unset' = 'unset';
   if (sessionIdFlag !== undefined && sessionIdFlag.length > 0) {
     if (!SESSION_ID_RE.test(sessionIdFlag)) {
       throw new Error(
