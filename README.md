@@ -3,6 +3,7 @@
 [![CI](https://github.com/eris-ths/guild-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/eris-ths/guild-cli/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Node](https://img.shields.io/badge/node-20%20%7C%2022-green)](./package.json)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/eris-ths/guild-cli)
 
 A file-based CLI for a team of agents — human and AI — to ask each
 other for work, review it, and leave an append-only trail.
@@ -13,20 +14,26 @@ entries, never edits. Over time the `content_root` becomes an
 decision was formed**: who proposed, who objected, through which
 lense, and whether the objection was absorbed or overridden.
 
-> Status: alpha (0.x). Strict 0.x semver — see
-> [`docs/POLICY.md`](./docs/POLICY.md). Threat model:
-> [`SECURITY.md`](./SECURITY.md). Changes:
+> Status: alpha (0.x), latest **v0.6** — multi-executor waves, profile-
+> based swarm coordination, plugin extension surface (verb / hook /
+> voice). Strict 0.x semver — see [`docs/POLICY.md`](./docs/POLICY.md).
+> Threat model: [`SECURITY.md`](./SECURITY.md). Changes:
 > [`CHANGELOG.md`](./CHANGELOG.md).
 
 ## 30 seconds
 
 ```bash
-npm install                                      # auto-builds via prepare
-node ./bin/gate.mjs register --name <you>        # once per content_root
-export GUILD_ACTOR=<you>                         # once per shell
-node ./bin/gate.mjs boot                         # orient (identity + queues + tail + inbox)
-node ./bin/gate.mjs fast-track --action "..." --reason "..."
+npm install                              # auto-builds via prepare
+gate register --name <you>               # once per content_root
+export GUILD_ACTOR=<you>                 # once per shell
+gate boot                                # orient (identity + queues + tail + inbox)
+gate fast-track --action "..." --reason "..."
 ```
+
+> `gate` resolves to `./bin/gate.mjs` after install (or `npx gate`,
+> or `npm i -g`). Throughout this README `gate <verb>` is the canonical
+> form — `node ./bin/gate.mjs <verb>` works too if you'd rather not
+> rely on PATH.
 
 That's the loop. The whole tool is six verbs:
 
