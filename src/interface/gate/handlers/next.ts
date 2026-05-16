@@ -44,6 +44,7 @@ import {
 // `gate next` reads the same actionable ladder bootCmd assembles.
 import { deriveVerbsAvailableNow } from './bootActionable.js';
 import { parseFormat } from '../../shared/parseFormat.js';
+import { DomainError } from '../../../domain/shared/DomainError.js';
 
 const NEXT_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'confirm',
@@ -96,14 +97,16 @@ export async function nextCmd(c: C, args: ParsedArgs): Promise<number> {
   if (actor === null) {
     // No GUILD_ACTOR — boot would suggest `export GUILD_ACTOR=...`,
     // but `next` is specifically about actor-scoped actionable work.
-    // Refuse rather than auto-dispatch a meaningless suggestion.
-    process.stderr.write(
-      'error: GUILD_ACTOR is not set. ' +
+    // Throw DomainError so the outer catch routes through
+    // emitErrorEnvelope; JSON callers get the structured envelope
+    // (field='GUILD_ACTOR'), text callers get the prose `error:` line.
+    throw new DomainError(
+      'GUILD_ACTOR is not set. ' +
         'Set it before asking gate next what to do — the actionable ' +
         'ladder is actor-scoped.\n' +
-        '  next: export GUILD_ACTOR=<your-name>\n',
+        '  next: export GUILD_ACTOR=<your-name>',
+      'GUILD_ACTOR',
     );
-    return 1;
   }
 
   // Reuse boot's derivation modules so the actionable ladder gate
@@ -119,12 +122,12 @@ export async function nextCmd(c: C, args: ParsedArgs): Promise<number> {
       ? 'host'
       : 'unknown';
   if (role === 'unknown') {
-    process.stderr.write(
-      `error: GUILD_ACTOR=${actor} is not a registered member or host. ` +
+    throw new DomainError(
+      `GUILD_ACTOR=${actor} is not a registered member or host. ` +
         `gate boot would suggest registering — run that first.\n` +
-        `  next: gate register --name ${actor}\n`,
+        `  next: gate register --name ${actor}`,
+      'GUILD_ACTOR',
     );
-    return 1;
   }
 
   const allRequests = await c.requestUC.listAll();
@@ -186,11 +189,18 @@ export async function nextCmd(c: C, args: ParsedArgs): Promise<number> {
   }
 
   if (!canAuto) {
-    emitPlan(plan, format, true);
-    process.stderr.write(
-      `error: '${top.verb}' needs caller-supplied args and won't be ` +
-        `auto-dispatched. Run the command shown above with your inputs filled in.\n`,
-    );
+    // Caller asked --confirm but the verb needs extra args we don't
+    // know — emit the plan with `dispatched: false` (truth) and exit
+    // non-zero. JSON consumers read `can_auto_dispatch: false +
+    // dispatched: false` and know to fill in args; text callers get
+    // the prose hint on stderr alongside the human plan render.
+    emitPlan(plan, format, false);
+    if (format !== 'json') {
+      process.stderr.write(
+        `error: '${top.verb}' needs caller-supplied args and won't be ` +
+          `auto-dispatched. Run the command shown above with your inputs filled in.\n`,
+      );
+    }
     return 1;
   }
 
