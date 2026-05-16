@@ -175,7 +175,7 @@ export interface BootPayload {
   actor: string | null;
   role: 'member' | 'host' | 'unknown' | null;
   session_id: string | null;
-  session_id_source: 'flag' | 'env' | null;
+  session_id_source: 'flag' | 'env' | 'unset';
   /**
    * Delta-filter timestamp (--since). When set, `tail`, `your_recent`,
    * and `inbox_unread` only contain entries whose `at` is strictly

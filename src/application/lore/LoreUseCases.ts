@@ -42,9 +42,23 @@ export class LoreUseCases {
     return all.filter((e) => matchesFilter(e, filter));
   }
 
-  /** Lookup by exact name. Returns null when missing. */
+  /**
+   * Lookup by exact name (canonical slug, e.g. `11-ai-first-human-as-projection`)
+   * with a numeric-prefix fallback (e.g. `11` resolves to that file).
+   * Numeric fallback matches when the input is purely digits and
+   * exactly one entry starts with `<digits>-`. Disambiguates only the
+   * common "I remember the number, not the slug" cold-read case;
+   * ambiguous matches (multiple hits, or non-digit input) fall through
+   * to null so the caller's `next: gate lore list` hint stays
+   * meaningful (eris touch-feel 2026-05-16 finding 4.6).
+   */
   find(name: string): LoreEntry | null {
-    return this.repo.find(name);
+    const exact = this.repo.find(name);
+    if (exact !== null) return exact;
+    if (!/^\d+$/.test(name)) return null;
+    const prefix = `${name}-`;
+    const candidates = this.repo.listAll().filter((e) => e.name.startsWith(prefix));
+    return candidates.length === 1 ? candidates[0]! : null;
   }
 }
 

@@ -37,6 +37,15 @@ export type JsonSchema = {
   description?: string;
   items?: JsonSchema;
   oneOf?: JsonSchema[];
+  /**
+   * Hard ceiling on string length for free-form text fields. Surfaced
+   * here so AI consumers can pre-validate payload length without
+   * having to compose, submit, and recover from a domain-side
+   * DomainError (asteria dogfood 2026-05-16 finding F1).
+   * Domain caps: MAX_TEXT=4096 (action/reason/note/comment/text);
+   * MAX_STAKE_NOTE=80 (witness/claim stake notes).
+   */
+  maxLength?: number;
 };
 
 export interface VerbSchema {
@@ -60,6 +69,21 @@ export interface VerbSchema {
 const str: JsonSchema = { type: 'string' };
 const strOpt = (description?: string): JsonSchema =>
   description ? { type: 'string', description } : { type: 'string' };
+// Domain-side caps for free-form text fields (action / reason / note /
+// review comment / message text). Surfaced here so AI consumers know
+// the ceiling without having to guess or hit a domain error after
+// composing a long payload (asteria dogfood 2026-05-16 finding F1).
+// Keep in sync with `MAX_TEXT` / `MAX_STAKE_NOTE` in Request.ts.
+const TEXT_MAX = 4096;
+const STAKE_NOTE_MAX = 80;
+const textField = (description?: string): JsonSchema =>
+  description
+    ? { type: 'string', maxLength: TEXT_MAX, description }
+    : { type: 'string', maxLength: TEXT_MAX };
+const stakeNoteField = (description?: string): JsonSchema =>
+  description
+    ? { type: 'string', maxLength: STAKE_NOTE_MAX, description }
+    : { type: 'string', maxLength: STAKE_NOTE_MAX };
 const idStr: JsonSchema = {
   type: 'string',
   description:
@@ -365,11 +389,12 @@ const VERBS: readonly VerbSchema[] = [
         },
         session_id_source: {
           type: 'string',
-          enum: ['flag', 'env'],
+          enum: ['flag', 'env', 'unset'],
           description:
             'Names which input populated `session_id`: "flag" when ' +
             '--session-id was supplied on this invocation, "env" when ' +
-            'GUILD_SESSION_ID was the source, null when neither.',
+            'GUILD_SESSION_ID was the source, "unset" when neither ' +
+            '(session_id is null in that case).',
         },
         since: {
           type: 'string',
@@ -1734,7 +1759,7 @@ const VERBS: readonly VerbSchema[] = [
       properties: {
         id: idStr,
         by: strOpt('approver (defaults to $GUILD_ACTOR)'),
-        note: str,
+        note: textField(),
         format: formatField,
         'dry-run': dryRunField,
       },
@@ -1751,8 +1776,8 @@ const VERBS: readonly VerbSchema[] = [
       properties: {
         id: idStr,
         by: str,
-        reason: strOpt('alias for --note'),
-        note: strOpt('closure note; falls back to positional arg'),
+        reason: textField('alias for --note'),
+        note: textField('closure note; falls back to positional arg'),
         format: formatField,
         'dry-run': dryRunField,
       },
@@ -1769,7 +1794,7 @@ const VERBS: readonly VerbSchema[] = [
       properties: {
         id: idStr,
         by: str,
-        note: str,
+        note: textField(),
         cwd: {
           type: 'string',
           description:
@@ -1791,7 +1816,7 @@ const VERBS: readonly VerbSchema[] = [
       properties: {
         id: idStr,
         by: str,
-        note: str,
+        note: textField(),
         cliff: {
           type: 'string',
           description:
@@ -1822,8 +1847,8 @@ const VERBS: readonly VerbSchema[] = [
       properties: {
         id: idStr,
         by: str,
-        reason: str,
-        note: str,
+        reason: textField(),
+        note: textField(),
         format: formatField,
         'dry-run': dryRunField,
       },
@@ -1870,7 +1895,7 @@ const VERBS: readonly VerbSchema[] = [
       properties: {
         id: idStr,
         by: strOpt('claimant (defaults to $GUILD_ACTOR)'),
-        note: strOpt(
+        note: stakeNoteField(
           'optional stake metadata (issue #246). Single short string ' +
             '≤ 80 chars — metadata for THIS stake event, not commentary. ' +
             'Cross-actor discussion belongs in agora plays; the note is ' +
@@ -1900,7 +1925,7 @@ const VERBS: readonly VerbSchema[] = [
       properties: {
         id: idStr,
         by: strOpt('observer (defaults to $GUILD_ACTOR)'),
-        note: strOpt(
+        note: stakeNoteField(
           'optional per-witness metadata (issue #246). Single short string ' +
             '≤ 80 chars — metadata for THIS stake event, not commentary. ' +
             'Cross-actor discussion belongs in agora plays. Same-actor ' +

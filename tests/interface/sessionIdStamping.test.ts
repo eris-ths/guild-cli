@@ -248,7 +248,7 @@ test('gate boot: actor set + no session → hints.session_id_unset=true', (t) =>
   assert.equal(r.status, 0);
   const j = JSON.parse(r.stdout) as Record<string, unknown>;
   assert.equal(j['session_id'], null);
-  assert.equal(j['session_id_source'], null);
+  assert.equal(j['session_id_source'], 'unset');
   const hints = j['hints'] as Record<string, unknown>;
   assert.equal(hints['session_id_unset'], true);
 });
