@@ -76,8 +76,11 @@ export async function reqThank(c: C, args: ParsedArgs): Promise<number> {
   const updated = await c.requestUC.thank(ucInput);
 
   // Self-thank: not an error, just surface it so the log reads
-  // honestly. Mirrors the self-review / self-approval notices.
-  if (by === to) {
+  // honestly. Mirrors the self-review / self-approval notices. Text
+  // mode only — JSON consumers have the by/to fields in the envelope
+  // and can detect the self-edge structurally without prose noise.
+  const format = parseFormat(args);
+  if (by === to && format !== 'json') {
     process.stderr.write(
       `notice: self-thank — ${by} thanked themselves on ${id}. ` +
         `thanks is usually a cross-actor primitive; if that's intentional ` +
@@ -86,7 +89,7 @@ export async function reqThank(c: C, args: ParsedArgs): Promise<number> {
   }
 
   emitWriteResponse(
-    parseFormat(args),
+    format,
     updated,
     `✓ thanked: ${to} on ${id}`,
     c.config,
