@@ -101,6 +101,7 @@ export async function reqReview(c: C, args: ParsedArgs): Promise<number> {
   // as --executor / --executors in `gate request`.
   const noteOpt = optionalOption(args, 'note');
   const commentOpt = optionalOption(args, 'comment');
+  const format = parseFormat(args);
   if (noteOpt !== undefined && commentOpt !== undefined) {
     throw new Error(
       'review: --note and --comment are mutually exclusive (got both). ' +
@@ -108,10 +109,10 @@ export async function reqReview(c: C, args: ParsedArgs): Promise<number> {
     );
   }
   // Surface a one-line deprecation hint when the legacy alias is used,
-  // so the migration path is visible in session transcripts. The hint
-  // goes to stderr (not stdout) so JSON callers stay clean — same
-  // discipline as the self-approve / self-review notices.
-  if (commentOpt !== undefined) {
+  // so the migration path is visible in session transcripts. Text mode
+  // only — JSON consumers don't need the prose hint clogging their
+  // context window; the flag still works either way.
+  if (commentOpt !== undefined && format !== 'json') {
     process.stderr.write(
       'notice: --comment is a deprecated alias of --note; please migrate ' +
         '(both will continue to work for now).\n',
@@ -175,7 +176,7 @@ export async function reqReview(c: C, args: ParsedArgs): Promise<number> {
     });
     // Review doesn't transition state — omit would_transition, let
     // the preview payload carry the new review entry in `reviews`.
-    emitDryRunPreview({ verb: 'review', id, by, after: updated, format: parseFormat(args) });
+    emitDryRunPreview({ verb: 'review', id, by, after: updated, format });
     return 0;
   }
   // Lifecycle hook fire point (#36 Phase 1 step 5). `before:review`
@@ -201,9 +202,10 @@ export async function reqReview(c: C, args: ParsedArgs): Promise<number> {
   // undermined when the critic is the author. We surface a stderr
   // marker rather than reject — history may need self-annotations
   // (e.g. "I want to flag this myself") and the caller's own
-  // judgement wins. The warning exists so the choice is visible in
-  // the session transcript and not silently laundered into YAML.
-  if (updated.from.value === by) {
+  // judgement wins. Text mode only — JSON consumers can detect the
+  // self-edge structurally from the `by` and `from` fields in the
+  // envelope without 3 lines of prose.
+  if (updated.from.value === by && format !== 'json') {
     process.stderr.write(
       `⚠ self-review: ${by} reviewed their own request ${id}. ` +
         `The Two-Persona Devil frame expects a different voice — ` +
@@ -224,7 +226,7 @@ export async function reqReview(c: C, args: ParsedArgs): Promise<number> {
   const displayLense = stored?.lense ?? lense;
   const displayVerdict = stored?.verdict ?? verdict;
   emitWriteResponse(
-    parseFormat(args),
+    format,
     updated,
     `✓ review recorded: ${id} [${displayLense}/${displayVerdict}]`,
     c.config,

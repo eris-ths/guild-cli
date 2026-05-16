@@ -127,15 +127,22 @@ export async function reqApprove(c: C, args: ParsedArgs): Promise<number> {
   // Self-approval notice. Suppressed under `allowed` (deployments that
   // actively rely on self-approve and don't want the audit line).
   // Preserved under `warn` — the historical default — so the
-  // no-second-pair-of-eyes case never happens silently.
-  if (by === r.from.value && c.config.features.selfApprove === 'warn') {
+  // no-second-pair-of-eyes case never happens silently. Text mode
+  // only: JSON consumers have `by` and `from` in the envelope and can
+  // detect the self-edge structurally without 3 lines of prose.
+  const format = parseFormat(args);
+  if (
+    by === r.from.value &&
+    c.config.features.selfApprove === 'warn' &&
+    format !== 'json'
+  ) {
     process.stderr.write(
       `notice: ${by} approved their own request ${id} ` +
         `(no second reviewer; for a single-step self-flow use ` +
         `'gate fast-track').\n`,
     );
   }
-  emitWriteResponse(parseFormat(args), r, `✓ approved: ${id}`, c.config, [], {
+  emitWriteResponse(format, r, `✓ approved: ${id}`, c.config, [], {
     voice: renderVoice(c.voicePlugins, 'approve', r, c.config),
   });
   return 0;
@@ -277,15 +284,16 @@ export async function reqExecute(c: C, args: ParsedArgs): Promise<number> {
   // contradicts the actual record. Membership check resolves both
   // false-positives and silent drops.
   const assigned = r.executors;
-  if (assigned.length > 0 && !r.hasExecutor(by)) {
+  const execFormat = parseFormat(args);
+  if (assigned.length > 0 && !r.hasExecutor(by) && execFormat !== 'json') {
     const assignedList = assigned.map((m) => m.value).join(', ');
     const noun = assigned.length === 1 ? 'assigned to' : 'assigned to one of';
     process.stderr.write(
       `notice: ${by} executed request ${id} (${noun} ` +
-        `${assignedList}); --executor records intent, not access.\n`,
+        `${assignedList}); --executors records intent, not access.\n`,
     );
   }
-  emitWriteResponse(parseFormat(args), r, `✓ executing: ${id}`, c.config, [], {
+  emitWriteResponse(execFormat, r, `✓ executing: ${id}`, c.config, [], {
     voice: renderVoice(c.voicePlugins, 'execute', r, c.config),
   });
   return 0;

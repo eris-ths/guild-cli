@@ -67,7 +67,7 @@ test('gate execute: notice fires when --executor was set and actor differs', (t)
   assert.match(r.stdout, /✓ executing/);
   assert.match(
     r.stderr,
-    /notice: alice executed request .* \(assigned to bob\); --executor records intent, not access\./,
+    /notice: alice executed request .* \(assigned to bob\); --executors records intent, not access\./,
   );
 });
 
