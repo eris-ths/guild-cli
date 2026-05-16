@@ -13,7 +13,8 @@ import {
   emitDryRunPreview,
   normalizeActor,
 } from './internal.js';
-import { emitWriteResponse, parseFormat } from './writeFormat.js';
+import { emitWriteResponse } from './writeFormat.js';
+import { parseFormat } from '../../shared/parseFormat.js';
 import { renderVoice } from '../../shared/voiceRender.js';
 import {
   fireBeforeHook,

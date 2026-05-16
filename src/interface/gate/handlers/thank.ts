@@ -12,7 +12,8 @@ import {
   emitDryRunPreview,
   normalizeActor,
 } from './internal.js';
-import { emitWriteResponse, parseFormat } from './writeFormat.js';
+import { emitWriteResponse } from './writeFormat.js';
+import { parseFormat } from '../../shared/parseFormat.js';
 
 const THANK_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'for',

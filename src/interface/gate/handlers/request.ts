@@ -34,7 +34,8 @@ import {
   resolveInvokedBy,
   normalizeActor,
 } from './internal.js';
-import { emitWriteResponse, parseFormat } from './writeFormat.js';
+import { emitWriteResponse } from './writeFormat.js';
+import { parseFormat } from '../../shared/parseFormat.js';
 import { renderVoice } from '../../shared/voiceRender.js';
 
 // Known flags per write-verb. Silent-ignore of unknown flags (e.g.

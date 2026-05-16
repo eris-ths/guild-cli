@@ -5,7 +5,8 @@ import {
   rejectUnknownFlags,
 } from '../../shared/parseArgs.js';
 import { C, isDryRun, emitDryRunPreview } from './internal.js';
-import { emitWriteResponse, parseFormat } from './writeFormat.js';
+import { emitWriteResponse } from './writeFormat.js';
+import { parseFormat } from '../../shared/parseFormat.js';
 import { resolveGuildSessionId } from '../../shared/resolveGuildSessionId.js';
 
 // Issue #244 (#226 phase 2) — non-exclusive cross-session observer.
