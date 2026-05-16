@@ -1,20 +1,6 @@
 import { resolveGuildActor } from '../../shared/resolveGuildActor.js';
 import { Request } from '../../../domain/request/Request.js';
 import { GuildConfig } from '../../../infrastructure/config/GuildConfig.js';
-import { ParsedArgs } from '../../shared/parseArgs.js';
-import { parseFormat as parseFormatShared } from '../../shared/parseFormat.js';
-
-/**
- * Re-export of the shared `--format` parser. Kept as a named export
- * here for backwards-compatibility with the many gate write-handlers
- * that import it from this module; new code should pull from
- * `interface/shared/parseFormat.js` directly. Text is the default to
- * keep the `✓ ...` muscle memory intact for humans; agents opt into
- * json explicitly.
- */
-export function parseFormat(args: ParsedArgs): 'json' | 'text' {
-  return parseFormatShared(args);
-}
 
 /**
  * Structured write-side response for agent-first consumers.

@@ -5,7 +5,7 @@ import {
   rejectUnknownFlags,
 } from '../../shared/parseArgs.js';
 import { C } from './internal.js';
-import { parseFormat } from './writeFormat.js';
+import { parseFormat } from '../../shared/parseFormat.js';
 import {
   fireBeforeSessionHook,
   fireAfterSessionHook,
