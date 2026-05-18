@@ -5,7 +5,11 @@ import {
   rejectUnknownFlags,
 } from '../../shared/parseArgs.js';
 import { C } from './internal.js';
-import { deriveBootSuggestedNext, BootSuggestedNext } from './boot.js';
+import {
+  deriveBootSuggestedNext,
+  deriveSuggestedNextNullReason,
+  BootSuggestedNext,
+} from './boot.js';
 import { parseFormat } from '../../shared/parseFormat.js';
 
 const SUGGEST_KNOWN_FLAGS: ReadonlySet<string> = new Set(['format']);
@@ -34,6 +38,15 @@ const SUGGEST_KNOWN_FLAGS: ReadonlySet<string> = new Set(['format']);
 
 interface SuggestPayload {
   suggested_next: BootSuggestedNext | null;
+  /**
+   * Short explanation set when `suggested_next` is `null` but the
+   * substrate still has open work the caller might wonder about
+   * (host with pending waves that name other executors, author who
+   * delegated execution, …). `null` when the silence is genuine.
+   * Matches the sibling field on `gate boot` — two surfaces, one
+   * contract.
+   */
+  suggested_next_reason: string | null;
 }
 
 export async function suggestCmd(c: C, args: ParsedArgs): Promise<number> {
@@ -57,14 +70,25 @@ export async function suggestCmd(c: C, args: ParsedArgs): Promise<number> {
 
   const allRequests = await c.requestUC.listAll();
   const suggestion = deriveBootSuggestedNext(actor, role, members, allRequests);
+  const reason =
+    suggestion === null && actor !== null
+      ? deriveSuggestedNextNullReason(actor, allRequests)
+      : null;
 
-  const payload: SuggestPayload = { suggested_next: suggestion };
+  const payload: SuggestPayload = {
+    suggested_next: suggestion,
+    suggested_next_reason: reason,
+  };
 
   if (format === 'json') {
     process.stdout.write(JSON.stringify(payload) + '\n');
   } else {
     if (suggestion === null) {
-      process.stdout.write('(nothing urgent)\n');
+      if (reason !== null) {
+        process.stdout.write(`(nothing urgent — ${reason})\n`);
+      } else {
+        process.stdout.write('(nothing urgent)\n');
+      }
     } else {
       // Compact text form: one line for verb + args, one for reason,
       // one trailing advisory footer. The footer goes to stderr so

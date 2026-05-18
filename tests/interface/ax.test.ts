@@ -311,6 +311,77 @@ test('suggest: null when registered actor has nothing to do', () => {
     const { stdout } = runGate(root, ['suggest'], { GUILD_ACTOR: 'alice' });
     const payload = JSON.parse(stdout);
     assert.equal(payload.suggested_next, null);
+    // Genuine silence — no open work, no reason to surface.
+    assert.equal(payload.suggested_next_reason, null);
+  } finally {
+    cleanup();
+  }
+});
+
+test('suggest: null with substrate open-work surfaces suggested_next_reason', () => {
+  // Asteria dogfood 2026-05-17: host saw status.pending.total: 1 but
+  // suggested_next: null. The substrate's silence read as a bug. Fix:
+  // a sibling `suggested_next_reason` names which open requests exist
+  // when the suggestion ladder is empty but the substrate isn't.
+  const { root, cleanup } = bootstrap();
+  try {
+    // Alice authors a request naming bob as executor. Host has no
+    // role in the executor list, so actionableTransitions is empty
+    // for the host — but `status.pending.total: 1` would still show.
+    runGate(
+      root,
+      ['request', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executors', 'bob'],
+      { GUILD_ACTOR: 'alice' },
+    );
+    const { stdout } = runGate(root, ['suggest'], { GUILD_ACTOR: 'human' });
+    const payload = JSON.parse(stdout);
+    assert.equal(payload.suggested_next, null);
+    assert.ok(
+      typeof payload.suggested_next_reason === 'string' &&
+        payload.suggested_next_reason.includes('1 pending'),
+      `expected reason to mention 1 pending, got: ${payload.suggested_next_reason}`,
+    );
+    assert.match(payload.suggested_next_reason, /none names you as executor/);
+  } finally {
+    cleanup();
+  }
+});
+
+test('suggest --format text: null + reason → (nothing urgent — <reason>)', () => {
+  const { root, cleanup } = bootstrap();
+  try {
+    runGate(
+      root,
+      ['request', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executors', 'bob'],
+      { GUILD_ACTOR: 'alice' },
+    );
+    const { stdout } = runGate(
+      root,
+      ['suggest', '--format', 'text'],
+      { GUILD_ACTOR: 'human' },
+    );
+    assert.match(stdout, /^\(nothing urgent — /);
+    assert.match(stdout, /1 pending/);
+  } finally {
+    cleanup();
+  }
+});
+
+test('boot: suggested_next_reason field is null when suggested_next is non-null', () => {
+  // When the suggest ladder picks a hint, the hint's own `reason`
+  // field carries the explanation — the sibling field stays null
+  // to avoid duplicate prose at the surface.
+  const { root, cleanup } = bootstrap();
+  try {
+    runGate(
+      root,
+      ['request', '--from', 'alice', '--action', 'x', '--reason', 'r', '--executors', 'bob'],
+      { GUILD_ACTOR: 'alice' },
+    );
+    const { stdout } = runGate(root, ['boot'], { GUILD_ACTOR: 'bob' });
+    const payload = JSON.parse(stdout);
+    assert.ok(payload.suggested_next !== null);
+    assert.equal(payload.suggested_next_reason, null);
   } finally {
     cleanup();
   }

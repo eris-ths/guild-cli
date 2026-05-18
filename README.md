@@ -35,6 +35,11 @@ gate fast-track --action "..." --reason "..."
 > form — `node ./bin/gate.mjs <verb>` works too if you'd rather not
 > rely on PATH.
 
+> Pick `<you>` to be a name distinct from `host_names:` in
+> `guild.config.yaml` (default reservations: `eris`, `nao`). Hosts and
+> members are different roles, so `register --name eris` is rejected
+> with a one-line hint to pick a different name.
+
 That's the loop. The whole tool is six verbs:
 
 ```bash

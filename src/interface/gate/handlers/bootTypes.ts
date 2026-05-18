@@ -230,6 +230,17 @@ export interface BootPayload {
   };
   suggested_next: BootSuggestedNextOrPendingResponse | null;
   /**
+   * Short explanation set when `suggested_next` is `null` but the
+   * substrate still has open work the caller might wonder about
+   * (e.g. host with `pending` waves that name other executors).
+   * `null` when the silence is genuine — no open work, no gap to
+   * explain. Mirrors the friction-fix in #404 follow-up: a null
+   * suggestion is fine, but a null suggestion sitting next to a
+   * non-zero pending count reads as a substrate bug; this field
+   * closes the loop.
+   */
+  suggested_next_reason: string | null;
+  /**
    * Forward-pointing cliffs left on completed requests the actor
    * authored or executed (#37x). Most-recent-terminal-first, capped at
    * 5. Each entry surfaces the request id, the closing actor's cliff
