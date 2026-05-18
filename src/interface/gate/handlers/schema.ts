@@ -536,6 +536,15 @@ const VERBS: readonly VerbSchema[] = [
             },
           },
         },
+        suggested_next_reason: {
+          type: 'string',
+          description:
+            'Short explanation when `suggested_next` is null but open ' +
+            'work exists. Closes the gap a host sees as "status.pending ≥ 1, ' +
+            'but suggested_next is null" — names which open requests ' +
+            'exist and where to read them. Emitted as JSON null when ' +
+            'silence is genuine (no open work, or actor is unresolved).',
+        },
         past_cliffs: {
           type: 'array',
           description:
@@ -704,6 +713,14 @@ const VERBS: readonly VerbSchema[] = [
           // was added). Keeps `actor_resolved` and any future field
           // visible to schema-aware consumers without a second edit.
           properties: suggestedNextProperties,
+        },
+        suggested_next_reason: {
+          type: 'string',
+          description:
+            'Short explanation when `suggested_next` is null but open ' +
+            'work exists on substrate (e.g. host with pending waves ' +
+            'that name other executors). Emitted as JSON null when ' +
+            'silence is genuine. Mirrors the sibling field on `gate boot`.',
         },
       },
     },

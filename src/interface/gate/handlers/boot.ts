@@ -37,6 +37,7 @@ import { collectUtterances } from '../voices.js';
 import type { BootPayload, BootSuggestedNextOrPendingResponse } from './bootTypes.js';
 import {
   deriveBootSuggestedNext,
+  deriveSuggestedNextNullReason,
   derivePendingBroadcastResponse,
   deriveVerbsAvailableNow,
   computeActiveOverlappingTargets,
@@ -53,6 +54,7 @@ import { parseFormat } from '../../shared/parseFormat.js';
 // for any third-party plugin reading them via the package surface).
 export {
   deriveBootSuggestedNext,
+  deriveSuggestedNextNullReason,
   computeLastAuthoredWriteAt,
 } from './bootActionable.js';
 export type { BootSuggestedNext } from './bootTypes.js';
@@ -398,6 +400,13 @@ export async function bootCmd(c: C, args: ParsedArgs): Promise<number> {
     baseSuggestedNext !== null
       ? baseSuggestedNext
       : derivePendingBroadcastResponse(inboxUnread);
+  // Sibling field: when both halves of the suggest ladder above end
+  // up null AND the caller has an identity, explain why if the
+  // substrate still has open state. See deriveSuggestedNextNullReason.
+  const suggestedNextReason: string | null =
+    suggestedNext === null && actor !== null
+      ? deriveSuggestedNextNullReason(actor, allRequests)
+      : null;
   const verbsAvailableNow = deriveVerbsAvailableNow(
     actor,
     role,
@@ -507,6 +516,7 @@ export async function bootCmd(c: C, args: ParsedArgs): Promise<number> {
     cross_passage: crossPassage,
     active_overlapping_targets: activeOverlappingTargets,
     suggested_next: suggestedNext,
+    suggested_next_reason: suggestedNextReason,
     past_cliffs: pastCliffs,
     verbs_available_now: verbsAvailableNow,
     lore_stats: loreStats,

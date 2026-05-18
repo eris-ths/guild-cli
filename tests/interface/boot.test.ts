@@ -67,6 +67,7 @@ test('gate boot: JSON top-level keys are stable', () => {
         'since',
         'status',
         'suggested_next',
+        'suggested_next_reason',
         'tail',
         'verbs_available_now',
         'warnings',

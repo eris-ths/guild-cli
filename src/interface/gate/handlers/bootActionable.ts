@@ -134,6 +134,47 @@ export function deriveBootSuggestedNext(
 }
 
 /**
+ * Explain why `deriveBootSuggestedNext` returned null when the
+ * substrate still has open work. Most common cause: the caller is a
+ * host (or an author who delegated execution) and `pending` /
+ * `approved` / `executing` requests exist but name a different
+ * executor, so `actionableTransitions` finds nothing for them.
+ *
+ * Returns `null` when the substrate is genuinely empty for this actor
+ * (true silence is fine) — only emit text when there is open state
+ * the caller might otherwise wonder about. Mirrors the project's
+ * "no silent gaps" convention (#228 friction bundle): if `gate
+ * suggest` is null but `gate status` shows pending, the reader gets
+ * one line that links the two.
+ */
+export function deriveSuggestedNextNullReason(
+  actor: string,
+  allRequests: ReadonlyArray<Request>,
+): string | null {
+  const lower = actor.toLowerCase();
+  let pendingNotMine = 0;
+  let approvedNotMine = 0;
+  let executingNotMine = 0;
+  for (const r of allRequests) {
+    if (r.hasExecutor(lower)) continue;
+    if (r.state === 'pending') pendingNotMine += 1;
+    else if (r.state === 'approved') approvedNotMine += 1;
+    else if (r.state === 'executing') executingNotMine += 1;
+  }
+  if (pendingNotMine + approvedNotMine + executingNotMine === 0) return null;
+  const parts: string[] = [];
+  if (pendingNotMine > 0) parts.push(`${pendingNotMine} pending`);
+  if (approvedNotMine > 0) parts.push(`${approvedNotMine} approved`);
+  if (executingNotMine > 0) parts.push(`${executingNotMine} executing`);
+  return (
+    `${parts.join(', ')} open request(s) on substrate, but none names you ` +
+    'as executor — use `gate list --state pending` (or --state approved / ' +
+    'executing) to read them. Hosts approve from this list rather than ' +
+    'through `gate suggest`.'
+  );
+}
+
+/**
  * Lowest-priority hint: pick the oldest unread broadcast whose sender
  * stamped `expects_response: true`. Returns null when no such entry
  * exists, when expectsResponse was never opted in, or when every
