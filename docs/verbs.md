@@ -210,6 +210,45 @@ The per-request actionable[] is capped at 5 entries to keep the boot
 payload lean (it sits on the agent hot path); deeper backlogs remain
 visible via `status.reviews_unseen`.
 
+### Execute: non-enforcing transition (#168)
+
+Unlike `complete` and `fail`, `execute` does **not** reject when the
+`--by` actor was not named in `--executors` at request time.
+`complete` / `fail` enforce `rejectIfNonMember` (terminal transitions
+are membership-gated); `execute` is deliberately permissive.
+
+This is intentional. `--executors` records **intent** (who is expected
+to do the work), not access (who is allowed to claim a transition).
+Late-binding executors are common: an actor who picks up a wave a
+peer originally took, or a swarm member who steps in mid-flight,
+runs `execute` with `--by <self>` and the substrate captures both
+the originally-assigned list and the actual executor in the
+`status_log` entry. The terminal `complete` / `fail` is where
+membership enforcement closes the loop, because that is where the
+trail's authoritative claim of "who finished the work" gets stamped.
+
+The asymmetry surfaces a `notice:` on the `execute` response when
+the `--by` actor differs from the assigned list, so the mismatch
+is visible at the surface that did it rather than hidden until the
+post-mortem read. See
+[issue #168](https://github.com/eris-ths/guild-cli/issues/168)
+for the original design discussion.
+
+```bash
+gate request --executors alice --from kiri ...
+# → 2026-04-16-0001 (pending, executors=[alice])
+
+gate approve 2026-04-16-0001 --by kiri
+# → approved
+
+gate execute 2026-04-16-0001 --by bob          # not in executors, but accepted
+# notice: executor 'bob' not in assigned list [alice] — late-binding ok
+# → executing
+
+gate complete 2026-04-16-0001 --by bob         # if bob is not a member: rejected here
+# (membership enforcement is at the terminal transition, not at execute)
+```
+
 ### Write verbs: `--format json` and `suggested_next`
 
 Every write verb (`request`, `approve`, `deny`, `execute`, `complete`,
