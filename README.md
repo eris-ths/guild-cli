@@ -22,22 +22,41 @@ lense, and whether the objection was absorbed or overridden.
 
 ## 30 seconds
 
+Pick the install style that fits — every step after `register` is the
+same.
+
 ```bash
-npm install                              # auto-builds via prepare
+# A. Use it standalone (most common):
+git clone https://github.com/eris-ths/guild-cli && cd guild-cli && npm install
+
+# B. Use it inside an existing repo:
+npm install --save-dev eris-ths/guild-cli            # then `npx gate <verb>`
+# (or `npm i -g eris-ths/guild-cli` for a system-wide `gate` command)
+
+# C. One-off try without installing:
+npx -y github:eris-ths/guild-cli gate <verb>
+
+# Then, in whatever directory you want as the content_root:
 gate register --name <you>               # once per content_root
-export GUILD_ACTOR=<you>                 # once per shell
+export GUILD_ACTOR=<you>                 # once per shell (POSIX)
+                                          #   fish: set -x GUILD_ACTOR <you>
+                                          #   powershell: $env:GUILD_ACTOR = "<you>"
 gate boot                                # orient (identity + queues + tail + inbox)
 gate fast-track --action "..." --reason "..."
 ```
 
-> `gate` resolves to `./bin/gate.mjs` after install (or `npx gate`,
-> or `npm i -g`). Throughout this README `gate <verb>` is the canonical
-> form — `node ./bin/gate.mjs <verb>` works too if you'd rather not
-> rely on PATH.
+> Throughout this README `gate <verb>` is the canonical form. After
+> install A or B, `gate` resolves to `./bin/gate.mjs`. If you'd rather
+> spell it out, `node ./bin/gate.mjs <verb>` works too.
 
-> Pick `<you>` to be a name distinct from `host_names:` in
-> `guild.config.yaml` (default reservations: `eris`, `nao`). Hosts and
-> members are different roles, so `register --name eris` is rejected
+> **No `guild.config.yaml`? No problem.** `gate register` works in any
+> empty directory — the cwd becomes the `content_root` and you'll see
+> a `notice: config: none — cwd used as fallback root` line so you know
+> nothing is being silently inferred elsewhere. Drop in a
+> `guild.config.yaml` later if you want to customize `host_names` or
+> paths. If you do, pick `<you>` to be a name distinct from
+> `host_names:` (default reservations: `eris`, `nao`) — hosts and
+> members are different roles, and `register --name eris` is rejected
 > with a one-line hint to pick a different name.
 
 That's the loop. The whole tool is six verbs:
