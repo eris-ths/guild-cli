@@ -435,3 +435,91 @@ test('YamlIssueRepository.findById: unparseable YAML returns null without throwi
     cleanup();
   }
 });
+
+// --- #407: identity trust boundary -------------------------------------
+// Three tests covering H-1 (empty-file actor) and H-2 (yaml.name vs
+// filename divergence). These close the trail-author asymmetry where
+// whoami warns "unknown" but write verbs silently accept the same
+// actor — see issue #407 for the full PoC trace.
+
+test('YamlMemberRepository: empty members/<name>.yaml does not promote to actor (#407 H-1)', async () => {
+  const { root, cleanup } = makeRoot();
+  try {
+    // 0-byte file — the situation an attacker (or a careless operator
+    // with write access to content_root) produces by `touch
+    // members/ghost.yaml`. Pre-#407 this passed `exists()` and any
+    // write verb would silently file a trail entry as `authored ghost`
+    // while `whoami` already classified ghost as `unknown`.
+    writeFileSync(join(root, 'members', 'ghost.yaml'), '');
+    const warnings: string[] = [];
+    const config = GuildConfig.load(root, (_s, msg) => warnings.push(msg));
+    const repo = new YamlMemberRepository(config);
+
+    const exists = await repo.exists(MemberName.of('ghost'));
+    assert.equal(exists, false, 'empty file must NOT count as registered actor');
+    assert.ok(
+      warnings.some((w) => /top-level YAML is not a mapping/.test(w)),
+      `expected malformed warning, got: ${warnings.join(' | ')}`,
+    );
+  } finally {
+    cleanup();
+  }
+});
+
+test('YamlMemberRepository: yaml.name diverging from filename is rejected (#407 H-2)', async () => {
+  const { root, cleanup } = makeRoot();
+  try {
+    // `alice.yaml` whose internal `name:` is `leysia`. Pre-#407 hydrate
+    // silently let yaml.name win, so `GUILD_ACTOR=leysia` would
+    // resolve to member status even though no `leysia.yaml` exists.
+    writeFileSync(
+      join(root, 'members', 'alice.yaml'),
+      'name: leysia\ncategory: professional\nactive: true\n',
+    );
+    const warnings: string[] = [];
+    const config = GuildConfig.load(root, (_s, msg) => warnings.push(msg));
+    const repo = new YamlMemberRepository(config);
+
+    // The unregistered name `leysia` must NOT be promoted to member
+    // status just because some other file says so internally.
+    const leysiaExists = await repo.exists(MemberName.of('leysia'));
+    assert.equal(leysiaExists, false, 'unregistered name must not be promoted via foreign yaml.name');
+
+    // The actual filename owner is also rejected because the file is
+    // malformed — both halves of the spoof path are closed.
+    const aliceExists = await repo.exists(MemberName.of('alice'));
+    assert.equal(aliceExists, false, 'malformed file must not pass exists()');
+
+    assert.ok(
+      warnings.some((w) => /yaml\.name=.*does not match filename stem/.test(w)),
+      `expected divergence warning, got: ${warnings.join(' | ')}`,
+    );
+  } finally {
+    cleanup();
+  }
+});
+
+test('YamlMemberRepository: properly-registered actor with matching yaml.name still works', async () => {
+  const { root, cleanup } = makeRoot();
+  try {
+    // Regression guard: the most common case (yaml.name omitted, or
+    // yaml.name matches filename) must continue to work transparently.
+    writeFileSync(
+      join(root, 'members', 'bob.yaml'),
+      'name: bob\ncategory: professional\nactive: true\n',
+    );
+    writeFileSync(
+      join(root, 'members', 'carol.yaml'),
+      'category: professional\nactive: true\n', // no yaml.name — falls back to filename
+    );
+    const warnings: string[] = [];
+    const config = GuildConfig.load(root, (_s, msg) => warnings.push(msg));
+    const repo = new YamlMemberRepository(config);
+
+    assert.equal(await repo.exists(MemberName.of('bob')), true, 'matching yaml.name OK');
+    assert.equal(await repo.exists(MemberName.of('carol')), true, 'omitted yaml.name OK');
+    assert.deepEqual(warnings, [], 'happy paths must not warn');
+  } finally {
+    cleanup();
+  }
+});
