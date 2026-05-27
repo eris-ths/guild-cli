@@ -29,7 +29,7 @@ import {
   optionalOption,
   rejectUnknownFlags,
 } from '../../shared/parseArgs.js';
-import { notFoundMessage } from '../../shared/notFoundHint.js';
+import { notFoundEnvelope } from '../../shared/notFoundHint.js';
 import { C } from './internal.js';
 import { Request } from '../../../domain/request/Request.js';
 import { parseFormat } from '../../shared/parseFormat.js';
@@ -133,7 +133,7 @@ export async function waveStatusCmd(c: C, args: ParsedArgs): Promise<number> {
   const format = parseFormat(args);
   const r = await c.requestUC.show(id);
   if (!r) {
-    process.stderr.write(notFoundMessage('request', id));
+    process.stderr.write(notFoundEnvelope('request', id, format));
     return 1;
   }
   const payload = buildWaveStatus(r, new Date());
