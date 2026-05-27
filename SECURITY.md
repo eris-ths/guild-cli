@@ -133,6 +133,24 @@ For full details: `src/passages/devil/README.md`,
   per issue), inbox messages (500 per member).
 - **YAML safety** — parsing goes through `yaml` lib's default schema
   which refuses custom tags.
+- **Identity resolution chain** (#407) — actor identity goes through
+  three distinct steps that must all agree:
+  - `GUILD_ACTOR` env var is the actor claim (also the trail-author
+    value recorded into request `from`/`by`/`executors` fields).
+  - `members/<name>.yaml` must exist, parse as a YAML mapping, and
+    successfully `hydrate` to count as a registered member. An empty
+    or malformed file does NOT promote `<name>` to actor status —
+    `assertActor` consults `findByName` (parse + hydrate), not bare
+    file existence. (Pre-#407 this was filename-only, so
+    `touch members/ghost.yaml` was enough to slip past `--by` /
+    `--from` / `--executors` validation while `whoami` already
+    classified the same actor as `unknown`.)
+  - The `name:` field inside `members/<name>.yaml`, if present, must
+    equal the filename stem. A divergence (e.g. `members/alice.yaml`
+    containing `name: leysia`) is treated as malformed by `hydrate`
+    and the record is rejected — neither `alice` nor `leysia` is
+    promoted to member status from such a file. The operator must
+    either rename the file or fix the field.
 
 ## Trust assumptions (v0.3.0)
 
