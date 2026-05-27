@@ -19,7 +19,7 @@ import {
   rejectUnknownFlags,
 } from '../../shared/parseArgs.js';
 import { maybeEmitExplain } from '../../shared/explain.js';
-import { notFoundMessage } from '../../shared/notFoundHint.js';
+import { notFoundEnvelope } from '../../shared/notFoundHint.js';
 import { Request } from '../../../domain/request/Request.js';
 import { formatDelta, pushMultilineField } from '../voices.js';
 import { C, truncateCodePoints } from './internal.js';
@@ -204,7 +204,7 @@ export async function reqShow(c: C, args: ParsedArgs): Promise<number> {
   }
   const r = await c.requestUC.show(id);
   if (!r) {
-    process.stderr.write(notFoundMessage('request', id));
+    process.stderr.write(notFoundEnvelope('request', id, format));
     return 1;
   }
   const fields = optionalOption(args, 'fields');
