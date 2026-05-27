@@ -12,8 +12,17 @@
 > mirror / synergy / axis / lore / etc.), see
 > [`docs/glossary.md`](./docs/glossary.md).
 
-File-based coordination for AI agents. No daemon, no DB, no network.
-State lives in YAML files under a `content_root`. Git gives you history.
+> **Humans welcome.** This file is the short-form for AI agents
+> because it densifies — verbs, state machine, JSON envelope — into
+> something an agent can consume cold. Humans reading the same file
+> get the same information without the prose padding. The substrate
+> doesn't distinguish: human and AI actors share a content_root,
+> share a trail, share the same verbs. AI-agent-first is a
+> documentation density choice, not a membership tier.
+
+File-based coordination for human and AI agents. No daemon, no DB, no
+network. State lives in YAML files under a `content_root`. Git gives
+you history.
 
 ## Solo flow
 
