@@ -2,11 +2,15 @@
 //
 // What this pins:
 //   * `solo` filter → 14 principles (the unannotated set), and the
-//     one annotated 'swarm' principle (14) is NOT in the result.
-//   * `swarm` filter → all 15 (the 14 default-'all' + principle 14
-//     which explicitly carries applies_to: swarm).
-//   * `all` filter → all 15.
+//     annotated 'swarm' principles (14, 16) are NOT in the result.
+//   * `swarm` filter → all 16 (the 14 default-'all' + principle 14
+//     and principle 16 which explicitly carry applies_to: swarm).
+//   * `all` filter → all 16.
 //   * Invalid audience exits non-zero (POSIX usage convention).
+//
+// Counts shift when a new principle lands. If you add principle 17,
+// bump the swarm/all asserts here. The solo count only changes when
+// the new file omits `applies_to:` (default 'all').
 //
 // Why a subprocess test (and not unit-testing a parser): the script is
 // the contract. Reading frontmatter via shell is the deliverable, and
@@ -70,20 +74,26 @@ test('lore-scope.sh solo includes 14 unannotated principles and excludes 14-', (
   );
 });
 
-test('lore-scope.sh swarm includes principle 14 plus all 14 unannotated', () => {
+test('lore-scope.sh swarm includes the swarm-annotated principles plus all unannotated', () => {
   const out = run('swarm');
   assert.equal(out.status, 0, `swarm should exit 0; stderr=${out.stderr}`);
   const files = lines(out.stdout).map((p) => basename(p));
   assert.equal(
     files.length,
-    15,
-    `expected 15 swarm principles, got ${files.length}: ${files.join(', ')}`,
+    16,
+    `expected 16 swarm principles, got ${files.length}: ${files.join(', ')}`,
   );
-  const annotated = files.filter((f) => f.startsWith('14-'));
+  const p14 = files.filter((f) => f.startsWith('14-'));
   assert.equal(
-    annotated.length,
+    p14.length,
     1,
-    `principle 14 must appear in swarm set exactly once, got ${annotated.length}`,
+    `principle 14 must appear in swarm set exactly once, got ${p14.length}`,
+  );
+  const p16 = files.filter((f) => f.startsWith('16-'));
+  assert.equal(
+    p16.length,
+    1,
+    `principle 16 must appear in swarm set exactly once, got ${p16.length}`,
   );
 });
 
@@ -91,7 +101,7 @@ test('lore-scope.sh all returns every principle', () => {
   const out = run('all');
   assert.equal(out.status, 0, `all should exit 0; stderr=${out.stderr}`);
   const files = lines(out.stdout);
-  assert.equal(files.length, 15, `expected 15 'all' principles, got ${files.length}`);
+  assert.equal(files.length, 16, `expected 16 'all' principles, got ${files.length}`);
 });
 
 test('lore-scope.sh passage:devil includes universal principles (applies_to: all is the floor)', () => {

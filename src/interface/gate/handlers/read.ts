@@ -8,7 +8,7 @@ import {
   rejectUnknownFlags,
 } from '../../shared/parseArgs.js';
 import { maybeEmitExplain } from '../../shared/explain.js';
-import { notFoundMessage } from '../../shared/notFoundHint.js';
+import { notFoundEnvelope } from '../../shared/notFoundHint.js';
 import { parseLense } from '../../../domain/shared/Lense.js';
 import { parseVerdict } from '../../../domain/shared/Verdict.js';
 import { DomainError } from '../../../domain/shared/DomainError.js';
@@ -522,7 +522,7 @@ export async function reqChain(c: C, args: ParsedArgs): Promise<number> {
   if (isIssueId) {
     const root = issueById.get(rootId);
     if (!root) {
-      process.stderr.write(notFoundMessage('issue', rootId));
+      process.stderr.write(notFoundEnvelope('issue', rootId, format));
       return 1;
     }
     const j = root.toJSON();
@@ -533,7 +533,7 @@ export async function reqChain(c: C, args: ParsedArgs): Promise<number> {
   } else {
     const root = requestById.get(rootId);
     if (!root) {
-      process.stderr.write(notFoundMessage('request', rootId));
+      process.stderr.write(notFoundEnvelope('request', rootId, format));
       return 1;
     }
     const j = root.toJSON() as unknown as RequestJSON;
