@@ -42,7 +42,7 @@ export GUILD_ACTOR=<you>                 # once per shell (POSIX)
                                           #   fish: set -x GUILD_ACTOR <you>
                                           #   powershell: $env:GUILD_ACTOR = "<you>"
 gate boot                                # orient (identity + queues + tail + inbox)
-gate fast-track --action "..." --reason "..."
+gate fast-track --action "..." --reason "..."   # request→approve→execute in one self-flow call
 ```
 
 > Throughout this README `gate <verb>` is the canonical form. After
@@ -69,6 +69,11 @@ gate execute    # take it on
 gate complete   # / fail
 gate review     # leave a judgment under a named lense
 ```
+
+These six are the full deliberation loop — for work someone *else*
+reviews or runs. `gate fast-track` (used in the 30-second loop above)
+is the self-flow shortcut: it collapses request → approve → execute
+into one call when you file *and* run the work yourself.
 
 Everything else is depth on top.
 
@@ -109,9 +114,11 @@ interaction running through the same `content_root`.
 
 Set is open — see [`lore/principle 12`](./lore/principles/12-substrate-pure-module-in-projection-ecosystem.md).
 Architecture detail in [`AGENT.md`](./AGENT.md). agora / devil / ctx
-are alpha and **opt-in**: invoke as `node ./bin/<name>.mjs ...`.
-`gate` is the primary entry; `guild` is the admin-side helper for
-managing the container itself.
+are alpha and **opt-in**: only `gate` and `guild` are registered as
+`bin` commands (see `package.json`), so the alpha passages run via
+their script path — `node ./bin/<name>.mjs ...`. `gate` is the primary
+entry; `guild` is the admin-side helper for managing the container
+itself.
 
 ## Make it yours (optional)
 
