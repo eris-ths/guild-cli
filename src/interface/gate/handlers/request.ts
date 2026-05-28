@@ -379,18 +379,14 @@ export async function reqCreate(c: C, args: ParsedArgs): Promise<number> {
       `  suggested_next: gate approve ${r.id.value} ` +
         `(or gate fast-track for the self-flow shortcut)`,
     );
-  } else {
-    // Non-self-wave: surface the same approve hint the JSON surface
-    // already returns via deriveSuggestedNext, so text-mode callers
-    // aren't left at `✓ created` with no pointer to the approve step
-    // (dogfood friction: every other write verb emits a next-line).
-    // Pre-fill --by only when exactly one host is configured — mirrors
-    // deriveSuggestedNext's pending branch, where multiple hosts must
-    // be chosen explicitly so one operator isn't silently nominated.
-    const hosts = c.config.hostNames;
-    const byPart = hosts.length === 1 ? ` --by ${hosts[0]}` : '';
-    extraLines.push(`  suggested_next: gate approve ${r.id.value}${byPart}`);
   }
+  // NOTE: the non-self-wave case intentionally emits NO text hint.
+  // `request` is a lifecycle verb (principle 13: affordance density
+  // follows verb shape) — text stays quiet and the JSON envelope's
+  // `suggested_next` carries the approve step for orchestrators. The
+  // self-wave line above is the documented exception: it surfaces the
+  // `fast-track` *boundary* shortcut's existence at the request moment
+  // (#228), not the lifecycle next-step.
   emitWriteResponse(
     parseFormat(args),
     r,
