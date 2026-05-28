@@ -223,7 +223,7 @@ export function warnIfMisconfiguredCwd(c: C, isEmpty: boolean): void {
   if (!isEmpty) return;
   process.stderr.write(
     `⚠️  no guild.config.yaml found, falling back to cwd: ${c.config.contentRoot}\n` +
-      `   (likely wrong cwd, not a fresh start — cd into the directory\n` +
+      `   (either the wrong cwd, or a fresh start here — cd into the directory\n` +
       `    that contains guild.config.yaml, or run 'gate register --name <you>'\n` +
       `    here if you really mean to use this directory as the guild root.)\n`,
   );

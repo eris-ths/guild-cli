@@ -231,6 +231,25 @@ test('#228(3): gate request does NOT hint fast-track when executor differs', (t)
   assert.equal(r.status, 0, r.stderr);
   assert.equal(/fast-track/.test(r.stdout), false,
     'cross-actor wave should not push the self-flow shortcut');
+  // ...and per principle 13 (affordance density follows verb shape),
+  // `request` is a lifecycle verb: text mode emits NO next-hint for the
+  // cross-actor case. The approve step is carried by the JSON envelope's
+  // `suggested_next` for orchestrators, not by a text line.
+  assert.doesNotMatch(r.stdout, /suggested_next:/,
+    'lifecycle verb (request) stays text-quiet for cross-actor waves');
+  // The JSON envelope still carries the affordance unconditionally
+  // (principle 11/13: substrate carries it, projection emits it
+  // conditionally) so orchestrators aren't left without a next-step.
+  const j = run(root, [
+    'request',
+    '--from', 'alice',
+    '--action', 'cross-json',
+    '--reason', 'r',
+    '--executors', 'bob',
+    '--format', 'json',
+  ]);
+  assert.equal(j.status, 0, j.stderr);
+  assert.equal(JSON.parse(j.stdout).suggested_next.verb, 'approve');
 });
 
 // -------------------- sub-task 4: dist stale → stderr (regression pin) ---

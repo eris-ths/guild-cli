@@ -380,6 +380,13 @@ export async function reqCreate(c: C, args: ParsedArgs): Promise<number> {
         `(or gate fast-track for the self-flow shortcut)`,
     );
   }
+  // NOTE: the non-self-wave case intentionally emits NO text hint.
+  // `request` is a lifecycle verb (principle 13: affordance density
+  // follows verb shape) — text stays quiet and the JSON envelope's
+  // `suggested_next` carries the approve step for orchestrators. The
+  // self-wave line above is the documented exception: it surfaces the
+  // `fast-track` *boundary* shortcut's existence at the request moment
+  // (#228), not the lifecycle next-step.
   emitWriteResponse(
     parseFormat(args),
     r,

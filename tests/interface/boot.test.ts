@@ -156,8 +156,13 @@ test('gate boot: misconfigured_cwd IS true when no config found AND no data', ()
     // text format surfaces the warning so interactive users see it too.
     const { stdout: textOut } = runGate(empty, ['boot', '--format', 'text']);
     assert.match(textOut, /no guild\.config\.yaml found/);
-    assert.match(textOut, /likely wrong cwd/);
+    // Phrasing acknowledges both the wrong-cwd and the genuine
+    // fresh-start-here cases (no longer asserts "not a fresh start").
+    assert.match(textOut, /either the wrong cwd, or a fresh start here/);
     assert.match(textOut, /cd into/);
+    // Aligns with boot's own `→ next: gate register` hint — the block
+    // offers the register-here escape hatch, not just "cd elsewhere".
+    assert.match(textOut, /gate register --name/);
   } finally {
     rmSync(empty, { recursive: true, force: true });
   }
