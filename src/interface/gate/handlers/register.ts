@@ -79,9 +79,10 @@ export async function reqRegister(c: C, args: ParsedArgs): Promise<number> {
   if (c.config.hostNames.includes(parsedName.value)) {
     throw new Error(
       `"${parsedName.value}" is already declared as a host in guild.config.yaml.\n` +
-        `  Hosts and members are different roles; a single name cannot be both.\n` +
-        `  Either pick a different --name, or remove "${parsedName.value}" from ` +
-        `host_names: in guild.config.yaml before registering as a member.`,
+        `  Pick a different --name (hosts and members are different roles; ` +
+        `a single name cannot be both).\n` +
+        `  (Or, if you really want this name as a member, remove ` +
+        `"${parsedName.value}" from host_names: in guild.config.yaml first.)`,
     );
   }
 

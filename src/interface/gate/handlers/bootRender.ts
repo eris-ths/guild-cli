@@ -364,6 +364,12 @@ export function renderBootText(
       lines.push(`→ or:   gate ${a.verb} ${a.id}`);
       lines.push(`        (${a.reason})`);
     }
+  } else if (p.suggested_next_reason !== null) {
+    // suggested_next is null but the substrate has open work. Surface
+    // the reason here so the reader doesn't have to cross-check the
+    // status block manually.
+    lines.push('');
+    lines.push(`→ (no suggestion — ${p.suggested_next_reason})`);
   }
   return lines.join('\n') + '\n';
 }

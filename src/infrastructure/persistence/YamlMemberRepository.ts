@@ -52,7 +52,13 @@ export class YamlMemberRepository implements MemberRepository {
   }
 
   async exists(name: MemberName): Promise<boolean> {
-    return existsSafe(this.config.paths.members, `${name.value}.yaml`);
+    // Membership is gated by successful parse + hydrate, not by mere
+    // file existence. A 0-byte or malformed members/<name>.yaml must
+    // NOT promote the name to "registered actor" — `assertActor`
+    // calls this for every write verb's --by/--from/--executor, and
+    // a silent yes there leads to trail entries authored by an
+    // identity the substrate cannot actually describe (issue #407).
+    return (await this.findByName(name)) !== null;
   }
 
   async listAll(): Promise<Member[]> {
@@ -131,6 +137,18 @@ function hydrate(
     return null;
   }
   const obj = data as Record<string, unknown>;
+  // If yaml.name is set, it must match the filename stem. A divergence
+  // (e.g. members/alice.yaml containing `name: leysia`) would otherwise
+  // silently promote an unregistered name to "member" status — see #407.
+  // Treat as malformed and reject the record entirely; the operator
+  // must either rename the file or fix the field.
+  if (typeof obj['name'] === 'string' && obj['name'] !== fallbackName) {
+    onMalformed(
+      source,
+      `yaml.name=${JSON.stringify(obj['name'])} does not match filename stem "${fallbackName}"; rename the file or fix the field; skipping`,
+    );
+    return null;
+  }
   const name =
     typeof obj['name'] === 'string' ? (obj['name'] as string) : fallbackName;
   const category =
