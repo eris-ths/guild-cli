@@ -86,6 +86,10 @@ For full details: `src/passages/devil/README.md`,
 (design rationale), and `docs/playbook.md` (combos with `gate` /
 `agora`).
 
+Day-to-day repo-specific rules for contributors and review tools live in
+[`docs/security-checklist.md`](docs/security-checklist.md). Findings from
+upstream tools flow into the substrate via `devil ingest --from <source>`.
+
 ## Invariants enforced in code
 
 - **Path safety** — every filesystem op goes through
