@@ -1,15 +1,18 @@
 #!/usr/bin/env node
 // Two coupled facts to remember if you change anything here:
-//   1. The dist-missing guard is duplicated across the 5 bin entries
-//      (gate / guild / agora / devil / ctx) intentionally — a shared
-//      helper that itself lived in dist/ would hit the same load
-//      failure (circular trap). The partial-staleness check, by
-//      contrast, lives in bin/_lib/ as plain .mjs and is shared.
+//   1. The try/catch around `await import(ENTRY_URL)` is duplicated across
+//      the 5 bin entries (gate / guild / agora / devil / ctx) because each
+//      has its own ENTRY_URL. The classification + remedy text it delegates
+//      to lives in bin/_lib/handleDistLoadError.mjs — plain .mjs, not
+//      transpiled, so a load failure can't take the helper down with it
+//      (same circular-trap reasoning as checkDistFreshness).
 //   2. The error message references `npm install` and the `prepare`
-//      script. If package.json drops `prepare: tsc`, update the message.
+//      script. If package.json drops `prepare: tsc`, update the message
+//      in handleDistLoadError.mjs.
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { checkDistFreshness } from './_lib/checkDistFreshness.mjs';
+import { handleDistLoadError } from './_lib/handleDistLoadError.mjs';
 import { handleMainError } from './_lib/handleMainError.mjs';
 // Make stdout/stderr blocking so large payloads (e.g. `gate schema --format
 // json`, `gate boot` on busy substrates) drain before the trailing
@@ -28,28 +31,7 @@ let main;
 try {
   ({ main } = await import(ENTRY_URL));
 } catch (err) {
-  if (err?.code === 'ERR_MODULE_NOT_FOUND') {
-    // Prefer err.url (stable across Node ESM-loader message tweaks);
-    // fall back to message scan for older runtimes that don't set it.
-    const failedUrl = typeof err.url === 'string' ? err.url : '';
-    const fromDist =
-      failedUrl.includes('/dist/') || /\/dist\//.test(err.message ?? '');
-    if (fromDist) {
-      process.stderr.write(
-        'guild-cli: dist/ not built (or out of date).\n' +
-          '  Run: npm install   (auto-builds via the `prepare` script)\n' +
-          '  Or:  npm run build (rebuild after pulling source changes)\n',
-      );
-      // Transitive failure (entry loaded, but a deeper dist module is
-      // missing) suggests an incomplete or stale build rather than a
-      // never-built tree. Surface the missing path so the operator can
-      // tell the difference instead of being told to "install" twice.
-      if (failedUrl && failedUrl !== ENTRY_URL) {
-        process.stderr.write(`  (transitive miss: ${failedUrl})\n`);
-      }
-      process.exit(2);
-    }
-  }
+  handleDistLoadError(err, ENTRY_URL); // exits on a recognized dist/dep miss
   throw err;
 }
 main(process.argv.slice(2))

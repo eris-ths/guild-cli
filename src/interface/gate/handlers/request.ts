@@ -379,6 +379,17 @@ export async function reqCreate(c: C, args: ParsedArgs): Promise<number> {
       `  suggested_next: gate approve ${r.id.value} ` +
         `(or gate fast-track for the self-flow shortcut)`,
     );
+  } else {
+    // Non-self-wave: surface the same approve hint the JSON surface
+    // already returns via deriveSuggestedNext, so text-mode callers
+    // aren't left at `✓ created` with no pointer to the approve step
+    // (dogfood friction: every other write verb emits a next-line).
+    // Pre-fill --by only when exactly one host is configured — mirrors
+    // deriveSuggestedNext's pending branch, where multiple hosts must
+    // be chosen explicitly so one operator isn't silently nominated.
+    const hosts = c.config.hostNames;
+    const byPart = hosts.length === 1 ? ` --by ${hosts[0]}` : '';
+    extraLines.push(`  suggested_next: gate approve ${r.id.value}${byPart}`);
   }
   emitWriteResponse(
     parseFormat(args),

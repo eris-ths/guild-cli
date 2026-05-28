@@ -104,13 +104,13 @@ export function renderBootText(
     );
     lines.push(`   resolved: ${p.hints.resolved_content_root}`);
     lines.push(
-      `   (0 members, 0 requests — likely wrong cwd, not a fresh start)`,
+      `   (0 members, 0 requests — either the wrong cwd, or a fresh start here)`,
     );
     lines.push(
       `   fix: cd into the directory that contains guild.config.yaml,`,
     );
     lines.push(
-      `        or use a wrapper that cd's before invoking gate.mjs.`,
+      `        or run 'gate register --name <you>' to root a guild in this dir.`,
     );
   } else if (
     p.hints.cwd_outside_content_root ||

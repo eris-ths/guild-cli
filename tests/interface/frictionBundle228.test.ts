@@ -231,6 +231,37 @@ test('#228(3): gate request does NOT hint fast-track when executor differs', (t)
   assert.equal(r.status, 0, r.stderr);
   assert.equal(/fast-track/.test(r.stdout), false,
     'cross-actor wave should not push the self-flow shortcut');
+  // ...but it STILL points at the approve step (touch-feel: every write
+  // verb leaves a next-line; the cross-actor request must not dead-end
+  // at `✓ created`). Single host (eris) → --by is pre-filled, mirroring
+  // deriveSuggestedNext's pending branch.
+  assert.match(r.stdout, /suggested_next: gate approve .* --by eris/,
+    'cross-actor request should still hint the approve next-step');
+});
+
+test('request: approve hint omits --by when multiple hosts are configured', (t) => {
+  // Mirrors deriveSuggestedNext: with >1 host the substrate must not
+  // silently nominate one operator's name, so --by is left out.
+  const { root, cleanup } = bootstrap();
+  // Overwrite the single-host default with a two-host config.
+  writeFileSync(
+    join(root, 'guild.config.yaml'),
+    'content_root: .\nhost_names: [eris, nyx]\n',
+  );
+  t.after(cleanup);
+  run(root, ['register', '--name', 'alice']);
+  run(root, ['register', '--name', 'bob']);
+  const r = run(root, [
+    'request',
+    '--from', 'alice',
+    '--action', 'cross',
+    '--reason', 'r',
+    '--executors', 'bob',
+  ]);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /suggested_next: gate approve/);
+  assert.doesNotMatch(r.stdout, /--by/,
+    'multiple hosts must not pre-fill a single operator name');
 });
 
 // -------------------- sub-task 4: dist stale → stderr (regression pin) ---
