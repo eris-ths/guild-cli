@@ -347,6 +347,76 @@ test('suggest: null with substrate open-work surfaces suggested_next_reason', ()
   }
 });
 
+test('suggest: self-wave pending is counted so the reason reconciles with queues', () => {
+  // dogfood 2026-05-29: an actor authored a self-wave pending (author ==
+  // executor). suggested_next stayed null (the ladder won't nudge
+  // self-approve — actionableTransitions requires from != actor for
+  // pending-as-executor), but the null-reason skipped it while boot's
+  // `queues: pending` counted it. The two surfaces disagreed (queues
+  // pending=2, reason said "1 pending"). The reason now carries a
+  // self-wave clause so the tallies match.
+  const { root, cleanup } = bootstrap();
+  try {
+    // alice: self-wave (author == executor). bob: a normal wave alice
+    // has no role in. Viewed as alice, neither is actionable, so
+    // suggested_next is null and both must be reflected in the reason.
+    runGate(
+      root,
+      ['request', '--from', 'alice', '--action', 'solo', '--reason', 'r', '--executors', 'alice'],
+      { GUILD_ACTOR: 'alice' },
+    );
+    runGate(
+      root,
+      ['request', '--from', 'bob', '--action', 'theirs', '--reason', 'r', '--executors', 'bob'],
+      { GUILD_ACTOR: 'bob' },
+    );
+    const { stdout } = runGate(root, ['suggest'], { GUILD_ACTOR: 'alice' });
+    const payload = JSON.parse(stdout);
+    assert.equal(payload.suggested_next, null);
+    const reason: string = payload.suggested_next_reason;
+    // The not-mine clause (bob's) AND the self-wave clause (alice's)
+    // both fire, so the pending tally reconciles with queues.pending=2.
+    assert.match(reason, /none names you as executor/);
+    assert.match(reason, /self-wave/);
+    // Reconciliation: boot's queues.pending must equal the count the
+    // reason accounts for. Both pending requests are acknowledged.
+    const boot = JSON.parse(
+      runGate(root, ['boot', '--format', 'json'], { GUILD_ACTOR: 'alice' }).stdout,
+    );
+    assert.equal(boot.status.pending.total, 2);
+    assert.equal((reason.match(/pending/g) ?? []).length >= 2, true,
+      `reason must account for both pending requests; got: ${reason}`);
+  } finally {
+    cleanup();
+  }
+});
+
+test('suggest: a lone self-wave pending no longer goes silent', () => {
+  // Regression for the silent-gap sub-case: when the ONLY open request
+  // is a self-wave pending, the pre-fix null-reason returned null
+  // (not-mine total was 0), so `gate suggest` said nothing while
+  // `queues: pending=1` showed one — exactly the "silence reads as a
+  // bug" failure the reason field exists to prevent.
+  const { root, cleanup } = bootstrap();
+  try {
+    runGate(
+      root,
+      ['request', '--from', 'alice', '--action', 'solo', '--reason', 'r', '--executors', 'alice'],
+      { GUILD_ACTOR: 'alice' },
+    );
+    const { stdout } = runGate(root, ['suggest'], { GUILD_ACTOR: 'alice' });
+    const payload = JSON.parse(stdout);
+    assert.equal(payload.suggested_next, null);
+    assert.ok(
+      typeof payload.suggested_next_reason === 'string' &&
+        /self-wave/.test(payload.suggested_next_reason),
+      `lone self-wave pending must surface a reason; got: ${payload.suggested_next_reason}`,
+    );
+  } finally {
+    cleanup();
+  }
+});
+
 test('suggest --format text: null + reason → (nothing urgent — <reason>)', () => {
   const { root, cleanup } = bootstrap();
   try {
