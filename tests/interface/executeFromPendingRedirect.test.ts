@@ -103,6 +103,7 @@ test('gate execute on a pending request — JSON envelope carries error.recovery
     assert.equal(env.ok, false);
     assert.ok(env.error.recovery, 'error.recovery must be present');
     assert.equal(env.error.recovery.verb, 'approve');
+    assert.equal(env.error.code, 'illegal_transition');
     assert.equal(env.error.recovery.args.id, id);
     assert.match(env.error.recovery.reason, /pending/, 'recovery.reason must name why approve is the path');
   } finally {

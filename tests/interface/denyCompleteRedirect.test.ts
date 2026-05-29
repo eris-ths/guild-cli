@@ -102,6 +102,7 @@ test('gate complete on approved --format json carries error.recovery {verb:execu
     assert.ok(line, 'expected JSON envelope on stderr');
     const env = JSON.parse(line!);
     assert.equal(env.error.recovery.verb, 'execute');
+    assert.equal(env.error.code, 'illegal_transition');
     assert.equal(env.error.recovery.args.id, id);
   } finally {
     b.cleanup();
@@ -134,6 +135,7 @@ test('gate deny on executing --format json carries error.recovery {verb:fail}', 
     assert.ok(line, 'expected JSON envelope on stderr');
     const env = JSON.parse(line!);
     assert.equal(env.error.recovery.verb, 'fail');
+    assert.equal(env.error.code, 'illegal_transition');
     assert.equal(env.error.recovery.args.id, id);
   } finally {
     b.cleanup();

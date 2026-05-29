@@ -147,6 +147,10 @@ test('gate fail on a pending request — JSON envelope carries error.recovery', 
     assert.equal(env.ok, false);
     assert.ok(env.error.recovery, 'error.recovery must be present');
     assert.equal(env.error.recovery.verb, 'deny');
+    // The reworded redirect message escapes deriveErrorCode's prose
+    // scan; RecoverableError still classifies it so a code-branching
+    // agent isn't blind to the richest-recovery errors.
+    assert.equal(env.error.code, 'illegal_transition');
     assert.equal(env.error.recovery.args.id, id);
     assert.match(
       env.error.recovery.reason,
