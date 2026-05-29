@@ -235,6 +235,30 @@ export async function reqExecute(c: C, args: ParsedArgs): Promise<number> {
   // the optimistic-lock in YamlRequestRepository.save catches any
   // residual collision at the *record* layer.
   const target = await c.requestUC.show(id);
+  // Verb-shape redirect (mirrors reqFail's pending/approved branches):
+  // the domain rejects pending→executing with a state-name hint
+  // ("valid next states from pending: approved, denied"), but a caller
+  // who skipped approve has to translate "approved" back into a verb.
+  // Surface `gate approve` directly — same RecoverableError shape so
+  // the JSON envelope's `error.recovery` names the next verb + args and
+  // the prose `error:` line carries the human-facing bridge. Pre-empting
+  // here also makes the dry-run preview of this illegal transition
+  // redirect consistently rather than throwing the bare domain hint.
+  if (target !== null && target.state === 'pending') {
+    throw new RecoverableError(
+      `Request ${id} is pending — execute is reachable only from approved.\n` +
+        `  Approve it first, then execute:\n` +
+        `    gate approve ${id} --by <m>\n` +
+        `    gate execute ${id} --by <m>`,
+      {
+        verb: 'approve',
+        args: { id },
+        reason:
+          `${id} is pending; execute is reachable only from approved — ` +
+          `approve is the step before executing.`,
+      },
+    );
+  }
   if (target && target.requiresWorktreeIsolation && target.target !== undefined) {
     const peers = await c.requestUC.listByState('executing');
     for (const peer of peers) {
