@@ -117,10 +117,23 @@ export interface Recovery {
  */
 export class RecoverableError extends Error {
   readonly recovery: Recovery;
-  constructor(message: string, recovery: Recovery) {
+  /**
+   * Macro-classification for the JSON envelope's `error.code`. Defaults
+   * to `illegal_transition` because every current throw site is a
+   * verb-shape transition redirect (pending→deny, approved→execute,
+   * pending→approve, …) — the message is reworded away from the domain's
+   * "Illegal state transition" phrasing, so `deriveErrorCode`'s prose
+   * scan no longer classifies it and a code-branching agent would
+   * otherwise see `undefined` on exactly the errors carrying the richest
+   * `recovery`. A future non-transition RecoverableError passes its own
+   * code explicitly.
+   */
+  readonly code: string;
+  constructor(message: string, recovery: Recovery, code = 'illegal_transition') {
     super(message);
     this.name = 'RecoverableError';
     this.recovery = recovery;
+    this.code = code;
   }
 }
 
@@ -173,10 +186,16 @@ export function emitErrorEnvelope(
     } else if (opts.field !== undefined) {
       errObj['field'] = opts.field;
     }
-    // code: deriveErrorCode(err) wins; opts.code is fallback.
+    // code: deriveErrorCode(err) wins; then a RecoverableError's own
+    // `code` (its reworded message escapes the prose scan, but it still
+    // carries a classification + recovery); opts.code is the last
+    // fallback. Without the RecoverableError arm a code-branching agent
+    // saw `undefined` on every transition redirect.
     const derived = deriveErrorCode(err);
     if (derived !== null) {
       errObj['code'] = derived;
+    } else if (err instanceof RecoverableError) {
+      errObj['code'] = err.code;
     } else if (opts.code !== undefined) {
       errObj['code'] = opts.code;
     }
