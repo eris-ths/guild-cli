@@ -162,6 +162,26 @@ export async function reqDeny(c: C, args: ParsedArgs): Promise<number> {
     requireOption(args, 'by', '<m>', 'GUILD_ACTOR'),
   );
   const invokedBy = resolveInvokedBy(by, 'deny', id);
+  // Verb-shape redirect (symmetric to reqFail's pending→deny): deny is
+  // the *pending* cancel path. Once a request is executing the cancel
+  // path is `gate fail`; the domain would only surface "valid next
+  // states from executing: completed, failed". Name the verb directly.
+  // One show() before the dry-run branch covers both preview and live.
+  const priorForRedirect = await c.requestUC.show(id);
+  if (priorForRedirect !== null && priorForRedirect.state === 'executing') {
+    throw new RecoverableError(
+      `Request ${id} is executing — deny cancels a *pending* request; an ` +
+        `executing one is cancelled with fail:\n` +
+        `    gate fail ${id} --by <m> --reason <s>`,
+      {
+        verb: 'fail',
+        args: { id },
+        reason:
+          `${id} is executing; deny is the pending-cancel path — fail is the ` +
+          `cancellation path once work has started.`,
+      },
+    );
+  }
   if (isDryRun(args)) {
     const prior = await c.requestUC.show(id);
     if (!prior) throw new Error(`Request not found: ${id}`);
@@ -421,6 +441,29 @@ export async function reqComplete(c: C, args: ParsedArgs): Promise<number> {
   // the real run rejected. The preview must match what the real run
   // would do.
   const priorComplete = await c.requestUC.show(id);
+  // Verb-shape redirect (mirrors reqFail's approved→execute branch):
+  // complete is reachable only from executing. On an approved request
+  // the bridge is `gate execute` first — the domain would otherwise only
+  // surface "valid next states from approved: executing", leaving the
+  // caller to translate the state back into a verb. Checked before the
+  // slice-membership reject because the state gap is the more
+  // fundamental problem, and pre-empts both dry-run and live so the
+  // preview can't show a transition the real run would refuse.
+  if (priorComplete !== null && priorComplete.state === 'approved') {
+    throw new RecoverableError(
+      `Request ${id} is approved — complete is reachable only from executing.\n` +
+        `  Start the work first, then complete:\n` +
+        `    gate execute ${id} --by <m>\n` +
+        `    gate complete ${id} --by <m>`,
+      {
+        verb: 'execute',
+        args: { id },
+        reason:
+          `${id} is approved; complete is reachable only from executing — ` +
+          `execute is the bridge step before completing.`,
+      },
+    );
+  }
   if (priorComplete !== null) {
     // Issue #294 (miki concern #1): when the wave has assigned
     // executors and `by` is not one of them, refuse before writing.
