@@ -27,6 +27,7 @@
 import { DomainError } from '../../domain/shared/DomainError.js';
 import { LockBusyError } from '../../infrastructure/lock/guildLock.js';
 import { sanitizeError } from './sanitizeError.js';
+import { notFoundHintForMessage } from './notFoundHint.js';
 
 /**
  * Per-call options for {@link emitErrorEnvelope}. All three are
@@ -143,6 +144,27 @@ export function emitErrorEnvelope(
   const rawMsg = err instanceof Error ? err.message : String(err);
   const prefixed = opts.prefix ? `${opts.prefix}${rawMsg}` : rawMsg;
   const msg = sanitizeError(prefixed, contentRoot);
+
+  // Recovery source priority (computed once, used by both surfaces):
+  //   1. `err instanceof RecoverableError` → err.recovery wins
+  //      (the throw site authored the recovery; honour it).
+  //   2. opts.recovery → caller of emitErrorEnvelope supplied one.
+  //   3. generic not-found enrichment (below) → the wire-up sweep the
+  //      doc above anticipated. Read verbs emit their own hint and
+  //      return; the write lifecycle throws `Request not found`, which
+  //      arrives here hint-less. Attach the same per-entity discovery
+  //      hint + recovery the read path uses — but ONLY when the throw
+  //      site didn't already author one, so explicit recoveries win.
+  //   4. absence → no `recovery` field on the wire (the no-known-
+  //      recovery signal consumers branch on).
+  const explicitRecovery =
+    err instanceof RecoverableError ? err.recovery : opts.recovery;
+  const notFound =
+    explicitRecovery === undefined && deriveErrorCode(err) === 'not_found'
+      ? notFoundHintForMessage(msg)
+      : null;
+  const recovery = explicitRecovery ?? notFound?.recovery;
+
   if (format === 'json') {
     const errObj: Record<string, unknown> = { message: msg };
     // field: err.field wins; opts.field is fallback (see EmitOptions doc).
@@ -158,25 +180,24 @@ export function emitErrorEnvelope(
     } else if (opts.code !== undefined) {
       errObj['code'] = opts.code;
     }
-    // recovery: structured next-step. Source priority:
-    //   1. `err instanceof RecoverableError` → err.recovery wins
-    //      (the throw site authored the recovery; honour it).
-    //   2. opts.recovery → caller of emitErrorEnvelope supplied one.
-    //   3. absence → no `recovery` field on the wire.
-    // Consumers branch on field presence; absence is the no-known-
-    // recovery signal. Today only the throw sites with an obvious
-    // "use verb X instead" answer pass this — generic not-found /
-    // validation errors keep their existing prose-only surface
-    // until a wire-up sweep follows.
-    const recovery =
-      err instanceof RecoverableError ? err.recovery : opts.recovery;
+    // hint: the human-facing discovery line, mirrored onto the wire so
+    // JSON consumers see the same recovery affordance as text readers.
+    // `message` stays clean (matches the read-path notFoundEnvelope,
+    // where hint is a sibling field, not folded into message).
+    if (notFound !== null) {
+      errObj['hint'] = notFound.hint;
+    }
     if (recovery !== undefined) {
       errObj['recovery'] = recovery;
     }
     const payload = { ok: false, error: errObj };
     process.stderr.write(JSON.stringify(payload) + '\n');
   }
-  process.stderr.write(`error: ${msg}\n`);
+  // Prose: append the discovery hint on its own indented line so the
+  // terminal reader who mistyped an id recovers in one read — matching
+  // the read-path `not found: <id>\n  try 'gate list' …` shape.
+  const hintSuffix = notFound !== null ? `\n  ${notFound.hint}` : '';
+  process.stderr.write(`error: ${msg}${hintSuffix}\n`);
 }
 
 /**

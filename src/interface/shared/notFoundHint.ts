@@ -59,3 +59,48 @@ export function notFoundEnvelope(
   }
   return notFoundMessage(entity, id);
 }
+
+/**
+ * Map a *thrown* not-found error message to its discovery hint +
+ * structured recovery, when the message is a recognized shape.
+ *
+ * Why this exists separately from {@link notFoundMessage}: the read
+ * verbs (show / why / transcript / summarize / …) call
+ * `notFoundMessage`/`notFoundEnvelope` directly and `return` without
+ * throwing, so they already carry the hint. The WRITE lifecycle verbs
+ * (approve / deny / execute / complete / fail) instead throw a
+ * `Request not found: <id>` that surfaces through the shared
+ * {@link emitErrorEnvelope} catch path — and pre-this-sweep it arrived
+ * hint-less, the worse touch-feel of the two not-found paths. This
+ * function lets the central envelope attach the SAME per-entity hint
+ * the read path uses, keeping the two surfaces in phrasing-sync.
+ *
+ * Returns null for messages that don't name a known entity (e.g.
+ * agora / devil / ctx not-founds, which share `emitErrorEnvelope`),
+ * so the shared envelope leaves those untouched rather than stapling a
+ * gate-specific `gate list` hint onto an unrelated passage's error.
+ */
+export function notFoundHintForMessage(message: string): {
+  entity: NotFoundEntity;
+  hint: string;
+  recovery: { verb: string; args: Record<string, string>; reason: string };
+} | null {
+  // Only `request` reaches the shared catch as a throw today; issues
+  // and members emit their hint + return from their own handlers. The
+  // anchored pattern keeps a passing "review not found" / "play not
+  // found" from a sibling passage out of this branch.
+  if (/\brequest not found\b/i.test(message)) {
+    return {
+      entity: 'request',
+      hint: HINTS.request.trim(),
+      recovery: {
+        verb: 'list',
+        args: {},
+        reason:
+          "id not found — run 'gate list' (or 'gate tail') to see existing request ids",
+      },
+    };
+  }
+  return null;
+}
+
