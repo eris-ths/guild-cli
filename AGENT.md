@@ -149,8 +149,8 @@ the mismatch is visible at the surface that did it. See
 design rationale.
 
 `--executors a[,b,c]` accepts one or many executors for single or
-parallel waves (#230). The singular `--executor <m>` is still accepted
-as a deprecated alias (removed at v0.7 per [#239](https://github.com/eris-ths/guild-cli/issues/239)).
+parallel waves (#230). The singular `--executor <m>` was removed from
+`gate request` in v0.6 (per [#239](https://github.com/eris-ths/guild-cli/issues/239)) — use `--executors`.
 Under `profile: swarm`, parallel waves additionally require worktree
 isolation (`gate execute` refuses same-cwd collisions, #231).
 
@@ -750,7 +750,7 @@ for the end-to-end shape.
 Request IDs: `YYYY-MM-DD-NNNN`. Issue IDs: `i-YYYY-MM-DD-NNNN`.
 
 The agora / devil / ctx subtrees layer on top — see
-[`docs/storage-format.md`](docs/storage-format.md) for the full
+[`docs/storage-format.md`](./docs/storage-format.md) for the full
 per-record YAML schema, hydrate tolerance, and backward-compat rules.
 
 ## Environment
