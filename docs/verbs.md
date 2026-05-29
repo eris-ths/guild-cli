@@ -42,7 +42,7 @@ works — it just moves the review from "blocking" to "after-the-fact."
 `--with <n1>[,<n2>...]` on `gate request` / `gate fast-track`
 records the dialogue partners during the formation of a request.
 Empty / omitted = solo. Partners go through the same actor
-validation as `--from` / `--executor` (members or hosts).
+validation as `--from` / `--executors` (members or hosts).
 
 ```bash
 gate request --from claude --with eris --action "..." --reason "..."
