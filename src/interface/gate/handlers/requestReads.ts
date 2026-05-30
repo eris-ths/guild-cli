@@ -54,10 +54,18 @@ export async function reqList(
 ): Promise<number> {
   // Different known-flag sets per verb so a typo on `gate pending`
   // doesn't get a list-grade hint, and the error names the right verb.
+  // `pending` is the lean "--for me" shortcut (only --for / --format);
+  // when someone reaches for a richer filter on it, point them at the
+  // capable verb instead of dead-ending at "valid flags: --for, --format".
   rejectUnknownFlags(
     args,
     verb === 'pending' ? PENDING_KNOWN_FLAGS : LIST_KNOWN_FLAGS,
     verb,
+    [],
+    verb === 'pending'
+      ? 'to filter pending by author/executor/reviewer, use: ' +
+          'gate list --state pending --executor <m> (or --from / --auto-review)'
+      : undefined,
   );
   maybeEmitExplain(args, verb);
   const fromFilter = optionalOption(args, 'from');
