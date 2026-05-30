@@ -355,8 +355,7 @@ whoami for voice recovery.
 
 ### Filtering lists
 
-`gate list` and `gate pending` accept filter flags that combine
-via AND:
+`gate list` accepts filter flags that combine via AND:
 
 - `--from <m>` — match author
 - `--executor <m>` — match executor
@@ -364,9 +363,14 @@ via AND:
 - `--for <m>` — match author OR executor OR reviewer (sugar for
   "anything I touch")
 
+`gate pending` is the lean "what's on my plate" shortcut — it is fixed
+to the pending state and accepts only `--for <m>` (plus `--format`). To
+filter pending requests by author / executor / reviewer, reach for
+`gate list --state pending` with any of the flags above.
+
 ```
 $ gate pending --for kiri
-$ gate list --state executing --executor noir
+$ gate list --state pending --executor noir
 $ gate list --state completed --auto-review rin
 ```
 
