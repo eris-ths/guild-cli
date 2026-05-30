@@ -134,7 +134,7 @@ gate request --from <m> --action "..." --reason "..." \
 gate approve <id> --by <m> [--note "..."]
 gate deny <id> --by <m> --reason "..."
 gate execute <id> --by <m> [--cwd <path>]                  # cwd stamped on the status_log entry
-gate complete <id> --by <m> [--note "..."]
+gate complete <id> --by <m> [--note "..."] [--cliff "<hint for next agent>"]
 gate fail <id> --by <m> --reason "..."
 gate fast-track --from <m> --action "..." --reason "..." \
                 [--executors a[,b,c]] [--with ...]
@@ -206,7 +206,7 @@ gate transcript <id>                    # narrative prose arc of a request
 gate suggest [--format json|text]       # suggested_next only (hot-loop sibling of boot)
 gate why <id>                           # decision walk: why is this request in this state?
 gate summarize <id> [--limit <N>]       # narrative summary
-gate unresponded [--for <m>]            # concerns recorded but not yet responded to
+gate unresponded [--for <m>] [--max-age-days <N>]   # concerns recorded but not yet responded to
 gate flow-suggest --severity <s> --area <a> [--scope <s>]      # advisory: which flow shape? (#307)
 gate lense-stats [--for <m>] [--since <d>]                     # lense rotation diagnostic (#305)
 gate decisions [--for <m>] [--since <d>]                       # authored state transitions (#336; defaults --for to GUILD_ACTOR)
@@ -324,7 +324,7 @@ open ↔ in_progress ↔ deferred → resolved (reopen → open)
 ```
 
 ```bash
-gate issues add --from <m> --severity <low|med|high> --area <a> "text"
+gate issues add --from <m> --severity <low|med|high> --area <a> --text "<text>"
 gate issues list [--state <s>]
 gate issues resolve|defer|start|reopen <id> --by <m>   # --by required; appends state_log
 gate issues note <id> --by <m> --text "..."          # append annotation
@@ -442,6 +442,9 @@ agora cliff <play-id> [--game <slug>]          # peek closing cliff/invitation, 
 agora schema [--verb <name>]                   # principle 10 contract
 ```
 
+All agora verbs also accept `[--format json|text]` (omitted above for
+density) — the JSON envelope is the agent contract, same as gate.
+
 agora records live under `<content_root>/agora/`:
 
 ```
@@ -486,7 +489,7 @@ devil entry <rev-id> --persona <p> --lense <l> --kind <k> --text "<prose>"
                      [--severity-rationale "<prose>"]   # required when kind=finding
                      [--addresses <e-NNN>]
                      [--by <m>]
-devil list [--state <open|concluded>] [--target-type <pr|file|function|commit|system>]
+devil list [--state <open|concluded|all>] [--target-type <pr|file|function|commit|system>]
 devil show <rev-id>
 devil conclude <rev-id> --synthesis "<prose>" [--unresolved e-001,e-002,...] [--by <m>]
 devil dismiss <rev-id> <entry-id> --reason <r> [--note "..."] [--by <m>]
