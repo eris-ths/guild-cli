@@ -619,9 +619,9 @@ plus generated `index.md` / `log.md` views. OKF is an interchange
 stays YAML; OKF is another surface, the way `--format text` is.
 
 ```bash
-ctx export <dir> [--as okf] [--format json|text]   # facts -> OKF bundle
+ctx export <dir> [--as okf] [--force] [--format json|text]   # facts -> OKF bundle
 ctx import <dir> [--as okf] [--by <m>] [--allow-duplicates]
-                 [--format json|text]               # bundle -> facts
+                 [--format json|text]                         # bundle -> facts
 ```
 
 Round-trip is lossless for guild-authored bundles — `id`, `timestamp`,
@@ -630,7 +630,12 @@ is idempotent (existing ids skip). Foreign bundles import tolerantly:
 nested subtrees are walked; bare tags land under `topic:`; a non-`Fact`
 `type` is preserved as an `okf:<type>` provenance tag; documents lacking
 an author fall back to `--by`; empty or unparseable documents are
-reported as skipped rather than failing the whole import.
+reported as skipped rather than failing the whole import. A foreign `id`
+that collides with an existing record but carries *different* prose is
+reallocated a fresh id rather than dropped (the idempotent skip is gated
+on a prose match, so a distinct observation is never lost). `export`
+refuses a non-empty target directory unless `--force`, so it can't
+silently clobber an unrelated tree.
 
 **Prose dedup** is on by default: a fact whose normalized prose is
 already recorded — under any id, or earlier in the same bundle — is

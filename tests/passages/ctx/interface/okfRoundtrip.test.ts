@@ -1,11 +1,15 @@
 // ctx OKF export/import — end-to-end round-trip through the real binary.
 //
-// Covers the three guarantees the feature promises:
+// Covers the guarantees the feature promises:
 //   1. guild fact -> export -> import (fresh root) restores the record
 //      losslessly (id / created_at / created_by / tags).
 //   2. re-importing the same bundle is idempotent (existing ids skip).
 //   3. a foreign bundle imports tolerantly (fresh id, --by author,
 //      coerced tags, provenance, reserved views skipped, empty skipped).
+//   4. prose dedup + --allow-duplicates opt-out.
+//   5. a foreign id colliding with a *different* fact reallocates rather
+//      than dropping (records-outlive-writers).
+//   6. export refuses a non-empty target dir unless --force.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -172,4 +176,64 @@ test('--allow-duplicates (placed before the dir) opts out of prose dedup', (t) =
   const env = JSON.parse(again.stdout);
   assert.equal(env.imported_count, 1);
   assert.equal(env.skipped_count, 0);
+});
+
+test('a foreign id colliding with a different fact reallocates instead of dropping', (t) => {
+  const root = newRoot();
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+
+  // Seed one fact -> it takes ctx-<today>-001.
+  runCtx(root, ['record', '--fact', 'the incumbent observation'], { GUILD_ACTOR: 'eris' });
+  const today = new Date().toISOString().slice(0, 10);
+
+  const bundle = join(root, 'foreign');
+  mkdirSync(bundle, { recursive: true });
+  // Foreign doc reuses our id namespace but carries different prose.
+  writeFileSync(
+    join(bundle, 'collide.md'),
+    `---\ntype: Note\nid: ctx-${today}-001\n---\na DIFFERENT observation that must not be dropped\n`,
+  );
+  // And a doc that is a genuine round-trip of the incumbent (same id +
+  // same prose) -> that one is the idempotent skip.
+  writeFileSync(
+    join(bundle, 'same.md'),
+    `---\ntype: Fact\nid: ctx-${today}-001\n---\nthe incumbent observation\n`,
+  );
+
+  const env = JSON.parse(
+    runCtx(root, ['import', bundle, '--format', 'json'], { GUILD_ACTOR: 'x' }).stdout,
+  );
+  // collide.md imported under a fresh id (not 001); same.md idempotent-skipped.
+  assert.equal(env.imported_count, 1);
+  assert.notEqual(env.imported[0].id, `ctx-${today}-001`);
+  assert.equal(env.skipped_count, 1);
+  assert.match(env.skipped[0].reason, /already present \(idempotent skip\)/);
+
+  // The distinct observation survived on the substrate.
+  const survived = readdirSync(join(root, 'ctx'))
+    .map((f) => readFileSync(join(root, 'ctx', f), 'utf8'))
+    .some((y) => y.includes('must not be dropped'));
+  assert.ok(survived, 'colliding-id foreign fact must be reallocated, not dropped');
+});
+
+test('export refuses a non-empty dir unless --force', (t) => {
+  const root = newRoot();
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  runCtx(root, ['record', '--fact', 'a fact to export'], { GUILD_ACTOR: 'eris' });
+
+  const out = join(root, 'out');
+  mkdirSync(out, { recursive: true });
+  writeFileSync(join(out, 'pre-existing.txt'), 'do not clobber me silently\n');
+
+  const refused = runCtx(root, ['export', out, '--format', 'json']);
+  assert.equal(refused.status, 1);
+  assert.match(refused.stderr, /not empty; pass --force/);
+
+  // --force before the positional dir: boolean registration keeps the
+  // parser from swallowing the dir as the flag value.
+  const forced = runCtx(root, ['export', '--force', out, '--format', 'json']);
+  assert.equal(forced.status, 0);
+  assert.equal(JSON.parse(forced.stdout).count, 1);
+  // The pre-existing file is left in place (export writes alongside).
+  assert.ok(readdirSync(out).includes('pre-existing.txt'));
 });

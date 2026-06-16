@@ -21,7 +21,7 @@ import { nearestCommand } from '../../../interface/shared/nearestCommand.js';
 import { getPackageVersion, isVersionFlag } from '../../../interface/shared/version.js';
 import { buildCtxContainer } from './container.js';
 import { recordCtx } from './handlers/record.js';
-import { exportCtx } from './handlers/exportOkf.js';
+import { exportCtx, EXPORT_BOOLEAN_FLAGS } from './handlers/exportOkf.js';
 import { importCtx, IMPORT_BOOLEAN_FLAGS } from './handlers/importOkf.js';
 import { withEntryLock } from '../../../infrastructure/lock/withEntryLock.js';
 import { resolveGuildActor } from '../../../interface/shared/resolveGuildActor.js';
@@ -36,10 +36,11 @@ Usage:
                               <content_root>/ctx/<id>.yaml. Id is
                               auto-allocated as ctx-YYYY-MM-DD-NNN.
 
-  ctx export <dir>            [--as okf] [--format json|text]
+  ctx export <dir>            [--as okf] [--force] [--format json|text]
                               Project every fact into an Open Knowledge
                               Format bundle under <dir> (one <id>.md per
-                              fact + index.md / log.md views).
+                              fact + index.md / log.md views). Refuses a
+                              non-empty <dir> unless --force.
 
   ctx import <dir>            [--as okf] [--by <m>] [--format json|text]
                               [--allow-duplicates]
@@ -89,6 +90,7 @@ export async function main(argv: readonly string[]): Promise<number> {
   // that owns them so the parser doesn't consume a following positional
   // (e.g. `ctx import --allow-duplicates <dir>`) as the flag's value.
   const VERB_BOOLEAN_FLAGS: Record<string, ReadonlySet<string>> = {
+    export: EXPORT_BOOLEAN_FLAGS,
     import: IMPORT_BOOLEAN_FLAGS,
   };
   const verbBooleans = VERB_BOOLEAN_FLAGS[cmd ?? ''];

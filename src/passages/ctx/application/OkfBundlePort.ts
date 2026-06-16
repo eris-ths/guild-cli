@@ -24,12 +24,22 @@ export interface OkfBundleWriteResult {
   readonly written: readonly string[];
 }
 
+export interface OkfBundleWriteOptions {
+  /** Overwrite into a non-empty target directory instead of refusing. */
+  readonly force?: boolean;
+}
+
 export interface OkfBundlePort {
   /**
    * Write `docs` as an OKF bundle under `dir`, plus the generated
    * `index.md` / `log.md` view files. `dir` is created if absent.
+   * Refuses a non-empty `dir` unless `opts.force` is set.
    */
-  write(dir: string, docs: readonly OkfDocument[]): Promise<OkfBundleWriteResult>;
+  write(
+    dir: string,
+    docs: readonly OkfDocument[],
+    opts?: OkfBundleWriteOptions,
+  ): Promise<OkfBundleWriteResult>;
 
   /**
    * Read an OKF bundle from `dir`. Reserved view files (`index.md`,
