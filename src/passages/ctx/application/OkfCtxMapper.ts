@@ -131,14 +131,23 @@ export function okfDocumentToCtxFact(doc: OkfDocument): OkfImportMapping {
     }
   }
 
-  // Preserve a non-`Fact` type as provenance. `Fact` is guild's own
-  // export type and carries no extra signal, so it's left off to keep
-  // round-tripped bundles tag-clean.
-  if (typeof fm.type === 'string') {
-    const typeSlug = slugifyForTagValue(fm.type);
-    if (typeSlug !== null && typeSlug !== 'fact') {
-      push(`okf:${typeSlug}`);
-    }
+  // Provenance via the `type` field:
+  //   - `Fact`        -> no tag (guild's own export type, kept tag-clean)
+  //   - any other type -> `okf:<type-slug>`
+  //   - missing / empty / unusable type -> `okf:untyped`
+  // The import side is deliberately tolerant (a frontmatter-less or
+  // type-less .md still records — its body is the fact), but OKF requires
+  // a `type` on every concept, so a doc without a usable one isn't a
+  // conformant concept. Tagging it `okf:untyped` keeps the tolerance while
+  // making the gap auditable: `ctx list --tag okf:untyped` surfaces every
+  // fact that came in without a real OKF type (e.g. a stray README.md), so
+  // it can be reviewed or culled rather than silently passing as a Fact.
+  const rawType = typeof fm.type === 'string' ? fm.type : '';
+  const typeSlug = slugifyForTagValue(rawType);
+  if (typeSlug === null) {
+    push('okf:untyped');
+  } else if (typeSlug !== 'fact') {
+    push(`okf:${typeSlug}`);
   }
 
   return {

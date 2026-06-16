@@ -127,6 +127,14 @@ test('a foreign OKF bundle imports tolerantly', (t) => {
   assert.match(orders!, /owner:data-team/); // prefixed tag coerced
   assert.match(orders!, /okf:bigquery-table/); // type provenance
   assert.match(orders!, /created_at: 2025-01-02T10:00:00\.000Z/); // foreign ts preserved
+
+  // The frontmatter-less plain.md records but is tagged okf:untyped so a
+  // stray non-concept .md is auditable rather than passing as a Fact.
+  const plain = files
+    .map((f) => readFileSync(join(root, 'ctx', f), 'utf8'))
+    .find((y) => y.includes('plain prose, no frontmatter'));
+  assert.ok(plain, 'frontmatter-less doc should still record');
+  assert.match(plain!, /okf:untyped/);
 });
 
 test('prose dedup: id-less re-import and in-bundle duplicates are skipped', (t) => {
