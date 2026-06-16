@@ -9,7 +9,14 @@ import {
 import { DomainError } from '../../../../domain/shared/DomainError.js';
 import { OKF_VERSION } from '../../../../domain/okf/OkfDocument.js';
 
-const EXPORT_KNOWN_FLAGS: ReadonlySet<string> = new Set(['as', 'format']);
+const EXPORT_KNOWN_FLAGS: ReadonlySet<string> = new Set(['as', 'format', 'force']);
+
+/**
+ * Boolean flags for `ctx export`, threaded into `parseArgs` by the
+ * dispatcher (issue #158 per-verb pattern) so `--force <dir>` doesn't
+ * speculatively consume the positional directory as its value.
+ */
+export const EXPORT_BOOLEAN_FLAGS: ReadonlySet<string> = new Set(['force']);
 
 /**
  * Validate `--as <bundle-format>`. OKF is the only bundle format today;
@@ -49,6 +56,7 @@ export async function exportCtx(
   rejectUnknownFlags(args, EXPORT_KNOWN_FLAGS, 'export');
   parseBundleFormat(args);
   const format = parseFormat(args);
+  const force = args.options['force'] === true;
 
   const dir = args.positional[0];
   if (dir === undefined || dir.length === 0) {
@@ -58,7 +66,7 @@ export async function exportCtx(
     );
   }
 
-  const summary = await deps.uc.exportOkf({ dir });
+  const summary = await deps.uc.exportOkf({ dir, force });
 
   if (format === 'json') {
     process.stdout.write(

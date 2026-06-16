@@ -1708,10 +1708,16 @@ plus generated `index.md` / `log.md` views. OKF is an interchange
 stays YAML; the bundle is another surface.
 
 ```bash
-ctx export <dir> [--as okf] [--format json|text]              # facts -> OKF bundle
+ctx export <dir> [--as okf] [--force] [--format json|text]    # facts -> OKF bundle
 ctx import <dir> [--as okf] [--by <m>] [--allow-duplicates]
                  [--format json|text]                         # bundle -> facts
 ```
+
+`export` refuses a non-empty target directory unless `--force`, so it
+can't silently clobber an unrelated tree. On import, a foreign `id` that
+collides with an existing record but carries *different* prose is
+reallocated a fresh id rather than dropped — the idempotent skip is gated
+on a prose match, so a distinct observation is never silently lost.
 
 A round-trip of guild-authored facts is **lossless** — the exported
 frontmatter carries `id`, `timestamp`, `author` and `tags`, so import

@@ -63,7 +63,7 @@ export class CtxUseCases {
    * the substrate (writes land outside `content_root`, in the chosen
    * bundle directory).
    */
-  async exportOkf(input: { dir: string }): Promise<OkfExportSummary> {
+  async exportOkf(input: { dir: string; force?: boolean }): Promise<OkfExportSummary> {
     const bundle = this.requireBundle();
     const ids = [...(await this.repo.listAllIds())].sort();
     const docs = [];
@@ -71,7 +71,7 @@ export class CtxUseCases {
       const ctx = await this.repo.findById(id);
       if (ctx !== null) docs.push(ctxToOkfDocument(ctx));
     }
-    const res = await bundle.write(input.dir, docs);
+    const res = await bundle.write(input.dir, docs, { force: input.force === true });
     return { written: res.written, count: docs.length };
   }
 
@@ -123,18 +123,29 @@ export class CtxUseCases {
         continue;
       }
 
-      // Resolve the id: preserve a well-formed guild id (idempotent skip
-      // if it already exists); allocate fresh for missing/foreign ids.
+      // Resolve the id. Preserve a well-formed guild id; allocate fresh
+      // for missing/foreign ids. When a preserved id already exists,
+      // distinguish a true round-trip (same prose -> idempotent skip)
+      // from a foreign-id collision (different — or unreadable —
+      // incumbent: don't drop the observation, allocate a fresh id).
+      // Records-outlive-writers: a distinct fact must not be lost just
+      // because a foreign bundle reused our `ctx-YYYY-MM-DD-NNN`
+      // namespace. The incumbent is read on demand only on a collision,
+      // so the common path stays a single id-set membership check.
+      const proseKey = factDedupKey(mapped.fact);
       let id: string;
       const preserved = wellFormedCtxId(mapped.id);
-      if (preserved !== null) {
-        if (existing.includes(preserved)) {
+      if (preserved !== null && existing.includes(preserved)) {
+        const incumbent = await this.repo.findById(preserved);
+        if (incumbent !== null && factDedupKey(incumbent.fact) === proseKey) {
           allSkipped.push({
             path: doc.path,
             reason: `id ${preserved} already present (idempotent skip)`,
           });
           continue;
         }
+        id = nextCtxId(existing, now);
+      } else if (preserved !== null) {
         id = preserved;
       } else {
         id = nextCtxId(existing, now);
@@ -144,7 +155,6 @@ export class CtxUseCases {
       // normalized prose is already recorded — under any id — is a
       // duplicate observation. ctx records are immutable, so re-recording
       // the same prose adds noise rather than signal.
-      const proseKey = factDedupKey(mapped.fact);
       if (dedup) {
         const dupId = idByProse.get(proseKey);
         if (dupId !== undefined) {

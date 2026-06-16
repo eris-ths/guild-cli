@@ -26,6 +26,7 @@ import {
   OkfBundlePort,
   OkfBundleReadResult,
   OkfBundleWriteResult,
+  OkfBundleWriteOptions,
   OkfSkippedDoc,
 } from '../../passages/ctx/application/OkfBundlePort.js';
 import { OnMalformed } from '../../application/ports/OnMalformed.js';
@@ -44,7 +45,28 @@ export class FsOkfBundleRepository implements OkfBundlePort {
   async write(
     dir: string,
     docs: readonly OkfDocument[],
+    opts: OkfBundleWriteOptions = {},
   ): Promise<OkfBundleWriteResult> {
+    // Overwrite guard: refuse to write into a non-empty directory unless
+    // forced, so an export can't silently clobber an unrelated tree (its
+    // own index.md / log.md / colliding <id>.md). An absent or empty dir
+    // is created by the writes below.
+    const baseAbs = assertUnder(dir, '.');
+    if (existsSync(baseAbs)) {
+      if (!statSync(baseAbs).isDirectory()) {
+        throw new DomainError(
+          `export target ${dir} exists and is not a directory`,
+          'dir',
+        );
+      }
+      if (!opts.force && readdirSync(baseAbs).length > 0) {
+        throw new DomainError(
+          `export target ${dir} is not empty; pass --force to overwrite`,
+          'dir',
+        );
+      }
+    }
+
     const written: string[] = [];
     const sorted = [...docs].sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
 
