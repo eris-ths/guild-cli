@@ -10,7 +10,21 @@ import {
 import { DomainError } from '../../../../domain/shared/DomainError.js';
 import { OKF_VERSION } from '../../../../domain/okf/OkfDocument.js';
 
-const IMPORT_KNOWN_FLAGS: ReadonlySet<string> = new Set(['as', 'by', 'format']);
+const IMPORT_KNOWN_FLAGS: ReadonlySet<string> = new Set([
+  'as',
+  'by',
+  'format',
+  'allow-duplicates',
+]);
+
+/**
+ * Boolean flags for `ctx import`, threaded into `parseArgs` by the
+ * dispatcher (issue #158 per-verb pattern) so `--allow-duplicates <dir>`
+ * doesn't speculatively consume the positional directory as its value.
+ */
+export const IMPORT_BOOLEAN_FLAGS: ReadonlySet<string> = new Set([
+  'allow-duplicates',
+]);
 
 function parseBundleFormat(args: ParsedArgs): 'okf' {
   const raw = optionalOption(args, 'as') ?? 'okf';
@@ -39,6 +53,11 @@ export interface ImportCtxDeps {
  * a no-op. Foreign concepts import tolerantly (fresh id, `--by` as the
  * fallback author, provenance preserved as tags). `--by` defaults from
  * GUILD_ACTOR.
+ *
+ * Prose dedup is on by default: a fact whose normalized prose is already
+ * recorded — under any id, or earlier in the same bundle — is skipped,
+ * so even an id-less foreign bundle re-imported is a no-op.
+ * `--allow-duplicates` opts out for a deliberate re-record.
  */
 export async function importCtx(
   deps: ImportCtxDeps,
@@ -48,6 +67,7 @@ export async function importCtx(
   parseBundleFormat(args);
   const format = parseFormat(args);
   const by = requireOption(args, 'by', '<m>', 'GUILD_ACTOR');
+  const allowDuplicates = args.options['allow-duplicates'] === true;
 
   const dir = args.positional[0];
   if (dir === undefined || dir.length === 0) {
@@ -57,7 +77,7 @@ export async function importCtx(
     );
   }
 
-  const summary = await deps.uc.importOkf({ dir, by });
+  const summary = await deps.uc.importOkf({ dir, by, allowDuplicates });
 
   if (format === 'json') {
     process.stdout.write(

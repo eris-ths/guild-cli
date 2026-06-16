@@ -620,7 +620,8 @@ stays YAML; OKF is another surface, the way `--format text` is.
 
 ```bash
 ctx export <dir> [--as okf] [--format json|text]   # facts -> OKF bundle
-ctx import <dir> [--as okf] [--by <m>] [--format json|text]   # bundle -> facts
+ctx import <dir> [--as okf] [--by <m>] [--allow-duplicates]
+                 [--format json|text]               # bundle -> facts
 ```
 
 Round-trip is lossless for guild-authored bundles — `id`, `timestamp`,
@@ -629,9 +630,14 @@ is idempotent (existing ids skip). Foreign bundles import tolerantly:
 nested subtrees are walked; bare tags land under `topic:`; a non-`Fact`
 `type` is preserved as an `okf:<type>` provenance tag; documents lacking
 an author fall back to `--by`; empty or unparseable documents are
-reported as skipped rather than failing the whole import. `--as` selects
-the bundle format (only `okf` today; the flag is the seam for a future
-second format).
+reported as skipped rather than failing the whole import.
+
+**Prose dedup** is on by default: a fact whose normalized prose is
+already recorded — under any id, or earlier in the same bundle — is
+skipped, so even an id-less foreign bundle re-imported is a no-op (the
+skip reason names the record it duplicates). `--allow-duplicates` opts
+out for a deliberate re-record. `--as` selects the bundle format (only
+`okf` today; the flag is the seam for a future second format).
 
 When to reach for ctx vs the other passages: ctx is the residence
 for prose that doesn't want closure. If the observation is heading

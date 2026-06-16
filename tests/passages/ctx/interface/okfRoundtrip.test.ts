@@ -124,3 +124,52 @@ test('a foreign OKF bundle imports tolerantly', (t) => {
   assert.match(orders!, /okf:bigquery-table/); // type provenance
   assert.match(orders!, /created_at: 2025-01-02T10:00:00\.000Z/); // foreign ts preserved
 });
+
+test('prose dedup: id-less re-import and in-bundle duplicates are skipped', (t) => {
+  const root = newRoot();
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+
+  const bundle = join(root, 'foreign');
+  mkdirSync(bundle, { recursive: true });
+  // a and b carry the same prose (b differs only in whitespace -> still a
+  // duplicate after normalization); c is unique. None have an id.
+  writeFileSync(join(bundle, 'a.md'), '---\ntype: Note\n---\nshared observation\n');
+  writeFileSync(join(bundle, 'b.md'), '---\ntype: Note\n---\nshared    observation\n');
+  writeFileSync(join(bundle, 'c.md'), '---\ntype: Note\n---\nunique observation\n');
+
+  const first = JSON.parse(
+    runCtx(root, ['import', bundle, '--format', 'json'], { GUILD_ACTOR: 'x' }).stdout,
+  );
+  // a + c imported; b skipped as an in-bundle duplicate.
+  assert.equal(first.imported_count, 2);
+  assert.equal(first.skipped_count, 1);
+  assert.match(first.skipped[0].reason, /duplicate prose \(already recorded as ctx-/);
+
+  // Re-import: every doc now duplicates substrate prose -> all skipped.
+  const second = JSON.parse(
+    runCtx(root, ['import', bundle, '--format', 'json'], { GUILD_ACTOR: 'x' }).stdout,
+  );
+  assert.equal(second.imported_count, 0);
+  assert.equal(second.skipped_count, 3);
+});
+
+test('--allow-duplicates (placed before the dir) opts out of prose dedup', (t) => {
+  const root = newRoot();
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+
+  const bundle = join(root, 'foreign');
+  mkdirSync(bundle, { recursive: true });
+  writeFileSync(join(bundle, 'a.md'), '---\ntype: Note\n---\nrepeatable observation\n');
+
+  runCtx(root, ['import', bundle, '--format', 'json'], { GUILD_ACTOR: 'x' });
+  // Flag before the positional dir: the boolean registration must keep
+  // the parser from swallowing the dir as the flag value.
+  const again = runCtx(
+    root,
+    ['import', '--allow-duplicates', bundle, '--format', 'json'],
+    { GUILD_ACTOR: 'x' },
+  );
+  const env = JSON.parse(again.stdout);
+  assert.equal(env.imported_count, 1);
+  assert.equal(env.skipped_count, 0);
+});

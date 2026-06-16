@@ -10,5 +10,9 @@
   to `prefix:value` (bare → `topic:`), a non-`Fact` type is preserved as
   an `okf:<type>` provenance tag, missing authors fall back to `--by`,
   and empty/unparseable documents are reported as skipped rather than
-  failing the import. OKF is an interchange *projection* (principle 11),
-  not a storage change — the on-disk substrate stays YAML.
+  failing the import. Prose dedup is on by default — a fact whose
+  normalized prose is already recorded (under any id, or earlier in the
+  same bundle) is skipped, so even an id-less foreign bundle re-imported
+  is a no-op; `--allow-duplicates` opts out. OKF is an interchange
+  *projection* (principle 11), not a storage change — the on-disk
+  substrate stays YAML.

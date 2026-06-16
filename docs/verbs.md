@@ -1709,7 +1709,8 @@ stays YAML; the bundle is another surface.
 
 ```bash
 ctx export <dir> [--as okf] [--format json|text]              # facts -> OKF bundle
-ctx import <dir> [--as okf] [--by <m>] [--format json|text]   # bundle -> facts
+ctx import <dir> [--as okf] [--by <m>] [--allow-duplicates]
+                 [--format json|text]                         # bundle -> facts
 ```
 
 A round-trip of guild-authored facts is **lossless** — the exported
@@ -1736,8 +1737,15 @@ Foreign bundles import tolerantly: nested subtrees are walked; bare tags
 land under `topic:`; a non-`Fact` `type` is preserved as an `okf:<type>`
 provenance tag; documents lacking an author fall back to `--by`; empty or
 unparseable documents are reported as skipped rather than failing the
-import. `--as` selects the bundle format (only `okf` today — the flag is
-the seam for a future second format).
+import.
+
+**Prose dedup** is on by default: a fact whose normalized prose
+(trimmed, internal whitespace collapsed) is already recorded — under any
+id, or earlier in the same bundle — is skipped, so even an id-less
+foreign bundle re-imported is a no-op. The skip reason names the record
+it duplicates. `--allow-duplicates` opts out for the rare deliberate
+re-record. `--as` selects the bundle format (only `okf` today — the flag
+is the seam for a future second format).
 
 ### Status (alpha phase 1)
 

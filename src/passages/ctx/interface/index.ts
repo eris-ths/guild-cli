@@ -22,7 +22,7 @@ import { getPackageVersion, isVersionFlag } from '../../../interface/shared/vers
 import { buildCtxContainer } from './container.js';
 import { recordCtx } from './handlers/record.js';
 import { exportCtx } from './handlers/exportOkf.js';
-import { importCtx } from './handlers/importOkf.js';
+import { importCtx, IMPORT_BOOLEAN_FLAGS } from './handlers/importOkf.js';
 import { withEntryLock } from '../../../infrastructure/lock/withEntryLock.js';
 import { resolveGuildActor } from '../../../interface/shared/resolveGuildActor.js';
 import { READ_VERBS, WRITE_VERBS, LOCK_EXEMPT_VERBS } from './verbs.js';
@@ -42,10 +42,12 @@ Usage:
                               fact + index.md / log.md views).
 
   ctx import <dir>            [--as okf] [--by <m>] [--format json|text]
+                              [--allow-duplicates]
                               Record an OKF bundle's concepts as facts.
                               Guild-authored bundles round-trip (ids
                               preserved, idempotent); foreign bundles
-                              import tolerantly.
+                              import tolerantly. Prose dedup is on by
+                              default; --allow-duplicates opts out.
 
   ctx --help                   This help.
   ctx --version                Print version and exit.
@@ -83,7 +85,16 @@ export async function main(argv: readonly string[]): Promise<number> {
   }
 
   const [cmd, ...rest] = argv;
-  const args = parseArgs(rest);
+  // Per-verb boolean flags (issue #158): registered next to the verb
+  // that owns them so the parser doesn't consume a following positional
+  // (e.g. `ctx import --allow-duplicates <dir>`) as the flag's value.
+  const VERB_BOOLEAN_FLAGS: Record<string, ReadonlySet<string>> = {
+    import: IMPORT_BOOLEAN_FLAGS,
+  };
+  const verbBooleans = VERB_BOOLEAN_FLAGS[cmd ?? ''];
+  const args = verbBooleans
+    ? parseArgs(rest, { booleanFlags: verbBooleans })
+    : parseArgs(rest);
   const { config, uc } = buildCtxContainer();
 
   const dispatch = async (): Promise<number> => {

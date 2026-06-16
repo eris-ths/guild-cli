@@ -84,8 +84,16 @@ export class CtxUseCases {
    * - A foreign bundle imports tolerantly: a missing/foreign id gets a
    *   fresh allocation; missing author falls back to `input.by`; a
    *   non-`Fact` type and non-conformant tags are preserved as tags.
+   * - Prose dedup (default on): a fact whose normalized prose already
+   *   exists on the substrate — or appears twice in the same bundle — is
+   *   skipped, so an id-less foreign bundle re-imported is also a no-op.
+   *   `allowDuplicates` opts out for the rare deliberate re-record.
    */
-  async importOkf(input: { dir: string; by: string }): Promise<OkfImportSummary> {
+  async importOkf(input: {
+    dir: string;
+    by: string;
+    allowDuplicates?: boolean;
+  }): Promise<OkfImportSummary> {
     const bundle = this.requireBundle();
     const { docs, skipped } = await bundle.read(input.dir);
 
@@ -93,6 +101,20 @@ export class CtxUseCases {
     const now = this.now();
     const imported: OkfImportedFact[] = [];
     const allSkipped: OkfSkippedDoc[] = [...skipped];
+
+    // Map normalized-prose -> the id that already carries it, so a
+    // duplicate import is skipped *and* the skip reason can name the
+    // record it duplicates. Built by hydrating the existing facts once
+    // (import is a deliberate batch op, so the O(n) read is acceptable);
+    // grows as the batch records new prose to catch in-bundle dups.
+    const dedup = input.allowDuplicates ? false : true;
+    const idByProse = new Map<string, string>();
+    if (dedup) {
+      for (const id of existing) {
+        const ctx = await this.repo.findById(id);
+        if (ctx !== null) idByProse.set(factDedupKey(ctx.fact), id);
+      }
+    }
 
     for (const doc of docs) {
       const mapped = okfDocumentToCtxFact(doc);
@@ -116,6 +138,22 @@ export class CtxUseCases {
         id = preserved;
       } else {
         id = nextCtxId(existing, now);
+      }
+
+      // Prose dedup (after the id-match idempotent skip): a fact whose
+      // normalized prose is already recorded — under any id — is a
+      // duplicate observation. ctx records are immutable, so re-recording
+      // the same prose adds noise rather than signal.
+      const proseKey = factDedupKey(mapped.fact);
+      if (dedup) {
+        const dupId = idByProse.get(proseKey);
+        if (dupId !== undefined) {
+          allSkipped.push({
+            path: doc.path,
+            reason: `duplicate prose (already recorded as ${dupId})`,
+          });
+          continue;
+        }
       }
 
       // Preserve the original timestamp when present and parseable.
@@ -144,6 +182,7 @@ export class CtxUseCases {
       try {
         await this.repo.saveNew(ctx);
         existing.push(id);
+        if (dedup) idByProse.set(proseKey, ctx.id);
         imported.push({ id: ctx.id, path: doc.path });
       } catch (e) {
         if (e instanceof CtxIdCollision) {
@@ -176,4 +215,15 @@ function wellFormedCtxId(raw: string | undefined): string | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Normalize fact prose into a dedup key: trim, then collapse internal
+ * whitespace runs (including newlines) to a single space. Case is kept —
+ * a case difference is treated as a distinct observation rather than
+ * silently merged. Resilient to markdown re-wrapping, which is the
+ * realistic source of "same fact, different bytes" across a round-trip.
+ */
+function factDedupKey(fact: string): string {
+  return fact.trim().replace(/\s+/g, ' ');
 }
