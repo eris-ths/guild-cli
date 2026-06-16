@@ -46,6 +46,16 @@ export class YamlCtxRepository implements CtxRepository {
     return out;
   }
 
+  async listAll(): Promise<readonly Ctx[]> {
+    const ids = await this.listAllIds();
+    const out: Ctx[] = [];
+    for (const id of ids) {
+      const ctx = await this.findById(id);
+      if (ctx !== null) out.push(ctx); // malformed records skip via findById
+    }
+    return out;
+  }
+
   async saveNew(ctx: Ctx): Promise<void> {
     const rel = `${ctx.id}.yaml`;
     if (existsSafe(this.base, rel)) {

@@ -57,7 +57,7 @@ const DEVIL_ALL = [
   'suspend', 'resume', 'ingest', 'conclude', 'schema',
 ] as const;
 
-const CTX_ALL = ['record', 'export', 'import'] as const;
+const CTX_ALL = ['record', 'list', 'show', 'export', 'import'] as const;
 
 const CASES: Case[] = [
   { passage: 'gate', verbs: gateVerbs, all: GATE_ALL },
