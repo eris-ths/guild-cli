@@ -584,7 +584,8 @@ substrate primitive for facts; surrounding ecosystem modules
 (persona-side `*_resume.md`, code comments, ADR docs) hold related
 prose at different layers without absorbing into one another.
 
-Phase 1 ships only `ctx record`. The remaining six verbs (`fork` /
+Phase 1 ships `ctx record` plus the OKF interop pair (`export` /
+`import`, below). The remaining six lifecycle verbs (`fork` /
 `supersede` / `show` / `list` / `chain` / `status`) and schema
 extensions (`evidence` / `supersedes` / `sub_of` / `chain_after` /
 `branch_ref`) land in phase 2.
@@ -610,6 +611,34 @@ later — filter by `tech:*`, `status:*`, etc. Phase 1 leaves prefix
 choice free-form; phase 2 will introduce strictness levels (0/1/2 =
 loose / middle / strict) for prefix catalogs.
 
+**OKF interchange (export / import).** ctx facts project to and from
+[Open Knowledge Format](https://cloud.google.com/blog/products/data-analytics/how-the-open-knowledge-format-can-improve-data-sharing/)
+bundles — a directory of `<id>.md` files (YAML frontmatter + fact prose)
+plus generated `index.md` / `log.md` views. OKF is an interchange
+*projection* (principle 11), not a storage change: the on-disk substrate
+stays YAML; OKF is another surface, the way `--format text` is.
+
+```bash
+ctx export <dir> [--as okf] [--format json|text]   # facts -> OKF bundle
+ctx import <dir> [--as okf] [--by <m>] [--allow-duplicates]
+                 [--format json|text]               # bundle -> facts
+```
+
+Round-trip is lossless for guild-authored bundles — `id`, `timestamp`,
+`author` and `tags` survive the trip, and re-importing the same bundle
+is idempotent (existing ids skip). Foreign bundles import tolerantly:
+nested subtrees are walked; bare tags land under `topic:`; a non-`Fact`
+`type` is preserved as an `okf:<type>` provenance tag; documents lacking
+an author fall back to `--by`; empty or unparseable documents are
+reported as skipped rather than failing the whole import.
+
+**Prose dedup** is on by default: a fact whose normalized prose is
+already recorded — under any id, or earlier in the same bundle — is
+skipped, so even an id-less foreign bundle re-imported is a no-op (the
+skip reason names the record it duplicates). `--allow-duplicates` opts
+out for a deliberate re-record. `--as` selects the bundle format (only
+`okf` today; the flag is the seam for a future second format).
+
 When to reach for ctx vs the other passages: ctx is the residence
 for prose that doesn't want closure. If the observation is heading
 toward a verdict, file it via `gate request`. If it's
@@ -617,7 +646,8 @@ thought-in-motion across sessions, use `agora play`. If it's a
 finding that needs adversarial scrutiny, use `devil entry`. ctx is
 for what remains: pinned observation, no closure required.
 
-Status: alpha phase 1. Read-side is currently grep on
+Status: alpha phase 1. Structured read-side is `ctx export` (OKF
+projection); ad-hoc read-side is still grep on
 `<content_root>/ctx/*.yaml` — `ctx list` / `ctx chain` arrive in
 phase 2 and that's the design test (junk-drawer risk vs principled
 substrate).

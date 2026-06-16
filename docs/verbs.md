@@ -1648,7 +1648,8 @@ that don't fit into a verdict, a play, or a review.
 
 ### Phase 1 surface
 
-Phase 1 ships only `ctx record`. The remaining six verbs (`fork` /
+Phase 1 ships `ctx record` plus the OKF interop pair (`export` /
+`import`, below). The remaining six lifecycle verbs (`fork` /
 `supersede` / `show` / `list` / `chain` / `status`) and schema
 extensions (`evidence` / `supersedes` / `sub_of` / `chain_after` /
 `branch_ref`) land in phase 2.
@@ -1698,9 +1699,58 @@ leaves prefix choice free-form (the substrate already in use mixes
 `meta:` / `pr:` / `principle:`); phase 2 introduces strictness
 levels (0/1/2 = loose / middle / strict) for prefix catalogs.
 
+### OKF interchange (`export` / `import`)
+
+ctx facts project to and from [Open Knowledge Format](https://cloud.google.com/blog/products/data-analytics/how-the-open-knowledge-format-can-improve-data-sharing/)
+bundles — a directory of `<id>.md` files (YAML frontmatter + fact prose)
+plus generated `index.md` / `log.md` views. OKF is an interchange
+*projection* (principle 11), not a storage change: the on-disk substrate
+stays YAML; the bundle is another surface.
+
+```bash
+ctx export <dir> [--as okf] [--format json|text]              # facts -> OKF bundle
+ctx import <dir> [--as okf] [--by <m>] [--allow-duplicates]
+                 [--format json|text]                         # bundle -> facts
+```
+
+A round-trip of guild-authored facts is **lossless** — the exported
+frontmatter carries `id`, `timestamp`, `author` and `tags`, so import
+reconstructs the same record, and re-importing the same bundle is
+idempotent (existing ids skip):
+
+```yaml
+# bundle/ctx-2026-05-04-006.md
+---
+type: Fact
+tags:
+  - scope:develop-only
+  - topic:branch-policy
+timestamp: 2026-05-04T13:58:11.476Z
+author: claude
+id: ctx-2026-05-04-006
+---
+
+main↔develop diff is PR #145 only; harness layer stays develop-side
+```
+
+Foreign bundles import tolerantly: nested subtrees are walked; bare tags
+land under `topic:`; a non-`Fact` `type` is preserved as an `okf:<type>`
+provenance tag; documents lacking an author fall back to `--by`; empty or
+unparseable documents are reported as skipped rather than failing the
+import.
+
+**Prose dedup** is on by default: a fact whose normalized prose
+(trimmed, internal whitespace collapsed) is already recorded — under any
+id, or earlier in the same bundle — is skipped, so even an id-less
+foreign bundle re-imported is a no-op. The skip reason names the record
+it duplicates. `--allow-duplicates` opts out for the rare deliberate
+re-record. `--as` selects the bundle format (only `okf` today — the flag
+is the seam for a future second format).
+
 ### Status (alpha phase 1)
 
-Read-side is currently grep on `<content_root>/ctx/*.yaml`.
+Structured read-side is `ctx export` (OKF projection); ad-hoc read-side
+is still grep on `<content_root>/ctx/*.yaml`.
 `ctx list` / `ctx show` / `ctx chain` (phase 2) are the design
 test — whether the substrate stays principled or drifts into a
 junk drawer at the 100-record scale.
