@@ -68,10 +68,23 @@ Lore upstream:
 `;
 
 // Mirror of the switch below for did-you-mean suggestions. Phase 1
-// has only `record`; phase 2 will add fork / supersede / show /
-// list / chain / status. A new verb forgotten here loses its typo
-// hint, doesn't crash anything.
+// ships record / export / import; a new verb forgotten here loses its
+// typo hint, doesn't crash anything.
 const CTX_COMMANDS = ['record', 'export', 'import'] as const;
+
+// The phase-2 lifecycle verbs named in HELP / AGENT.md / docs as
+// "arriving in phase 2". A user who read the docs and types one of these
+// deserves a roadmap-aware message ("planned, not yet implemented")
+// rather than the same "unknown verb" a typo gets. Keep in sync with the
+// HELP phase-2 line above.
+const CTX_PHASE2_VERBS: ReadonlySet<string> = new Set([
+  'fork',
+  'supersede',
+  'show',
+  'list',
+  'chain',
+  'status',
+]);
 
 export async function main(argv: readonly string[]): Promise<number> {
   if (argv.length === 0 || argv[0] === '--help' || argv[0] === '-h') {
@@ -108,6 +121,16 @@ export async function main(argv: readonly string[]): Promise<number> {
       case 'import':
         return await importCtx({ uc, config }, args);
       default: {
+        // A documented phase-2 verb that isn't implemented yet gets a
+        // roadmap-aware message, so a reader of the docs isn't told the
+        // same "unknown verb" a typo gets (dogfood finding).
+        if (cmd !== undefined && CTX_PHASE2_VERBS.has(cmd)) {
+          process.stderr.write(
+            `ctx: '${cmd}' is a planned phase-2 verb, not yet implemented.\n` +
+              `  phase 1 surface: record / export / import. See 'ctx --help'.\n`,
+          );
+          return 1;
+        }
         // Phase 2 will add fork / supersede / show / list / chain /
         // status; the catalog grows as those land. Valid verbs today are
         // record / export / import — typos like `recor` should still get

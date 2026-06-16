@@ -10,9 +10,10 @@ examples/*/data/
 
 # Local gate dogfood records (actor names + session content — do not publish)
 # Root-anchored so examples/*/requests/ + examples/*/issues/ + examples/*/agora/
-# fixtures stay tracked. Same rationale across stores — issues and agora
-# plays carry actor names and free-form session content the same way
-# requests do.
+# + examples/*/ctx/ fixtures stay tracked. Same rationale across all four
+# substrate stores — issues, agora plays and ctx facts carry actor names and
+# free-form session content the same way requests do.
 /requests/
 /issues/
 /agora/
+/ctx/
