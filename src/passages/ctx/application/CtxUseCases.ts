@@ -59,18 +59,48 @@ export class CtxUseCases {
   }
 
   /**
+   * List recorded facts, newest first, optionally filtered by an exact
+   * tag and/or author. Read-only.
+   */
+  async list(filter: { tag?: string; by?: string } = {}): Promise<readonly Ctx[]> {
+    let out = [...(await this.repo.listAll())];
+    if (filter.tag !== undefined) {
+      out = out.filter((c) => c.tags.includes(filter.tag!));
+    }
+    if (filter.by !== undefined) {
+      out = out.filter((c) => c.created_by === filter.by);
+    }
+    // Newest first: created_at desc, id desc as a stable tiebreak.
+    out.sort((a, b) =>
+      a.created_at < b.created_at
+        ? 1
+        : a.created_at > b.created_at
+          ? -1
+          : a.id < b.id
+            ? 1
+            : a.id > b.id
+              ? -1
+              : 0,
+    );
+    return out;
+  }
+
+  /** Show a single fact by id, or null if absent. Read-only. */
+  async show(id: string): Promise<Ctx | null> {
+    return this.repo.findById(id);
+  }
+
+  /**
    * Export every ctx fact as an OKF bundle under `dir`. Read-only over
    * the substrate (writes land outside `content_root`, in the chosen
    * bundle directory).
    */
   async exportOkf(input: { dir: string; force?: boolean }): Promise<OkfExportSummary> {
     const bundle = this.requireBundle();
-    const ids = [...(await this.repo.listAllIds())].sort();
-    const docs = [];
-    for (const id of ids) {
-      const ctx = await this.repo.findById(id);
-      if (ctx !== null) docs.push(ctxToOkfDocument(ctx));
-    }
+    const facts = [...(await this.repo.listAll())].sort((a, b) =>
+      a.id < b.id ? -1 : a.id > b.id ? 1 : 0,
+    );
+    const docs = facts.map(ctxToOkfDocument);
     const res = await bundle.write(input.dir, docs, { force: input.force === true });
     return { written: res.written, count: docs.length };
   }

@@ -1648,16 +1648,28 @@ that don't fit into a verdict, a play, or a review.
 
 ### Phase 1 surface
 
-Phase 1 ships `ctx record` plus the OKF interop pair (`export` /
-`import`, below). The remaining six lifecycle verbs (`fork` /
-`supersede` / `show` / `list` / `chain` / `status`) and schema
-extensions (`evidence` / `supersedes` / `sub_of` / `chain_after` /
-`branch_ref`) land in phase 2.
+Phase 1 ships `ctx record`, the read-side `list` / `show`, and the OKF
+interop pair (`export` / `import`, below). The remaining lifecycle verbs
+(`fork` / `supersede` / `chain` / `status`) and schema extensions
+(`evidence` / `supersedes` / `sub_of` / `chain_after` / `branch_ref`)
+land in phase 2.
 
 ```bash
 ctx record --fact "<prose>" [--tag prefix:value,prefix:value]
                             [--by <m>] [--format json|text]
+ctx list   [--tag prefix:value] [--by <m>] [--format json|text]
+ctx show   <id> [--format json|text]
 ```
+
+### Reading facts back (`list` / `show`)
+
+`ctx list` prints recorded facts newest-first (id, author, timestamp,
+tags, and a one-line snippet); `--tag` filters by an exact tag, `--by` by
+author. `ctx show <id>` prints one fact in full. A `show` on a
+well-formed but absent id raises a not-found that names `ctx list` as the
+recovery (text hint + structured `error.recovery` in JSON). This is the
+phase-1 read surface — before it, reading facts back meant grep over
+`<content_root>/ctx/*.yaml`.
 
 ### A worked record
 
@@ -1755,11 +1767,10 @@ is the seam for a future second format).
 
 ### Status (alpha phase 1)
 
-Structured read-side is `ctx export` (OKF projection); ad-hoc read-side
-is still grep on `<content_root>/ctx/*.yaml`.
-`ctx list` / `ctx show` / `ctx chain` (phase 2) are the design
-test — whether the substrate stays principled or drifts into a
-junk drawer at the 100-record scale.
+Read-side is `ctx list` (newest-first, `--tag` / `--by` filters) +
+`ctx show <id>`, plus `ctx export` (OKF projection). `ctx chain` (phase
+2) is the remaining design test — whether the substrate stays principled
+or drifts into a junk drawer at the 100-record scale.
 
 For the conceptual framing alongside the other passages, see the
 `## ctx` section of [`AGENT.md`](../AGENT.md).

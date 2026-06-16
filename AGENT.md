@@ -584,15 +584,17 @@ substrate primitive for facts; surrounding ecosystem modules
 (persona-side `*_resume.md`, code comments, ADR docs) hold related
 prose at different layers without absorbing into one another.
 
-Phase 1 ships `ctx record` plus the OKF interop pair (`export` /
-`import`, below). The remaining six lifecycle verbs (`fork` /
-`supersede` / `show` / `list` / `chain` / `status`) and schema
-extensions (`evidence` / `supersedes` / `sub_of` / `chain_after` /
-`branch_ref`) land in phase 2.
+Phase 1 ships `ctx record`, the read-side `list` / `show`, and the OKF
+interop pair (`export` / `import`, below). The remaining lifecycle verbs
+(`fork` / `supersede` / `chain` / `status`) and schema extensions
+(`evidence` / `supersedes` / `sub_of` / `chain_after` / `branch_ref`)
+land in phase 2.
 
 ```bash
 ctx record --fact "<prose>" [--tag prefix:value,prefix:value]
                             [--by <m>] [--format json|text]
+ctx list [--tag prefix:value] [--by <m>] [--format json|text]  # read back, newest first
+ctx show <id> [--format json|text]                             # one fact in full
 ```
 
 ctx records live under `<content_root>/ctx/`:
@@ -651,11 +653,10 @@ thought-in-motion across sessions, use `agora play`. If it's a
 finding that needs adversarial scrutiny, use `devil entry`. ctx is
 for what remains: pinned observation, no closure required.
 
-Status: alpha phase 1. Structured read-side is `ctx export` (OKF
-projection); ad-hoc read-side is still grep on
-`<content_root>/ctx/*.yaml` — `ctx list` / `ctx chain` arrive in
-phase 2 and that's the design test (junk-drawer risk vs principled
-substrate).
+Status: alpha phase 1. Read-side is `ctx list` (newest-first, `--tag` /
+`--by` filters) + `ctx show <id>`, plus `ctx export` (OKF projection).
+`ctx chain` arrives in phase 2 and that's the design test (junk-drawer
+risk vs principled substrate at the 100-record scale).
 
 # Tier: Diagnostic
 
