@@ -83,3 +83,18 @@ test('an empty body is skipped with a reason', () => {
   if (m.kind !== 'skip') return;
   assert.match(m.reason, /empty body/);
 });
+
+test('a type-less doc (frontmatter-less) is tagged okf:untyped for audit', () => {
+  // parseOkfDocument coerces a frontmatter-less file to type ''.
+  const doc: OkfDocument = { path: 'nofm.md', frontmatter: { type: '' }, body: 'plain prose' };
+  const m = okfDocumentToCtxFact(doc);
+  if (m.kind !== 'fact') throw new Error('expected fact');
+  assert.deepEqual(m.tags, ['okf:untyped']);
+});
+
+test('a type that slugs to nothing also falls back to okf:untyped', () => {
+  const doc: OkfDocument = { path: 'x.md', frontmatter: { type: '***' }, body: 'b' };
+  const m = okfDocumentToCtxFact(doc);
+  if (m.kind !== 'fact') throw new Error('expected fact');
+  assert.deepEqual(m.tags, ['okf:untyped']);
+});

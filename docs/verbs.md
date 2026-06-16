@@ -1753,17 +1753,25 @@ main↔develop diff is PR #145 only; harness layer stays develop-side
 
 Foreign bundles import tolerantly: nested subtrees are walked; bare tags
 land under `topic:`; a non-`Fact` `type` is preserved as an `okf:<type>`
-provenance tag; documents lacking an author fall back to `--by`; empty or
-unparseable documents are reported as skipped rather than failing the
-import.
+provenance tag; a doc with no usable `type` (frontmatter-less, or `type`
+empty) still records but is tagged `okf:untyped` — so a stray non-concept
+`.md` (a README, a note) is auditable via `ctx list --tag okf:untyped`
+rather than passing silently as a Fact; documents lacking an author fall
+back to `--by`; empty or unparseable documents are reported as skipped
+rather than failing the import.
 
-**Prose dedup** is on by default: a fact whose normalized prose
-(trimmed, internal whitespace collapsed) is already recorded — under any
-id, or earlier in the same bundle — is skipped, so even an id-less
-foreign bundle re-imported is a no-op. The skip reason names the record
-it duplicates. `--allow-duplicates` opts out for the rare deliberate
-re-record. `--as` selects the bundle format (only `okf` today — the flag
-is the seam for a future second format).
+**Prose dedup** is on by default: a fact whose prose is already recorded
+— under any id, or earlier in the same bundle — is skipped, so even an
+id-less foreign bundle re-imported is a no-op. The skip reason names the
+record it duplicates. The match is **trim + whitespace-collapse only —
+case and punctuation are significant**: it catches a markdown re-wrap but
+not a hand-edited copy (capitalized, re-punctuated). A guild-authored
+bundle survives that via the `id`-based idempotent skip; a *foreignized*
+copy (id stripped + body reworded) can re-import as a new fact. That is
+intentional — dedup is a cheap exact-prose guard, not a similarity model.
+`--allow-duplicates` opts out for the rare deliberate re-record. `--as`
+selects the bundle format (only `okf` today — the flag is the seam for a
+future second format).
 
 ### Status (alpha phase 1)
 

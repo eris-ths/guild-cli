@@ -630,21 +630,30 @@ Round-trip is lossless for guild-authored bundles — `id`, `timestamp`,
 `author` and `tags` survive the trip, and re-importing the same bundle
 is idempotent (existing ids skip). Foreign bundles import tolerantly:
 nested subtrees are walked; bare tags land under `topic:`; a non-`Fact`
-`type` is preserved as an `okf:<type>` provenance tag; documents lacking
-an author fall back to `--by`; empty or unparseable documents are
-reported as skipped rather than failing the whole import. A foreign `id`
-that collides with an existing record but carries *different* prose is
-reallocated a fresh id rather than dropped (the idempotent skip is gated
-on a prose match, so a distinct observation is never lost). `export`
-refuses a non-empty target directory unless `--force`, so it can't
-silently clobber an unrelated tree.
+`type` is preserved as an `okf:<type>` provenance tag; a doc with no
+usable `type` (frontmatter-less, or `type` empty) still records but is
+tagged `okf:untyped` so a stray non-concept `.md` (a README, a note) is
+auditable via `ctx list --tag okf:untyped` rather than passing silently
+as a Fact; documents lacking an author fall back to `--by`; empty or
+unparseable documents are reported as skipped rather than failing the
+whole import. A foreign `id` that collides with an existing record but
+carries *different* prose is reallocated a fresh id rather than dropped
+(the idempotent skip is gated on a prose match, so a distinct observation
+is never lost). `export` refuses a non-empty target directory unless
+`--force`, so it can't silently clobber an unrelated tree.
 
-**Prose dedup** is on by default: a fact whose normalized prose is
-already recorded — under any id, or earlier in the same bundle — is
-skipped, so even an id-less foreign bundle re-imported is a no-op (the
-skip reason names the record it duplicates). `--allow-duplicates` opts
-out for a deliberate re-record. `--as` selects the bundle format (only
-`okf` today; the flag is the seam for a future second format).
+**Prose dedup** is on by default: a fact whose prose is already recorded
+— under any id, or earlier in the same bundle — is skipped, so even an
+id-less foreign bundle re-imported is a no-op (the skip reason names the
+record it duplicates). The match is **trim + whitespace-collapse only —
+case and punctuation are significant**, so it catches re-wraps but not a
+hand-edited copy (capitalized, re-punctuated). For a guild-authored
+bundle the `id` carries that case via the idempotent skip; a *foreignized*
+copy (id stripped + body reworded) can re-import as a new fact. That is
+intentional — dedup is a cheap exact-prose guard, not a similarity model.
+`--allow-duplicates` opts out for a deliberate re-record. `--as` selects
+the bundle format (only `okf` today; the flag is the seam for a future
+second format).
 
 When to reach for ctx vs the other passages: ctx is the residence
 for prose that doesn't want closure. If the observation is heading
