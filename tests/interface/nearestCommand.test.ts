@@ -117,10 +117,11 @@ test('ctx <typo>: suggests ctx-prefixed verb (phase-1 catalog)', (t) => {
   assert.equal(r.status, 1);
   assert.match(r.stderr, /unknown verb: recor/);
   assert.match(r.stderr, /did you mean: ctx record\?/);
-  // Phase-1 callout — flag the constraint at the surface that hit it,
-  // since fork / supersede / show / list / chain / status are not yet
-  // implemented and a typo for any of those would refuse to suggest.
-  assert.match(r.stderr, /phase 1: record only/);
+  // Verb-catalog callout — flag the available surface at the point a
+  // typo hit it, since the phase-2 lifecycle verbs (fork / supersede /
+  // show / list / chain / status) are not yet implemented and a typo
+  // for any of those would refuse to suggest.
+  assert.match(r.stderr, /record \/ export \/ import/);
 });
 
 test('devil <typo>: suggests devil-prefixed verb', (t) => {

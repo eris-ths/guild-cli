@@ -9,6 +9,7 @@
 
 import { GuildConfig } from '../../../infrastructure/config/GuildConfig.js';
 import { YamlCtxRepository } from '../infrastructure/YamlCtxRepository.js';
+import { FsOkfBundleRepository } from '../../../infrastructure/okf/FsOkfBundleRepository.js';
 import { CtxUseCases } from '../application/CtxUseCases.js';
 
 export interface CtxContainer {
@@ -26,6 +27,7 @@ export function buildCtxContainer(
 ): CtxContainer {
   const config = GuildConfig.load(opts.cwd);
   const repo = new YamlCtxRepository(config);
-  const uc = new CtxUseCases(repo);
+  const bundle = new FsOkfBundleRepository(config.onMalformed);
+  const uc = new CtxUseCases(repo, () => new Date(), bundle);
   return { config, repo, uc };
 }
