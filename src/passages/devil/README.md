@@ -152,6 +152,40 @@ Four devil-specific lenses extend the catalog:
   Surfaced as a methodology gap and promoted to a first-class
   lense so the audit posture itself is auditable.
 
+### Extending the catalog per content_root (#134 G)
+
+The 12 bundled lenses are security-shaped, but the
+coverage-gate machinery (every lense needs an entry before
+`conclude`; silent gaps forbidden) is not security-specific —
+it is a general no-gaps coercion. To apply that coercion to a
+**non-security review axis**, drop one YAML file per extension
+lense under `<content_root>/devil/lenses/<name>.yaml`:
+
+```yaml
+# <content_root>/devil/lenses/correctness.yaml
+name: correctness
+title: Correctness (judgment-axis)
+description: >-
+  Does the change do what it claims, for the cases that matter?
+  Logic errors, off-by-one, wrong default, broken invariant.
+ingest_sources: []
+examples:
+  - "guard checks is_set but consumer needs full completeness"
+```
+
+`ComposedLenseCatalog` (wired in `interface/container.ts`)
+merges these over the bundled defaults at startup, pins
+`source: extension` provenance on each, and **hard-errors at
+load** if an extension name collides with a bundled one
+(`LenseCollision` — extend-only, so old review records stay
+unambiguous). A `devil open --type system` review can then
+fill `correctness` (or any judgment lense you author) with no
+`skip` noise — the no-gaps floor now guards judgment, not only
+security. This is the configured-escape-hatch the playbook's
+"When NOT to use devil" warning points at: the warning is about
+skip-spam when you force a judgment review through the *bundled*
+catalog; an extension catalog removes the spam.
+
 ## Persona catalog (v1, 6 personas)
 
 Three hand-rolled (a reviewer can pick by hand):

@@ -16,9 +16,12 @@ file-based な coordination substrate を作っている TypeScript CLI。
   + claim/witness の cross-session stake
 - **agora** — `new` / `play` / `move` / `suspend` / `resume` / `conclude`
   の議論・探索プリミティブ (alpha)
-- **devil** — multi-persona security review (lenses: devil/layer/cognitive/user
-  + custom)。security 寄りの変更専用 — 汎用レビューは `gate review` (docs/playbook.md
-  "When NOT to use devil")
+- **devil** — multi-persona security review。bundled catalog は security
+  12-lense (injection / path-network / supply-chain ...)。security 寄りの
+  変更が主用途で、汎用レビューは `gate review` (docs/playbook.md
+  "When NOT to use devil")。ただし no-gaps 強制 (全 lense に entry、silent
+  gap 禁止) 自体は security 専用でなく、`<content_root>/devil/lenses/*.yaml`
+  の extension lense で judgment 軸にも転用できる (#134 G、ComposedLenseCatalog)
 - **ctx** — session 跨ぎの fact accumulation (alpha, phase 1 は `record` のみ)
 
 Clean Architecture: **Domain → Application → Infrastructure → Interface**
