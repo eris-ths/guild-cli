@@ -210,10 +210,15 @@ GUILD_SESSION_ID=agent-hookbus-2026-05-11  gate witness 2026-05-11-0001 --by age
 #    note as the slice progresses so cold readers can trace per-executor state.
 GUILD_SESSION_ID=agent-issues-2026-05-11  gate witness 2026-05-11-0001 --by agent-issues   --note "executing slice — 2 commits cherry-pickable"
 
-# 7) One execute → one complete (lifecycle is wave-scoped, not per-executor)
-gate execute 2026-05-11-0001 --by agent-issues
+# 7) execute, then per-slice complete (#294: complete is per-executor).
+#    Each executor closes its own slice; the wave transitions to
+#    completed only once every assigned executor's slice is terminal.
+gate execute  2026-05-11-0001 --by agent-issues
 # … cherry-pick both SubAgents' commits into a single branch, push, open PR …
-gate complete 2026-05-11-0001 --by agent-issues --note "PR #291 opened"
+gate complete 2026-05-11-0001 --by agent-issues  --note "issues slice done; PR #291 opened"
+gate complete 2026-05-11-0001 --by agent-hookbus --note "hook-bus slice done"
+# → "open slices remaining" until the last --by closes; then the wave
+#   auto-transitions to completed (no separate wave-level complete call).
 ```
 
 ### What the substrate now carries (cold-reader audit)
@@ -230,16 +235,24 @@ That's the substrate engagement payoff: the orchestrator's working
 memory of "who's doing what" was moved into a YAML file the audit
 replay reads cleanly.
 
-### Known limitations (as of 2026-05-11)
+### Known limitations (as of 2026-05-11; #294 resolved 2026-06-17)
 
 These are real, known, and tracked as separate issues for shipable
-fixes:
+fixes. Items marked **RESOLVED** have since shipped and are kept
+here (struck through) so the trail behind the rule survives:
 
-- **One lifecycle for N executors** — `gate complete` fires once for
-  the wave even when multiple executors finished different slices.
-  Per-slice closure is not first-class on the substrate. Follow-up
-  to #230 (see issue tracker — `gate slice-complete` / per-executor
-  status field).
+- **~~One lifecycle for N executors~~ — RESOLVED (#294).** Per-slice
+  closure is now first-class: `gate complete --by X` and `gate fail
+  --by X` are per-executor operations on a multi-executor wave. Each
+  executor's slice carries its own `status` / `completed_at`; the
+  wave-level state transitions to `completed` only once every
+  assigned executor's slice is terminal (any-fail-wave-fail is the
+  phase-1 default — #235 phase 2 replaces it with template-bound
+  policy). A `complete` while siblings are still open reports `open
+  slices remaining` and leaves the wave executing. (JSON note: the
+  `executors` field gains an object shape `[{name,status,...}]` on
+  any wave that has seen a slice closure — `jq '.executors[] |
+  (.name // .)'` reads both legacy and post-#294 records.)
 - **In-flight slice status visible at two scales** — `gate
   wave-status <id>` returns per-executor progress inside one wave
   (witness notes, claim/witness occupancy, freshness band).
