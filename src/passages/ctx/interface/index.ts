@@ -57,7 +57,7 @@ Usage:
                               Guild-authored bundles round-trip (ids
                               preserved, idempotent); foreign bundles
                               import tolerantly (a type-less doc is tagged
-                              okf:untyped so it's auditable). Prose dedup
+                              okf:none so it's auditable). Prose dedup
                               is on by default — it matches on trimmed,
                               whitespace-collapsed prose, so case and
                               punctuation are significant. --allow-duplicates

@@ -84,17 +84,29 @@ test('an empty body is skipped with a reason', () => {
   assert.match(m.reason, /empty body/);
 });
 
-test('a type-less doc (frontmatter-less) is tagged okf:untyped for audit', () => {
+test('a type-less doc (frontmatter-less) is tagged okf:none for audit', () => {
   // parseOkfDocument coerces a frontmatter-less file to type ''.
   const doc: OkfDocument = { path: 'nofm.md', frontmatter: { type: '' }, body: 'plain prose' };
   const m = okfDocumentToCtxFact(doc);
   if (m.kind !== 'fact') throw new Error('expected fact');
-  assert.deepEqual(m.tags, ['okf:untyped']);
+  assert.deepEqual(m.tags, ['okf:none']);
 });
 
-test('a type that slugs to nothing also falls back to okf:untyped', () => {
+test('a type that slugs to nothing also falls back to okf:none', () => {
   const doc: OkfDocument = { path: 'x.md', frontmatter: { type: '***' }, body: 'b' };
   const m = okfDocumentToCtxFact(doc);
   if (m.kind !== 'fact') throw new Error('expected fact');
+  assert.deepEqual(m.tags, ['okf:none']);
+});
+
+test('a real type named "Untyped" does NOT collide with the missing-type marker', () => {
+  // The whole point of marker=none: a present-but-named type "Untyped"
+  // slugs to okf:untyped, which must stay distinct from the okf:none
+  // gap marker so `ctx list --tag okf:none` audits only genuinely
+  // type-less docs.
+  const doc: OkfDocument = { path: 'u.md', frontmatter: { type: 'Untyped' }, body: 'b' };
+  const m = okfDocumentToCtxFact(doc);
+  if (m.kind !== 'fact') throw new Error('expected fact');
   assert.deepEqual(m.tags, ['okf:untyped']);
+  assert.ok(!m.tags.includes('okf:none'));
 });
