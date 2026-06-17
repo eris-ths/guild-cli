@@ -42,7 +42,7 @@ works — it just moves the review from "blocking" to "after-the-fact."
 `--with <n1>[,<n2>...]` on `gate request` / `gate fast-track`
 records the dialogue partners during the formation of a request.
 Empty / omitted = solo. Partners go through the same actor
-validation as `--from` / `--executor` (members or hosts).
+validation as `--from` / `--executors` (members or hosts).
 
 ```bash
 gate request --from claude --with eris --action "..." --reason "..."
@@ -355,8 +355,7 @@ whoami for voice recovery.
 
 ### Filtering lists
 
-`gate list` and `gate pending` accept filter flags that combine
-via AND:
+`gate list` accepts filter flags that combine via AND:
 
 - `--from <m>` — match author
 - `--executor <m>` — match executor
@@ -364,9 +363,14 @@ via AND:
 - `--for <m>` — match author OR executor OR reviewer (sugar for
   "anything I touch")
 
+`gate pending` is the lean "what's on my plate" shortcut — it is fixed
+to the pending state and accepts only `--for <m>` (plus `--format`). To
+filter pending requests by author / executor / reviewer, reach for
+`gate list --state pending` with any of the flags above.
+
 ```
 $ gate pending --for kiri
-$ gate list --state executing --executor noir
+$ gate list --state pending --executor noir
 $ gate list --state completed --auto-review rin
 ```
 
@@ -1644,15 +1648,28 @@ that don't fit into a verdict, a play, or a review.
 
 ### Phase 1 surface
 
-Phase 1 ships only `ctx record`. The remaining six verbs (`fork` /
-`supersede` / `show` / `list` / `chain` / `status`) and schema
-extensions (`evidence` / `supersedes` / `sub_of` / `chain_after` /
-`branch_ref`) land in phase 2.
+Phase 1 ships `ctx record`, the read-side `list` / `show`, and the OKF
+interop pair (`export` / `import`, below). The remaining lifecycle verbs
+(`fork` / `supersede` / `chain` / `status`) and schema extensions
+(`evidence` / `supersedes` / `sub_of` / `chain_after` / `branch_ref`)
+land in phase 2.
 
 ```bash
 ctx record --fact "<prose>" [--tag prefix:value,prefix:value]
                             [--by <m>] [--format json|text]
+ctx list   [--tag prefix:value] [--by <m>] [--format json|text]
+ctx show   <id> [--format json|text]
 ```
+
+### Reading facts back (`list` / `show`)
+
+`ctx list` prints recorded facts newest-first (id, author, timestamp,
+tags, and a one-line snippet); `--tag` filters by an exact tag, `--by` by
+author. `ctx show <id>` prints one fact in full. A `show` on a
+well-formed but absent id raises a not-found that names `ctx list` as the
+recovery (text hint + structured `error.recovery` in JSON). This is the
+phase-1 read surface — before it, reading facts back meant grep over
+`<content_root>/ctx/*.yaml`.
 
 ### A worked record
 
@@ -1694,12 +1711,74 @@ leaves prefix choice free-form (the substrate already in use mixes
 `meta:` / `pr:` / `principle:`); phase 2 introduces strictness
 levels (0/1/2 = loose / middle / strict) for prefix catalogs.
 
+### OKF interchange (`export` / `import`)
+
+ctx facts project to and from [Open Knowledge Format](https://cloud.google.com/blog/products/data-analytics/how-the-open-knowledge-format-can-improve-data-sharing/)
+bundles — a directory of `<id>.md` files (YAML frontmatter + fact prose)
+plus generated `index.md` / `log.md` views. OKF is an interchange
+*projection* (principle 11), not a storage change: the on-disk substrate
+stays YAML; the bundle is another surface.
+
+```bash
+ctx export <dir> [--as okf] [--force] [--format json|text]    # facts -> OKF bundle
+ctx import <dir> [--as okf] [--by <m>] [--allow-duplicates]
+                 [--format json|text]                         # bundle -> facts
+```
+
+`export` refuses a non-empty target directory unless `--force`, so it
+can't silently clobber an unrelated tree. On import, a foreign `id` that
+collides with an existing record but carries *different* prose is
+reallocated a fresh id rather than dropped — the idempotent skip is gated
+on a prose match, so a distinct observation is never silently lost.
+
+A round-trip of guild-authored facts is **lossless** — the exported
+frontmatter carries `id`, `timestamp`, `author` and `tags`, so import
+reconstructs the same record, and re-importing the same bundle is
+idempotent (existing ids skip):
+
+```yaml
+# bundle/ctx-2026-05-04-006.md
+---
+type: Fact
+tags:
+  - scope:develop-only
+  - topic:branch-policy
+timestamp: 2026-05-04T13:58:11.476Z
+author: claude
+id: ctx-2026-05-04-006
+---
+
+main↔develop diff is PR #145 only; harness layer stays develop-side
+```
+
+Foreign bundles import tolerantly: nested subtrees are walked; bare tags
+land under `topic:`; a non-`Fact` `type` is preserved as an `okf:<type>`
+provenance tag; a doc with no usable `type` (frontmatter-less, or `type`
+empty) still records but is tagged `okf:untyped` — so a stray non-concept
+`.md` (a README, a note) is auditable via `ctx list --tag okf:untyped`
+rather than passing silently as a Fact; documents lacking an author fall
+back to `--by`; empty or unparseable documents are reported as skipped
+rather than failing the import.
+
+**Prose dedup** is on by default: a fact whose prose is already recorded
+— under any id, or earlier in the same bundle — is skipped, so even an
+id-less foreign bundle re-imported is a no-op. The skip reason names the
+record it duplicates. The match is **trim + whitespace-collapse only —
+case and punctuation are significant**: it catches a markdown re-wrap but
+not a hand-edited copy (capitalized, re-punctuated). A guild-authored
+bundle survives that via the `id`-based idempotent skip; a *foreignized*
+copy (id stripped + body reworded) can re-import as a new fact. That is
+intentional — dedup is a cheap exact-prose guard, not a similarity model.
+`--allow-duplicates` opts out for the rare deliberate re-record. `--as`
+selects the bundle format (only `okf` today — the flag is the seam for a
+future second format).
+
 ### Status (alpha phase 1)
 
-Read-side is currently grep on `<content_root>/ctx/*.yaml`.
-`ctx list` / `ctx show` / `ctx chain` (phase 2) are the design
-test — whether the substrate stays principled or drifts into a
-junk drawer at the 100-record scale.
+Read-side is `ctx list` (newest-first, `--tag` / `--by` filters) +
+`ctx show <id>`, plus `ctx export` (OKF projection). `ctx chain` (phase
+2) is the remaining design test — whether the substrate stays principled
+or drifts into a junk drawer at the 100-record scale.
 
 For the conceptual framing alongside the other passages, see the
 `## ctx` section of [`AGENT.md`](../AGENT.md).

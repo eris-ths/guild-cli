@@ -21,6 +21,7 @@ import {
 import { maybeEmitExplain } from '../../shared/explain.js';
 import { notFoundEnvelope } from '../../shared/notFoundHint.js';
 import { Request } from '../../../domain/request/Request.js';
+import { REQUEST_STATES } from '../../../domain/request/RequestState.js';
 import { formatDelta, pushMultilineField } from '../voices.js';
 import { C, truncateCodePoints } from './internal.js';
 import { parseFormat } from '../../shared/parseFormat.js';
@@ -54,10 +55,18 @@ export async function reqList(
 ): Promise<number> {
   // Different known-flag sets per verb so a typo on `gate pending`
   // doesn't get a list-grade hint, and the error names the right verb.
+  // `pending` is the lean "--for me" shortcut (only --for / --format);
+  // when someone reaches for a richer filter on it, point them at the
+  // capable verb instead of dead-ending at "valid flags: --for, --format".
   rejectUnknownFlags(
     args,
     verb === 'pending' ? PENDING_KNOWN_FLAGS : LIST_KNOWN_FLAGS,
     verb,
+    [],
+    verb === 'pending'
+      ? 'to filter pending by author/executor/reviewer, use: ' +
+          'gate list --state pending --executor <m> (or --from / --auto-review)'
+      : undefined,
   );
   maybeEmitExplain(args, verb);
   const fromFilter = optionalOption(args, 'from');
@@ -70,6 +79,23 @@ export async function reqList(
       : undefined;
   const forFilter = explicitFor ?? envActor;
 
+  // Validate `--state` at the interface boundary, where the full
+  // CLI-valid set is known: the domain's REQUEST_STATES *plus* the
+  // `all` sugar this layer adds (see the comment below). The app layer
+  // (RequestUseCases) throws a bare `Invalid state: <x>` with no valid
+  // set — and it can't enumerate one anyway, because `all` is an
+  // interface affordance it doesn't know about. Surfacing the hint here
+  // mirrors the deny/execute verb-redirect split: state vocabulary
+  // lives in the domain, the CLI-facing hint is an interface concern.
+  // (The app-layer guard stays as defense-in-depth.)
+  if (state !== 'all' && !(REQUEST_STATES as readonly string[]).includes(state)) {
+    const valid = [...REQUEST_STATES, 'all'].join(', ');
+    throw new Error(
+      `${verb}: invalid --state '${state}'.\n` +
+        `  valid states: ${valid}\n` +
+        `  ('all' lists every state; omit --state on '${verb}' for its default)`,
+    );
+  }
   // `--state all` is sugar for "every state, no filter" — parity with
   // `gate issues list --state all`. Implemented at the interface layer
   // because `all` is a CLI-level affordance, not a domain state;

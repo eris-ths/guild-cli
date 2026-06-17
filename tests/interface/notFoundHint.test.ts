@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 import {
   notFoundMessage,
   notFoundEnvelope,
+  notFoundHintForMessage,
 } from '../../src/interface/shared/notFoundHint.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -173,4 +174,64 @@ test('gate show <bad-id> --format text: keeps the legacy text body', (t) => {
   assert.equal(r.status, 1);
   assert.match(r.stderr, /^not found: 2026-05-05-9999\n/);
   assert.match(r.stderr, /try 'gate list' or 'gate tail'/);
+});
+
+// --- write-lifecycle parity: the THROWN not-found path gains the same
+// hint the read path emits. Pre-this-sweep `gate approve <typo>` (a
+// thrown `Request not found`) dead-ended through the shared error
+// envelope with no `gate list` signal, while `gate show <typo>` (an
+// emit-and-return read) carried it — the two not-found surfaces
+// disagreed. notFoundHintForMessage + emitErrorEnvelope close the gap.
+
+test('notFoundHintForMessage: matches a thrown request not-found, with recovery', () => {
+  const r = notFoundHintForMessage('Request not found: 2026-05-05-9999');
+  assert.ok(r);
+  assert.equal(r!.entity, 'request');
+  assert.match(r!.hint, /try 'gate list' or 'gate tail'/);
+  assert.equal(r!.recovery.verb, 'list');
+});
+
+test('notFoundHintForMessage: returns null for a sibling-passage not-found', () => {
+  // agora / devil / ctx share emitErrorEnvelope; a `Play not found`
+  // must NOT get a gate-specific `gate list` hint stapled on.
+  assert.equal(notFoundHintForMessage('Play "p1" not found'), null);
+  assert.equal(notFoundHintForMessage('all good'), null);
+});
+
+test('gate approve <bad-id>: write path now emits the discovery hint', (t) => {
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  run(GATE, root, ['register', '--name', 'alice']);
+  const r = run(GATE, root, ['approve', '2026-05-05-9999', '--by', 'alice']);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /Request not found: 2026-05-05-9999/);
+  assert.match(r.stderr, /try 'gate list' or 'gate tail'/);
+});
+
+test('gate approve <bad-id> --dry-run: hint rides the dry-run throw too', (t) => {
+  // The dry-run branch threw a plain Error (no DomainError.field); the
+  // real branch threw a DomainError from the use-case. Both surface
+  // through the same envelope and must both carry the hint now.
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  run(GATE, root, ['register', '--name', 'alice']);
+  const r = run(GATE, root, ['approve', '2026-05-05-9999', '--by', 'alice', '--dry-run']);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /try 'gate list' or 'gate tail'/);
+});
+
+test('gate complete <bad-id> --format json: hint + recovery on the wire, message stays clean', (t) => {
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  run(GATE, root, ['register', '--name', 'alice']);
+  const r = run(GATE, root, ['complete', '2026-05-05-9999', '--by', 'alice', '--format', 'json']);
+  assert.equal(r.status, 1);
+  const line = r.stderr.split('\n').find((l) => l.trim().startsWith('{'));
+  assert.ok(line, 'expected a JSON envelope line on stderr');
+  const p = JSON.parse(line!);
+  assert.equal(p.error.code, 'not_found');
+  // message stays clean (ax.test contract) — hint is a sibling field.
+  assert.match(p.error.message, /^Request not found: 2026-05-05-9999$/);
+  assert.match(p.error.hint, /try 'gate list'/);
+  assert.equal(p.error.recovery.verb, 'list');
 });

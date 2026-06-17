@@ -95,7 +95,7 @@ const SECTIONS: readonly Section[] = [
         tier: 'base',
         text:
           '  gate list --state <state> [--for <m>] [--from <m>]\n' +
-          '                            [--executors a[,b,...]] [--auto-review <m>]',
+          '                            [--executor <m>] [--auto-review <m>]',
       },
       {
         tier: 'base',

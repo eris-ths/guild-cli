@@ -134,7 +134,7 @@ gate request --from <m> --action "..." --reason "..." \
 gate approve <id> --by <m> [--note "..."]
 gate deny <id> --by <m> --reason "..."
 gate execute <id> --by <m> [--cwd <path>]                  # cwd stamped on the status_log entry
-gate complete <id> --by <m> [--note "..."]
+gate complete <id> --by <m> [--note "..."] [--cliff "<hint for next agent>"]
 gate fail <id> --by <m> --reason "..."
 gate fast-track --from <m> --action "..." --reason "..." \
                 [--executors a[,b,c]] [--with ...]
@@ -149,8 +149,8 @@ the mismatch is visible at the surface that did it. See
 design rationale.
 
 `--executors a[,b,c]` accepts one or many executors for single or
-parallel waves (#230). The singular `--executor <m>` is still accepted
-as a deprecated alias (removed at v0.7 per [#239](https://github.com/eris-ths/guild-cli/issues/239)).
+parallel waves (#230). The singular `--executor <m>` was removed from
+`gate request` in v0.6 (per [#239](https://github.com/eris-ths/guild-cli/issues/239)) — use `--executors`.
 Under `profile: swarm`, parallel waves additionally require worktree
 isolation (`gate execute` refuses same-cwd collisions, #231).
 
@@ -206,7 +206,7 @@ gate transcript <id>                    # narrative prose arc of a request
 gate suggest [--format json|text]       # suggested_next only (hot-loop sibling of boot)
 gate why <id>                           # decision walk: why is this request in this state?
 gate summarize <id> [--limit <N>]       # narrative summary
-gate unresponded [--for <m>]            # concerns recorded but not yet responded to
+gate unresponded [--for <m>] [--max-age-days <N>]   # concerns recorded but not yet responded to
 gate flow-suggest --severity <s> --area <a> [--scope <s>]      # advisory: which flow shape? (#307)
 gate lense-stats [--for <m>] [--since <d>]                     # lense rotation diagnostic (#305)
 gate decisions [--for <m>] [--since <d>]                       # authored state transitions (#336; defaults --for to GUILD_ACTOR)
@@ -324,7 +324,7 @@ open ↔ in_progress ↔ deferred → resolved (reopen → open)
 ```
 
 ```bash
-gate issues add --from <m> --severity <low|med|high> --area <a> "text"
+gate issues add --from <m> --severity <low|med|high> --area <a> --text "<text>"
 gate issues list [--state <s>]
 gate issues resolve|defer|start|reopen <id> --by <m>   # --by required; appends state_log
 gate issues note <id> --by <m> --text "..."          # append annotation
@@ -442,6 +442,9 @@ agora cliff <play-id> [--game <slug>]          # peek closing cliff/invitation, 
 agora schema [--verb <name>]                   # principle 10 contract
 ```
 
+All agora verbs also accept `[--format json|text]` (omitted above for
+density) — the JSON envelope is the agent contract, same as gate.
+
 agora records live under `<content_root>/agora/`:
 
 ```
@@ -486,7 +489,7 @@ devil entry <rev-id> --persona <p> --lense <l> --kind <k> --text "<prose>"
                      [--severity-rationale "<prose>"]   # required when kind=finding
                      [--addresses <e-NNN>]
                      [--by <m>]
-devil list [--state <open|concluded>] [--target-type <pr|file|function|commit|system>]
+devil list [--state <open|concluded|all>] [--target-type <pr|file|function|commit|system>]
 devil show <rev-id>
 devil conclude <rev-id> --synthesis "<prose>" [--unresolved e-001,e-002,...] [--by <m>]
 devil dismiss <rev-id> <entry-id> --reason <r> [--note "..."] [--by <m>]
@@ -581,14 +584,17 @@ substrate primitive for facts; surrounding ecosystem modules
 (persona-side `*_resume.md`, code comments, ADR docs) hold related
 prose at different layers without absorbing into one another.
 
-Phase 1 ships only `ctx record`. The remaining six verbs (`fork` /
-`supersede` / `show` / `list` / `chain` / `status`) and schema
-extensions (`evidence` / `supersedes` / `sub_of` / `chain_after` /
-`branch_ref`) land in phase 2.
+Phase 1 ships `ctx record`, the read-side `list` / `show`, and the OKF
+interop pair (`export` / `import`, below). The remaining lifecycle verbs
+(`fork` / `supersede` / `chain` / `status`) and schema extensions
+(`evidence` / `supersedes` / `sub_of` / `chain_after` / `branch_ref`)
+land in phase 2.
 
 ```bash
 ctx record --fact "<prose>" [--tag prefix:value,prefix:value]
                             [--by <m>] [--format json|text]
+ctx list [--tag prefix:value] [--by <m>] [--format json|text]  # read back, newest first
+ctx show <id> [--format json|text]                             # one fact in full
 ```
 
 ctx records live under `<content_root>/ctx/`:
@@ -607,6 +613,48 @@ later — filter by `tech:*`, `status:*`, etc. Phase 1 leaves prefix
 choice free-form; phase 2 will introduce strictness levels (0/1/2 =
 loose / middle / strict) for prefix catalogs.
 
+**OKF interchange (export / import).** ctx facts project to and from
+[Open Knowledge Format](https://cloud.google.com/blog/products/data-analytics/how-the-open-knowledge-format-can-improve-data-sharing/)
+bundles — a directory of `<id>.md` files (YAML frontmatter + fact prose)
+plus generated `index.md` / `log.md` views. OKF is an interchange
+*projection* (principle 11), not a storage change: the on-disk substrate
+stays YAML; OKF is another surface, the way `--format text` is.
+
+```bash
+ctx export <dir> [--as okf] [--force] [--format json|text]   # facts -> OKF bundle
+ctx import <dir> [--as okf] [--by <m>] [--allow-duplicates]
+                 [--format json|text]                         # bundle -> facts
+```
+
+Round-trip is lossless for guild-authored bundles — `id`, `timestamp`,
+`author` and `tags` survive the trip, and re-importing the same bundle
+is idempotent (existing ids skip). Foreign bundles import tolerantly:
+nested subtrees are walked; bare tags land under `topic:`; a non-`Fact`
+`type` is preserved as an `okf:<type>` provenance tag; a doc with no
+usable `type` (frontmatter-less, or `type` empty) still records but is
+tagged `okf:untyped` so a stray non-concept `.md` (a README, a note) is
+auditable via `ctx list --tag okf:untyped` rather than passing silently
+as a Fact; documents lacking an author fall back to `--by`; empty or
+unparseable documents are reported as skipped rather than failing the
+whole import. A foreign `id` that collides with an existing record but
+carries *different* prose is reallocated a fresh id rather than dropped
+(the idempotent skip is gated on a prose match, so a distinct observation
+is never lost). `export` refuses a non-empty target directory unless
+`--force`, so it can't silently clobber an unrelated tree.
+
+**Prose dedup** is on by default: a fact whose prose is already recorded
+— under any id, or earlier in the same bundle — is skipped, so even an
+id-less foreign bundle re-imported is a no-op (the skip reason names the
+record it duplicates). The match is **trim + whitespace-collapse only —
+case and punctuation are significant**, so it catches re-wraps but not a
+hand-edited copy (capitalized, re-punctuated). For a guild-authored
+bundle the `id` carries that case via the idempotent skip; a *foreignized*
+copy (id stripped + body reworded) can re-import as a new fact. That is
+intentional — dedup is a cheap exact-prose guard, not a similarity model.
+`--allow-duplicates` opts out for a deliberate re-record. `--as` selects
+the bundle format (only `okf` today; the flag is the seam for a future
+second format).
+
 When to reach for ctx vs the other passages: ctx is the residence
 for prose that doesn't want closure. If the observation is heading
 toward a verdict, file it via `gate request`. If it's
@@ -614,10 +662,10 @@ thought-in-motion across sessions, use `agora play`. If it's a
 finding that needs adversarial scrutiny, use `devil entry`. ctx is
 for what remains: pinned observation, no closure required.
 
-Status: alpha phase 1. Read-side is currently grep on
-`<content_root>/ctx/*.yaml` — `ctx list` / `ctx chain` arrive in
-phase 2 and that's the design test (junk-drawer risk vs principled
-substrate).
+Status: alpha phase 1. Read-side is `ctx list` (newest-first, `--tag` /
+`--by` filters) + `ctx show <id>`, plus `ctx export` (OKF projection).
+`ctx chain` arrives in phase 2 and that's the design test (junk-drawer
+risk vs principled substrate at the 100-record scale).
 
 # Tier: Diagnostic
 
@@ -750,7 +798,7 @@ for the end-to-end shape.
 Request IDs: `YYYY-MM-DD-NNNN`. Issue IDs: `i-YYYY-MM-DD-NNNN`.
 
 The agora / devil / ctx subtrees layer on top — see
-[`docs/storage-format.md`](docs/storage-format.md) for the full
+[`docs/storage-format.md`](./docs/storage-format.md) for the full
 per-record YAML schema, hydrate tolerance, and backward-compat rules.
 
 ## Environment

@@ -266,6 +266,7 @@ export function rejectUnknownFlags(
   known: ReadonlySet<string>,
   verb: string,
   extras: readonly string[] = [],
+  hint?: string,
 ): void {
   if (args.options['help'] === true) {
     throw new HelpRequested(verb, [...known].sort(), extras);
@@ -286,6 +287,7 @@ export function rejectUnknownFlags(
   const badList = unknown.sort().map((k) => `--${k}`).join(', ');
   throw new Error(
     `${verb}: unknown flag${unknown.length === 1 ? '' : 's'}: ${badList}\n` +
-      `  valid flags for '${verb}': ${knownList}`,
+      `  valid flags for '${verb}': ${knownList}` +
+      (hint ? `\n  ${hint}` : ''),
   );
 }

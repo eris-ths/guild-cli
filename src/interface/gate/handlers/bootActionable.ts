@@ -155,23 +155,55 @@ export function deriveSuggestedNextNullReason(
   let pendingNotMine = 0;
   let approvedNotMine = 0;
   let executingNotMine = 0;
+  // Self-wave pending: the actor authored the request AND is its
+  // executor, so the only open transition (approve) is a self-approve
+  // the suggestion ladder deliberately won't nudge — `actionable-
+  // Transitions` requires `from !== actor` for `pending-as-executor`.
+  // These requests count toward `boot`'s `queues: pending` line but
+  // were previously skipped here (the `hasExecutor` guard `continue`d
+  // past them), so `gate suggest`'s tally read one lower than the
+  // queues count for the same substrate — a self-wave pending was
+  // invisible in the reason while visible in queues (dogfood
+  // 2026-05-29). Count them in their own clause so the two surfaces
+  // reconcile. (approved/executing self-waves don't reach here: they
+  // ARE actionable — `approved-for-me` / `executing-mine` — so
+  // suggested_next is non-null and this null-reason isn't computed.)
+  let yourPendingSelfWave = 0;
   for (const r of allRequests) {
-    if (r.hasExecutor(lower)) continue;
+    if (r.hasExecutor(lower)) {
+      if (r.state === 'pending' && r.from.value === lower) {
+        yourPendingSelfWave += 1;
+      }
+      continue;
+    }
     if (r.state === 'pending') pendingNotMine += 1;
     else if (r.state === 'approved') approvedNotMine += 1;
     else if (r.state === 'executing') executingNotMine += 1;
   }
-  if (pendingNotMine + approvedNotMine + executingNotMine === 0) return null;
-  const parts: string[] = [];
-  if (pendingNotMine > 0) parts.push(`${pendingNotMine} pending`);
-  if (approvedNotMine > 0) parts.push(`${approvedNotMine} approved`);
-  if (executingNotMine > 0) parts.push(`${executingNotMine} executing`);
-  return (
-    `${parts.join(', ')} open request(s) on substrate, but none names you ` +
-    'as executor — use `gate list --state pending` (or --state approved / ' +
-    'executing) to read them. Hosts approve from this list rather than ' +
-    'through `gate suggest`.'
-  );
+  const notMineTotal = pendingNotMine + approvedNotMine + executingNotMine;
+  if (notMineTotal === 0 && yourPendingSelfWave === 0) return null;
+
+  const sentences: string[] = [];
+  if (notMineTotal > 0) {
+    const parts: string[] = [];
+    if (pendingNotMine > 0) parts.push(`${pendingNotMine} pending`);
+    if (approvedNotMine > 0) parts.push(`${approvedNotMine} approved`);
+    if (executingNotMine > 0) parts.push(`${executingNotMine} executing`);
+    sentences.push(
+      `${parts.join(', ')} open request(s) on substrate, but none names you ` +
+        'as executor — use `gate list --state pending` (or --state approved / ' +
+        'executing) to read them. Hosts approve from this list rather than ' +
+        'through `gate suggest`.',
+    );
+  }
+  if (yourPendingSelfWave > 0) {
+    sentences.push(
+      `${yourPendingSelfWave} pending request(s) you authored also name you ` +
+        'as executor (self-wave) — `gate suggest` does not nudge self-approve, ' +
+        'so they stay off the ladder; read them with `gate list --state pending`.',
+    );
+  }
+  return sentences.join(' ');
 }
 
 /**

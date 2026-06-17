@@ -117,10 +117,25 @@ test('ctx <typo>: suggests ctx-prefixed verb (phase-1 catalog)', (t) => {
   assert.equal(r.status, 1);
   assert.match(r.stderr, /unknown verb: recor/);
   assert.match(r.stderr, /did you mean: ctx record\?/);
-  // Phase-1 callout — flag the constraint at the surface that hit it,
-  // since fork / supersede / show / list / chain / status are not yet
-  // implemented and a typo for any of those would refuse to suggest.
-  assert.match(r.stderr, /phase 1: record only/);
+  // Verb-catalog callout — flag the available surface at the point a
+  // typo hit it, since the phase-2 lifecycle verbs (fork / supersede /
+  // chain / status) are not yet implemented and a typo for any of those
+  // would refuse to suggest.
+  assert.match(r.stderr, /record \/ list \/ show \/ export \/ import/);
+});
+
+test('ctx <phase-2 verb>: roadmap-aware message, not a bare "unknown verb"', (t) => {
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  run(GATE, root, ['register', '--name', 'alice']);
+  // `fork` is documented as a phase-2 verb (list / show shipped); a
+  // reader of the docs who types it should be told it's planned, not
+  // treated like a typo.
+  const r = run(CTX, root, ['fork']);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /planned phase-2 verb, not yet implemented/);
+  assert.match(r.stderr, /phase 1 surface: record \/ export \/ import/);
+  assert.doesNotMatch(r.stderr, /unknown verb/);
 });
 
 test('devil <typo>: suggests devil-prefixed verb', (t) => {
