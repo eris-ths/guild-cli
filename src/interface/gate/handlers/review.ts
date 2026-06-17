@@ -195,7 +195,15 @@ export async function reqReview(c: C, args: ParsedArgs): Promise<number> {
     comment,
     ...(invokedBy !== undefined ? { invokedBy } : {}),
   });
-  await fireAfterHook(c.hookSubscriptions, 'review', updated, by);
+  // Pass the appended review on `ctx.extra.review` so `after:review`
+  // hooks can read verdict/lense/comment without re-deriving from the
+  // request (the documented contract in docs/plugin-schema.md). The
+  // appended review is the terminal entry — `requestUC.review` just
+  // pushed it, so `reviews` is guaranteed non-empty here.
+  const appendedReview = updated.reviews[updated.reviews.length - 1];
+  await fireAfterHook(c.hookSubscriptions, 'review', updated, by, {
+    review: appendedReview,
+  });
   // Self-review warning. The tool permits `--by` to equal the
   // request author (the YAML is just an append-only record and
   // doesn't know intent), but the Two-Persona Devil frame is

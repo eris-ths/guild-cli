@@ -421,3 +421,37 @@ test('hook plugin: before:review veto blocks review append', (t) => {
   const show = runGate(root, ['show', id, '--format', 'json']);
   assert.equal(JSON.parse(show.stdout).reviews?.length ?? 0, 0);
 });
+
+test('hook plugin: after:review receives the appended review on ctx.extra.review', (t) => {
+  // Regression: review.ts fired fireAfterHook without the `extra`
+  // arg, so `ctx.extra` was undefined for after:review hooks even
+  // though docs/plugin-schema.md documents extra.review as the
+  // contract. A review→issue automation hook reading
+  // ctx.extra.review.verdict silently saw `undefined`.
+  const { root, pluginDir, cleanup } = bootstrap(
+    'plugins:\n  trusted: true\n  hooks:\n    - plugins/review-tap.mjs\n',
+  );
+  t.after(cleanup);
+  const trace = join(root, 'review-extra.log');
+  writeFileSync(
+    join(pluginDir, 'review-tap.mjs'),
+    `import { appendFileSync } from 'node:fs';
+     export default {
+       on: 'after:review',
+       run: async (ctx) => {
+         const r = ctx.extra?.review;
+         const line = r
+           ? r.lense + '/' + r.verdict + '/' + (r.comment ?? '') + '/' + r.by.value
+           : 'NO_EXTRA';
+         appendFileSync(${JSON.stringify(trace)}, line + '\\n');
+       },
+     };`,
+  );
+
+  const id = makeRequest(root);
+  const r = runGate(root, ['review', id, '--by', 'bob', '--lense', 'devil', '--verdict', 'concern', '--note', 'breaks under load']);
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(existsSync(trace), 'after:review hook should have fired');
+  // ctx.extra.review carries the appended review — verdict/lense/comment/by
+  assert.equal(readFileSync(trace, 'utf8'), 'devil/concern/breaks under load/bob\n');
+});
