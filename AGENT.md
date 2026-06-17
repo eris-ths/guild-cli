@@ -632,8 +632,8 @@ is idempotent (existing ids skip). Foreign bundles import tolerantly:
 nested subtrees are walked; bare tags land under `topic:`; a non-`Fact`
 `type` is preserved as an `okf:<type>` provenance tag; a doc with no
 usable `type` (frontmatter-less, or `type` empty) still records but is
-tagged `okf:untyped` so a stray non-concept `.md` (a README, a note) is
-auditable via `ctx list --tag okf:untyped` rather than passing silently
+tagged `okf:none` so a stray non-concept `.md` (a README, a note) is
+auditable via `ctx list --tag okf:none` rather than passing silently
 as a Fact; documents lacking an author fall back to `--by`; empty or
 unparseable documents are reported as skipped rather than failing the
 whole import. A foreign `id` that collides with an existing record but
