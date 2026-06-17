@@ -710,6 +710,21 @@ Skip devil for:
 - Test-only changes
 - Documentation changes (this PR, for example)
 
+### Extending instead of skipping (#134 G)
+
+The skip-spam problem above is a property of forcing a
+non-security review through the **bundled** 12-lense catalog.
+If you genuinely want devil's no-gaps coercion on a judgment
+axis (correctness, architecture, LDD/user-impact), don't fill
+9 security lenses with `n/a` — author a content_root extension
+lense instead. Drop `<content_root>/devil/lenses/correctness.yaml`
+(see devil's README "Extending the catalog"), then `devil open
+--type system` and fill *that* lense with zero skip noise. The
+coverage gate then raises the floor on judgment, which is what
+you wanted devil for. The "use gate review instead" advice still
+holds when you don't need the no-gaps floor — extension is for
+when you specifically do.
+
 ---
 
 ## Tips for AI agents
