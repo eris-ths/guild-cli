@@ -415,7 +415,11 @@ const VERBS: readonly VerbSchema[] = [
             'Cross-passage orientation. Per-passage summary keyed by ' +
             "passage name (currently 'agora' and 'devil'). Empty when no " +
             'passage besides gate has any records under the content_root. ' +
-            'Each entry shape: { passage, open, suspended, last_id, last_state, last_at }. ' +
+            'Each entry shape: { passage, open, suspended, last_id, last_state, last_at, ' +
+            'oldest_suspended_age_days, oldest_suspended_cliff }. The last two are a ' +
+            'forgotten-thread alarm: a bare suspended count reads the same whether the ' +
+            'oldest pause is hours or months old, so age + one-line cliff surface staleness ' +
+            '(null when nothing is paused). ' +
             "Surfaced so a fresh instance booting on a content_root with " +
             "active agora plays or devil reviews sees them at the orientation " +
             "entry point — closes the substrate-side Zeigarnik continuity " +

@@ -107,6 +107,10 @@ test('gate boot: cross_passage.agora populated when an agora play exists', (t) =
   assert.equal(payload.cross_passage.agora.suspended, 0);
   assert.match(payload.cross_passage.agora.last_id, /^\d{4}-\d{2}-\d{2}-\d{3}$/);
   assert.equal(payload.cross_passage.agora.last_state, 'playing');
+  // Nothing paused → the forgotten-thread alarm fields stay null,
+  // so the renderer emits no alarm line for a clean board.
+  assert.equal(payload.cross_passage.agora.oldest_suspended_age_days, null);
+  assert.equal(payload.cross_passage.agora.oldest_suspended_cliff, null);
   // No devil records → no devil entry.
   assert.equal(payload.cross_passage.devil, undefined);
 });
@@ -128,6 +132,20 @@ test('gate boot: suspended count distinguishes paused plays from playing ones', 
   assert.equal(payload.cross_passage.agora.open, 1, 'suspended still counts as open');
   assert.equal(payload.cross_passage.agora.suspended, 1);
   assert.equal(payload.cross_passage.agora.last_state, 'suspended');
+  // Forgotten-thread alarm fields: a paused play exposes how stale
+  // it is (age) and what it was (cliff), so re-entry can't skim past
+  // a thread left hanging. Just-suspended → age is a non-negative
+  // number; the cliff is the prose passed to suspend.
+  assert.equal(
+    typeof payload.cross_passage.agora.oldest_suspended_age_days,
+    'number',
+    'oldest_suspended_age_days must be a number when something is paused',
+  );
+  assert.ok(
+    payload.cross_passage.agora.oldest_suspended_age_days >= 0,
+    'age is non-negative',
+  );
+  assert.equal(payload.cross_passage.agora.oldest_suspended_cliff, 'paused');
 });
 
 test('gate boot: cross_passage.devil populated when a devil review exists', (t) => {

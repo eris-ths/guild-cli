@@ -28,10 +28,20 @@ export const agoraOrientation: PassageOrientationProvider = async (
   let openCount = 0;
   let suspendedCount = 0;
   let last: { id: string; state: string; at: string; game: string } | null = null;
+  // Oldest still-paused play, keyed on when it was suspended (the
+  // last suspension's timestamp). "Oldest" = paused longest ago, so
+  // the most-forgotten thread surfaces — not the oldest by creation.
+  let oldestPaused: { at: string; cliff: string } | null = null;
 
   for (const play of plays) {
     if (play.state !== 'concluded') openCount += 1;
-    if (play.state === 'suspended') suspendedCount += 1;
+    if (play.state === 'suspended') {
+      suspendedCount += 1;
+      const closing = play.suspensions[play.suspensions.length - 1];
+      if (closing && (oldestPaused === null || closing.at < oldestPaused.at)) {
+        oldestPaused = { at: closing.at, cliff: closing.cliff };
+      }
+    }
 
     // Latest activity timestamp on this play: max of started_at,
     // any move/suspension/resume timestamp, conclusion timestamp.
@@ -47,6 +57,13 @@ export const agoraOrientation: PassageOrientationProvider = async (
     }
   }
 
+  const ageDays =
+    oldestPaused === null
+      ? null
+      : Math.floor(
+          (Date.now() - Date.parse(oldestPaused.at)) / (1000 * 60 * 60 * 24),
+        );
+
   return {
     passage: 'agora',
     open: openCount,
@@ -54,5 +71,7 @@ export const agoraOrientation: PassageOrientationProvider = async (
     last_id: last ? last.id : null,
     last_state: last ? last.state : null,
     last_at: last ? last.at : null,
+    oldest_suspended_age_days: ageDays,
+    oldest_suspended_cliff: oldestPaused ? oldestPaused.cliff : null,
   };
 };
