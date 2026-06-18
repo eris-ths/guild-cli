@@ -193,6 +193,21 @@ export function renderBootText(
           ? `; last ${s.last_id} [${s.last_state}]`
           : '';
       lines.push(`${s.passage}: ${s.open} open${suspendedNote}${lastNote}`);
+      // Forgotten-thread alarm: when something has been paused a
+      // while, the bare count above doesn't convey staleness. Show
+      // the oldest pause's age + cliff so re-entry can't skim past a
+      // thread left hanging for weeks (dogfood 2026-06-18).
+      if (
+        s.oldest_suspended_age_days != null &&
+        s.oldest_suspended_age_days >= 1
+      ) {
+        const cliff = s.oldest_suspended_cliff
+          ? `: ${s.oldest_suspended_cliff.slice(0, 72)}`
+          : '';
+        lines.push(
+          `  ↳ oldest paused ${s.oldest_suspended_age_days}d ago${cliff}`,
+        );
+      }
     }
   }
 

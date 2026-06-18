@@ -59,6 +59,29 @@ export interface PassageOrientationSummary {
    * `last_id`. Null when `last_id` is null.
    */
   readonly last_at: string | null;
+  /**
+   * Age in whole days of the oldest still-paused record, or null
+   * when nothing is paused. The plain `suspended` count answers
+   * "how many" but not "how stale" — and staleness is the cue an
+   * agent needs: a count of 3 reads the same whether the oldest
+   * pause is 2 hours or 2 months old, so a long-forgotten thread
+   * hides inside the count. Surfacing the oldest age turns boot
+   * into a forgotten-thread alarm (dogfood 2026-06-18: a play sat
+   * suspended 41 days, its conclusion intact, because re-entry
+   * only ever saw the count). Optional so passages that don't
+   * model suspensions omit it.
+   */
+  readonly oldest_suspended_age_days?: number | null;
+  /**
+   * One-line cliff prose of the oldest still-paused record, or null
+   * when nothing is paused. Pairs with `oldest_suspended_age_days`:
+   * the age says "you've ignored this for N days", the cliff says
+   * "this is what it was". Full cliff/invitation prose still lives
+   * at the passage's own read verbs (agora show); orientation
+   * carries only the single line that lets an agent decide
+   * resume-now vs leave-paused without walking the records.
+   */
+  readonly oldest_suspended_cliff?: string | null;
 }
 
 /**
