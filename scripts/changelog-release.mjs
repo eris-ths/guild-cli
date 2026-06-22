@@ -30,6 +30,8 @@ const here = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(here, '..');
 const FRAG_DIR = join(ROOT, '.changelog', 'next');
 const CHANGELOG = join(ROOT, 'CHANGELOG.md');
+const PKG = join(ROOT, 'package.json');
+const LOCK = join(ROOT, 'package-lock.json');
 
 const CATEGORY_ORDER = [
   'breaking',
@@ -165,6 +167,43 @@ function rewriteChangelog(text, newBlock) {
   return before + placeholder + folded + rest;
 }
 
+function escapeRe(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// Sync the `version` field(s) in package.json / package-lock.json to the
+// release version. Targeted text replacement (not JSON re-serialize) keeps
+// the byte layout stable — only the version line(s) move. Without this the
+// manifests drift from CHANGELOG and CI's version-drift guard fails the
+// release (the trap that surfaced in the 0.7.0 dogfood, #441/#442).
+function bumpManifestVersion(path, version, { isLock = false } = {}) {
+  const raw = readFileSync(path, 'utf8');
+  const parsed = JSON.parse(raw);
+  const rootOld = parsed.version;
+  const lockOld = isLock ? (parsed.packages?.['']?.version ?? rootOld) : rootOld;
+  let next = raw;
+  // Top-level "version" — 2-space indent in npm manifests; the only
+  // 2-space `"version"` key in either file, so first-match is the root.
+  next = next.replace(
+    new RegExp(`(\\n  "version": ")${escapeRe(rootOld)}(",)`),
+    `$1${version}$2`,
+  );
+  if (isLock) {
+    // packages[""].version — 6-space indent; "" is the first packages
+    // entry, so the first 6-space match is the self-version.
+    next = next.replace(
+      new RegExp(`(\\n      "version": ")${escapeRe(lockOld)}(",)`),
+      `$1${version}$2`,
+    );
+  }
+  if (next === raw) {
+    if (rootOld === version) return false; // already at target
+    throw new Error(`could not locate version field to bump in ${path}`);
+  }
+  writeFileSync(path, next);
+  return true;
+}
+
 function main() {
   const args = process.argv.slice(2);
   const dryRun = args.includes('--dry-run');
@@ -209,11 +248,22 @@ function main() {
   const newBlock = buildNewBlock(version, byCategory);
   if (dryRun) {
     process.stdout.write(newBlock);
+    process.stderr.write(
+      `\n(dry-run: would set package.json + package-lock.json version to ` +
+        `${version})\n`,
+    );
     return;
   }
   const original = readFileSync(CHANGELOG, 'utf8');
   const next = rewriteChangelog(original, newBlock);
   writeFileSync(CHANGELOG, next);
+  // Keep the manifests in lockstep with the release so CI's version-drift
+  // guard stays green (see bumpManifestVersion).
+  bumpManifestVersion(PKG, version);
+  bumpManifestVersion(LOCK, version, { isLock: true });
+  process.stderr.write(
+    `Set package.json + package-lock.json version to ${version}.\n`,
+  );
   for (const f of files) {
     try {
       unlinkSync(f);

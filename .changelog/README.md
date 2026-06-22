@@ -60,13 +60,27 @@ Wrap prose at ~72 cols, matching the rest of `CHANGELOG.md`.
 
 A maintainer:
 
-1. Runs `node scripts/changelog-release.mjs <version>` (or does it
-   by hand) — collects all fragments under `.changelog/next/`, groups
-   by category, and prepends a `## [<version>] - <date>` block to
-   `CHANGELOG.md`.
-2. Deletes the fragment files under `.changelog/next/` (release
-   script does this).
-3. Commits both edits together.
+1. Runs `node scripts/changelog-release.mjs <version>` (or
+   `npm run changelog:release -- <version>`). The script, in one step:
+   - collects all fragments under `.changelog/next/`, groups by
+     category, and prepends a `## [<version>] - <date>` block to
+     `CHANGELOG.md`;
+   - **bumps the `version` field in `package.json` and
+     `package-lock.json`** (root + `packages[""]`) to `<version>`, so
+     they never drift from the release (CI has a version-drift guard
+     that fails the build otherwise — the trap that surfaced in the
+     0.7.0 dogfood, #441/#442);
+   - deletes the collected fragment files under `.changelog/next/`.
+   It **refuses to run** if `next/` holds a file with an unrecognized
+   category (see the filename convention above).
+2. Commits all edits together (`CHANGELOG.md`, `package.json`,
+   `package-lock.json`, removed fragments).
+3. Tags the release commit: **`git tag -a v<version> -m "guild-cli
+   <version>"` then `git push origin v<version>`**. Tags are annotated
+   and `v`-prefixed (`v0.6.0`, `v0.7.0`), one per release.
+
+`npm run changelog:preview -- <version>` (a `--dry-run`) prints the
+block and the would-bump note without writing anything.
 
 The `[Unreleased]` block in `CHANGELOG.md` becomes a placeholder
 that points readers at this directory — it is no longer where
