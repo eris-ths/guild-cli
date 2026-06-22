@@ -29,6 +29,406 @@ versioned block alongside collected fragments.
 
 _Add entries by dropping a file under `.changelog/next/` (see `.changelog/README.md`). The release script collects them into a versioned block at `npm run changelog:release -- <ver>`._
 
+## [0.7.0] - 2026-06-22
+
+### Changed
+
+- **`ctx` OKF hardening — collision-safe import + export overwrite guard.**
+  Two follow-ups from the OKF round-trip review (#431): (1) on import, a
+  foreign `id` that collides with an existing record but carries
+  *different* prose is now reallocated a fresh id instead of being
+  dropped — the idempotent skip is gated on a prose match, so a distinct
+  observation reusing the `ctx-YYYY-MM-DD-NNN` namespace is never
+  silently lost (records-outlive-writers). The incumbent is read on
+  demand only on a collision, so the common path stays a single id-set
+  check. (2) `ctx export` refuses a non-empty target directory unless
+  `--force`, so it can't silently clobber an unrelated tree.
+
+- **`ctx import` tags type-less docs `okf:none`.** OKF requires a
+  `type` on every concept; import stays tolerant (a frontmatter-less or
+  `type`-empty `.md` still records — its body is the fact) but now tags
+  such a doc `okf:none` instead of letting it pass as a plain Fact. A
+  stray non-concept file in a bundle (a README, a note) is therefore
+  auditable after the fact via `ctx list --tag okf:none`, rather than
+  being indistinguishable from a real guild fact. The marker is `none`,
+  not `untyped`: a real type literally named "Untyped" slugs to
+  `okf:untyped`, so using `untyped` for the missing-type marker would
+  collide the two and defeat the audit; `none` is not a plausible OKF
+  concept type and stays unambiguous. A document with a usable
+  type is unchanged (`Fact` stays tag-clean; other types keep their
+  `okf:<type>` provenance tag). Also clarifies, in help and the docs, that
+  prose dedup matches on a **trim + whitespace-collapse only — case and
+  punctuation are significant** (it catches a markdown re-wrap, not a
+  hand-edited copy).
+
+- **`ctx <phase-2 verb>` now gives a roadmap-aware message.** Typing a
+  verb that the help / docs name as "arriving in phase 2" (`fork` /
+  `supersede` / `show` / `list` / `chain` / `status`) used to produce the
+  same bare `unknown verb` a typo gets. It now says the verb is *planned
+  for phase 2, not yet implemented* and points at the phase-1 surface
+  (`record` / `export` / `import`). Genuine typos still get the
+  did-you-mean suggestion. Surfaced by dogfooding ctx from a user's
+  perspective.
+
+- **`gate complete` (from approved) and `gate deny` (from executing) now
+  redirect by verb name**, completing the verb-shape redirect family
+  alongside the existing `fail`-from-pending/approved and the
+  `execute`-from-pending cases. Scoped (per a dev-substrate agora play) to
+  the two transitions with a clean single-verb bridge:
+  - `gate complete` on an *approved* request → names `gate execute`
+    (start the work first), recovery `{verb:"execute"}`.
+  - `gate deny` on an *executing* request → names `gate fail` (deny is the
+    *pending* cancel path; once work has started, fail is the cancel),
+    recovery `{verb:"fail"}`; the dry-run path redirects identically.
+  Deliberately left on the domain's state-name hint: `complete`-on-pending
+  (recovery is multi-step approve→execute→complete, no single verb) and
+  `deny`-on-approved (no clean cancel verb exists from approved). State
+  vocabulary stays in the domain; the verb hint is an interface concern.
+
+- **`gate execute` on a pending request now redirects to `gate approve`
+  by name.** The domain rejects `pending → executing` with a state-name
+  hint ("valid next states from pending: approved, denied"), leaving a
+  caller who skipped approve to translate "approved" back into a verb.
+  `reqExecute` now pre-checks the pending state and throws a
+  `RecoverableError` naming the bridge directly — prose `error:` line
+  plus a structured `error.recovery: {verb:"approve", args:{id}, …}` for
+  JSON consumers. This mirrors the existing `gate fail`-from-pending
+  (→ `deny`) and `gate fail`-from-approved (→ `execute`) redirects; the
+  dry-run path redirects identically rather than throwing the bare
+  domain hint. State vocabulary stays in the domain (RequestState.ts);
+  the verb hint stays an interface concern.
+
+- **`gate boot` / `gate status` / `gate doctor`: the misconfigured-cwd
+  warning no longer asserts "not a fresh start".** On a genuine fresh
+  clone (the dogfood substrate's `guild.config.yaml` is local-only, so a
+  fresh checkout always lands here) the block read "likely wrong cwd, not
+  a fresh start" while boot's own `→ next:` hint said `gate register` —
+  a self-contradiction. The block now reads "either the wrong cwd, or a
+  fresh start here" and offers the `gate register --name <you>` escape
+  hatch alongside the cd-elsewhere fix, aligning both surfaces. (This
+  also closes the `formatContentRootDisclosure` arm of
+  `trap_silent_fallback_loses_signal`: a fallback disclosure now carries a
+  recovery `next:` cue instead of reading as noise.)
+
+- **README `30 seconds`: install entry now 3-tier + shell-portable
+  GUILD_ACTOR.** R19 first-impression dogfood (yuki / asteria /
+  miki) surfaced two doc papercuts that the prior block left to the
+  reader:
+  - The leading `npm install` looked clone-first by default, with
+    `npx gate` / `npm i -g` buried in a blockquote — newcomers
+    repeatedly missed the "use inside an existing repo" path. The
+    block now presents three explicit install styles (A clone, B
+    drop-in dev-dep, C one-off npx) so the reader picks before
+    running anything.
+  - The `export GUILD_ACTOR=` line was bash-shaped only; fish and
+    PowerShell readers had to mentally re-translate. The exports
+    for all three shells now sit inline as comments under the
+    POSIX form.
+- **README config warning: "no `guild.config.yaml`? no problem" is
+  now leading prose, not the overcautious "pick a name distinct
+  from `host_names:`" warning the dogfood read as gatekeeping.**
+  The substrate already handles the config-less path with a clear
+  `notice: config: none — cwd used as fallback root` line; the
+  README now says that *before* getting into the host-name
+  collision detail, which is now framed as "if you do add a
+  config" rather than "before you start".
+- **`AGENT.md`: explicit "humans welcome" preface.** R19 dogfood
+  (yuki) found the "AI-agent-first" framing read as a membership
+  tier to first-time human readers. The preface now reframes it as
+  "documentation density choice, not membership tier" — humans and
+  AI share a content_root, share a trail, share the same verbs.
+
+- **README: `gate fast-track` is now glossed where the "30 seconds" loop
+  first uses it.** The quick-start told newcomers to run `gate fast-track`
+  but the verb was absent from the "the whole tool is six verbs" list and
+  never defined — so the loop you're told to run and the loop you're shown
+  didn't line up. An inline comment plus a one-line note now explain that
+  fast-track collapses request → approve → execute for the self-flow case,
+  while the six verbs remain the full deliberation loop.
+- **README: the Passages note says *why* agora / devil / ctx run via
+  `node ./bin/<name>.mjs`.** Only `gate` and `guild` are registered as
+  `bin` commands in `package.json`, so the alpha passages aren't on PATH
+  even after a global install — the README now states that rather than
+  leaving the reader to infer it.
+
+- **Split `tests/interface/ax.test.ts`** (1549 lines, 56 tests — the
+  largest test file) following the #421 exemplar. The four largest
+  cohesive sections move into focused, well-named files sharing one
+  fixture module:
+  - `_axHelpers.ts` — the shared `bootstrap` + `runGate` + `rid`/`today`
+  - `axSuggest.test.ts` — `gate suggest` tight-loop behavior
+  - `axVerbsAvailableNow.test.ts` — `boot.verbs_available_now` discovery
+  - `axVoiceCalibration.test.ts` — Two-Persona Devil voice memory
+  - `axThank.test.ts` — `gate thank` appreciation primitive
+  - `ax.test.ts` (trimmed, 648 lines) keeps the remaining AX affordances
+    (suggested_next routing, JSON error envelope, board/show surfaces,
+    advisory semantics, transcript, --plain, --dry-run, the text footer).
+  Same 56 tests, no behavior change — navigability only. (`boot.test.ts`,
+  the other 1.4k-line file, is the remaining follow-up.)
+
+- **Split `tests/interface/boot.test.ts`** (1444 lines, 42 tests — the
+  last of the three oversized files, after #421/Request and #422/ax).
+  Its seven helpers (`bootstrap` / `runGate` / `escapeRegex` /
+  `bootstrapWithMembers` / `registerMember` / `makeRequestWithTarget` /
+  `makeRequestSessioned`, plus the `GATE` path) were interleaved through
+  the file; they're now centralized in `_bootHelpers.ts` and the tests
+  split by concern:
+  - `boot.test.ts` (trimmed) — JSON-shape stability, actor/role,
+    misconfigured-cwd, content_root_health, content-root disclosure, tail
+  - `bootReviewedAuthored.test.ts` — the reviewed-authored surface
+  - `bootOverlap.test.ts` — `active_overlapping_targets` + same-actor
+    parallel-session detection (#234 / #249)
+  - `bootWarnings.test.ts` — the C3 silent-fallback warnings
+  Same 42 tests, no behavior change. With this the three big test files
+  (Request 1158, ax 1549, boot 1444) are all decomposed.
+
+- **`gate boot` / `gate suggest`: new `suggested_next_reason` field.**
+  When `suggested_next` is `null` but the substrate has open
+  (`pending` / `approved` / `executing`) requests that don't name the
+  caller as executor, the field carries a one-line explanation —
+  closing the asteria-dogfood gap where `status.pending.total: 1`
+  next to `suggested_next: null` read as a substrate bug for a host
+  who approves from `gate list --state pending` rather than through
+  the suggest ladder. Field is `null` when silence is genuine. Text
+  mode renders the reason inline as `(nothing urgent — <reason>)` /
+  `→ (no suggestion — <reason>)`.
+- **`gate register --name <n>`: host-collision error front-loads the
+  fix.** The "pick a different `--name`" path is now the lead
+  recovery hint; "remove from `host_names:`" is parenthetical. Lines
+  up with the asteria observation that a first-time user hitting
+  `nao` (a default `host_names` reservation) was reading the longer
+  guidance first. README `30 seconds` block also picks up a
+  one-liner: `<you>` should be distinct from `host_names:` (default
+  reservations: `eris`, `nao`).
+
+- **Per-group test scripts.** `package.json` gains `test:domain`,
+  `test:application`, `test:infrastructure`, `test:interface`,
+  `test:passages`, and `test:e2e` — each builds then runs only that
+  subtree via `node tests/run.mjs dist/tests/<group>` (the runner already
+  accepted a root argument). Iterating on one area no longer requires the
+  full ~1.8k-test suite. The default `npm test` is unchanged.
+- **Split the largest domain test file.** `tests/domain/Request.test.ts`
+  (1158 lines, 69 tests) is broken into focused files sharing one
+  fixture module: `RequestId.test.ts` (id format), `RequestSlices294.test.ts`
+  (the self-contained #294 per-executor slice-closure block), and the
+  trimmed `Request.test.ts` (core lifecycle / serialization / actor
+  stamps), with `_requestHelpers.ts` holding the shared clock + builder.
+  Same 69 tests, no behavior change — just navigability. (Exemplar for
+  the remaining large files; `ax.test.ts` is left untouched here to avoid
+  colliding with an in-flight change.)
+
+### Added
+
+- **`gate boot` cross_passage — oldest-paused alarm.** Each passage's
+  orientation summary now carries `oldest_suspended_age_days` and
+  `oldest_suspended_cliff` (null when nothing is paused). A bare
+  `suspended` count reads the same whether the oldest pause is two hours
+  or two months old, so a long-forgotten thread hides inside the count;
+  surfacing the oldest pause's age plus its one-line cliff turns boot
+  into a forgotten-thread alarm. Text mode renders an `↳ oldest paused
+  Nd ago: <cliff>` line under the passage when the oldest pause is at
+  least a day old. Found by dogfood: an agora play sat suspended 39 days
+  with its conclusion intact, because re-entry only ever saw the count.
+  Closes the other half of records-outlive-writers — records must also be
+  *findable* on re-entry, not merely countable.
+
+- **`ctx list` / `ctx show` — phase-1 read-side.** Facts can now be read
+  back without grep. `ctx list` prints recorded facts newest-first (id,
+  author, timestamp, tags, snippet); `--tag prefix:value` filters by an
+  exact tag and `--by <m>` by author. `ctx list` with no records and
+  `ctx list` with a filter that matches nothing give distinct messages.
+  `ctx show <id>` prints one fact in full; a well-formed but absent id
+  raises a not-found that names `ctx list` as the recovery (text hint +
+  structured `error.recovery` in JSON), and a malformed id fails at the
+  domain boundary. `list` / `show` leave the phase-2 verb set. Surfaced as
+  the strongest pull toward phase 2 while dogfooding ctx.
+
+- **`ctx export` / `ctx import` — Open Knowledge Format (OKF) round-trip.**
+  ctx facts can now be projected to and recorded from
+  [OKF](https://cloud.google.com/blog/products/data-analytics/how-the-open-knowledge-format-can-improve-data-sharing/)
+  bundles (a directory of `<id>.md` files: YAML frontmatter + fact prose,
+  plus generated `index.md` / `log.md` views). `ctx export <dir>` writes
+  the bundle; `ctx import <dir>` records it back. Guild-authored bundles
+  round-trip losslessly — id, timestamp, author and tags survive, and a
+  re-import is idempotent (existing ids skip). Foreign bundles import
+  tolerantly: nested subtrees are walked, bare/prefixed tags are coerced
+  to `prefix:value` (bare → `topic:`), a non-`Fact` type is preserved as
+  an `okf:<type>` provenance tag, missing authors fall back to `--by`,
+  and empty/unparseable documents are reported as skipped rather than
+  failing the import. Prose dedup is on by default — a fact whose prose
+  (matched on a trim + whitespace-collapse, so case and punctuation are
+  significant) is already recorded (under any id, or earlier in the same
+  bundle) is skipped, so even an id-less foreign bundle re-imported is a
+  no-op; `--allow-duplicates` opts out. OKF is an interchange
+  *projection* (principle 11), not a storage change — the on-disk
+  substrate stays YAML.
+
+- **`gate show` / `gate chain` / `gate wave-status`: not-found errors
+  now honor `--format json` (#408).** Pre-#408 these surfaces
+  emitted `not found: <id>\n  try 'gate list' or 'gate tail' ...`
+  as free text even when the caller requested `--format json` —
+  tool-use agents that pipe `gate show <id> --format json` into a
+  JSON parser tripped on the prose. A new `notFoundEnvelope` helper
+  in `src/interface/shared/notFoundHint.ts` renders the same
+  information through the existing envelope shape used by `whoami`
+  and the write-verb error path (issue #194 lineage):
+  `{ok:false, error:{kind:'not_found', entity, id, message, hint}}`.
+  Text and `--plain` formats are unchanged — the asymmetry the PR
+  fixes is "format flag was ignored", not "format default changed".
+  Unknown-command and `lore` not-found are out of scope (separate
+  contract decisions; tracked in #408 discussion).
+
+### Fixed
+
+- **`after:review` hooks now receive the appended review on
+  `ctx.extra.review`.** The review handler fired `fireAfterHook`
+  without the `extra` argument, so `ctx.extra` was `undefined` for
+  `after:review` subscribers — contradicting the contract documented
+  in `docs/plugin-schema.md` ("`before:review` / `after:review` set
+  `extra.review`"). A hook reading `ctx.extra.review.verdict` to
+  route reject/concern verdicts silently saw `undefined`. The
+  handler now passes the terminal (just-appended) review as
+  `{ review }`, and a regression test in
+  `tests/interface/hookPluginLoader.test.ts` asserts the hook
+  receives `lense` / `verdict` / `comment` / `by`. (`before:review`
+  carrying its own payload is tracked separately — it fires before
+  the append, so the documented "appended review" shape needs a
+  distinct decision.)
+
+- **bin entries: a missing dependency is no longer misreported as an
+  unbuilt `dist/`.** On a fresh clone where `tsc` had run (so `dist/`
+  exists) but `npm install` had not (so `node_modules` is absent), the
+  bare `yaml` import failed and every `gate`/`guild`/`agora`/`devil`/`ctx`
+  invocation printed `dist/ not built (or out of date) … npm run build` —
+  pointing the operator at a rebuild when the actual fix is installing
+  deps. Node phrases the failure as `Cannot find package 'yaml' imported
+  from <dist importer>`, so the old `/dist/` message scan misclassified
+  it. The 5 inlined catch-blocks now delegate to a shared
+  `bin/_lib/handleDistLoadError.mjs` that distinguishes a bare-specifier
+  dependency miss (→ `dependency '<pkg>' is not installed … npm install`)
+  from a genuine missing/stale `dist/` (→ unchanged build message +
+  transitive-miss hint). New unit tests in
+  `tests/interface/distLoadError.test.ts` pin both paths.
+
+- **`members/`: identity resolution chain hardened (#407).** Two
+  related gaps in the `members/` actor identity boundary, surfaced
+  by a first-impression dogfood:
+  - An empty (0-byte) or malformed `members/<name>.yaml` no longer
+    promotes `<name>` to a registered actor. Previously `exists()`
+    was filename-only, so `touch members/ghost.yaml` was enough for
+    `gate fast-track --from ghost ...` to slip past `assertActor`
+    while `whoami` already classified `ghost` as `unknown` — write
+    verbs and the read-side identity surface disagreed. Both
+    surfaces now follow the same parse + hydrate contract.
+  - The internal `name:` field of `members/<filename>.yaml`, if
+    present, must match the filename stem. A divergence (e.g.
+    `members/alice.yaml` containing `name: leysia`) is now flagged
+    as malformed by `hydrate` and the record is rejected — neither
+    `alice` nor `leysia` resolves to member status from such a file.
+    Previously yaml.name silently won, letting a write-access
+    adversary (or careless operator) promote arbitrary names to
+    `member` by editing the yaml internals without renaming the file.
+  - `SECURITY.md` "Invariants enforced in code" gains an "Identity
+    resolution chain" entry documenting the `GUILD_ACTOR` env /
+    filename / yaml.name resolution rules now enforced.
+  - Three new tests under
+    `tests/infrastructure/hydrateErrorSurface.test.ts` cover the
+    empty-file path, the divergence path, and the regression guard
+    that properly-registered actors (with or without an explicit
+    yaml.name) continue to work transparently.
+
+- **`gate --help` now advertises the `list` filter as `--executor <m>`,
+  matching the runtime.** The BASE catalog line showed `gate list …
+  [--executors a[,b,...]]` (plural, copied from `gate request`'s
+  multi-executor flag), but the `list` verb accepts only `--executor`
+  (singular — "match waves naming this one executor") and rejects
+  `--executors` with "unknown flag". An agent copying the advertised flag
+  from `--help` hit a wall — a help-text ↔ runtime drift (principle 10 /
+  `trap_help_text_drift_on_new_verb`). Help line corrected; a regression
+  test pins the help and the runtime KNOWN_FLAGS to the same singular flag.
+
+- **`gate list --state <bogus>` now enumerates the valid states instead
+  of dead-ending.** It errored with a bare `Invalid state: <x>` and no
+  valid set, while sibling unknown-flag errors list their valid flags — an
+  asymmetric touch-feel that violated the "error + recovery path" house
+  style. `reqList` now validates `--state` at the interface boundary and,
+  on a miss, names the full CLI-valid set: `pending, approved, executing,
+  completed, failed, denied, all` (built from the domain's `REQUEST_STATES`
+  ∪ the interface-only `all` sugar, so it can't drift from the enum) plus a
+  note that omitting `--state` uses the verb's default. The app-layer guard
+  in `RequestUseCases.listByState` stays as defense-in-depth. State
+  vocabulary lives in the domain; the CLI-facing hint is an interface
+  concern — same split as the deny/execute verb redirects. Pinned by
+  `tests/interface/listInvalidState.test.ts`.
+
+- **Docs + touch-feel: `gate pending`'s filter surface is now accurate
+  and self-directing.** `docs/verbs.md` had lumped `gate list` and `gate
+  pending` together as accepting `--from / --executor / --auto-review /
+  --for`, but `pending` is the lean "--for me" shortcut — its known flags
+  are `{for, format}` and it rejects the richer filters (surfaced by a
+  two-persona review red-teaming the #426/#427 docs work, which had
+  reasoned about `list` in isolation). The doc now describes `list`'s full
+  filter set and `pending`'s narrow one separately, pointing richer
+  pending filtering at `gate list --state pending`. And the runtime
+  matches the advice: `gate pending --executor <m>` (or `--from` /
+  `--auto-review`) no longer dead-ends at "valid flags: --for, --format"
+  — it appends `to filter pending by author/executor/reviewer, use: gate
+  list --state pending …`. (`rejectUnknownFlags` gained an optional
+  `hint`; only `pending` passes one, so every other verb's error is
+  unchanged.) Pinned by `tests/interface/pendingFilterFlags.test.ts`.
+
+- **Transition-redirect errors now carry `error.code` again, not just
+  `error.recovery`.** `RecoverableError` (thrown by the verb-shape
+  redirects: `execute`-from-pending → approve, `complete`-from-approved
+  → execute, `deny`-from-executing → fail, `fail`-from-pending/approved)
+  reworded the message away from the domain's "Illegal state transition"
+  phrasing, so `deriveErrorCode`'s prose scan stopped classifying it and
+  the JSON envelope emitted `recovery` but a `code: undefined`. An agent
+  branching on `error.code` was blind to exactly the errors carrying the
+  richest recovery hint (surfaced dogfooding the JSON surface as an
+  orchestrator). `RecoverableError` now carries a `code` (default
+  `illegal_transition`, overridable) and the envelope emits it — so every
+  redirect error classifies as `illegal_transition` *and* ships a
+  dispatchable `recovery`. `not_found` and the plain transition errors are
+  unchanged.
+
+- **`gate suggest` / `gate boot` no longer undercount pending when a
+  self-wave is open.** A request the actor both authored and is the
+  executor of (a self-wave) is deliberately kept off the suggestion
+  ladder — its only open transition is a self-approve, which
+  `actionableTransitions` won't nudge. But `deriveSuggestedNextNullReason`
+  skipped those requests entirely, so the null-reason's pending tally
+  read one lower than `boot`'s `queues: pending` line for the same
+  substrate (e.g. queues showed `pending=2` while the reason said "1
+  pending"). The two surfaces now reconcile: the reason carries a
+  dedicated self-wave clause ("N pending request(s) you authored also
+  name you as executor (self-wave) — `gate suggest` does not nudge
+  self-approve …"). This also closes a silent-gap sub-case where a
+  *lone* self-wave pending produced no reason at all (the not-mine total
+  was zero) while `queues: pending=1` showed it — the exact "silence
+  reads as a bug" failure the reason field was added to prevent.
+
+- **Write-lifecycle not-found errors now carry the same discovery hint
+  the read verbs already emit.** `gate approve` / `deny` / `execute` /
+  `complete` / `fail` on a mistyped or stale id threw `Request not found:
+  <id>` straight through the shared error envelope with no pointer to
+  recovery — while `gate show <id>` (and the other read verbs) had carried
+  `try 'gate list' or 'gate tail'` since the not-found-hint work. The two
+  not-found surfaces disagreed; the write side was the worse touch-feel.
+  `emitErrorEnvelope` now performs the wire-up sweep its own doc
+  anticipated: a recognized `Request not found` gains the prose hint line
+  plus, under `--format json`, an `error.hint` field and a structured
+  `error.recovery` (`{verb: "list", …}`) — `error.message` stays clean so
+  existing parsers are unaffected. Both the dry-run (plain `Error`) and
+  real (`DomainError`) not-found paths are covered. Sibling passages
+  (agora / devil / ctx) that share the envelope are untouched: the hint is
+  attached only for the `request` entity, never stapled onto an unrelated
+  `Play not found` / `Review not found`.
+
+<!-- carried over from pre-fragment [Unreleased] -->
+
+_Add entries by dropping a file under `.changelog/next/` (see `.changelog/README.md`). The release script collects them into a versioned block at `npm run changelog:release -- <ver>`._
+
 ## [0.6.0] - 2026-05-16
 
 ### ⚠ BREAKING

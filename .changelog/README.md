@@ -33,6 +33,14 @@ release time.
   number or branch slug. `387-gate-boot-by.md`, `voices-no-arg-index.md`.
   Uniqueness is enforced by filesystem; collisions surface immediately.
 
+**docs-only changes do not get a fragment.** The CHANGELOG records
+notable user-facing behavior; a `docs/` or README edit is recorded by
+its PR + git history. There is intentionally no `docs` category. The
+release script **refuses to run** (exit 1) if `next/` holds any file
+whose category is not in the list above — a mis-categorized fragment
+must be renamed or deleted, never silently dropped. (Surfaced by the
+0.7.0 release dogfood, #441.)
+
 ## File contents
 
 One or more markdown bullets. The release script concatenates
