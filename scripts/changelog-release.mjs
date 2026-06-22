@@ -66,19 +66,23 @@ function collectFragments() {
   try {
     entries = readdirSync(FRAG_DIR, { withFileTypes: true });
   } catch (e) {
-    if (e?.code === 'ENOENT') return { byCategory: out, files: [] };
+    if (e?.code === 'ENOENT') return { byCategory: out, files: [], orphans: [] };
     throw e;
   }
   const files = [];
+  // Files that look like they want to be fragments but carry an
+  // unrecognized category. We do NOT silently skip these: a stray
+  // `docs-foo.md` would otherwise sit in next/ forever, never collected,
+  // while the release still exits 0 ("silence reads as success"). main()
+  // refuses to proceed when orphans exist (see #441).
+  const orphans = [];
   for (const ent of entries) {
     if (!ent.isFile()) continue;
-    if (ent.name === '.gitkeep' || ent.name.startsWith('.')) continue;
+    if (ent.name === '.gitkeep' || ent.name === 'README.md') continue;
+    if (ent.name.startsWith('.')) continue;
     const meta = parseFragmentFilename(ent.name);
     if (!meta) {
-      process.stderr.write(
-        `warn: skipping '${ent.name}' (does not match <category>-<slug>.md; ` +
-          `category must be one of: ${CATEGORY_ORDER.join(', ')})\n`,
-      );
+      orphans.push(ent.name);
       continue;
     }
     const full = join(FRAG_DIR, ent.name);
@@ -87,7 +91,7 @@ function collectFragments() {
     out[meta.category].push(body);
     files.push(full);
   }
-  return { byCategory: out, files };
+  return { byCategory: out, files, orphans };
 }
 
 function todayIso() {
@@ -178,7 +182,7 @@ function main() {
     );
     process.exit(2);
   }
-  const { byCategory, files } = collectFragments();
+  const { byCategory, files, orphans } = collectFragments();
   const fragmentCount = Object.values(byCategory).reduce(
     (n, arr) => n + arr.length,
     0,
@@ -187,6 +191,21 @@ function main() {
     `Collected ${fragmentCount} fragment${fragmentCount === 1 ? '' : 's'} ` +
       `from .changelog/next/.\n`,
   );
+  // Refuse to release (or preview) while unrecognized files linger in
+  // next/ — collecting them silently would drop the entry on the floor.
+  if (orphans.length > 0) {
+    process.stderr.write(
+      `\nerror: ${orphans.length} file(s) in .changelog/next/ are not valid ` +
+        `fragments and would be left behind:\n` +
+        orphans.map((n) => `  - ${n}\n`).join('') +
+        `\nA fragment is <category>-<slug>.md where category is one of: ` +
+        `${CATEGORY_ORDER.join(', ')}.\n` +
+        `docs-only changes do not get a fragment (the PR / git history is ` +
+        `their record) — delete the file. Otherwise rename it to a valid ` +
+        `category. See .changelog/README.md.\n`,
+    );
+    process.exit(1);
+  }
   const newBlock = buildNewBlock(version, byCategory);
   if (dryRun) {
     process.stdout.write(newBlock);
