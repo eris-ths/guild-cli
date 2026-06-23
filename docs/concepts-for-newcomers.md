@@ -28,9 +28,11 @@ passage holds a different **shape** of agent activity:
 - **`devil` — 守備 (defense).** "Protect end-users." Floor-shaped:
   multi-persona, lense-enforced, friction is the feature.
 - **`ctx` — 事実 (fact).** "Pin an observation." Verdict-less,
-  thread-less, target-less append. Phase 1 ships only `record`;
-  more verbs (fork / supersede / show / list / chain / status)
-  arrive in phase 2 as the use surface fills in.
+  thread-less, target-less append. Ships `record` / `supersede`
+  (correct an immutable fact with a new one) / `list` / `show` /
+  `chain` (one-hop reference walk) + OKF `export` / `import`; the
+  remaining phase-2 verbs (fork / status) arrive as the use surface
+  fills in.
 
 If you're new to guild-cli, start with `gate` — the rest of this
 document is gate-rooted. The other three passages have their own
