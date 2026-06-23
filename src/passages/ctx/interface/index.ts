@@ -6,8 +6,8 @@
 // append-only. See lore/principles/12 for the boundary with adjacent
 // modules.
 //
-// Phase 1 ships only `ctx record`. The remaining six verbs (fork /
-// supersede / show / list / chain / status) land iteratively in
+// Surface: record / supersede / list / show + OKF export/import. The
+// remaining lifecycle verbs (fork / chain / status) land iteratively in
 // phase 2 as use surfaces what shape they need.
 //
 // AI-first per principle 11: the substrate is machine-parseable JSON /
@@ -23,13 +23,14 @@ import { buildCtxContainer } from './container.js';
 import { recordCtx } from './handlers/record.js';
 import { exportCtx, EXPORT_BOOLEAN_FLAGS } from './handlers/exportOkf.js';
 import { importCtx, IMPORT_BOOLEAN_FLAGS } from './handlers/importOkf.js';
-import { listCtx } from './handlers/list.js';
+import { listCtx, LIST_BOOLEAN_FLAGS } from './handlers/list.js';
 import { showCtx } from './handlers/show.js';
+import { supersedeCtx } from './handlers/supersede.js';
 import { withEntryLock } from '../../../infrastructure/lock/withEntryLock.js';
 import { resolveGuildActor } from '../../../interface/shared/resolveGuildActor.js';
 import { READ_VERBS, WRITE_VERBS, LOCK_EXEMPT_VERBS } from './verbs.js';
 
-const HELP = `ctx — fact accumulation passage (phase 1: record / list / show + OKF interop)
+const HELP = `ctx — fact accumulation passage (phase 2: + supersede)
 
 Usage:
   ctx record --fact "<prose>" [--tag tech:foo,status:bar]
@@ -38,12 +39,23 @@ Usage:
                               <content_root>/ctx/<id>.yaml. Id is
                               auto-allocated as ctx-YYYY-MM-DD-NNN.
 
-  ctx list                    [--tag prefix:value] [--by <m>] [--format json|text]
-                              Read facts back, newest first. --tag filters
-                              by an exact tag, --by by author.
+  ctx supersede <old-id>      --fact "<corrected prose>"
+                              [--tag prefix:value] [--by <m>] [--format json|text]
+                              Correct an older fact. Records a NEW fact whose
+                              supersedes points back at <old-id>; the old
+                              record is left untouched (immutable). list folds
+                              the superseded one out by default.
+
+  ctx list                    [--tag prefix:value] [--by <m>] [--all]
+                              [--format json|text]
+                              Read facts back, newest first. --tag filters by
+                              an exact tag, --by by author. Superseded facts
+                              are folded out by default; --all keeps them
+                              (marked) for audit / history.
 
   ctx show <id>               [--format json|text]
-                              Show one fact in full.
+                              Show one fact in full. A superseded fact stays
+                              readable, marked with its successor.
 
   ctx export <dir>            [--as okf] [--force] [--format json|text]
                               Project every fact into an Open Knowledge
@@ -66,10 +78,10 @@ Usage:
   ctx --help                   This help.
   ctx --version                Print version and exit.
 
-Phase 1 status: \`record\` / \`list\` / \`show\` plus the OKF interop
+Status: \`record\` / \`supersede\` / \`list\` / \`show\` plus the OKF interop
 pair (\`export\` / \`import\`). OKF is an interchange *projection*
 (principle 11), not a storage change — the substrate stays YAML.
-Phase 2 (separate session): fork / supersede / chain / status.
+Remaining phase-2 verbs: fork / chain / status.
 
 Substrate: shares content_root and members/ with gate; ctx-specific
 data goes under <content_root>/ctx/.
@@ -80,19 +92,18 @@ Lore upstream:
   lore/principles/04-records-outlive-writers.md
 `;
 
-// Mirror of the switch below for did-you-mean suggestions. Phase 1
-// ships record / export / import; a new verb forgotten here loses its
-// typo hint, doesn't crash anything.
-const CTX_COMMANDS = ['record', 'export', 'import', 'list', 'show'] as const;
+// Mirror of the switch below for did-you-mean suggestions. A new verb
+// forgotten here loses its typo hint, doesn't crash anything.
+const CTX_COMMANDS = ['record', 'supersede', 'export', 'import', 'list', 'show'] as const;
 
 // The phase-2 lifecycle verbs named in HELP / AGENT.md / docs as
 // "arriving in phase 2". A user who read the docs and types one of these
 // deserves a roadmap-aware message ("planned, not yet implemented")
 // rather than the same "unknown verb" a typo gets. Keep in sync with the
-// HELP phase-2 line above (list / show shipped — they left this set).
+// HELP "remaining phase-2 verbs" line above (record/supersede/list/show
+// shipped — they left this set).
 const CTX_PHASE2_VERBS: ReadonlySet<string> = new Set([
   'fork',
-  'supersede',
   'chain',
   'status',
 ]);
@@ -104,7 +115,7 @@ export async function main(argv: readonly string[]): Promise<number> {
   }
   if (isVersionFlag(argv)) {
     process.stdout.write(
-      `ctx (under guild-cli ${getPackageVersion()}) — alpha phase 1 (record / list / show + OKF export/import)\n`,
+      `ctx (under guild-cli ${getPackageVersion()}) — alpha phase 2 (record / supersede / list / show + OKF export/import)\n`,
     );
     return 0;
   }
@@ -116,6 +127,7 @@ export async function main(argv: readonly string[]): Promise<number> {
   const VERB_BOOLEAN_FLAGS: Record<string, ReadonlySet<string>> = {
     export: EXPORT_BOOLEAN_FLAGS,
     import: IMPORT_BOOLEAN_FLAGS,
+    list: LIST_BOOLEAN_FLAGS,
   };
   const verbBooleans = VERB_BOOLEAN_FLAGS[cmd ?? ''];
   const args = verbBooleans
@@ -127,6 +139,8 @@ export async function main(argv: readonly string[]): Promise<number> {
     switch (cmd) {
       case 'record':
         return await recordCtx({ uc, config }, args);
+      case 'supersede':
+        return await supersedeCtx({ uc, config }, args);
       case 'list':
         return await listCtx({ uc, config }, args);
       case 'show':
@@ -142,19 +156,19 @@ export async function main(argv: readonly string[]): Promise<number> {
         if (cmd !== undefined && CTX_PHASE2_VERBS.has(cmd)) {
           process.stderr.write(
             `ctx: '${cmd}' is a planned phase-2 verb, not yet implemented.\n` +
-              `  phase 1 surface: record / export / import. See 'ctx --help'.\n`,
+              `  current surface: record / supersede / list / show / export / import. See 'ctx --help'.\n`,
           );
           return 1;
         }
-        // Phase 2 will add fork / supersede / chain / status; the catalog
-        // grows as those land. Valid verbs today are record / list / show
-        // / export / import — typos like `recor` should still get
-        // suggested rather than dumping the full HELP.
+        // Remaining phase-2 verbs (fork / chain / status) land as use
+        // surfaces their shape; the catalog grows then. Valid verbs today
+        // are record / supersede / list / show / export / import — typos
+        // like `recor` should still get suggested rather than dumping HELP.
         const hint = nearestCommand(cmd, CTX_COMMANDS);
         const suggest = hint ? `\n  did you mean: ctx ${hint}?` : '';
         process.stderr.write(
           `ctx: unknown verb: ${cmd}${suggest}\n` +
-            `  see 'ctx --help' for the full verb catalog (record / list / show / export / import).\n`,
+            `  see 'ctx --help' for the full verb catalog (record / supersede / list / show / export / import).\n`,
         );
         return 1;
       }

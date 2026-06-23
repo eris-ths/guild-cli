@@ -59,11 +59,67 @@ export class CtxUseCases {
   }
 
   /**
+   * Supersede an older fact with a correction. Records a *new* fact whose
+   * `supersedes` points back at `oldId`; the old record is left untouched
+   * (immutable substrate). Throws SupersedeTargetMissing if the target id
+   * has no record — a correction must point at something real, and a
+   * dangling link would silently lose the correction's meaning.
+   *
+   * The domain guards shape + self-loop; existence is checked here because
+   * only the application layer holds a repository. A chain is allowed
+   * (B supersedes A, C supersedes B): each link names exactly one parent,
+   * so the graph stays a forest and `latest` resolution walks it without
+   * cycles — every node points strictly backward to an id that already
+   * existed when it was written, so no cycle can form.
+   */
+  async supersede(input: {
+    oldId: string;
+    by: string;
+    fact: string;
+    tags?: readonly string[];
+  }): Promise<Ctx> {
+    const oldId = parseCtxId(input.oldId);
+    const target = await this.repo.findById(oldId);
+    if (target === null) {
+      throw new SupersedeTargetMissing(oldId);
+    }
+    const now = this.now();
+    const existing = await this.repo.listAllIds();
+    const id = nextCtxId(existing, now);
+    const ctx = Ctx.create({
+      id,
+      created_by: input.by,
+      fact: input.fact,
+      tags: input.tags ?? [],
+      supersedes: oldId,
+      now: () => now,
+    });
+    await this.repo.saveNew(ctx);
+    return ctx;
+  }
+
+  /**
    * List recorded facts, newest first, optionally filtered by an exact
    * tag and/or author. Read-only.
+   *
+   * By default superseded facts are folded out (only the surviving head of
+   * each supersession chain is shown), so the everyday list stays the
+   * current view rather than drifting into a junk drawer. `includeAll`
+   * keeps every fact, superseded ones included, for audit / history.
    */
-  async list(filter: { tag?: string; by?: string } = {}): Promise<readonly Ctx[]> {
-    let out = [...(await this.repo.listAll())];
+  async list(
+    filter: { tag?: string; by?: string; includeAll?: boolean } = {},
+  ): Promise<readonly Ctx[]> {
+    const all = [...(await this.repo.listAll())];
+    // A fact is superseded iff some other fact's `supersedes` names it.
+    const supersededIds = new Set<string>();
+    for (const c of all) {
+      if (c.supersedes !== undefined) supersededIds.add(c.supersedes);
+    }
+    let out = all;
+    if (filter.includeAll !== true) {
+      out = out.filter((c) => !supersededIds.has(c.id));
+    }
     if (filter.tag !== undefined) {
       out = out.filter((c) => c.tags.includes(filter.tag!));
     }
@@ -88,6 +144,20 @@ export class CtxUseCases {
   /** Show a single fact by id, or null if absent. Read-only. */
   async show(id: string): Promise<Ctx | null> {
     return this.repo.findById(id);
+  }
+
+  /**
+   * Find the fact that supersedes `id`, if any — the reverse of the
+   * forward-only `supersedes` link. Read-only; returns null when `id` is
+   * still the current head (nothing corrects it). Used by `show` to mark a
+   * superseded fact with its successor.
+   */
+  async supersededBy(id: string): Promise<Ctx | null> {
+    const all = await this.repo.listAll();
+    for (const c of all) {
+      if (c.supersedes === id) return c;
+    }
+    return null;
   }
 
   /**
@@ -244,6 +314,19 @@ export class CtxUseCases {
       throw new Error('ctx OKF use cases require an OkfBundlePort (wiring bug)');
     }
     return this.bundle;
+  }
+}
+
+/**
+ * Raised when `supersede` targets an id that has no record. A correction
+ * must point at something real; a dangling link would silently strip the
+ * correction of its referent. The interface layer maps this to a
+ * recoverable not-found that names `ctx list` as the recovery path.
+ */
+export class SupersedeTargetMissing extends Error {
+  constructor(public readonly id: string) {
+    super(`ctx supersede target not found: ${id}`);
+    this.name = 'SupersedeTargetMissing';
   }
 }
 

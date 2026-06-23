@@ -98,6 +98,8 @@ export class YamlCtxRepository implements CtxRepository {
         tags: Array.isArray(obj['tags'])
           ? (obj['tags'] as unknown[]).filter((t): t is string => typeof t === 'string')
           : [],
+        supersedes:
+          typeof obj['supersedes'] === 'string' ? (obj['supersedes'] as string) : undefined,
       });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);

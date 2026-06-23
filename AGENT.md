@@ -570,7 +570,7 @@ findings / SCG verdict output into devil's strict v0 ingest JSON
 shapes are out of scope for the in-tree passage and would land as
 separate utilities (or in the source tools themselves).
 
-## ctx (fourth passage — fact accumulation, alpha phase 1)
+## ctx (fourth passage — fact accumulation, alpha phase 2)
 
 `ctx` is the fourth passage under guild — alongside `gate`, `agora`,
 and `devil`. Where gate carries decisions, agora carries narrative,
@@ -584,11 +584,14 @@ substrate primitive for facts; surrounding ecosystem modules
 (persona-side `*_resume.md`, code comments, ADR docs) hold related
 prose at different layers without absorbing into one another.
 
-Phase 1 ships `ctx record`, the read-side `list` / `show`, and the OKF
-interop pair (`export` / `import`, below). The remaining lifecycle verbs
-(`fork` / `supersede` / `chain` / `status`) and schema extensions
-(`evidence` / `supersedes` / `sub_of` / `chain_after` / `branch_ref`)
-land in phase 2.
+Shipped: `ctx record`, the correction verb `ctx supersede` (a correction
+is a *new* fact whose `supersedes` points back at the old one — the old
+record is never mutated; `ctx list` folds it out by default, `--all` keeps
+it marked, `ctx show <old-id>` resolves the reverse `superseded_by` link),
+the read-side `list` / `show`, and the OKF interop pair (`export` /
+`import`, below). The remaining lifecycle verbs (`fork` / `chain` /
+`status`) and schema extensions (`evidence` / `sub_of` / `chain_after` /
+`branch_ref`) land in phase 2.
 
 ```bash
 ctx record --fact "<prose>" [--tag prefix:value,prefix:value]
@@ -662,10 +665,11 @@ thought-in-motion across sessions, use `agora play`. If it's a
 finding that needs adversarial scrutiny, use `devil entry`. ctx is
 for what remains: pinned observation, no closure required.
 
-Status: alpha phase 1. Read-side is `ctx list` (newest-first, `--tag` /
-`--by` filters) + `ctx show <id>`, plus `ctx export` (OKF projection).
-`ctx chain` arrives in phase 2 and that's the design test (junk-drawer
-risk vs principled substrate at the 100-record scale).
+Status: alpha, phase 2 in progress. Write-side is `ctx record` +
+`ctx supersede`; read-side is `ctx list` (newest-first, `--tag` / `--by` /
+`--all` filters) + `ctx show <id>`, plus `ctx export` (OKF projection).
+`ctx chain` still arrives in phase 2 and that's the design test
+(junk-drawer risk vs principled substrate at the 100-record scale).
 
 # Tier: Diagnostic
 

@@ -6,8 +6,12 @@
 //
 // Phase 1 ships the minimum: id, attribution, the fact prose, and
 // optional prefix-tagged labels (e.g. `tech:typescript`, `status:active`).
-// `evidence`, `supersedes`, `sub_of`, `chain_after`, `branch_ref` arrive
-// in phase 2 — see issue tracker.
+// Phase 2 begins with `supersedes` — a forward-only link to the older
+// fact this one corrects. The old record is never mutated (immutable on
+// save); the correction is a *new* fact pointing back, so the ledger keeps
+// both and the supersession is reconstructable from the link alone.
+// `evidence`, `sub_of`, `chain_after`, `branch_ref` remain phase-2 work —
+// see issue tracker.
 //
 // AI-first per principle 11:
 //   - immutable on save (re-reading agents must see what was written)
@@ -68,6 +72,10 @@ export interface CtxProps {
   readonly created_by: string; // member or host name
   readonly fact: string;       // non-empty prose
   readonly tags: readonly string[]; // possibly empty; each `prefix:value`
+  // phase-2: forward link to the older fact this corrects. `string | undefined`
+  // (not `?:`) so callers can pass an explicit undefined under
+  // exactOptionalPropertyTypes; toJSON omits it when undefined for byte stability.
+  readonly supersedes: string | undefined;
 }
 
 export class Ctx {
@@ -76,6 +84,14 @@ export class Ctx {
   readonly created_by: string;
   readonly fact: string;
   readonly tags: readonly string[];
+  /**
+   * The id of an older fact this one corrects, or undefined for an
+   * ordinary fact. Forward-only: the *new* (correcting) fact carries the
+   * link; the superseded fact is never mutated. A reader reconstructs the
+   * "superseded_by" direction by scanning for facts whose `supersedes`
+   * names a given id.
+   */
+  readonly supersedes: string | undefined;
 
   private constructor(props: CtxProps) {
     this.id = props.id;
@@ -83,6 +99,7 @@ export class Ctx {
     this.created_by = props.created_by;
     this.fact = props.fact;
     this.tags = props.tags;
+    this.supersedes = props.supersedes;
   }
 
   static create(input: {
@@ -90,6 +107,7 @@ export class Ctx {
     fact: string;
     created_by: string;
     tags?: readonly string[];
+    supersedes?: string;
     now?: () => Date;
   }): Ctx {
     const id = parseCtxId(input.id);
@@ -100,6 +118,7 @@ export class Ctx {
       throw new DomainError('created_by required (non-empty string)', 'created_by');
     }
     const tags = (input.tags ?? []).map((t) => parseCtxTag(t));
+    const supersedes = parseSupersedes(input.supersedes, id);
     const created_at = (input.now ?? (() => new Date()))().toISOString();
     return new Ctx({
       id,
@@ -107,6 +126,7 @@ export class Ctx {
       created_by: input.created_by.trim(),
       fact: input.fact.trim(),
       tags: Object.freeze([...tags]),
+      supersedes,
     });
   }
 
@@ -116,24 +136,45 @@ export class Ctx {
    */
   static restore(input: CtxProps): Ctx {
     const tags = (input.tags ?? []).map((t) => parseCtxTag(t));
+    const id = parseCtxId(input.id);
     return new Ctx({
-      id: parseCtxId(input.id),
+      id,
       created_at: input.created_at,
       created_by: input.created_by,
       fact: input.fact,
       tags: Object.freeze([...tags]),
+      supersedes: parseSupersedes(input.supersedes, id),
     });
   }
 
   toJSON(): Record<string, unknown> {
-    return {
+    const out: Record<string, unknown> = {
       id: this.id,
       created_at: this.created_at,
       created_by: this.created_by,
       fact: this.fact,
       tags: [...this.tags],
     };
+    // byte-stable YAML: omit the link entirely on an ordinary fact, so a
+    // phase-1 record round-trips unchanged and diffs stay minimal.
+    if (this.supersedes !== undefined) out['supersedes'] = this.supersedes;
+    return out;
   }
+}
+
+/**
+ * Validate an optional `supersedes` link: must be a well-formed ctx id and
+ * must not point at the fact's own id (a self-supersession is incoherent —
+ * a fact cannot correct itself). Existence of the target is an application
+ * concern (the domain has no repository); this guards shape + self-loop.
+ */
+function parseSupersedes(raw: unknown, ownId: string): string | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  const target = parseCtxId(raw);
+  if (target === ownId) {
+    throw new DomainError('a fact cannot supersede itself', 'supersedes');
+  }
+  return target;
 }
 
 export class CtxIdCollision extends Error {

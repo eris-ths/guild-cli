@@ -68,10 +68,10 @@ export async function recordCtx(
           where_written: `${deps.config.contentRoot}/ctx/${ctx.id}.yaml`,
           config_file: deps.config.configFile,
           suggested_next: {
-            verb: 'gate',
-            args: ['boot'],
+            verb: 'ctx',
+            args: ['list'],
             reason:
-              "phase 1 ships record only; show / list / fork / supersede / chain / status arrive in phase 2. Confirm the write landed via filesystem or `gate boot`.",
+              'read the fact back (newest first) to confirm it landed; correct it later with `ctx supersede <id>`. fork / chain / status remain phase-2.',
           },
         },
         null,

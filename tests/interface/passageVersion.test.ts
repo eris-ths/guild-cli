@@ -68,10 +68,10 @@ test('devil -v: same as --version', () => {
   assert.equal(run(DEVIL, ['-v']), run(DEVIL, ['--version']));
 });
 
-test('ctx --version: includes package version + phase 1 status', () => {
+test('ctx --version: includes package version + phase 2 status', () => {
   const out = run(CTX, ['--version']);
   assert.match(out, new RegExp(`ctx \\(under guild-cli ${SEMVER.source}\\)`));
-  assert.match(out, /alpha phase 1/);
+  assert.match(out, /alpha phase 2/);
 });
 
 test('ctx -v: same as --version', () => {

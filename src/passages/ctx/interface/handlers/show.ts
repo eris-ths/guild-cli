@@ -49,15 +49,36 @@ export async function showCtx(
     );
   }
 
+  // A superseded fact stays readable (immutable substrate) but is marked
+  // with the fact that corrects it, so a reader who pulls up an old id sees
+  // it has a successor rather than treating it as current.
+  const successor = await deps.uc.supersededBy(id);
+
   if (format === 'json') {
     process.stdout.write(
-      JSON.stringify({ ok: true, ...fact.toJSON() }, null, 2) + '\n',
+      JSON.stringify(
+        {
+          ok: true,
+          ...fact.toJSON(),
+          // reverse link, resolved at read time (the substrate stores only
+          // the forward `supersedes`); null when this fact is still current.
+          superseded_by: successor !== null ? successor.id : null,
+        },
+        null,
+        2,
+      ) + '\n',
     );
     return 0;
   }
 
   process.stdout.write(`${fact.id}\n`);
   process.stdout.write(`  created ${fact.created_at} by ${fact.created_by}\n`);
+  if (fact.supersedes !== undefined) {
+    process.stdout.write(`  supersedes: ${fact.supersedes}\n`);
+  }
+  if (successor !== null) {
+    process.stdout.write(`  ⊘ superseded by: ${successor.id}\n`);
+  }
   if (fact.tags.length > 0) {
     process.stdout.write(`  tags: ${fact.tags.join(', ')}\n`);
   }
