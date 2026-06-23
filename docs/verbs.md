@@ -1670,12 +1670,26 @@ is never touched, so the ledger keeps both and the supersession is
 reconstructable from the link alone. `ctx list` folds the superseded fact
 out by default (showing the current head of each chain); `ctx list --all`
 keeps every fact, marking the superseded ones, and `ctx show <old-id>`
-stays readable and resolves the reverse `superseded_by` link at read time.
+stays readable and resolves the reverse link at read time.
+
+`ctx show` reports that reverse link as `superseded_by`, **an array of
+ids** (JSON) — empty while the fact is current, and possibly more than one:
+nothing forbids two independent corrections of the same fact, so a fork (A
+superseded by both B and C) is legal and both successors are reported
+rather than silently picking one. Both forks are current heads in the
+default `list`. The reverse link is derived at read time by scanning the
+substrate (the flat per-file layout has no reverse index in phase 2), which
+is fine at the alpha record scale; a persisted index is the planned remedy
+if `chain` pushes the substrate past the junk-drawer threshold.
+
 A chain is allowed (C supersedes B supersedes A): every link points
 strictly backward to an id that already existed, so no cycle can form (the
-domain also rejects a self-supersession outright). Superseding an id that
-has no record is a recoverable not-found — a correction must point at
-something real, so a dangling link is refused rather than written.
+domain also rejects a self-supersession outright). And because the newest
+fact can never be superseded — nothing is written after it to point back —
+a non-empty store always has at least one current head; an empty default
+list means the store is genuinely empty. Superseding an id that has no
+record is a recoverable not-found — a correction must point at something
+real, so a dangling link is refused rather than written.
 
 ```bash
 ctx record --fact "<prose>" [--tag prefix:value,prefix:value]

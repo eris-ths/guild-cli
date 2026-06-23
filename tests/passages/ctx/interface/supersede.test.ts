@@ -102,11 +102,33 @@ test('show <old-id> resolves the reverse superseded_by link', (t) => {
 
   const r = JSON.parse(runCtx(root, ['show', oldId, '--format', 'json']).stdout);
   assert.equal(r.ok, true);
-  assert.equal(r.superseded_by, sup.id);
+  assert.deepEqual(r.superseded_by, [sup.id]);
 
-  // a current (un-superseded) fact reports null
+  // a current (un-superseded) fact reports an empty list
   const cur = JSON.parse(runCtx(root, ['show', sup.id, '--format', 'json']).stdout);
-  assert.equal(cur.superseded_by, null);
+  assert.deepEqual(cur.superseded_by, []);
+});
+
+test('show reports every successor when corrections fork the link', (t) => {
+  const root = newRoot();
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const oldId = recordFact(root, 'forked base');
+  // two independent corrections of the same fact -> two successors
+  const b = JSON.parse(
+    runCtx(root, ['supersede', oldId, '--fact', 'correction B', '--format', 'json'], { GUILD_ACTOR: 'eris' }).stdout,
+  );
+  const c = JSON.parse(
+    runCtx(root, ['supersede', oldId, '--fact', 'correction C', '--format', 'json'], { GUILD_ACTOR: 'eris' }).stdout,
+  );
+
+  const r = JSON.parse(runCtx(root, ['show', oldId, '--format', 'json']).stdout);
+  assert.equal(r.superseded_by.length, 2, 'both forks are reported, not just the first');
+  assert.deepEqual([...r.superseded_by].sort(), [b.id, c.id].sort());
+
+  // text surface lists both
+  const txt = runCtx(root, ['show', oldId]).stdout;
+  assert.match(txt, new RegExp(b.id));
+  assert.match(txt, new RegExp(c.id));
 });
 
 test('supersede a missing target is a recoverable not-found', (t) => {

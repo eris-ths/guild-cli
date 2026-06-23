@@ -147,17 +147,37 @@ export class CtxUseCases {
   }
 
   /**
-   * Find the fact that supersedes `id`, if any — the reverse of the
-   * forward-only `supersedes` link. Read-only; returns null when `id` is
-   * still the current head (nothing corrects it). Used by `show` to mark a
-   * superseded fact with its successor.
+   * Find every fact that supersedes `id` — the reverse of the forward-only
+   * `supersedes` link. Read-only; returns [] when `id` is still a current
+   * head (nothing corrects it). Used by `show` to mark a superseded fact
+   * with its successor(s).
+   *
+   * Returns a list, not a single fact, because the link is forward-only and
+   * nothing forbids two independent corrections of the same fact (a fork: A
+   * superseded by both B and C). Reporting only the first would silently
+   * hide the second. Newest-first so the most recent correction reads first.
+   *
+   * Cost is one full hydration scan of the substrate, inherent to the flat
+   * per-file layout (no reverse index in phase 2). Fine at the alpha record
+   * scale; if `chain` lands and the substrate grows past the junk-drawer
+   * threshold the docs warn about, a persisted reverse index is the planned
+   * remedy — see the `## ctx` design notes.
    */
-  async supersededBy(id: string): Promise<Ctx | null> {
+  async supersededBy(id: string): Promise<readonly Ctx[]> {
     const all = await this.repo.listAll();
-    for (const c of all) {
-      if (c.supersedes === id) return c;
-    }
-    return null;
+    const successors = all.filter((c) => c.supersedes === id);
+    // Newest first: created_at desc, id desc as a stable tiebreak (mirrors list()).
+    return [...successors].sort((a, b) =>
+      a.created_at < b.created_at
+        ? 1
+        : a.created_at > b.created_at
+          ? -1
+          : a.id < b.id
+            ? 1
+            : a.id > b.id
+              ? -1
+              : 0,
+    );
   }
 
   /**

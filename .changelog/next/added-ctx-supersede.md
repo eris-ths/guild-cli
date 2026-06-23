@@ -6,11 +6,15 @@
   forward-only link alone. `ctx list` now folds superseded facts out by
   default (showing the current head of each chain) and gains `--all` to
   keep every fact, marking the superseded ones; `ctx show <old-id>` stays
-  readable and resolves the reverse `superseded_by` link at read time. A
-  chain is allowed (C supersedes B supersedes A) and stays acyclic — every
-  link points strictly backward to an id that already existed, and the
-  domain rejects a self-supersession outright. Superseding an id with no
-  record is a recoverable not-found (a correction must point at something
-  real). The `supersedes` key is omitted from an ordinary record's YAML, so
-  phase-1 records round-trip byte-for-byte. Remaining phase-2 verbs: `fork`
-  / `chain` / `status`.
+  readable and resolves the reverse link at read time as `superseded_by`, an
+  **array** of successor ids (empty while current, more than one when two
+  independent corrections fork the same fact — both are reported rather than
+  silently picking one). A chain is allowed (C supersedes B supersedes A)
+  and stays acyclic — every link points strictly backward to an id that
+  already existed, and the domain rejects a self-supersession outright;
+  since the newest fact can never be superseded, a non-empty store always
+  keeps at least one current head. Superseding an id with no record is a
+  recoverable not-found (a correction must point at something real). The
+  `supersedes` key is omitted from an ordinary record's YAML, so phase-1
+  records round-trip byte-for-byte. Remaining phase-2 verbs: `fork` /
+  `chain` / `status`.

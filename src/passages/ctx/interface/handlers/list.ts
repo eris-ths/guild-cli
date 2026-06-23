@@ -80,17 +80,12 @@ export async function listCtx(
   if (facts.length === 0) {
     if (filtered) {
       process.stdout.write('no ctx facts match the filter.\n');
-    } else if (!includeAll && (await deps.uc.list({ includeAll: true })).length > 0) {
-      // Default view is empty only because every fact is superseded — the
-      // store isn't actually empty. Point at the history rather than the
-      // "record your first fact" prompt (which would be misleading).
-      process.stdout.write(
-        'no current ctx facts.\n' +
-          '  every recorded fact has been superseded — see history: ctx list --all\n',
-      );
     } else {
-      // Genuinely empty store (under --all, or default view with no facts
-      // at all): prompt for the first record.
+      // An empty default view means an empty store: the newest fact can
+      // never be superseded (nothing is written after it to point back at
+      // it), so a non-empty store always keeps at least one current head.
+      // There is therefore no "everything is superseded" state to message —
+      // an empty unfiltered list is genuinely empty, --all or not.
       process.stdout.write(
         'no ctx facts recorded yet.\n' +
           '  record one: ctx record --fact "<prose>" [--tag prefix:value]\n',

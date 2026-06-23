@@ -587,11 +587,12 @@ prose at different layers without absorbing into one another.
 Shipped: `ctx record`, the correction verb `ctx supersede` (a correction
 is a *new* fact whose `supersedes` points back at the old one — the old
 record is never mutated; `ctx list` folds it out by default, `--all` keeps
-it marked, `ctx show <old-id>` resolves the reverse `superseded_by` link),
-the read-side `list` / `show`, and the OKF interop pair (`export` /
-`import`, below). The remaining lifecycle verbs (`fork` / `chain` /
-`status`) and schema extensions (`evidence` / `sub_of` / `chain_after` /
-`branch_ref`) land in phase 2.
+it marked, `ctx show <old-id>` resolves the reverse `superseded_by` link as
+an **array** of successor ids — empty while current, more than one when two
+corrections fork the same fact), the read-side `list` / `show`, and the OKF
+interop pair (`export` / `import`, below). The remaining lifecycle verbs
+(`fork` / `chain` / `status`) and schema extensions (`evidence` / `sub_of`
+/ `chain_after` / `branch_ref`) land in phase 2.
 
 ```bash
 ctx record --fact "<prose>" [--tag prefix:value,prefix:value]

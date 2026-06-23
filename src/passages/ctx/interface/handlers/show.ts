@@ -50,9 +50,11 @@ export async function showCtx(
   }
 
   // A superseded fact stays readable (immutable substrate) but is marked
-  // with the fact that corrects it, so a reader who pulls up an old id sees
-  // it has a successor rather than treating it as current.
-  const successor = await deps.uc.supersededBy(id);
+  // with the fact(s) that correct it, so a reader who pulls up an old id
+  // sees it has a successor rather than treating it as current. It can have
+  // more than one successor — two independent corrections fork the link.
+  const successors = await deps.uc.supersededBy(id);
+  const successorIds = successors.map((s) => s.id);
 
   if (format === 'json') {
     process.stdout.write(
@@ -61,8 +63,9 @@ export async function showCtx(
           ok: true,
           ...fact.toJSON(),
           // reverse link, resolved at read time (the substrate stores only
-          // the forward `supersedes`); null when this fact is still current.
-          superseded_by: successor !== null ? successor.id : null,
+          // the forward `supersedes`); empty array when this fact is still
+          // current, multiple ids when corrections forked.
+          superseded_by: successorIds,
         },
         null,
         2,
@@ -76,8 +79,8 @@ export async function showCtx(
   if (fact.supersedes !== undefined) {
     process.stdout.write(`  supersedes: ${fact.supersedes}\n`);
   }
-  if (successor !== null) {
-    process.stdout.write(`  ⊘ superseded by: ${successor.id}\n`);
+  if (successorIds.length > 0) {
+    process.stdout.write(`  ⊘ superseded by: ${successorIds.join(', ')}\n`);
   }
   if (fact.tags.length > 0) {
     process.stdout.write(`  tags: ${fact.tags.join(', ')}\n`);
