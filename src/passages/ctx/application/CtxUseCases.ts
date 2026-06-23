@@ -44,18 +44,7 @@ export class CtxUseCases {
     fact: string;
     tags?: readonly string[];
   }): Promise<Ctx> {
-    const now = this.now();
-    const existing = await this.repo.listAllIds();
-    const id = nextCtxId(existing, now);
-    const ctx = Ctx.create({
-      id,
-      created_by: input.by,
-      fact: input.fact,
-      tags: input.tags ?? [],
-      now: () => now,
-    });
-    await this.repo.saveNew(ctx);
-    return ctx;
+    return this.appendFact({ by: input.by, fact: input.fact, tags: input.tags });
   }
 
   /**
@@ -79,10 +68,30 @@ export class CtxUseCases {
     tags?: readonly string[];
   }): Promise<Ctx> {
     const oldId = parseCtxId(input.oldId);
-    const target = await this.repo.findById(oldId);
-    if (target === null) {
+    if ((await this.repo.findById(oldId)) === null) {
       throw new SupersedeTargetMissing(oldId);
     }
+    return this.appendFact({
+      by: input.by,
+      fact: input.fact,
+      tags: input.tags,
+      supersedes: oldId,
+    });
+  }
+
+  /**
+   * Append a new fact to the substrate: allocate the next id for `now`,
+   * build the immutable Ctx, persist it. The single write path shared by
+   * `record` (no link) and `supersede` (a `supersedes` link, validated by
+   * the caller). Keeps id allocation + timestamp authorship consistent
+   * within one write and gives both verbs the same persistence behavior.
+   */
+  private async appendFact(input: {
+    by: string;
+    fact: string;
+    tags: readonly string[] | undefined;
+    supersedes?: string | undefined;
+  }): Promise<Ctx> {
     const now = this.now();
     const existing = await this.repo.listAllIds();
     const id = nextCtxId(existing, now);
@@ -91,7 +100,7 @@ export class CtxUseCases {
       created_by: input.by,
       fact: input.fact,
       tags: input.tags ?? [],
-      supersedes: oldId,
+      supersedes: input.supersedes,
       now: () => now,
     });
     await this.repo.saveNew(ctx);
@@ -126,18 +135,7 @@ export class CtxUseCases {
     if (filter.by !== undefined) {
       out = out.filter((c) => c.created_by === filter.by);
     }
-    // Newest first: created_at desc, id desc as a stable tiebreak.
-    out.sort((a, b) =>
-      a.created_at < b.created_at
-        ? 1
-        : a.created_at > b.created_at
-          ? -1
-          : a.id < b.id
-            ? 1
-            : a.id > b.id
-              ? -1
-              : 0,
-    );
+    out.sort(byNewestFirst);
     return out;
   }
 
@@ -165,19 +163,7 @@ export class CtxUseCases {
    */
   async supersededBy(id: string): Promise<readonly Ctx[]> {
     const all = await this.repo.listAll();
-    const successors = all.filter((c) => c.supersedes === id);
-    // Newest first: created_at desc, id desc as a stable tiebreak (mirrors list()).
-    return [...successors].sort((a, b) =>
-      a.created_at < b.created_at
-        ? 1
-        : a.created_at > b.created_at
-          ? -1
-          : a.id < b.id
-            ? 1
-            : a.id > b.id
-              ? -1
-              : 0,
-    );
+    return all.filter((c) => c.supersedes === id).sort(byNewestFirst);
   }
 
   /**
@@ -335,6 +321,19 @@ export class CtxUseCases {
     }
     return this.bundle;
   }
+}
+
+/**
+ * Order facts newest-first: `created_at` descending, with `id` descending
+ * as a stable tiebreak for same-instant writes (the `ctx-…-NNN` suffix
+ * monotonically increases within a day). The single ordering used by every
+ * read surface (`list`, `supersededBy`), so they stay consistent and a
+ * future verb (e.g. `chain`) can reuse the same comparator.
+ */
+function byNewestFirst(a: Ctx, b: Ctx): number {
+  if (a.created_at !== b.created_at) return a.created_at < b.created_at ? 1 : -1;
+  if (a.id !== b.id) return a.id < b.id ? 1 : -1;
+  return 0;
 }
 
 /**

@@ -9,6 +9,7 @@ import {
 } from '../../../../interface/shared/parseArgs.js';
 import { DomainError } from '../../../../domain/shared/DomainError.js';
 import { RecoverableError } from '../../../../interface/shared/errorEnvelope.js';
+import { parseTagList } from './parseTagList.js';
 
 const SUPERSEDE_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'fact',
@@ -16,18 +17,6 @@ const SUPERSEDE_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'by',
   'format',
 ]);
-
-/**
- * Parse `--tag tech:typescript,status:active` into a clean tag list.
- * Same convention as record.ts (Ctx.create validates the shape upstream).
- */
-function parseTagList(raw: string | undefined): string[] {
-  if (raw === undefined) return [];
-  return raw
-    .split(',')
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
-}
 
 export interface SupersedeCtxDeps {
   readonly uc: CtxUseCases;

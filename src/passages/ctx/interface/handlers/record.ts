@@ -7,6 +7,7 @@ import {
   requireOption,
   rejectUnknownFlags,
 } from '../../../../interface/shared/parseArgs.js';
+import { parseTagList } from './parseTagList.js';
 
 const RECORD_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'fact',
@@ -14,20 +15,6 @@ const RECORD_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'by',
   'format',
 ]);
-
-/**
- * Parse `--tag tech:typescript,status:active` (comma-separated) into a
- * clean tag list. Same convention as gate's `--with` (request.ts:
- * `parseWithList`). Tag-shape validation happens upstream in
- * Ctx.create -> parseCtxTag.
- */
-function parseTagList(raw: string | undefined): string[] {
-  if (raw === undefined) return [];
-  return raw
-    .split(',')
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
-}
 
 export interface RecordCtxDeps {
   readonly uc: CtxUseCases;

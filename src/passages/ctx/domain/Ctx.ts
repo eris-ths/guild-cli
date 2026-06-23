@@ -107,7 +107,7 @@ export class Ctx {
     fact: string;
     created_by: string;
     tags?: readonly string[];
-    supersedes?: string;
+    supersedes?: string | undefined;
     now?: () => Date;
   }): Ctx {
     const id = parseCtxId(input.id);
