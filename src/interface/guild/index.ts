@@ -34,6 +34,14 @@ Usage:
   guild --version                         Print version and exit
 
 Categories: core | professional | assignee | trial | special | host
+
+guild manages *who* the actors are. The work itself runs through the
+passages — separate CLIs over the same content_root:
+  gate   — judgment: request → review → complete   (gate --help)
+  agora  — exploration: play / move / suspend       (agora --help)
+  devil  — defense: multi-persona security review   (devil --help)
+  ctx    — fact accumulation: record / chain        (ctx --help)
+New here? Start with \`gate --help\`. Full map: AGENT.md.
 `;
 
 export async function main(argv: readonly string[]): Promise<number> {

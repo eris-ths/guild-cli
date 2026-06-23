@@ -8,6 +8,7 @@ import { notFoundMessage } from '../../shared/notFoundHint.js';
 import { resolveGuildSessionId } from '../../shared/resolveGuildSessionId.js';
 import { parseExecutorsList } from './request.js';
 import { parseFormat } from '../../shared/parseFormat.js';
+import { emitWriteResponse } from './writeFormat.js';
 import {
   C,
   readStdin,
@@ -40,6 +41,7 @@ const ISSUES_PROMOTE_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'auto-review',
   'action',
   'reason',
+  'format',
 ]);
 const ISSUES_NOTE_KNOWN_FLAGS: ReadonlySet<string> = new Set(['by', 'text']);
 // `gate issues resolve/defer/start/reopen` take `--by <m>` (or fall
@@ -339,9 +341,10 @@ async function issuesPromote(c: C, args: ParsedArgs): Promise<number> {
   if (!id) {
     throw new Error(
       'Usage: gate issues promote <id> --from <m> [--executors a,b] ' +
-        '[--auto-review <m>] [--action <a>] [--reason <r>]',
+        '[--auto-review <m>] [--action <a>] [--reason <r>] [--format json|text]',
     );
   }
+  const format = parseFormat(args);
   const from = requireOption(args, 'from', '<m>', 'GUILD_ACTOR');
   const executorsRaw = optionalOption(args, 'executors');
   const autoReview = optionalOption(args, 'auto-review');
@@ -423,8 +426,19 @@ async function issuesPromote(c: C, args: ParsedArgs): Promise<number> {
     );
     return 1;
   }
-  process.stdout.write(
-    `✓ promoted ${id} → ${req.id.value} (issue resolved)\n`,
+  // Unified write-envelope (ok/id/state/message/suggested_next) shared
+  // with `gate request` — keeps the JSON shape stable across write verbs
+  // (principle 10 schema-as-contract). The promote-specific fact (which
+  // issue was resolved) rides in `message`, so it survives in the JSON
+  // payload too (records-outlive-writers): the new request id and the
+  // resolved issue id are both greppable from the structured output.
+  // Decided in agora play promote-format-impl 2026-06-23-001 with
+  // devil (shape integrity) + noir (principle 04) review.
+  emitWriteResponse(
+    format,
+    req,
+    `✓ promoted ${id} → ${req.id.value} (issue resolved)`,
+    c.config,
   );
   return 0;
 }

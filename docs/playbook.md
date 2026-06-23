@@ -287,10 +287,12 @@ the action lives in another passage. Example: during a long
 gate decision but isn't part of this thread. Drop a `ctx record`
 mentioning the play id and tag it `cross-passage:agora` — the
 fact accumulates outside the play's scope, queryable later via
-`ctx list --tag cross-passage:agora`. And when you pull up a
-related ctx fact, `ctx chain <id>` surfaces the breadcrumbs that
-name it (inbound) and the ids it names (outbound) in one hop, so
-the side-observation reconnects to its context without a grep.
+`ctx list --tag cross-passage:agora`. The tag is the cross-passage
+retrieval path: `ctx chain` only walks links between *ctx* facts
+(prose mentions of `ctx-…` ids plus supersession), so a breadcrumb
+naming an `agora` / `gate` id is found by its tag, not by `chain`.
+Use `chain` when one ctx fact references another; use the tag when
+the breadcrumb points into a different passage.
 
 This pattern keeps the agora play focused on its own thread
 without losing the side-observation, and avoids inflating the
@@ -346,7 +348,7 @@ devil conclude <rev-id> --synthesis "..." [--unresolved ...]
 # Back to gate: critic reviews, factoring devil's findings
 gate review <request-id> --by <critic> --lense devil \
   --verdict <ok|concern|reject> \
-  --comment "see devil-review <rev-id>: <synthesis summary>"
+  --note "see devil-review <rev-id>: <synthesis summary>"
 
 # Then the lifecycle continues
 gate execute <request-id> --by <executor>
@@ -354,8 +356,8 @@ gate complete <request-id> --by <executor>
 ```
 
 The two passages run in parallel, not nested. `gate review`'s
-free-text `--comment` carries the cross-reference to the
-devil session.
+free-text `--note` carries the cross-reference to the
+devil session. (`--comment` is a deprecated alias of `--note`.)
 
 ### C3: agora + devil — explore-then-audit
 
@@ -408,7 +410,7 @@ gate issues promote <issue-id> --from <you> [--executors <you>] \
 
 # Phase 4a: routine fix → gate review only
 gate review <request-id> --by <critic> --lense layer \
-  --verdict ok --comment "fix matches the diagnosis in agora <play-id>"
+  --verdict ok --note "fix matches the diagnosis in agora <play-id>"
 
 # Phase 4b: security-implicated fix → ALSO devil
 devil open <fix-pr-url> --type pr
@@ -418,7 +420,7 @@ devil conclude <rev-id> --synthesis "..."
 # Then in gate review:
 gate review <request-id> --by <critic> --lense devil \
   --verdict <ok|concern> \
-  --comment "devil <rev-id> concluded clean / with N unresolved"
+  --note "devil <rev-id> concluded clean / with N unresolved"
 
 # Phase 5: ship + close
 gate execute <request-id> --by <executor>
@@ -492,12 +494,14 @@ you're solo.
 **Trade-off.** Review depth is operator discipline, not enforced.
 The mirror is the same actor wearing a different hat; if the
 hat-swap is shallow, the discipline degrades to a self-stamp. The
-`self_approve: allowed` default on the solo profile means a flat
+`self_approve: allowed` default on the `standard` profile means a flat
 `--by <you>` arc *also* succeeds (just with a "notice: claude
 approved their own request" surfaced on the approve event). The
 synergy is the *practiced shape*, not a code-enforced one. Flip to
 `profile: swarm` and `self_approve: forbidden` makes the separate
-`--by` mandatory — same arc, different enforcement.
+`--by` mandatory — same arc, different enforcement. (The two valid
+profiles are `standard` and `swarm`; there is no `solo` profile —
+"solo" describes the single-actor *situation*, not a config value.)
 
 **E2E test.** [`tests/e2e/synergy_s1_mirror_persona_loop.test.ts`](../tests/e2e/synergy_s1_mirror_persona_loop.test.ts)
 pins three contracts:
