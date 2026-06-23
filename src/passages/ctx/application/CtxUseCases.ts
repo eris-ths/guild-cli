@@ -2,6 +2,34 @@ import { Ctx, CtxIdCollision, nextCtxId, parseCtxId } from '../domain/Ctx.js';
 import { CtxRepository } from './CtxRepository.js';
 import { OkfBundlePort, OkfSkippedDoc } from './OkfBundlePort.js';
 import { ctxToOkfDocument, okfDocumentToCtxFact } from './OkfCtxMapper.js';
+import { extractReferences } from '../../../domain/shared/extractReferences.js';
+
+/** One end of a chain edge: the id, and the fact if it resolves. */
+export interface CtxChainRef {
+  readonly id: string;
+  /** The resolved fact, or null when the id is referenced but absent. */
+  readonly fact: Ctx | null;
+}
+
+/**
+ * The one-hop neighborhood around a ctx fact, the read model behind
+ * `ctx chain`. Mirrors `gate chain`'s shape: outbound (ids the root's
+ * prose mentions) + inbound (facts whose prose mentions the root), with
+ * the ctx-specific supersession edges (the link the root carries, and the
+ * facts that supersede the root) surfaced as first-class branches rather
+ * than buried in prose.
+ */
+export interface CtxChain {
+  readonly root: Ctx;
+  /** ctx ids the root's fact prose references (one hop, deduped). */
+  readonly outbound: readonly CtxChainRef[];
+  /** facts whose prose references the root id (one hop). */
+  readonly inbound: readonly Ctx[];
+  /** the fact the root supersedes, if any (the root's forward link). */
+  readonly supersedes: Ctx | null;
+  /** facts that supersede the root (reverse link; a fork yields >1). */
+  readonly supersededBy: readonly Ctx[];
+}
 
 /** Summary of an OKF export. */
 export interface OkfExportSummary {
@@ -164,6 +192,50 @@ export class CtxUseCases {
   async supersededBy(id: string): Promise<readonly Ctx[]> {
     const all = await this.repo.listAll();
     return all.filter((c) => c.supersedes === id).sort(byNewestFirst);
+  }
+
+  /**
+   * Build the one-hop chain neighborhood around `id` — the read model
+   * behind `ctx chain`. Read-only. Returns null when `id` has no record
+   * (the caller maps that to a recoverable not-found).
+   *
+   * Four edge kinds, all resolved from a single substrate scan:
+   *   - outbound: ctx ids the root's prose mentions (lexical, via the
+   *     shared `extractReferences`), each resolved to its fact or left as
+   *     a dangling ref (referenced-but-absent is surfaced, not dropped —
+   *     records-outlive-writers: a prose mention of a deleted/future id is
+   *     signal). Self-references are dropped.
+   *   - inbound: facts whose prose mentions the root id.
+   *   - supersedes: the fact the root corrects (its forward link).
+   *   - supersededBy: facts that correct the root (reverse link; fork >1).
+   *
+   * One hop only, like `gate chain`: deeper walks are the reader calling
+   * `ctx chain` again on a surfaced id. Cost is one full hydration scan —
+   * see the `supersededBy` note on the flat-layout scaling tradeoff.
+   */
+  async chain(id: string): Promise<CtxChain | null> {
+    const rootId = parseCtxId(id);
+    const all = await this.repo.listAll();
+    const byId = new Map<string, Ctx>(all.map((c) => [c.id, c]));
+    const root = byId.get(rootId);
+    if (root === undefined) return null;
+
+    // outbound: ctx ids the root's prose references (deduped, self dropped).
+    const outbound: CtxChainRef[] = [];
+    for (const refId of extractReferences(root.fact).ctxIds) {
+      if (refId === rootId) continue;
+      outbound.push({ id: refId, fact: byId.get(refId) ?? null });
+    }
+
+    // inbound: other facts whose prose references the root id.
+    const inbound = all
+      .filter((c) => c.id !== rootId && extractReferences(c.fact).ctxIds.includes(rootId))
+      .sort(byNewestFirst);
+
+    const supersedes = root.supersedes !== undefined ? byId.get(root.supersedes) ?? null : null;
+    const supersededBy = all.filter((c) => c.supersedes === rootId).sort(byNewestFirst);
+
+    return { root, outbound, inbound, supersedes, supersededBy };
   }
 
   /**

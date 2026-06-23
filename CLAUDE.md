@@ -24,8 +24,9 @@ file-based な coordination substrate を作っている TypeScript CLI。
   の extension lense で judgment 軸にも転用できる (#134 G、ComposedLenseCatalog)
 - **ctx** — session 跨ぎの fact accumulation (alpha phase 2)。`record` /
   `supersede` (不変 fact を新 fact で訂正、forward-only link) / `list` (`--all`
-  で superseded も) / `show` / OKF `export`・`import`。残り phase-2: `fork` /
-  `chain` / `status`
+  で superseded も) / `show` / `chain` (1-hop の参照近傍: prose 内 ctx-id
+  outbound・inbound + supersede リンク) / OKF `export`・`import`。残り phase-2:
+  `fork` / `status`
 
 Clean Architecture: **Domain → Application → Infrastructure → Interface**
 (`src/` 配下に layer 分割)。`bin/*.mjs` が CLI dispatcher、各 passage の

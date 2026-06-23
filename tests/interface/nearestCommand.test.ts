@@ -119,9 +119,9 @@ test('ctx <typo>: suggests ctx-prefixed verb (current catalog)', (t) => {
   assert.match(r.stderr, /did you mean: ctx record\?/);
   // Verb-catalog callout — flag the available surface at the point a
   // typo hit it, since the remaining phase-2 lifecycle verbs (fork /
-  // chain / status) are not yet implemented and a typo for any of those
-  // would refuse to suggest.
-  assert.match(r.stderr, /record \/ supersede \/ list \/ show \/ export \/ import/);
+  // status) are not yet implemented and a typo for either would refuse
+  // to suggest.
+  assert.match(r.stderr, /record \/ supersede \/ list \/ show \/ chain \/ export \/ import/);
 });
 
 test('ctx <phase-2 verb>: roadmap-aware message, not a bare "unknown verb"', (t) => {
@@ -129,12 +129,12 @@ test('ctx <phase-2 verb>: roadmap-aware message, not a bare "unknown verb"', (t)
   t.after(cleanup);
   run(GATE, root, ['register', '--name', 'alice']);
   // `fork` is documented as a remaining phase-2 verb (record / supersede /
-  // list / show shipped); a reader of the docs who types it should be told
-  // it's planned, not treated like a typo.
+  // list / show / chain shipped); a reader of the docs who types it should
+  // be told it's planned, not treated like a typo.
   const r = run(CTX, root, ['fork']);
   assert.equal(r.status, 1);
   assert.match(r.stderr, /planned phase-2 verb, not yet implemented/);
-  assert.match(r.stderr, /current surface: record \/ supersede \/ list \/ show \/ export \/ import/);
+  assert.match(r.stderr, /current surface: record \/ supersede \/ list \/ show \/ chain \/ export \/ import/);
   assert.doesNotMatch(r.stderr, /unknown verb/);
 });
 

@@ -245,11 +245,12 @@ disagree).
 
 > **Status.** ctx ships `record`, `supersede` (correct an immutable
 > fact with a new one), `list` (`--all` to include superseded), `show`,
-> and the OKF `export` / `import` pair. The remaining phase-2 verbs
-> (`fork` / `chain` / `status`) land iteratively. So the patterns here
-> are still narrow — more recipes appear as the verb surface fills in.
-> Substrate written today is forward-compatible with the phase-2 verbs
-> (id shape, tag prefix discipline).
+> `chain` (one-hop reference + supersession neighborhood), and the OKF
+> `export` / `import` pair. The remaining phase-2 verbs (`fork` /
+> `status`) land iteratively. So the patterns here are still narrow —
+> more recipes appear as the verb surface fills in. Substrate written
+> today is forward-compatible with the phase-2 verbs (id shape, tag
+> prefix discipline).
 
 ### X1: pin a fact future-you needs
 
@@ -267,8 +268,10 @@ the watch loop".
 
 The `--tag` shape is `prefix:value` (lowercase, kebab-case).
 Shared tag prefixes — `topic:`, `scope:`, `iter:`, `observation:`
-— make `ctx list --tag` filtering tractable now, and stay useful as
-phase-2 `ctx chain` arrives. Plan tags as if they will be queried.
+— make `ctx list --tag` filtering tractable. To follow a fact to its
+neighbors instead of filtering, `ctx chain <id>` walks one hop over the
+ctx ids its prose names (and the supersession links). Plan tags as if
+they will be queried.
 
 Distinct from a `gate request` because there is no action
 implied. Distinct from an `agora move` because there is no
