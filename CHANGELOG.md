@@ -29,6 +29,62 @@ versioned block alongside collected fragments.
 
 _Add entries by dropping a file under `.changelog/next/` (see `.changelog/README.md`). The release script collects them into a versioned block at `npm run changelog:release -- <ver>`._
 
+## [0.7.1] - 2026-06-23
+
+### Changed
+
+- **`changelog-release` now also bumps the `version` field in
+  `package.json` and `package-lock.json` (root + `packages[""]`) to the
+  release version**, in the same step that rewrites `CHANGELOG.md`.
+  Previously the script only touched the changelog, so a release had to
+  remember to bump the manifests by hand — and the 0.7.0 release didn't,
+  leaving `package-lock.json` at `0.6.0` until CI's version-drift guard
+  caught it (#442). The bump is a byte-stable text replacement (only the
+  version line(s) move), and `--dry-run`/`changelog:preview` reports the
+  would-bump without writing. `.changelog/README.md` documents the new
+  release step and the annotated `vX.Y.Z` tag convention. (#441/#442
+  follow-up.)
+
+- **`changelog-release` now refuses to run when `.changelog/next/` holds
+  a file with an unrecognized category, instead of warning and silently
+  leaving it behind.** A `docs-foo.md` (no `docs` category exists) used to
+  be `warn`ed-and-skipped while the release still exited 0 — the entry was
+  dropped on the floor and the orphan lingered for every future release
+  ("silence reads as success"). The script now collects such files as
+  *orphans* and exits 1 with a per-file list and the fix (rename to a
+  valid category, or delete — docs-only changes have no fragment). The
+  same guard fires under `--dry-run`/`changelog:preview`, so a
+  mis-categorized fragment surfaces before release. `.changelog/README.md`
+  documents that docs-only changes get no fragment. (#441, surfaced by the
+  0.7.0 release dogfood.)
+
+### Added
+
+- **`ctx supersede <old-id> --fact "..."` — the first phase-2 ctx verb.**
+  ctx records are immutable on save, so a correction is not an in-place
+  edit: `supersede` records a **new** fact whose `supersedes` field points
+  back at the one it replaces. The old record is never mutated, so the
+  ledger keeps both and the supersession is reconstructable from the
+  forward-only link alone. `ctx list` now folds superseded facts out by
+  default (showing the current head of each chain) and gains `--all` to
+  keep every fact, marking the superseded ones; `ctx show <old-id>` stays
+  readable and resolves the reverse link at read time as `superseded_by`, an
+  **array** of successor ids (empty while current, more than one when two
+  independent corrections fork the same fact — both are reported rather than
+  silently picking one). A chain is allowed (C supersedes B supersedes A)
+  and stays acyclic — every link points strictly backward to an id that
+  already existed, and the domain rejects a self-supersession outright;
+  since the newest fact can never be superseded, a non-empty store always
+  keeps at least one current head. Superseding an id with no record is a
+  recoverable not-found (a correction must point at something real). The
+  `supersedes` key is omitted from an ordinary record's YAML, so phase-1
+  records round-trip byte-for-byte. Remaining phase-2 verbs: `fork` /
+  `chain` / `status`.
+
+<!-- carried over from pre-fragment [Unreleased] -->
+
+_Add entries by dropping a file under `.changelog/next/` (see `.changelog/README.md`). The release script collects them into a versioned block at `npm run changelog:release -- <ver>`._
+
 ## [0.7.0] - 2026-06-22
 
 ### Changed
