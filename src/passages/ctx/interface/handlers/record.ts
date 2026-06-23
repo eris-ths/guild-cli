@@ -7,6 +7,7 @@ import {
   requireOption,
   rejectUnknownFlags,
 } from '../../../../interface/shared/parseArgs.js';
+import { parseTagList } from './parseTagList.js';
 
 const RECORD_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'fact',
@@ -14,20 +15,6 @@ const RECORD_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'by',
   'format',
 ]);
-
-/**
- * Parse `--tag tech:typescript,status:active` (comma-separated) into a
- * clean tag list. Same convention as gate's `--with` (request.ts:
- * `parseWithList`). Tag-shape validation happens upstream in
- * Ctx.create -> parseCtxTag.
- */
-function parseTagList(raw: string | undefined): string[] {
-  if (raw === undefined) return [];
-  return raw
-    .split(',')
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
-}
 
 export interface RecordCtxDeps {
   readonly uc: CtxUseCases;
@@ -68,10 +55,10 @@ export async function recordCtx(
           where_written: `${deps.config.contentRoot}/ctx/${ctx.id}.yaml`,
           config_file: deps.config.configFile,
           suggested_next: {
-            verb: 'gate',
-            args: ['boot'],
+            verb: 'ctx',
+            args: ['list'],
             reason:
-              "phase 1 ships record only; show / list / fork / supersede / chain / status arrive in phase 2. Confirm the write landed via filesystem or `gate boot`.",
+              'read the fact back (newest first) to confirm it landed; correct it later with `ctx supersede <id>`. fork / chain / status remain phase-2.',
           },
         },
         null,

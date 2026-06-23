@@ -1624,7 +1624,7 @@ outside the in-tree passage.
 For substrate paths and the persona/lense schema reference, see
 the `## devil-review` section of [`AGENT.md`](../AGENT.md).
 
-## ctx — the fourth passage (alpha phase 1)
+## ctx — the fourth passage (alpha, phase 2: + supersede)
 
 `ctx` is the fourth passage under guild, alongside `gate`, `agora`,
 and `devil`. Where gate carries decisions, agora carries narrative,
@@ -1646,13 +1646,50 @@ that don't fit into a verdict, a play, or a review.
   ripe for `lore/`, cross-session knowledge a future instance
   should be able to grep with `created_by:` intact.
 
-### Phase 1 surface
+### Surface
 
-Phase 1 ships `ctx record`, the read-side `list` / `show`, and the OKF
-interop pair (`export` / `import`, below). The remaining lifecycle verbs
-(`fork` / `supersede` / `chain` / `status`) and schema extensions
-(`evidence` / `supersedes` / `sub_of` / `chain_after` / `branch_ref`)
-land in phase 2.
+Shipped: `ctx record`, the correction verb `ctx supersede`, the read-side
+`list` / `show`, and the OKF interop pair (`export` / `import`, below).
+The remaining lifecycle verbs (`fork` / `chain` / `status`) and schema
+extensions (`evidence` / `sub_of` / `chain_after` / `branch_ref`) land in
+phase 2.
+
+#### `ctx supersede` — correct an immutable fact
+
+ctx records are immutable on save, so a "correction" is not an in-place
+edit — it is a **new** fact whose `supersedes` field points back at the
+one it replaces:
+
+```bash
+ctx supersede <old-id> --fact "<corrected prose>" [--tag prefix:value]
+              [--by <m>] [--format json|text]
+```
+
+The forward-only link lives on the new (correcting) fact; the old record
+is never touched, so the ledger keeps both and the supersession is
+reconstructable from the link alone. `ctx list` folds the superseded fact
+out by default (showing the current head of each chain); `ctx list --all`
+keeps every fact, marking the superseded ones, and `ctx show <old-id>`
+stays readable and resolves the reverse link at read time.
+
+`ctx show` reports that reverse link as `superseded_by`, **an array of
+ids** (JSON) — empty while the fact is current, and possibly more than one:
+nothing forbids two independent corrections of the same fact, so a fork (A
+superseded by both B and C) is legal and both successors are reported
+rather than silently picking one. Both forks are current heads in the
+default `list`. The reverse link is derived at read time by scanning the
+substrate (the flat per-file layout has no reverse index in phase 2), which
+is fine at the alpha record scale; a persisted index is the planned remedy
+if `chain` pushes the substrate past the junk-drawer threshold.
+
+A chain is allowed (C supersedes B supersedes A): every link points
+strictly backward to an id that already existed, so no cycle can form (the
+domain also rejects a self-supersession outright). And because the newest
+fact can never be superseded — nothing is written after it to point back —
+a non-empty store always has at least one current head; an empty default
+list means the store is genuinely empty. Superseding an id that has no
+record is a recoverable not-found — a correction must point at something
+real, so a dangling link is refused rather than written.
 
 ```bash
 ctx record --fact "<prose>" [--tag prefix:value,prefix:value]
@@ -1775,12 +1812,13 @@ intentional — dedup is a cheap exact-prose guard, not a similarity model.
 selects the bundle format (only `okf` today — the flag is the seam for a
 future second format).
 
-### Status (alpha phase 1)
+### Status (alpha, phase 2 in progress)
 
-Read-side is `ctx list` (newest-first, `--tag` / `--by` filters) +
-`ctx show <id>`, plus `ctx export` (OKF projection). `ctx chain` (phase
-2) is the remaining design test — whether the substrate stays principled
-or drifts into a junk drawer at the 100-record scale.
+Write-side is `ctx record` + `ctx supersede` (corrections as new facts);
+read-side is `ctx list` (newest-first, `--tag` / `--by` / `--all` filters)
++ `ctx show <id>`, plus `ctx export` (OKF projection). `ctx chain` (still
+phase 2) is the remaining design test — whether the substrate stays
+principled or drifts into a junk drawer at the 100-record scale.
 
 For the conceptual framing alongside the other passages, see the
 `## ctx` section of [`AGENT.md`](../AGENT.md).

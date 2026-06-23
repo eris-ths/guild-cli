@@ -44,6 +44,54 @@ export class CtxUseCases {
     fact: string;
     tags?: readonly string[];
   }): Promise<Ctx> {
+    return this.appendFact({ by: input.by, fact: input.fact, tags: input.tags });
+  }
+
+  /**
+   * Supersede an older fact with a correction. Records a *new* fact whose
+   * `supersedes` points back at `oldId`; the old record is left untouched
+   * (immutable substrate). Throws SupersedeTargetMissing if the target id
+   * has no record — a correction must point at something real, and a
+   * dangling link would silently lose the correction's meaning.
+   *
+   * The domain guards shape + self-loop; existence is checked here because
+   * only the application layer holds a repository. A chain is allowed
+   * (B supersedes A, C supersedes B): each link names exactly one parent,
+   * so the graph stays a forest and `latest` resolution walks it without
+   * cycles — every node points strictly backward to an id that already
+   * existed when it was written, so no cycle can form.
+   */
+  async supersede(input: {
+    oldId: string;
+    by: string;
+    fact: string;
+    tags?: readonly string[];
+  }): Promise<Ctx> {
+    const oldId = parseCtxId(input.oldId);
+    if ((await this.repo.findById(oldId)) === null) {
+      throw new SupersedeTargetMissing(oldId);
+    }
+    return this.appendFact({
+      by: input.by,
+      fact: input.fact,
+      tags: input.tags,
+      supersedes: oldId,
+    });
+  }
+
+  /**
+   * Append a new fact to the substrate: allocate the next id for `now`,
+   * build the immutable Ctx, persist it. The single write path shared by
+   * `record` (no link) and `supersede` (a `supersedes` link, validated by
+   * the caller). Keeps id allocation + timestamp authorship consistent
+   * within one write and gives both verbs the same persistence behavior.
+   */
+  private async appendFact(input: {
+    by: string;
+    fact: string;
+    tags: readonly string[] | undefined;
+    supersedes?: string | undefined;
+  }): Promise<Ctx> {
     const now = this.now();
     const existing = await this.repo.listAllIds();
     const id = nextCtxId(existing, now);
@@ -52,6 +100,7 @@ export class CtxUseCases {
       created_by: input.by,
       fact: input.fact,
       tags: input.tags ?? [],
+      supersedes: input.supersedes,
       now: () => now,
     });
     await this.repo.saveNew(ctx);
@@ -61,33 +110,60 @@ export class CtxUseCases {
   /**
    * List recorded facts, newest first, optionally filtered by an exact
    * tag and/or author. Read-only.
+   *
+   * By default superseded facts are folded out (only the surviving head of
+   * each supersession chain is shown), so the everyday list stays the
+   * current view rather than drifting into a junk drawer. `includeAll`
+   * keeps every fact, superseded ones included, for audit / history.
    */
-  async list(filter: { tag?: string; by?: string } = {}): Promise<readonly Ctx[]> {
-    let out = [...(await this.repo.listAll())];
+  async list(
+    filter: { tag?: string; by?: string; includeAll?: boolean } = {},
+  ): Promise<readonly Ctx[]> {
+    const all = [...(await this.repo.listAll())];
+    // A fact is superseded iff some other fact's `supersedes` names it.
+    const supersededIds = new Set<string>();
+    for (const c of all) {
+      if (c.supersedes !== undefined) supersededIds.add(c.supersedes);
+    }
+    let out = all;
+    if (filter.includeAll !== true) {
+      out = out.filter((c) => !supersededIds.has(c.id));
+    }
     if (filter.tag !== undefined) {
       out = out.filter((c) => c.tags.includes(filter.tag!));
     }
     if (filter.by !== undefined) {
       out = out.filter((c) => c.created_by === filter.by);
     }
-    // Newest first: created_at desc, id desc as a stable tiebreak.
-    out.sort((a, b) =>
-      a.created_at < b.created_at
-        ? 1
-        : a.created_at > b.created_at
-          ? -1
-          : a.id < b.id
-            ? 1
-            : a.id > b.id
-              ? -1
-              : 0,
-    );
+    out.sort(byNewestFirst);
     return out;
   }
 
   /** Show a single fact by id, or null if absent. Read-only. */
   async show(id: string): Promise<Ctx | null> {
     return this.repo.findById(id);
+  }
+
+  /**
+   * Find every fact that supersedes `id` — the reverse of the forward-only
+   * `supersedes` link. Read-only; returns [] when `id` is still a current
+   * head (nothing corrects it). Used by `show` to mark a superseded fact
+   * with its successor(s).
+   *
+   * Returns a list, not a single fact, because the link is forward-only and
+   * nothing forbids two independent corrections of the same fact (a fork: A
+   * superseded by both B and C). Reporting only the first would silently
+   * hide the second. Newest-first so the most recent correction reads first.
+   *
+   * Cost is one full hydration scan of the substrate, inherent to the flat
+   * per-file layout (no reverse index in phase 2). Fine at the alpha record
+   * scale; if `chain` lands and the substrate grows past the junk-drawer
+   * threshold the docs warn about, a persisted reverse index is the planned
+   * remedy — see the `## ctx` design notes.
+   */
+  async supersededBy(id: string): Promise<readonly Ctx[]> {
+    const all = await this.repo.listAll();
+    return all.filter((c) => c.supersedes === id).sort(byNewestFirst);
   }
 
   /**
@@ -244,6 +320,32 @@ export class CtxUseCases {
       throw new Error('ctx OKF use cases require an OkfBundlePort (wiring bug)');
     }
     return this.bundle;
+  }
+}
+
+/**
+ * Order facts newest-first: `created_at` descending, with `id` descending
+ * as a stable tiebreak for same-instant writes (the `ctx-…-NNN` suffix
+ * monotonically increases within a day). The single ordering used by every
+ * read surface (`list`, `supersededBy`), so they stay consistent and a
+ * future verb (e.g. `chain`) can reuse the same comparator.
+ */
+function byNewestFirst(a: Ctx, b: Ctx): number {
+  if (a.created_at !== b.created_at) return a.created_at < b.created_at ? 1 : -1;
+  if (a.id !== b.id) return a.id < b.id ? 1 : -1;
+  return 0;
+}
+
+/**
+ * Raised when `supersede` targets an id that has no record. A correction
+ * must point at something real; a dangling link would silently strip the
+ * correction of its referent. The interface layer maps this to a
+ * recoverable not-found that names `ctx list` as the recovery path.
+ */
+export class SupersedeTargetMissing extends Error {
+  constructor(public readonly id: string) {
+    super(`ctx supersede target not found: ${id}`);
+    this.name = 'SupersedeTargetMissing';
   }
 }
 
