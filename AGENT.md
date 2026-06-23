@@ -589,16 +589,18 @@ is a *new* fact whose `supersedes` points back at the old one — the old
 record is never mutated; `ctx list` folds it out by default, `--all` keeps
 it marked, `ctx show <old-id>` resolves the reverse `superseded_by` link as
 an **array** of successor ids — empty while current, more than one when two
-corrections fork the same fact), the read-side `list` / `show`, and the OKF
-interop pair (`export` / `import`, below). The remaining lifecycle verbs
-(`fork` / `chain` / `status`) and schema extensions (`evidence` / `sub_of`
-/ `chain_after` / `branch_ref`) land in phase 2.
+corrections fork the same fact), the read-side `list` / `show` / `chain`
+(one-hop neighborhood: outbound + inbound prose references and the
+supersession links), and the OKF interop pair (`export` / `import`, below).
+The remaining lifecycle verbs (`fork` / `status`) and schema extensions
+(`evidence` / `sub_of` / `chain_after` / `branch_ref`) land in phase 2.
 
 ```bash
 ctx record --fact "<prose>" [--tag prefix:value,prefix:value]
                             [--by <m>] [--format json|text]
-ctx list [--tag prefix:value] [--by <m>] [--format json|text]  # read back, newest first
+ctx list [--tag prefix:value] [--by <m>] [--all] [--format json|text]  # read back, newest first
 ctx show <id> [--format json|text]                             # one fact in full
+ctx chain <id> [--format json|text]                            # one-hop neighborhood
 ```
 
 ctx records live under `<content_root>/ctx/`:
@@ -668,9 +670,11 @@ for what remains: pinned observation, no closure required.
 
 Status: alpha, phase 2 in progress. Write-side is `ctx record` +
 `ctx supersede`; read-side is `ctx list` (newest-first, `--tag` / `--by` /
-`--all` filters) + `ctx show <id>`, plus `ctx export` (OKF projection).
-`ctx chain` still arrives in phase 2 and that's the design test
-(junk-drawer risk vs principled substrate at the 100-record scale).
+`--all` filters), `ctx show <id>`, and `ctx chain <id>` (one-hop reference
+walk), plus `ctx export` (OKF projection). `ctx chain` was the design test
+the roadmap flagged (junk-drawer risk vs principled substrate at the
+100-record scale); it ships as a one-hop, lexical-only walk — deeper walks
+are the reader re-invoking it. Remaining phase-2 verbs: `fork` / `status`.
 
 # Tier: Diagnostic
 

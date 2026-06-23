@@ -6,8 +6,8 @@
 // append-only. See lore/principles/12 for the boundary with adjacent
 // modules.
 //
-// Surface: record / supersede / list / show + OKF export/import. The
-// remaining lifecycle verbs (fork / chain / status) land iteratively in
+// Surface: record / supersede / list / show / chain + OKF export/import.
+// The remaining lifecycle verbs (fork / status) land iteratively in
 // phase 2 as use surfaces what shape they need.
 //
 // AI-first per principle 11: the substrate is machine-parseable JSON /
@@ -26,11 +26,12 @@ import { importCtx, IMPORT_BOOLEAN_FLAGS } from './handlers/importOkf.js';
 import { listCtx, LIST_BOOLEAN_FLAGS } from './handlers/list.js';
 import { showCtx } from './handlers/show.js';
 import { supersedeCtx } from './handlers/supersede.js';
+import { chainCtx } from './handlers/chain.js';
 import { withEntryLock } from '../../../infrastructure/lock/withEntryLock.js';
 import { resolveGuildActor } from '../../../interface/shared/resolveGuildActor.js';
 import { READ_VERBS, WRITE_VERBS, LOCK_EXEMPT_VERBS } from './verbs.js';
 
-const HELP = `ctx — fact accumulation passage (phase 2: + supersede)
+const HELP = `ctx — fact accumulation passage (phase 2: + supersede / chain)
 
 Usage:
   ctx record --fact "<prose>" [--tag tech:foo,status:bar]
@@ -57,6 +58,12 @@ Usage:
                               Show one fact in full. A superseded fact stays
                               readable, marked with its successor.
 
+  ctx chain <id>              [--format json|text]
+                              Show the one-hop neighborhood of a fact:
+                              outbound (ctx ids its prose mentions), inbound
+                              (facts that mention it), and supersession links.
+                              One hop — run chain on a surfaced id to go deeper.
+
   ctx export <dir>            [--as okf] [--force] [--format json|text]
                               Project every fact into an Open Knowledge
                               Format bundle under <dir> (one <id>.md per
@@ -78,10 +85,10 @@ Usage:
   ctx --help                   This help.
   ctx --version                Print version and exit.
 
-Status: \`record\` / \`supersede\` / \`list\` / \`show\` plus the OKF interop
-pair (\`export\` / \`import\`). OKF is an interchange *projection*
+Status: \`record\` / \`supersede\` / \`list\` / \`show\` / \`chain\` plus the OKF
+interop pair (\`export\` / \`import\`). OKF is an interchange *projection*
 (principle 11), not a storage change — the substrate stays YAML.
-Remaining phase-2 verbs: fork / chain / status.
+Remaining phase-2 verbs: fork / status.
 
 Substrate: shares content_root and members/ with gate; ctx-specific
 data goes under <content_root>/ctx/.
@@ -94,17 +101,16 @@ Lore upstream:
 
 // Mirror of the switch below for did-you-mean suggestions. A new verb
 // forgotten here loses its typo hint, doesn't crash anything.
-const CTX_COMMANDS = ['record', 'supersede', 'export', 'import', 'list', 'show'] as const;
+const CTX_COMMANDS = ['record', 'supersede', 'export', 'import', 'list', 'show', 'chain'] as const;
 
 // The phase-2 lifecycle verbs named in HELP / AGENT.md / docs as
 // "arriving in phase 2". A user who read the docs and types one of these
 // deserves a roadmap-aware message ("planned, not yet implemented")
 // rather than the same "unknown verb" a typo gets. Keep in sync with the
-// HELP "remaining phase-2 verbs" line above (record/supersede/list/show
-// shipped — they left this set).
+// HELP "remaining phase-2 verbs" line above (record/supersede/list/show/
+// chain shipped — they left this set).
 const CTX_PHASE2_VERBS: ReadonlySet<string> = new Set([
   'fork',
-  'chain',
   'status',
 ]);
 
@@ -115,7 +121,7 @@ export async function main(argv: readonly string[]): Promise<number> {
   }
   if (isVersionFlag(argv)) {
     process.stdout.write(
-      `ctx (under guild-cli ${getPackageVersion()}) — alpha phase 2 (record / supersede / list / show + OKF export/import)\n`,
+      `ctx (under guild-cli ${getPackageVersion()}) — alpha phase 2 (record / supersede / list / show / chain + OKF export/import)\n`,
     );
     return 0;
   }
@@ -145,6 +151,8 @@ export async function main(argv: readonly string[]): Promise<number> {
         return await listCtx({ uc, config }, args);
       case 'show':
         return await showCtx({ uc, config }, args);
+      case 'chain':
+        return await chainCtx({ uc, config }, args);
       case 'export':
         return await exportCtx({ uc, config }, args);
       case 'import':
@@ -156,19 +164,19 @@ export async function main(argv: readonly string[]): Promise<number> {
         if (cmd !== undefined && CTX_PHASE2_VERBS.has(cmd)) {
           process.stderr.write(
             `ctx: '${cmd}' is a planned phase-2 verb, not yet implemented.\n` +
-              `  current surface: record / supersede / list / show / export / import. See 'ctx --help'.\n`,
+              `  current surface: record / supersede / list / show / chain / export / import. See 'ctx --help'.\n`,
           );
           return 1;
         }
-        // Remaining phase-2 verbs (fork / chain / status) land as use
-        // surfaces their shape; the catalog grows then. Valid verbs today
-        // are record / supersede / list / show / export / import — typos
-        // like `recor` should still get suggested rather than dumping HELP.
+        // Remaining phase-2 verbs (fork / status) land as use surfaces
+        // their shape; the catalog grows then. Valid verbs today are
+        // record / supersede / list / show / chain / export / import —
+        // typos like `recor` should still get suggested rather than HELP.
         const hint = nearestCommand(cmd, CTX_COMMANDS);
         const suggest = hint ? `\n  did you mean: ctx ${hint}?` : '';
         process.stderr.write(
           `ctx: unknown verb: ${cmd}${suggest}\n` +
-            `  see 'ctx --help' for the full verb catalog (record / supersede / list / show / export / import).\n`,
+            `  see 'ctx --help' for the full verb catalog (record / supersede / list / show / chain / export / import).\n`,
         );
         return 1;
       }

@@ -1624,7 +1624,7 @@ outside the in-tree passage.
 For substrate paths and the persona/lense schema reference, see
 the `## devil-review` section of [`AGENT.md`](../AGENT.md).
 
-## ctx — the fourth passage (alpha, phase 2: + supersede)
+## ctx — the fourth passage (alpha, phase 2: + supersede / chain)
 
 `ctx` is the fourth passage under guild, alongside `gate`, `agora`,
 and `devil`. Where gate carries decisions, agora carries narrative,
@@ -1649,8 +1649,8 @@ that don't fit into a verdict, a play, or a review.
 ### Surface
 
 Shipped: `ctx record`, the correction verb `ctx supersede`, the read-side
-`list` / `show`, and the OKF interop pair (`export` / `import`, below).
-The remaining lifecycle verbs (`fork` / `chain` / `status`) and schema
+`list` / `show` / `chain`, and the OKF interop pair (`export` / `import`,
+below). The remaining lifecycle verbs (`fork` / `status`) and schema
 extensions (`evidence` / `sub_of` / `chain_after` / `branch_ref`) land in
 phase 2.
 
@@ -1691,11 +1691,39 @@ list means the store is genuinely empty. Superseding an id that has no
 record is a recoverable not-found — a correction must point at something
 real, so a dangling link is refused rather than written.
 
+#### `ctx chain` — the one-hop neighborhood of a fact
+
+```bash
+ctx chain <id> [--format json|text]
+```
+
+`ctx chain` shows the records adjacent to a fact in one hop, so a reader
+can follow related observations without grepping the substrate. It walks
+four edge kinds, all from a single read:
+
+- **outbound** — ctx ids the root's own prose mentions. Resolved to their
+  facts; a prose mention of an absent id is surfaced as `(referenced but
+  not found)` rather than dropped (records-outlive-writers: a dangling
+  reference is signal). Self-references are ignored.
+- **inbound** — other facts whose prose mentions the root id.
+- **supersedes / superseded by** — the supersession links, surfaced as
+  first-class branches instead of left buried in prose. A fork (two
+  corrections of one fact) shows both under *superseded by*.
+
+The id scanner is the shared `extractReferences` (also behind
+`gate chain`), extended to recognize the `ctx-YYYY-MM-DD-NNN` shape. It
+follows **well-formed** ids only — the same single-hop, lexical-only
+discipline as `gate chain`: to go deeper, run `ctx chain` on a surfaced
+id; the reader drives the depth. A missing root is a recoverable not-found
+that names `ctx list`. An isolated fact (no links in or out) reports an
+empty neighborhood rather than an error.
+
 ```bash
 ctx record --fact "<prose>" [--tag prefix:value,prefix:value]
                             [--by <m>] [--format json|text]
-ctx list   [--tag prefix:value] [--by <m>] [--format json|text]
+ctx list   [--tag prefix:value] [--by <m>] [--all] [--format json|text]
 ctx show   <id> [--format json|text]
+ctx chain  <id> [--format json|text]
 ```
 
 ### Reading facts back (`list` / `show`)
@@ -1815,10 +1843,14 @@ future second format).
 ### Status (alpha, phase 2 in progress)
 
 Write-side is `ctx record` + `ctx supersede` (corrections as new facts);
-read-side is `ctx list` (newest-first, `--tag` / `--by` / `--all` filters)
-+ `ctx show <id>`, plus `ctx export` (OKF projection). `ctx chain` (still
-phase 2) is the remaining design test — whether the substrate stays
-principled or drifts into a junk drawer at the 100-record scale.
+read-side is `ctx list` (newest-first, `--tag` / `--by` / `--all` filters),
+`ctx show <id>`, and `ctx chain <id>` (one-hop neighborhood), plus
+`ctx export` (OKF projection). `ctx chain` was the design test the roadmap
+flagged — whether a reference walk stays principled or drifts into a junk
+drawer at the 100-record scale; it ships as a one-hop, lexical-only walk
+(deeper walks are the reader re-invoking it), with a persisted reverse
+index held in reserve if the flat-scan cost bites. Remaining phase-2 verbs:
+`fork` / `status`.
 
 For the conceptual framing alongside the other passages, see the
 `## ctx` section of [`AGENT.md`](../AGENT.md).
