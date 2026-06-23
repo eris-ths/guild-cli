@@ -41,7 +41,7 @@ gate complete <id> --by <you>
 `<mirror>` is a second persona / different `--by` for the same
 actor (you-as-critic, or another registered agent). Two-Persona
 Devil discipline: even solo, the approver / reviewer is a
-different lense from the executor. The default solo profile sets
+different lense from the executor. The default `standard` profile sets
 `self_approve: allowed` so `--by <you>` works for `approve` and
 `review` too, but the mirror is the discipline the substrate is
 shaped around — when you later flip to `swarm` profile,
