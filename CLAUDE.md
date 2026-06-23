@@ -22,7 +22,10 @@ file-based な coordination substrate を作っている TypeScript CLI。
   "When NOT to use devil")。ただし no-gaps 強制 (全 lense に entry、silent
   gap 禁止) 自体は security 専用でなく、`<content_root>/devil/lenses/*.yaml`
   の extension lense で judgment 軸にも転用できる (#134 G、ComposedLenseCatalog)
-- **ctx** — session 跨ぎの fact accumulation (alpha, phase 1 は `record` のみ)
+- **ctx** — session 跨ぎの fact accumulation (alpha phase 2)。`record` /
+  `supersede` (不変 fact を新 fact で訂正、forward-only link) / `list` (`--all`
+  で superseded も) / `show` / OKF `export`・`import`。残り phase-2: `fork` /
+  `chain` / `status`
 
 Clean Architecture: **Domain → Application → Infrastructure → Interface**
 (`src/` 配下に layer 分割)。`bin/*.mjs` が CLI dispatcher、各 passage の
