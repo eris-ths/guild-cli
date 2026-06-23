@@ -9,12 +9,13 @@ import {
  * ctx's orientation provider. Surfaces the count of recorded facts
  * and the most-recently-created id + timestamp.
  *
- * ctx has no state machine in phase 1 — it is record-only. So
- * `open` is the total count, `suspended` is always 0, and
- * `last_state` is the literal string `'recorded'` (the only state
- * a ctx record can be in). This keeps the cross-passage shape
- * uniform for boot consumers without forcing ctx to invent a
- * lifecycle it doesn't have.
+ * ctx has no state machine by design — a fact is append-only and
+ * verdict-less, so it never transitions (supersede records a *new*
+ * fact rather than mutating the old one; it doesn't add a state). So
+ * `open` is the total count, `suspended` is always 0, and `last_state`
+ * is the literal string `'recorded'` (the only state a ctx record can
+ * be in). This keeps the cross-passage shape uniform for boot consumers
+ * without forcing ctx to invent a lifecycle it doesn't have.
  *
  * Returns null when `<content_root>/ctx/` has no records at all
  * — gate boot omits the entry rather than rendering an empty

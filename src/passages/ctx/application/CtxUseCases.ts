@@ -50,9 +50,9 @@ export interface OkfImportSummary {
 }
 
 /**
- * ctx use cases. Phase 1 shipped `record`; this adds the OKF interop
- * pair (`export` / `import`). The phase-2 lifecycle verbs (fork /
- * supersede / show / list / chain / status) remain separate.
+ * ctx use cases: `record` / `supersede` (write) and `list` / `show` /
+ * `chain` (read), plus the OKF interop pair (`export` / `import`). The
+ * remaining phase-2 lifecycle verbs (fork / status) are not yet here.
  *
  * `now` is injected so tests can pin time and so id-generation and
  * timestamp authorship stay consistent within a single record. The OKF
