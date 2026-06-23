@@ -286,8 +286,11 @@ the action lives in another passage. Example: during a long
 `agora` play, you notice a fact that *could* matter to a future
 gate decision but isn't part of this thread. Drop a `ctx record`
 mentioning the play id and tag it `cross-passage:agora` — the
-fact accumulates outside the play's scope, queryable later when
-phase-2 `ctx list` lands.
+fact accumulates outside the play's scope, queryable later via
+`ctx list --tag cross-passage:agora`. And when you pull up a
+related ctx fact, `ctx chain <id>` surfaces the breadcrumbs that
+name it (inbound) and the ids it names (outbound) in one hop, so
+the side-observation reconnects to its context without a grep.
 
 This pattern keeps the agora play focused on its own thread
 without losing the side-observation, and avoids inflating the

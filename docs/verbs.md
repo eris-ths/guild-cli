@@ -1678,9 +1678,10 @@ nothing forbids two independent corrections of the same fact, so a fork (A
 superseded by both B and C) is legal and both successors are reported
 rather than silently picking one. Both forks are current heads in the
 default `list`. The reverse link is derived at read time by scanning the
-substrate (the flat per-file layout has no reverse index in phase 2), which
-is fine at the alpha record scale; a persisted index is the planned remedy
-if `chain` pushes the substrate past the junk-drawer threshold.
+substrate (the flat per-file layout has no reverse index), which is fine at
+the alpha record scale; `ctx chain` (now shipped) walks the same scan, and a
+persisted reverse index is held in reserve should the flat-scan cost bite
+past the junk-drawer threshold.
 
 A chain is allowed (C supersedes B supersedes A): every link points
 strictly backward to an id that already existed, so no cycle can form (the
