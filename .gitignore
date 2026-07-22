@@ -17,3 +17,7 @@ examples/*/data/
 /issues/
 /agora/
 /ctx/
+# 2026-07-22: swarm 実験が substrate/ という *新しい置き場* を作り、上の4つの
+# root-anchored パターンをすり抜けていた (公開リポに actor 名 + セッション内容 +
+# ローカル絶対パス executing_at_cwd が出るところだった)。方針は同じ — publish しない。
+/substrate/
