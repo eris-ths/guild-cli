@@ -5,6 +5,7 @@ import {
   rejectUnknownFlags,
 } from '../../shared/parseArgs.js';
 import { notFoundMessage } from '../../shared/notFoundHint.js';
+import { ISSUE_SEVERITIES } from '../../../domain/issue/Issue.js';
 import { resolveGuildSessionId } from '../../shared/resolveGuildSessionId.js';
 import { parseExecutorsList } from './request.js';
 import { parseFormat } from '../../shared/parseFormat.js';
@@ -80,7 +81,7 @@ export async function issuesCmd(c: C, args: ParsedArgs): Promise<number> {
       'gate issues needs a subcommand. common ones:\n' +
         '  gate issues list                  # what is open\n' +
         '  gate issues show <id>             # full body + notes\n' +
-        '  gate issues add --from <m> --severity <s> --area <a> --text <s>\n' +
+        '  gate issues add --from <m> --severity <low|med|high|critical> --area <a> --text <s>\n' +
         '  gate issues note <id> --by <m> --text <s>\n' +
         '  full set: add|list|show|note|resolve|defer|start|reopen|promote ' +
         '(gate --help)\n',
@@ -96,7 +97,15 @@ export async function issuesCmd(c: C, args: ParsedArgs): Promise<number> {
   if (sub === 'add') {
     rejectUnknownFlags(args, ISSUES_ADD_KNOWN_FLAGS, 'issues add');
     const from = requireOption(args, 'from', '<m>', 'GUILD_ACTOR');
-    const severity = requireOption(args, 'severity', '<low|med|high>');
+    // Hint is derived from the domain list rather than hand-written: the
+    // previous literal said <low|med|high> and silently omitted `critical`,
+    // which is a valid severity. Aliases (medium/mid/hi/crit/...) are
+    // already handled by parseIssueSeverity in the domain.
+    const severity = requireOption(
+      args,
+      'severity',
+      `<${ISSUE_SEVERITIES.join('|')}>`,
+    );
     const area = requireOption(args, 'area', '<area>');
     // Text resolution mirrors `gate issues note`:
     //   --text <s>       inline short text
