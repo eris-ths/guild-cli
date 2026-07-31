@@ -437,6 +437,136 @@ async def gate_doctor(format: str = "text") -> str:
 
 
 # ---------------------------------------------------------------------------
+# MCP Apps — 判断履歴を「会話の中」に出す窓
+#
+# `io.modelcontextprotocol/ui` 拡張 (MCP spec 2026-07-28 で正式な拡張として登録)。
+# tool の `_meta.ui.resourceUri` が `ui://` を指すと、対応ホストはその HTML を
+# サンドボックス iframe で会話内にレンダリングする。
+#
+# ⚠️ **gate CLI が SOT のまま。これは窓であって本体ではない。**
+#    既存の tool 群も substrate も一切変えない。CLI にできないこと ──
+#    「誰が・いつ・何を決めたか」を *話している流れの隣に置く* ── だけを担う。
+#
+# ⚠️ **ホスト対応はクライアント依存。** 2026-07-31 時点の client-matrix では
+#    Claude (web) / Claude Desktop / VS Code Copilot / Cursor / ChatGPT 他が対応、
+#    **Claude Code (CLI) の行は無い**。非対応ホストでは `_meta` が無視され、
+#    `gate_board` はただのテキスト tool として動く (壊れない)。
+# ---------------------------------------------------------------------------
+
+BOARD_UI_URI = "ui://gate/board"
+
+# ⚠️ **1 枚に同梱する。** MCP Apps は `_meta.ui.csp` で明示しない限り外部オリジンを
+#    読めない。CDN を使わない = 制約への追従であると同時に、example の依存を増やさない。
+_BOARD_HTML = """<!doctype html>
+<meta charset="utf-8">
+<style>
+  :root { color-scheme: light dark; }
+  body { font: 13px/1.65 ui-monospace, SFMono-Regular, Menlo, monospace; margin: 0; padding: 14px; }
+  h1 { font-size: 13px; margin: 0 0 12px; letter-spacing: .06em; opacity: .75; }
+  .e { border-left: 3px solid currentColor; padding: 2px 0 2px 11px; margin: 0 0 11px; }
+  .h { display: flex; gap: 9px; align-items: baseline; flex-wrap: wrap; }
+  .id { font-weight: 700; }
+  .kind { font-size: 11px; padding: 0 6px; border: 1px solid currentColor; border-radius: 3px; opacity: .7; }
+  .at, .by { opacity: .55; font-size: 11px; }
+  .action { margin: 3px 0 0; }
+  .reason { opacity: .72; margin: 2px 0 0; }
+  .note { opacity: .55; margin: 2px 0 0; font-size: 12px; }
+  .empty { opacity: .6; }
+</style>
+<h1>gate — 判断の履歴</h1>
+<div id="root" class="empty">ホストからのデータを待っている…</div>
+<script>
+function esc(s) {
+  // ⚠️ **innerHTML に生の substrate を流さない。** action/reason は人間が書く自由文で、
+  //    山括弧も引用符も入る。ここを飛ばすと substrate の中身が DOM になる。
+  return String(s == null ? '' : s).replace(/[&<>"']/g,
+    c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function render(rows) {
+  const root = document.getElementById('root');
+  if (!Array.isArray(rows) || !rows.length) {
+    root.textContent = '記録なし';
+    return;
+  }
+  root.className = '';
+  root.innerHTML = rows.map(r => `
+    <div class="e">
+      <div class="h">
+        <span class="id">${esc(r.request_id)}</span>
+        <span class="kind">${esc(r.kind)}</span>
+        <span class="by">${esc(r.from)}</span>
+        <span class="at">${esc((r.at || '').slice(0, 16).replace('T', ' '))}</span>
+      </div>
+      <div class="action">${esc(r.action)}</div>
+      ${r.reason ? `<div class="reason">${esc(r.reason)}</div>` : ''}
+      ${r.completion_note ? `<div class="note">↳ ${esc(r.completion_note)}</div>` : ''}
+    </div>`).join('');
+}
+window.addEventListener('message', (e) => {
+  // ⚠️ 仕様の細部 (ホストがどの形で push するか) は未検証なので、
+  //    **受け取れた形を何であれ描く**。想定した形しか見ないと、
+  //    届いているのに空に見えて原因を切り分けられなくなる。
+  const d = e.data;
+  for (const c of [d, d && d.params, d && d.result, d && d.params && d.params.data]) {
+    if (Array.isArray(c)) { render(c); return; }
+    if (c && Array.isArray(c.rows)) { render(c.rows); return; }
+  }
+});
+// 初期表示はサーバが埋め込んだ値。push が来なくても空にしない
+// (届いていないのか描けていないのかを、画面だけで切り分けるため)。
+render(window.__GATE_BOARD__ || null);
+</script>
+"""
+
+
+async def _board_rows(n: int) -> list[dict[str, Any]]:
+    """`gate tail --format json` を読む。**JSON envelope が contract**（principle 11:
+    substrate が contract、text は human projection）なので text を parse しない。"""
+    raw = await _run_gate("tail", str(n), "--format", "json")
+    try:
+        rows = json.loads(raw)
+    except json.JSONDecodeError:
+        return []
+    return rows if isinstance(rows, list) else []
+
+
+@mcp.tool(
+    # ⚠️ **これが MCP Apps の入口。** FastMCP は `meta=` を受け取り `_meta` として送る。
+    #    (低レベル API の `types.Tool` では `meta=` が populate_by_name 無効のため
+    #     黙って捨てられ `_meta` が null になる。あちらは `_meta=` で渡す必要がある)
+    meta={"ui": {"resourceUri": BOARD_UI_URI}},
+)
+async def gate_board(n: int = 30) -> str:
+    """Show recent gate decisions. Renders as an interactive board in hosts that
+    support the MCP Apps extension; falls back to text elsewhere."""
+    rows = await _board_rows(n)
+    if not rows:
+        return "no records"
+    out = []
+    for r in rows:
+        out.append(
+            f"{r.get('request_id', '?')} [{r.get('kind', '?')}] "
+            f"{r.get('from', '?')} {(r.get('at') or '')[:16].replace('T', ' ')}\n"
+            f"  {r.get('action', '')}"
+        )
+    return "\n".join(out)
+
+
+@mcp.resource(
+    BOARD_UI_URI,
+    name="gate board UI",
+    description="gate の判断履歴を時系列で描く HTML (MCP Apps)",
+    mime_type="text/html",
+)
+async def gate_board_ui() -> str:
+    rows = await _board_rows(30)
+    # ⚠️ `</script>` を含む文字列が substrate に入ると HTML を破壊するので、
+    #    JSON 埋め込み時にエスケープする (action/reason は自由文)。
+    payload = json.dumps(rows, ensure_ascii=False).replace("</", "<\\/")
+    return _BOARD_HTML.replace("window.__GATE_BOARD__ || null", payload)
+
+
+# ---------------------------------------------------------------------------
 # Entrypoint
 # ---------------------------------------------------------------------------
 
