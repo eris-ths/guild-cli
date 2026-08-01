@@ -29,6 +29,103 @@ versioned block alongside collected fragments.
 
 _Add entries by dropping a file under `.changelog/next/` (see `.changelog/README.md`). The release script collects them into a versioned block at `npm run changelog:release -- <ver>`._
 
+## [0.7.2] - 2026-08-01
+
+### Changed
+
+- **`guild --help` now discloses the four passages.** `guild` is the
+  admin-side helper for managing actors, so its help listed only
+  member-management verbs — an agent that entered via `guild` had no
+  in-CLI path to the passages where the work actually happens
+  (orientation-disclosure gap, principle 09). The help now names
+  `gate` / `agora` / `devil` / `ctx` with their one-line shape and a
+  `<passage> --help` pointer, and points a newcomer at `gate --help`
+  and `AGENT.md`. Member-management docs are unchanged. Surfaced by a
+  "what if the entry point is guild, not gate?" walkthrough.
+
+### Added
+
+- **`ctx chain <id>` — the second phase-2 ctx verb (read-side).** Shows
+  the one-hop neighborhood of a fact so a reader can follow related
+  observations without grepping the substrate. It walks four edge kinds
+  from a single read: **outbound** (ctx ids the root's prose mentions, each
+  resolved to its fact or surfaced as `(referenced but not found)` rather
+  than dropped), **inbound** (facts whose prose mentions the root),
+  **supersedes** (the fact the root corrects), and **superseded by** (the
+  facts that correct the root — a fork shows more than one). One hop only,
+  like `gate chain`: to go deeper, run `ctx chain` on a surfaced id. A
+  missing root is a recoverable not-found; an isolated fact reports an
+  empty neighborhood rather than an error.
+- The shared id scanner `extractReferences` (also behind `gate chain`) now
+  recognizes the `ctx-YYYY-MM-DD-NNN` id shape as a third kind alongside
+  request and issue ids, returned in a new `ctxIds` field. This also fixes
+  a latent mis-classification: the leading boundary allowed a hyphen, so a
+  `ctx-…` (or `i-…`) id's digits could leak into `requestIds`; capturing
+  the prefix keeps the three kinds disjoint. `gate chain` behavior is
+  unchanged (it does not surface ctx ids). Remaining phase-2 verbs: `fork`
+  / `status`.
+
+- **`gate issues promote` now accepts `--format json|text`.** It is a
+  write verb but previously had no `--format`, so an agent couldn't
+  receive the created request id as JSON — a schema-as-contract gap
+  (principle 10), since every other write verb returns the unified
+  `ok` / `id` / `state` / `message` / `suggested_next` envelope. promote
+  now shares that envelope via `emitWriteResponse`, so its JSON shape is
+  stable with `gate request`. The resolved-issue id rides in `message`
+  (`✓ promoted i-… → … (issue resolved)`), so both the new request id and
+  the resolved issue id stay greppable from the structured output
+  (records-outlive-writers). Text output is unchanged; no `--format`
+  defaults to text (back-compatible). Surfaced by a playbook dogfood pass.
+
+- **`gate_board` — the example MCP server now speaks the MCP Apps extension
+  (`io.modelcontextprotocol/ui`).** The tool carries
+  `_meta.ui.resourceUri` pointing at a `ui://gate/board` resource, so hosts
+  that implement the extension render the decision history as an
+  interactive board inline in the conversation instead of a wall of text.
+  The board shows request id, passage kind, actor, timestamp, action,
+  reason, and completion note per record. Hosts without the extension
+  ignore `_meta` and get `gate_board` as a plain text tool, so nothing
+  breaks — support is per-client (as of 2026-07-31 the published client
+  matrix lists Claude web/Desktop, VS Code Copilot, Cursor and ChatGPT
+  among others; Claude Code is not listed).
+- The board reads `gate tail --format json` rather than parsing text
+  output, following principle 11: the substrate is the contract and text is
+  a human projection. The HTML is self-contained (no CDN) because MCP Apps
+  cannot reach external origins unless they are declared in `_meta.ui.csp`,
+  and because an example should not grow dependencies.
+- **`gate` remains the source of truth.** This adds a window, not a
+  migration: no existing tool, verb, or substrate shape changed. The board
+  is read-only and does the one thing the CLI cannot — put "who decided
+  what, and why" next to the conversation that led there.
+- Substrate values are HTML-escaped before they reach `innerHTML`, and the
+  embedded JSON escapes `</` so an action or reason containing markup
+  cannot break out of the page.
+
+### Fixed
+
+- **Record listings no longer drop the newest records in silence.**
+  `MAX_DIR_ENTRIES` (1000) is a memory guard, but four repositories applied
+  it with a bare `.slice(0, MAX_DIR_ENTRIES)`. A long-lived content_root
+  *does* reach that ceiling — a dogfood instance hit 1006 completed requests
+  and `gate list` / `gate tail` began returning exit 0 with a short list.
+  Records written seconds earlier were absent with no error, no warning and
+  no exit code; `gate show <id>` still returned them, so the writes had
+  succeeded and only the listings had gone blind. Worse, it dropped the
+  wrong end: ids are date-prefixed and the scan is ordered, so slicing from
+  the front discarded the *newest* records — precisely what `tail` exists to
+  show and what a session had just written, while a stale 1000-record window
+  survived. Listings now go through `capDirEntries`, which keeps the cap,
+  takes it from the end so the newest records always survive, preserves
+  ascending order for callers, and warns on stderr naming the directory, the
+  real entry count and how many older entries were dropped. Affects
+  `requests/<state>`, `issues`, `members` and `sessions`. The OKF bundle
+  reader already threw on the same condition; this closes the gap where one
+  constant was loud in one place and mute in four others.
+
+<!-- carried over from pre-fragment [Unreleased] -->
+
+_Add entries by dropping a file under `.changelog/next/` (see `.changelog/README.md`). The release script collects them into a versioned block at `npm run changelog:release -- <ver>`._
+
 ## [0.7.1] - 2026-06-23
 
 ### Changed
