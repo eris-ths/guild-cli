@@ -106,13 +106,21 @@ swarm の詳細は docs/swarm.md。
 | `docs/` | 設計・運用ドキュメント (README からリンク) | ✅ git |
 | `lore/` | principles (16) + traps (8)。`gate lore list` で読める | ✅ git |
 | `.changelog/next/` | per-PR changelog fragment (release 時に折り込み) | ✅ git |
-| `members/` | gate member 登録 (alice/bob 等) | ❌ local-only via `.git/info/exclude` |
-| `substrate/` | agora plays/games の作業領域 | ❌ local-only |
-| `requests/` | gate request YAML records (dogfood 履歴、actor 名含む) | ❌ local-only via `.gitignore` |
-| `.claude/` | worktree shadow / settings | ❌ local-only |
+| `members/` | gate member 登録 | ✅ git — ただし **sample の `alice.yaml` だけ** |
+| `substrate/` | agora plays/games の作業領域 | ❌ local-only via `/substrate/` |
+| `requests/` `issues/` `agora/` `ctx/` | 4 substrate store の dogfood 記録 (actor 名 + セッション内容) | ❌ local-only via root-anchored `/requests/` 等 |
 
-`guild.config.yaml` も local-only。なので fresh clone は素の状態で起動する
-(`gate boot` が register への導線を出す)。
+⚠️ **`members/` と `guild.config.yaml` は ignore されていない** (2026-08-01 実測)。
+自分の actor を `members/` に足すと**そのまま追跡対象になる**ので、
+`git add` する前に何を publish するか確認すること。sample の `alice.yaml` は
+fresh clone で `gate` が素振りできるよう意図的に追跡している。
+
+`.gitignore` が root-anchored (`/requests/`) なのは `examples/*/requests/` の
+fixture を残すため。新しい substrate 置き場を足す時は同じ形で追記する
+(2026-07-22 に `substrate/` がこのパターンをすり抜けた)。
+
+`guild.config.yaml` は追跡されておらず (まだ存在しない)、fresh clone は素の状態で
+起動する — `gate boot` が register への導線を出す。
 
 ## Development workflow
 
