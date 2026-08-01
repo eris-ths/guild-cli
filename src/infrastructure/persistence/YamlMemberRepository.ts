@@ -4,7 +4,7 @@ import { MemberName } from '../../domain/member/MemberName.js';
 import { MemberRepository } from '../../application/ports/MemberRepository.js';
 import { UnrecognizedRecordEntry } from '../../application/ports/UnrecognizedRecordEntry.js';
 import {
-  MAX_DIR_ENTRIES,
+  capDirEntries,
   existsSafe,
   listDirSafe,
   readTextSafe,
@@ -62,11 +62,14 @@ export class YamlMemberRepository implements MemberRepository {
   }
 
   async listAll(): Promise<Member[]> {
-    const files = listDirSafe(this.config.paths.members, '.').filter((f) =>
-      MEMBER_FILE_PATTERN.test(f),
+    const files = capDirEntries(
+      listDirSafe(this.config.paths.members, '.').filter((f) =>
+        MEMBER_FILE_PATTERN.test(f),
+      ),
+      'members',
     );
     const out: Member[] = [];
-    for (const f of files.slice(0, MAX_DIR_ENTRIES)) {
+    for (const f of files) {
       const raw = readTextSafe(this.config.paths.members, f);
       const name = f.replace(/\.yaml$/, '');
       const absSource = join(this.config.paths.members, f);

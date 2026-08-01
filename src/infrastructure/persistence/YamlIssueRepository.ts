@@ -17,7 +17,7 @@ import {
 } from '../../application/ports/IssueRepository.js';
 import { UnrecognizedRecordEntry } from '../../application/ports/UnrecognizedRecordEntry.js';
 import {
-  MAX_DIR_ENTRIES,
+  capDirEntries,
   existsSafe,
   listDirSafe,
   readTextSafe,
@@ -66,9 +66,10 @@ export class YamlIssueRepository implements IssueRepository {
   }
 
   async listAll(): Promise<Issue[]> {
-    const files = listDirSafe(this.config.paths.issues, '.')
-      .filter((f) => FILE_PATTERN.test(f))
-      .slice(0, MAX_DIR_ENTRIES);
+    const files = capDirEntries(
+      listDirSafe(this.config.paths.issues, '.').filter((f) => FILE_PATTERN.test(f)),
+      'issues',
+    );
     const out: Issue[] = [];
     for (const f of files) {
       const raw = readTextSafe(this.config.paths.issues, f);

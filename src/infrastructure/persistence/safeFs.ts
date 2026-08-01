@@ -127,10 +127,47 @@ export function unlinkSafe(base: string, relOrAbs: string): void {
 
 /**
  * Per-directory file cap applied by repository scans. Prevents memory
- * exhaustion on oversized directories — a content_root should never
- * reach this ceiling in normal use.
+ * exhaustion on oversized directories.
+ *
+ * A long-lived content_root *does* reach this ceiling: a dogfood instance hit
+ * 1006 completed requests on 2026-08-01. Callers must go through
+ * {@link capDirEntries} so crossing it is audible.
  */
 export const MAX_DIR_ENTRIES = 1000;
+
+/**
+ * Apply {@link MAX_DIR_ENTRIES}, keeping the newest entries and warning on
+ * stderr when older ones are dropped.
+ *
+ * Two things were wrong with the bare `.slice(0, MAX_DIR_ENTRIES)` this
+ * replaces, and the second is the worse one:
+ *
+ * 1. It was silent. `list` and `tail` returned exit 0 with a short list, so
+ *    records written moments earlier were absent with no error, no warning and
+ *    no exit code — while `show <id>` still returned them, proving the write
+ *    had succeeded and only the listing had gone blind.
+ * 2. It dropped the wrong end. Record ids are date-prefixed and directory
+ *    scans are ordered, so slicing from the front discards the *newest*
+ *    records — precisely what `tail` exists to show and what a session just
+ *    wrote. A stale 1000-record window survived while today's judgments
+ *    vanished.
+ *
+ * So: keep the cap (it is what bounds memory), take it from the end, and say
+ * out loud when anything was dropped. Ordering is preserved, so callers that
+ * assume ascending ids are unaffected.
+ */
+export function capDirEntries(files: string[], label: string): string[] {
+  if (files.length > MAX_DIR_ENTRIES) {
+    const dropped = files.length - MAX_DIR_ENTRIES;
+    process.stderr.write(
+      `warn: ${label}: ${files.length} entries exceed the ${MAX_DIR_ENTRIES} cap — ` +
+        `${dropped} oldest dropped from this listing (newest are kept). ` +
+        `Archive older records to restore full visibility.\n`,
+    );
+    return files.slice(-MAX_DIR_ENTRIES);
+  }
+  return files;
+}
 
 export function listDirSafe(base: string, relOrAbs: string): string[] {
   const p = assertUnder(base, relOrAbs);

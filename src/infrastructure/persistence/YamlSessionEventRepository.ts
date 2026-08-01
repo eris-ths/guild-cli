@@ -8,7 +8,7 @@ import { MemberName } from '../../domain/member/MemberName.js';
 import { SessionEventRepository } from '../../application/session/SessionEventRepository.js';
 import { GuildConfig } from '../config/GuildConfig.js';
 import {
-  MAX_DIR_ENTRIES,
+  capDirEntries,
   existsSafe,
   listDirSafe,
   readTextSafe,
@@ -65,9 +65,10 @@ export class YamlSessionEventRepository implements SessionEventRepository {
   }
 
   async listAll(): Promise<readonly SessionEvent[]> {
-    const files = listDirSafe(this.config.paths.sessions, '.')
-      .filter((f) => FILE_PATTERN.test(f))
-      .slice(0, MAX_DIR_ENTRIES);
+    const files = capDirEntries(
+      listDirSafe(this.config.paths.sessions, '.').filter((f) => FILE_PATTERN.test(f)),
+      'sessions',
+    );
     const out: SessionEvent[] = [];
     for (const f of files) {
       const raw = readTextSafe(this.config.paths.sessions, f);

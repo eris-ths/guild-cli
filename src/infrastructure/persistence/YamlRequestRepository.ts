@@ -38,7 +38,7 @@ function lstatSafe(path: string): Stats | null {
   }
 }
 import {
-  MAX_DIR_ENTRIES,
+  capDirEntries,
   existsSafe,
   listDirSafe,
   readTextSafe,
@@ -86,9 +86,12 @@ export class YamlRequestRepository implements RequestRepository {
   }
 
   async listByState(state: RequestState): Promise<Request[]> {
-    const files = listDirSafe(this.config.paths.requests, state)
-      .filter((f) => REQUEST_ID_FILE_PATTERN.test(f))
-      .slice(0, MAX_DIR_ENTRIES);
+    const files = capDirEntries(
+      listDirSafe(this.config.paths.requests, state).filter((f) =>
+        REQUEST_ID_FILE_PATTERN.test(f),
+      ),
+      `requests/${state}`,
+    );
     const out: Request[] = [];
     for (const f of files) {
       const rel = join(state, f);
