@@ -19,7 +19,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   capDirEntries,
+  maxDirEntries,
   MAX_DIR_ENTRIES,
+  MAX_DIR_ENTRIES_CEILING,
 } from '../../src/infrastructure/persistence/safeFs.js';
 
 /** Run fn with stderr captured; returns whatever it wrote. */
@@ -104,4 +106,90 @@ test('capDirEntries preserves ascending order after capping', () => {
   });
   const sorted = [...out].sort();
   assert.deepEqual(out, sorted, 'callers that assume sorted ids must be unaffected');
+});
+
+// --- GUILD_MAX_DIR_ENTRIES override ---------------------------------------
+//
+// The 1000 default bounds memory for a fresh clone, but a long-lived
+// content_root outgrows it legitimately (a request YAML is a few KB). The
+// override exists so such an instance can keep its records whole instead of
+// listing blind.
+//
+// Verifies:
+//   6. an unset/empty env keeps the documented default
+//   7. a raised value actually widens the window (the cap is read per call,
+//      not frozen at module load)
+//   8. a malformed value THROWS. Falling back to 1000 would silently restore
+//      the exact failure this file is a regression test for.
+//   9. the ceiling holds, so the override cannot remove the bound entirely.
+
+function withEnv(value: string | undefined, fn: () => void): void {
+  const had = Object.hasOwn(process.env, 'GUILD_MAX_DIR_ENTRIES');
+  const prev = process.env.GUILD_MAX_DIR_ENTRIES;
+  if (value === undefined) delete process.env.GUILD_MAX_DIR_ENTRIES;
+  else process.env.GUILD_MAX_DIR_ENTRIES = value;
+  try {
+    fn();
+  } finally {
+    if (had) process.env.GUILD_MAX_DIR_ENTRIES = prev;
+    else delete process.env.GUILD_MAX_DIR_ENTRIES;
+  }
+}
+
+test('maxDirEntries falls back to the default when unset or empty', () => {
+  withEnv(undefined, () => assert.equal(maxDirEntries(), MAX_DIR_ENTRIES));
+  withEnv('', () => assert.equal(maxDirEntries(), MAX_DIR_ENTRIES));
+  withEnv('   ', () => assert.equal(maxDirEntries(), MAX_DIR_ENTRIES));
+});
+
+test('GUILD_MAX_DIR_ENTRIES raises the effective cap for capDirEntries', () => {
+  const input = files(MAX_DIR_ENTRIES + 500);
+  withEnv(String(MAX_DIR_ENTRIES + 1000), () => {
+    let out: string[] = [];
+    const err = captureStderr(() => {
+      out = capDirEntries(input, 'requests/completed');
+    });
+    assert.equal(out.length, input.length, 'nothing is dropped under the raised cap');
+    assert.equal(err, '', 'and nothing is warned about');
+  });
+});
+
+test('a raised cap still warns, naming the raised number, once exceeded', () => {
+  const input = files(2100);
+  withEnv('2000', () => {
+    let out: string[] = [];
+    const err = captureStderr(() => {
+      out = capDirEntries(input, 'requests/completed');
+    });
+    assert.equal(out.length, 2000);
+    assert.match(err, /2000 cap/, 'the warning reports the effective cap, not the default');
+    assert.match(err, /100 oldest dropped/);
+    assert.match(err, /GUILD_MAX_DIR_ENTRIES/, 'and names the knob that changes it');
+  });
+});
+
+test('GUILD_MAX_DIR_ENTRIES rejects malformed values instead of silently defaulting', () => {
+  for (const bad of ['abc', '0', '-5', '10.5', String(MAX_DIR_ENTRIES_CEILING + 1)]) {
+    withEnv(bad, () => {
+      assert.throws(
+        () => maxDirEntries(),
+        /GUILD_MAX_DIR_ENTRIES/,
+        `"${bad}" must be rejected loudly, not quietly reset to ${MAX_DIR_ENTRIES}`,
+      );
+    });
+  }
+});
+
+test('the ceiling itself is accepted', () => {
+  withEnv(String(MAX_DIR_ENTRIES_CEILING), () =>
+    assert.equal(maxDirEntries(), MAX_DIR_ENTRIES_CEILING));
+});
+
+test('numeric spellings that are genuinely integral are accepted', () => {
+  // '1e4' was in the reject list on first writing and failed the suite:
+  // Number('1e4') is 10000 and passes Number.isInteger. Rejecting it would
+  // have been the test dictating a restriction the feature has no reason to
+  // impose — the contract is "an integer in range", not "written in decimal".
+  withEnv('1e4', () => assert.equal(maxDirEntries(), 10000));
+  withEnv(' 2500 ', () => assert.equal(maxDirEntries(), 2500));
 });

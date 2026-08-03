@@ -136,7 +136,46 @@ export function unlinkSafe(base: string, relOrAbs: string): void {
 export const MAX_DIR_ENTRIES = 1000;
 
 /**
- * Apply {@link MAX_DIR_ENTRIES}, keeping the newest entries and warning on
+ * Hard ceiling for {@link GUILD_MAX_DIR_ENTRIES_ENV}. The cap exists to bound
+ * memory, so the override must not be able to remove the bound entirely — an
+ * operator who needs more than this should archive, not raise the number.
+ */
+export const MAX_DIR_ENTRIES_CEILING = 100_000;
+
+export const GUILD_MAX_DIR_ENTRIES_ENV = 'GUILD_MAX_DIR_ENTRIES';
+
+/**
+ * Effective per-directory cap: {@link MAX_DIR_ENTRIES} unless the operator
+ * raises it via `GUILD_MAX_DIR_ENTRIES`.
+ *
+ * The default stays at 1000 deliberately. A fresh clone should not start out
+ * willing to read an unbounded directory into memory, and a long-lived
+ * content_root that outgrows the default is a real signal — the warning from
+ * {@link capDirEntries} is the intended first response, and archiving is the
+ * intended second. The override exists for instances that have decided their
+ * records are small enough to keep whole (a request YAML is a few KB, so a few
+ * thousand of them is tens of MB, not gigabytes).
+ *
+ * Malformed values are rejected loudly rather than silently falling back: a
+ * typo that quietly restores the 1000 cap would reproduce exactly the failure
+ * this cap was already fixed for once — a listing going blind with exit 0.
+ */
+export function maxDirEntries(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = env[GUILD_MAX_DIR_ENTRIES_ENV];
+  if (raw === undefined || raw.trim() === '') return MAX_DIR_ENTRIES;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 1 || n > MAX_DIR_ENTRIES_CEILING) {
+    throw new Error(
+      `${GUILD_MAX_DIR_ENTRIES_ENV}=${raw} is not usable — expected an integer ` +
+        `between 1 and ${MAX_DIR_ENTRIES_CEILING}. Unset it to use the default ` +
+        `of ${MAX_DIR_ENTRIES}.`,
+    );
+  }
+  return n;
+}
+
+/**
+ * Apply {@link maxDirEntries}, keeping the newest entries and warning on
  * stderr when older ones are dropped.
  *
  * Two things were wrong with the bare `.slice(0, MAX_DIR_ENTRIES)` this
@@ -157,14 +196,16 @@ export const MAX_DIR_ENTRIES = 1000;
  * assume ascending ids are unaffected.
  */
 export function capDirEntries(files: string[], label: string): string[] {
-  if (files.length > MAX_DIR_ENTRIES) {
-    const dropped = files.length - MAX_DIR_ENTRIES;
+  const cap = maxDirEntries();
+  if (files.length > cap) {
+    const dropped = files.length - cap;
     process.stderr.write(
-      `warn: ${label}: ${files.length} entries exceed the ${MAX_DIR_ENTRIES} cap — ` +
+      `warn: ${label}: ${files.length} entries exceed the ${cap} cap — ` +
         `${dropped} oldest dropped from this listing (newest are kept). ` +
-        `Archive older records to restore full visibility.\n`,
+        `Archive older records, or raise ${GUILD_MAX_DIR_ENTRIES_ENV}, ` +
+        `to restore full visibility.\n`,
     );
-    return files.slice(-MAX_DIR_ENTRIES);
+    return files.slice(-cap);
   }
   return files;
 }

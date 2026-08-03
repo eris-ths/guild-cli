@@ -35,7 +35,7 @@ import {
   assertUnder,
   readTextSafe,
   writeTextSafe,
-  MAX_DIR_ENTRIES,
+  maxDirEntries,
 } from '../persistence/safeFs.js';
 import { serializeOkfDocument, parseOkfDocument } from './OkfFrontmatter.js';
 
@@ -124,15 +124,18 @@ export class FsOkfBundleRepository implements OkfBundlePort {
   /**
    * Recursively collect relative paths of `.md` files under `relDir`.
    * Symlinks (file or directory) are skipped — the walk never leaves the
-   * bundle root. Entries are bounded by MAX_DIR_ENTRIES per directory to
-   * mirror the substrate's oversized-directory guard.
+   * bundle root. Entries are bounded per directory to mirror the substrate's
+   * oversized-directory guard, and the mirror is deliberate: this reads the
+   * same effective cap (`GUILD_MAX_DIR_ENTRIES`), so raising it for a large
+   * content_root cannot leave import stricter than the store it feeds.
    */
   private collectMdFiles(baseAbs: string, relDir: string): string[] {
     const dirAbs = relDir === '' ? baseAbs : join(baseAbs, relDir);
     const entries = readdirSync(dirAbs, { withFileTypes: true });
-    if (entries.length > MAX_DIR_ENTRIES) {
+    const cap = maxDirEntries();
+    if (entries.length > cap) {
       throw new DomainError(
-        `OKF bundle directory exceeds ${MAX_DIR_ENTRIES} entries: ${dirAbs}`,
+        `OKF bundle directory exceeds ${cap} entries: ${dirAbs}`,
         'dir',
       );
     }
