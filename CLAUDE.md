@@ -10,7 +10,7 @@ file-based な coordination substrate を作っている TypeScript CLI。
 
 ## この repo は何か
 
-4 つの passage を持つ public CLI:
+5 つの passage を持つ public CLI:
 
 - **gate** — request → approve → execute → complete の wave coordination
   + claim/witness の cross-session stake
@@ -27,6 +27,17 @@ file-based な coordination substrate を作っている TypeScript CLI。
   で superseded も) / `show` / `chain` (1-hop の参照近傍: prose 内 ctx-id
   outbound・inbound + supersede リンク) / OKF `export`・`import`。残り phase-2:
   `fork` / `status`
+- **delta** — deposit (結論は出たが、まだどの軸にも届いていないもの) の
+  堆積と分流 (alpha)。`add` / `list` / `deliver` / `show`。agora (思考が
+  未了) と ctx (fact として着地済み) の間に立つ ── この2つを混ぜると
+  読み手が「まだ分からない」と「分かっていて書いていない」を区別できなくなる。
+  `add` は `--text` だけ必須 (投げる側は作業中断中なので、必須フラグを
+  増やすほど堆積の口が使われなくなる)。`list` は **oldest-first** で
+  `ctx list` と逆 ── backlog は drain するために読むので、最も待たされた
+  ものが画面外へ流れてはいけない。`deliver` は一度きり (再ルートは
+  この deposit を引用する新しい deposit であって、行き先の上書きではない)。
+  **「全部振り分ける」verb は意図的に無い** — どこへ届けるかは judgment で、
+  judgment は著者付きで gate に残るもの
 
 Clean Architecture: **Domain → Application → Infrastructure → Interface**
 (`src/` 配下に layer 分割)。`bin/*.mjs` が CLI dispatcher、各 passage の
@@ -108,7 +119,7 @@ swarm の詳細は docs/swarm.md。
 | `.changelog/next/` | per-PR changelog fragment (release 時に折り込み) | ✅ git |
 | `members/` | gate member 登録 | ✅ git — ただし **sample の `alice.yaml` だけ** |
 | `substrate/` | agora plays/games の作業領域 | ❌ local-only via `/substrate/` |
-| `requests/` `issues/` `agora/` `ctx/` `observations/` | substrate store の dogfood 記録 (actor 名 + セッション内容)。件数は `.gitignore` の root-anchored 行が正 — ここに数を書くと足すたび腐る | ❌ local-only via root-anchored `/requests/` 等 |
+| `requests/` `issues/` `agora/` `ctx/` `observations/` `delta/` | substrate store の dogfood 記録 (actor 名 + セッション内容)。件数は `.gitignore` の root-anchored 行が正 — ここに数を書くと足すたび腐る | ❌ local-only via root-anchored `/requests/` 等 |
 
 ⚠️ **`members/` と `guild.config.yaml` は ignore されていない** (2026-08-01 実測)。
 自分の actor を `members/` に足すと**そのまま追跡対象になる**ので、

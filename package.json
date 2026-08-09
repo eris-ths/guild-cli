@@ -39,6 +39,7 @@
     "agora": "node bin/agora.mjs",
     "devil": "node bin/devil.mjs",
     "ctx": "node bin/ctx.mjs",
+    "delta": "node bin/delta.mjs",
     "changelog:release": "node scripts/changelog-release.mjs",
     "changelog:preview": "node scripts/changelog-release.mjs --dry-run"
   },

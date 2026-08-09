@@ -10,13 +10,17 @@ examples/*/data/
 
 # Local gate dogfood records (actor names + session content — do not publish)
 # Root-anchored so examples/*/requests/ + examples/*/issues/ + examples/*/agora/
-# + examples/*/ctx/ fixtures stay tracked. Same rationale across all four
-# substrate stores — issues, agora plays and ctx facts carry actor names and
-# free-form session content the same way requests do.
+# + examples/*/ctx/ fixtures stay tracked. Same rationale across all five
+# substrate stores — issues, agora plays, ctx facts and delta deposits carry
+# actor names and free-form session content the same way requests do.
 /requests/
 /issues/
 /agora/
 /ctx/
+# 2026-08-09: delta passage を足した時点で同時に追記。上のコメントが名指しで
+# 警告していた「新しい置き場がパターンをすり抜ける」型を、追加と同じ commit で
+# 塞ぐ。deposit は最も無防備な substrate — 判断の前の生の走り書きが入る。
+/delta/
 # 2026-07-22: swarm 実験が substrate/ という *新しい置き場* を作り、上の4つの
 # root-anchored パターンをすり抜けていた (公開リポに actor 名 + セッション内容 +
 # ローカル絶対パス executing_at_cwd が出るところだった)。方針は同じ — publish しない。
