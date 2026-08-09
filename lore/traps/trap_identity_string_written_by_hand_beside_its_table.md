@@ -50,9 +50,16 @@ Flag any change that adds or edits:
   implementations; `windows=20`.
 - **A doc table enumerating a runtime surface** where the runtime
   surface is separately enumerable. This repo already treats this as a
-  live risk — `tests/docs/pluginSchemaDocSync.test.ts` exists precisely
-  to bind `docs/plugin-schema.md` to the shipped contract. Extend that
-  reflex to new tables rather than adding untethered ones.
+  live risk, and its existing answer is the model to copy:
+  `tests/docs/pluginSchemaDocSync.test.ts` (#283) binds
+  `docs/plugin-schema.md` to the shipped contract **bidirectionally** —
+  a new `Request` getter that appears in neither the doc tables nor the
+  explicit "intentionally undocumented" list fails, *and* a
+  `request.NAME` reference in the doc with no matching getter fails.
+  It reads the emitted `.d.ts` rather than a hand-kept list, so the
+  expectation is derived from the same structure the code is. That is
+  exactly the fix shape below, already shipped. Extend the reflex to
+  new tables rather than adding untethered ones.
 - **A test that pins the summary with its own hardcoded literal.** The
   check must derive its expectation from the same structure the code
   derives from; otherwise the literal has merely moved into the test.

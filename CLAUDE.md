@@ -104,7 +104,7 @@ swarm の詳細は docs/swarm.md。
 | `bin/*.mjs` | CLI entrypoint dispatcher + `bin/_lib/` の plain .mjs helper | ✅ git |
 | `examples/` | sample guild instances (各種 config パターン) | ✅ git |
 | `docs/` | 設計・運用ドキュメント (README からリンク) | ✅ git |
-| `lore/` | principles (16) + traps (8)。`gate lore list` で読める | ✅ git |
+| `lore/` | principles + traps。件数は `gate lore list` が正 (ここに数を書くと足すたび腐る — `lore/traps/trap_identity_string_written_by_hand_beside_its_table.md`) | ✅ git |
 | `.changelog/next/` | per-PR changelog fragment (release 時に折り込み) | ✅ git |
 | `members/` | gate member 登録 | ✅ git — ただし **sample の `alice.yaml` だけ** |
 | `substrate/` | agora plays/games の作業領域 | ❌ local-only via `/substrate/` |

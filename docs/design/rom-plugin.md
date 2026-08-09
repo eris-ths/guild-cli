@@ -84,6 +84,11 @@ line from the engine published inside
 designing a new one is deliberate: the format has running code on both
 sides of it, and its stability has been measured (see § Provenance).
 
+**The key set below is the contract; the values are illustrative.** Only
+`cost.instrs` and `engine.windows` / `engine.feat` are reproduced from
+recorded runs — the remaining numbers are placeholders shaped like real
+ones, and should not be read as measurements.
+
 ```jsonc
 {
   "v": 1,
@@ -94,17 +99,17 @@ sides of it, and its stability has been measured (see § Provenance).
   },
   "cost": {
     "instrs": 1812458726,                // deterministic: same artifact ⇒ same number
-    "hostcalls": 41,
-    "mempeak_pages": 528,
+    "hostcalls": 41,                     // (illustrative)
+    "mempeak_pages": 528,                // (illustrative)
     "mode": "verify"
   },
   "io": {
-    "out_bytes": 230415,
+    "out_bytes": 230415,                 // (illustrative)
     "out_fnv1a": "0x8f2ad431"            // determinism anchor for the output itself
   },
   "capabilities": {
     "declared": 20,                      // what the engine offered
-    "used": 3,                           // what this run actually touched
+    "used": 3,                           // what this run actually touched  (illustrative)
     "used_names": [
       { "name": "fd_write", "count": 12 },
       { "name": "fd_read",  "count":  1 },
@@ -151,9 +156,11 @@ already numbers.
 
 Deliberately left open: whether the envelope is stored inline on the
 request record, referenced by digest, or emitted as a distinct
-substrate kind. That question depends on the record-size discipline in
-`docs/storage-format.md` and should be settled with a dogfood
-observation rather than in advance.
+substrate kind. `docs/storage-format.md` does not currently state a
+general per-record size discipline — the only bound it names is the
+inbox FIFO cap (`MAX_INBOX_SIZE`) — so this choice would be *setting* a
+precedent rather than following one. That is a reason to settle it with
+a dogfood observation rather than in advance.
 
 ## Provenance of the reference implementation
 
@@ -171,16 +178,25 @@ argument above leans on "this already works."
   diverged substantially — the published copy is a pre-refactor
   monolith; the canonical side has since split into separate modules
   and grown additional capability windows.
-- **The envelope itself has not diverged.** Both sides emit
-  `[agent] {"v":1,…}` with the same keys and the same version. Measured
-  2026-08-09.
+- **The envelope itself has not diverged at all.** The function that
+  emits it (`reportAgent`, 90 lines) is **byte-identical** on both
+  sides — not merely same-keyed, same-versioned, or compatible.
+  Measured 2026-08-09 by extracting the function from each tree and
+  comparing (`cmp`, zero difference).
 
 That last point is the actual argument for standardizing this
-particular shape: two implementations drifted by thousands of lines
-without the contract between them moving. A contract that survives that
-is a contract worth writing down — and writing it down here is what
-turns an accident into a guarantee, since a `v` field with a specified
-meaning can be violated loudly instead of silently.
+particular shape: two implementations drifted by thousands of lines —
+across a module split and a set of added capabilities — and the
+reporting surface between them did not move by one byte. A contract
+that survives that is a contract worth writing down, and writing it
+down here is what turns an accident into a guarantee: a `v` field with
+a specified meaning can be violated loudly instead of silently.
+
+The honest caveat is that byte-identity across a fork is *evidence of
+stability, not proof of it* — the two trees share an ancestor and one
+author. What it rules out is the failure mode that matters most here:
+a contract that looks stable only because nobody has stressed it. This
+one has been carried through a refactor that rewrote its surroundings.
 
 It also sets the boundary correctly. `guild-cli` depending on a
 *contract* is durable; `guild-cli` depending on a *copy of an engine
