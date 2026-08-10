@@ -43,7 +43,18 @@ const ISSUES_PROMOTE_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'reason',
   'format',
 ]);
-const ISSUES_NOTE_KNOWN_FLAGS: ReadonlySet<string> = new Set(['by', 'text']);
+// `--note` is accepted as an alias of `--text` here, and `--text` as an
+// alias of `--note` on the transition sub-verbs below. Both sub-verbs
+// attach the same thing — free-form prose onto an issue — under two
+// different flag names, so whichever one you learn first is wrong half
+// the time. Same class as the `issues add` positional/`--text`
+// asymmetry fixed earlier: the muscle memory is built by the sibling
+// verb, and the parser is the only thing that disagrees.
+const ISSUES_NOTE_KNOWN_FLAGS: ReadonlySet<string> = new Set([
+  'by',
+  'text',
+  'note',
+]);
 // `gate issues resolve/defer/start/reopen` take `--by <m>` (or fall
 // back to GUILD_ACTOR) so the state_log audit entry can record who
 // ran the transition. See Sec H3 (state_log per transition).
@@ -53,6 +64,7 @@ const ISSUES_NOTE_KNOWN_FLAGS: ReadonlySet<string> = new Set(['by', 'text']);
 const ISSUES_TRANSITION_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'by',
   'note',
+  'text',
 ]);
 
 export async function issuesCmd(c: C, args: ParsedArgs): Promise<number> {
@@ -267,7 +279,7 @@ export async function issuesCmd(c: C, args: ParsedArgs): Promise<number> {
     }
     const by = requireOption(args, 'by', '<m>', 'GUILD_ACTOR');
     const invokedBy = resolveInvokedBy(by, `issues ${sub}`, id);
-    const note = optionalOption(args, 'note');
+    const note = optionalOption(args, 'note') ?? optionalOption(args, 'text');
     const issue = await c.issueUC.setState(id, nextState, by, invokedBy, note);
     process.stdout.write(`✓ issue ${issue.id.value}: → ${nextState} by ${by}\n`);
     return 0;
@@ -461,7 +473,8 @@ async function issuesNote(c: C, args: ParsedArgs): Promise<number> {
   //   --text <s>       inline short note
   //   --text -         STDIN until EOF
   //   <positional>     everything after the id
-  const textOpt = optionalOption(args, 'text');
+  // `--note` is the accepted alias (see ISSUES_NOTE_KNOWN_FLAGS).
+  const textOpt = optionalOption(args, 'text') ?? optionalOption(args, 'note');
   const positional = args.positional.slice(2).join(' ');
   let text: string;
   if (textOpt === '-') {

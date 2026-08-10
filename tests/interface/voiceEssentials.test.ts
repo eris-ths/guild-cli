@@ -136,3 +136,78 @@ test('gate --help --essentials --all: --all wins (full catalog)', () => {
     // for the curation).
   } finally { cleanup(); }
 });
+
+// ── `verbs` is optional (2026-08-10) ────────────────────────────────
+//
+// A voice that only curates `essentials` has no narration to declare,
+// and `docs/eris-playbook.md` says all four sections are optional. The
+// loader disagreed: it rejected any plugin whose `verbs` was not an
+// object, and the `--essentials` path swallowed the rejection — so the
+// deployment silently rendered the plain profile help. The only way to
+// see the reason was to import the loader by hand.
+//
+// Two pins, because the bug needed both to be caught: the plugin must
+// load, and a plugin that genuinely fails must say so on stderr.
+
+function bootstrapVoiceSource(source: string): {
+  root: string;
+  cleanup: () => void;
+} {
+  const root = makeTempRoot('guild-voice-optional-');
+  writeFileSync(
+    join(root, 'guild.config.yaml'),
+    'content_root: .\n' +
+      'host_names: [human]\n' +
+      'plugins:\n' +
+      '  trusted: true\n' +
+      '  voices:\n' +
+      '    - plugins/voices/solo.mjs\n',
+  );
+  mkdirSync(join(root, 'members'));
+  mkdirSync(join(root, 'plugins', 'voices'), { recursive: true });
+  writeFileSync(join(root, 'plugins', 'voices', 'solo.mjs'), source);
+  writeFileSync(join(root, '.guild-voice'), 'solo\n');
+  return { root, cleanup: () => rmSync(root, { recursive: true, force: true }) };
+}
+
+test('voice plugin with no `verbs` section still loads and curates essentials', () => {
+  const { root, cleanup } = bootstrapVoiceSource(
+    `export default {
+  name: 'solo',
+  essentials: { verbs: ['boot', 'issues'], note: 'no narration here' },
+};
+`,
+  );
+  try {
+    const r = runGate(root, ['--help', '--essentials'], { GUILD_VOICE: '' });
+    assert.equal(r.status, 0);
+    assert.match(r.stdout, /ESSENTIALS curated by voice "solo"/);
+    assert.match(r.stdout, /no narration here/);
+    assert.equal(
+      r.stderr.includes('voice plugin not loaded'),
+      false,
+      'a valid essentials-only plugin must not report a load failure',
+    );
+  } finally {
+    cleanup();
+  }
+});
+
+test('a voice plugin the loader rejects is reported on stderr, not swallowed', () => {
+  // `verbs` present but not an object — still invalid, and now the
+  // operator gets told which file and why instead of a plain help page.
+  const { root, cleanup } = bootstrapVoiceSource(
+    `export default { name: 'solo', verbs: 'not-an-object' };\n`,
+  );
+  try {
+    const r = runGate(root, ['--help', '--essentials'], { GUILD_VOICE: '' });
+    assert.equal(r.status, 0, 'a broken voice must not block help');
+    assert.match(r.stderr, /voice plugin not loaded/);
+    assert.match(r.stderr, /solo\.mjs/);
+    assert.match(r.stderr, /verbs must be an object/);
+    // Help still renders — degraded, not dead.
+    assert.match(r.stdout, /showing: BASE/);
+  } finally {
+    cleanup();
+  }
+});

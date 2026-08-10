@@ -10,10 +10,17 @@
 // are buried in the noise.
 //
 // Tiered model:
-//   BASE          — the 14 verbs every operator needs.
-//   COORDINATION  — cross-session stake + wave-level visibility (5).
-//   EXTRA         — everything else (issues, messages, calibration,
+//   BASE          — what every operator needs, solo or not.
+//   COORDINATION  — cross-session stake + wave-level visibility.
+//   EXTRA         — everything else (messages, calibration,
 //                   rest/wake/farewell, transcript, templates, ...).
+//
+// No membership list or count appears in this file's prose. `SECTIONS`
+// below is the structure; `visibleVerbs()` is the derivation. A tally
+// written beside a table it summarises drifts on the first edit that
+// forgets it — this one did, three ways at once (see `lore/traps/
+// trap_identity_string_written_by_hand_beside_its_table.md`). Ask the
+// code: `gate --help` / `gate --help --all`, or `visibleVerbs()`.
 //
 // Default surface is profile-driven:
 //   profile=standard  → BASE only
@@ -39,18 +46,18 @@ interface Section {
   readonly entries: readonly VerbEntry[];
 }
 
-// Verb -> tier mapping. The lists below are authoritative for the
-// design lock (issue #324). Adding a new verb without an entry just
-// means it never appears in `gate --help`; the dispatch table in
-// `index.ts` is the single source of truth for runtime behaviour.
+// Verb -> tier mapping — authoritative for the design lock (issue
+// #324) and the ONLY place tier membership is stated. Adding a new
+// verb without an entry just means it never appears in `gate --help`;
+// the dispatch table in `index.ts` is the single source of truth for
+// runtime behaviour.
 //
-// BASE (14): request, approve, execute, complete, fail, review,
-//            show, list, tail, boot, register, doctor, fast-track,
-//            schema
-// COORDINATION (6): claim, witness, unwitness, wave-status,
-//                   swarm-status, slice-complete (slice-complete is
-//                   forthcoming and intentionally absent from the
-//                   help body).
+// Do not restate the membership as a comment beside this table. The
+// previous header did, and every one of the three copies was wrong:
+// the prose said BASE was 14 while 17 shipped, the tier headline said
+// COORDINATION was 5 while the enumeration below it said 6, and the
+// test that pinned it carried a fourth hand-typed list of 15. Read the
+// tiers off `visibleVerbs()`; the tests derive from it now.
 
 const SECTIONS: readonly Section[] = [
   {
@@ -169,7 +176,9 @@ const SECTIONS: readonly Section[] = [
         tier: 'base',
         text:
           '  gate review <id> --by <m> --lense <l> --verdict <v>\n' +
-          '                   [--comment <s> | --comment - | <comment>] [--dry-run]',
+          '                   [--note <s> | --note - | <comment>] [--dry-run]\n' +
+          '                       --comment is a deprecated alias of --note\n' +
+          '                       (still accepted; prefer --note in new call sites).',
       },
       {
         tier: 'extra',
@@ -270,13 +279,13 @@ const SECTIONS: readonly Section[] = [
     heading: 'Issues:',
     entries: [
       {
-        tier: 'extra',
+        tier: 'base',
         text:
           '  gate issues add --from <m> --severity <s> --area <a>\n' +
           '                  [--text <s> | --text - | <text>]',
       },
       {
-        tier: 'extra',
+        tier: 'base',
         text:
           '  gate issues list [--state <s>] [--format json|text]\n' +
           '                       Default --state is open (worklist semantic).\n' +
@@ -286,16 +295,16 @@ const SECTIONS: readonly Section[] = [
           '                       status report different scopes on purpose.',
       },
       {
-        tier: 'extra',
+        tier: 'base',
         text: '  gate issues resolve|defer|start|reopen <id>',
       },
       {
-        tier: 'extra',
+        tier: 'base',
         text:
           '  gate issues note <id> --by <m> [--text <s> | --text - | <text>]',
       },
       {
-        tier: 'extra',
+        tier: 'base',
         text:
           '  gate issues promote <id> --from <m> [--executors a[,b,...]] [--auto-review <m>]\n' +
           '                                      [--action <a>] [--reason <r>]',
@@ -464,7 +473,7 @@ const SECTIONS: readonly Section[] = [
           '                       read" sibling of transcript.',
       },
       {
-        tier: 'extra',
+        tier: 'base',
         text:
           '  gate why <id> [--format text|json]\n' +
           '                       Trace the decision chain: terminal transition,\n' +
@@ -708,7 +717,7 @@ function tierBanner(opts: RenderHelpOptions): string {
 // First non-trivial word on the first usage line of an entry =
 // the verb name. Mirrors the regex used in `visibleVerbs()` so the
 // two paths agree on what counts as "the verb of this entry."
-const VERB_LINE_RE = /^ {2}gate ([a-z-]+(?:\s+[a-z-]+)?)/;
+const VERB_LINE_RE = /^ {2}gate ([a-z][a-z-]*(?:\s+[a-z-]+)?)/;
 
 function entryVerb(text: string): string | null {
   for (const line of text.split('\n')) {
@@ -771,7 +780,7 @@ export function visibleVerbs(opts: RenderHelpOptions): readonly string[] {
     for (const e of section.entries) {
       if (!tierVisible(e.tier, opts)) continue;
       for (const line of e.text.split('\n')) {
-        const m = line.match(/^ {2}gate ([a-z-]+(?:\s+[a-z-]+)?)/);
+        const m = line.match(/^ {2}gate ([a-z][a-z-]*(?:\s+[a-z-]+)?)/);
         if (m) {
           const verb = m[1]!.split(/\s+/)[0]!;
           seen.add(verb);

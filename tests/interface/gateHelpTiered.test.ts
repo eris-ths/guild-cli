@@ -29,6 +29,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { visibleVerbs } from '../../src/interface/gate/help.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const GATE = resolve(here, '../../../bin/gate.mjs');
@@ -70,34 +71,39 @@ function run(
 // usage-line. Matching against `^  gate <verb>` rather than free-text
 // search avoids false positives from prose ("see `gate witness`" in
 // some explanatory paragraph).
-const BASE_VERBS = [
-  'request',
-  'approve',
-  // `deny` is BASE symmetric with the terminal-state vocab (pending
-  // → denied is listed alongside completed/failed in help). Pre-fix
-  // it was --all-only, leaving cold-session callers to misroute
-  // through `fail` (illegal pending → failed) before finding deny.
-  'deny',
-  'execute',
-  'complete',
-  'fail',
-  'review',
-  'show',
-  'list',
-  'tail',
-  'boot',
-  'register',
-  'doctor',
-  'fast-track',
-  'schema',
-];
+//
+// These three sets are DERIVED from the section table via
+// `visibleVerbs()`, never typed. They used to be hand-written literals,
+// and the BASE list drifted to 15 entries while 17 shipped and the
+// source comment claimed 14 — the pin had become a fourth copy of the
+// thing it was pinning. Deriving means retiering a verb updates the
+// expectation in the same edit, by construction. See
+// `lore/traps/trap_identity_string_written_by_hand_beside_its_table.md`.
+const BASE_VERBS = visibleVerbs({ profile: 'standard', all: false });
+const COORDINATION_VERBS = visibleVerbs({
+  profile: 'swarm',
+  all: false,
+}).filter((v) => !BASE_VERBS.includes(v));
+const EXTRA_VERBS = visibleVerbs({ profile: 'standard', all: true }).filter(
+  (v) => !BASE_VERBS.includes(v) && !COORDINATION_VERBS.includes(v),
+);
 
-const COORDINATION_VERBS = ['claim', 'witness', 'unwitness', 'wave-status'];
-
-// Sample of EXTRA verbs — any one of these appearing in non-`--all`
-// output under profile=standard|swarm would mean the tier filter
-// leaked.
-const EXTRA_SAMPLE = ['transcript', 'voices', 'rest', 'wake', 'farewell'];
+// A derived expectation can pass vacuously: if `visibleVerbs()` ever
+// returns nothing, every `for (const v of SET)` loop below becomes a
+// no-op and the suite goes green having asserted nothing. Pin the sets
+// as non-empty and mutually disjoint first, so the tiering tests can
+// only be green by actually checking something.
+test('#324: derived tier sets are non-empty and disjoint', () => {
+  assert.ok(BASE_VERBS.length > 0, 'BASE tier derived empty');
+  assert.ok(COORDINATION_VERBS.length > 0, 'COORDINATION tier derived empty');
+  assert.ok(EXTRA_VERBS.length > 0, 'EXTRA tier derived empty');
+  const all = [...BASE_VERBS, ...COORDINATION_VERBS, ...EXTRA_VERBS];
+  assert.equal(
+    new Set(all).size,
+    all.length,
+    'a verb appears in more than one tier',
+  );
+});
 
 function hasUsageLine(text: string, verb: string): boolean {
   // Match "  gate <verb>" at the start of a line, with the verb
@@ -123,7 +129,7 @@ test('#324: gate --help under profile=standard shows BASE only', (t) => {
       `coordination verb '${v}' should be hidden under profile=standard`,
     );
   }
-  for (const v of EXTRA_SAMPLE) {
+  for (const v of EXTRA_VERBS) {
     assert.ok(
       !hasUsageLine(r.stdout, v),
       `extra verb '${v}' should be hidden under profile=standard`,
@@ -151,7 +157,7 @@ test('#324: gate --help under profile=swarm shows BASE + COORDINATION', (t) => {
       `expected COORDINATION verb '${v}' in swarm --help`,
     );
   }
-  for (const v of EXTRA_SAMPLE) {
+  for (const v of EXTRA_VERBS) {
     assert.ok(
       !hasUsageLine(r.stdout, v),
       `extra verb '${v}' should be hidden under profile=swarm (use --all)`,
@@ -166,7 +172,7 @@ test('#324: gate --help --all shows everything regardless of profile', (t) => {
     t.after(() => b.cleanup());
     const r = run(b.root, ['--help', '--all']);
     assert.equal(r.status, 0, `--all under ${profile} should exit 0`);
-    for (const v of [...BASE_VERBS, ...COORDINATION_VERBS, ...EXTRA_SAMPLE]) {
+    for (const v of [...BASE_VERBS, ...COORDINATION_VERBS, ...EXTRA_VERBS]) {
       assert.ok(
         hasUsageLine(r.stdout, v),
         `expected verb '${v}' in --all output under profile=${profile}`,
@@ -188,7 +194,7 @@ test('#324: gate schema --format json is exhaustive regardless of profile', (t) 
     // present in the schema payload under both profiles. The
     // orchestrator contract is "schema sees everything" — tiering
     // is a human-readable surface only.
-    for (const v of [...BASE_VERBS, ...COORDINATION_VERBS, ...EXTRA_SAMPLE]) {
+    for (const v of [...BASE_VERBS, ...COORDINATION_VERBS, ...EXTRA_VERBS]) {
       assert.ok(
         names.has(v),
         `schema must list verb '${v}' under profile=${profile}`,

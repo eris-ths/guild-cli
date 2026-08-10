@@ -84,8 +84,39 @@ a claim *about* the registry, and it should come *from* the registry.
 
 ## Promotion history
 
-Single observation (external dogfood, `exp/03-wasm-userland`,
-2026-08-07). Pinned rather than promoted. A second independent sighting
-would most plausibly come from `gate schema` or the doc-sync tests; if
-it does, this trap and the existing "ledgers rot" stance likely merge
-into one principle about derived-vs-declared surfaces.
+First observation: external dogfood, `exp/03-wasm-userland`, 2026-08-07
+(the `feat=` capability string above).
+
+Second observation, **inside this repo**, 2026-08-10: the tier tally in
+`src/interface/gate/help.ts`. The prediction logged here was that a
+second sighting would come from `gate schema` or the doc-sync tests. It
+did not — it came from a *doc comment*, which is the cheapest place to
+write a summary and the one place nothing checks. Three copies existed
+and all three disagreed with the shipped table: the tier headline said
+BASE was 14 and COORDINATION 5, the enumeration below it said
+COORDINATION 6, `gateHelpTiered.test.ts` pinned a hand-typed list of 15,
+and 17 verbs actually rendered. The test literal is the part worth
+noting — this file already warned that a check with its own hardcoded
+expectation has merely moved the literal, and that is exactly what had
+happened, written before anyone looked.
+
+Repaired the same way as the first sighting: the counts and lists are
+gone from the prose, and the tests derive their sets from
+`visibleVerbs()`. Deriving immediately paid for itself by failing on
+something the hand-written list had been hiding — `visibleVerbs()`
+reported `--version` as a verb, because its token regex admitted a
+leading `-`. A literal list cannot surface that class of bug; it
+encodes the answer instead of asking for it.
+
+One caveat carried forward: a derived expectation can pass **vacuously**.
+If the derivation returns an empty set, every `for (const v of SET)`
+assertion becomes a no-op and the suite goes green having checked
+nothing — the failure mode `reachability-audit` calls an empty green.
+The tests now pin the derived sets as non-empty and disjoint before
+using them.
+
+Two independent observations, both felt rather than read. Per
+`lore/README.md` this clears the promotion bar; whether it merges with
+the existing "ledgers rot" stance into one principle about
+derived-vs-declared surfaces is a doctrine call, deliberately left to a
+separate decision rather than taken here.

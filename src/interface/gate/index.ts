@@ -145,6 +145,14 @@ export async function main(argv: readonly string[]): Promise<number> {
     //   - no active voice → falls back to profile tiering (with a banner)
     //   - voice has no `essentials` section → same fallback
     // Mirrors the "unknown voice → no error" silent-miss contract.
+    //
+    // Silent for a MISS, not for a BREAK. A voice that was declared,
+    // resolved, and then rejected by the loader is a broken deployment,
+    // and rendering the plain profile help with no diagnostic sends the
+    // author looking in the wrong place entirely (measured: the only way
+    // to see the reason was to import the loader by hand). One stderr
+    // line names the file and the reason; stdout stays clean so pipelines
+    // are unaffected, and help still renders — never block the surface.
     type EssentialsOpt = NonNullable<import('./help.js').RenderHelpOptions['essentials']>;
     let essentials: EssentialsOpt | null = null;
     if (wantEssentials && config !== null) {
@@ -156,6 +164,11 @@ export async function main(argv: readonly string[]): Promise<number> {
         const resolved = resolveActiveVoiceName(config);
         if (resolved !== null) {
           const loaded = await loadVoicePlugins(config.voicePluginPaths);
+          for (const e of loaded.errors) {
+            process.stderr.write(
+              `notice: voice plugin not loaded: ${e.path} — ${e.reason}\n`,
+            );
+          }
           const plugin = loaded.plugins.find((p) => p.name === resolved.name);
           if (plugin?.essentials) {
             essentials = {
