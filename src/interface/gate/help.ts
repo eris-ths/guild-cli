@@ -593,13 +593,18 @@ const SECTIONS: readonly Section[] = [
         tier: 'extra',
         text:
           '  gate rom verify <file|-> [--format json|text]\n' +
-          '                       Validate a v1 RomPlugin report envelope\n' +
-          '                       (docs/design/rom-plugin.md). Checks shape and\n' +
-          '                       the envelope\'s internal consistency, including\n' +
-          '                       used ⊆ declared by window NAME, not by count.\n' +
-          '                       Accepts a bare JSON document or a run log with\n' +
-          '                       the envelope on one line. Read-only: it does\n' +
-          '                       not record anything on a wave.',
+          '  gate rom record <file|-> [--for <id>] [--by <m>] [--source <tool>]\n' +
+          '  gate rom list [--for <id>] [--format json|text]\n' +
+          '  gate rom show <o-id> [--format json|text]\n' +
+          '                       v1 RomPlugin report envelopes\n' +
+          '                       (docs/design/rom-plugin.md). verify checks shape\n' +
+          '                       and internal consistency — including\n' +
+          '                       used ⊆ declared by window NAME, not by count —\n' +
+          '                       and records nothing. record does the same checks\n' +
+          '                       then appends an observation under observations/,\n' +
+          '                       an append-only machine-fact store with no state\n' +
+          '                       machine. Input may be a bare JSON document or a\n' +
+          '                       run log with the envelope on one line.',
       },
     ],
   },

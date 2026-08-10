@@ -21,3 +21,8 @@ examples/*/data/
 # root-anchored パターンをすり抜けていた (公開リポに actor 名 + セッション内容 +
 # ローカル絶対パス executing_at_cwd が出るところだった)。方針は同じ — publish しない。
 /substrate/
+# 2026-08-10: observations/ は5つ目の substrate store (gate rom record)。
+# 中身は機械が吐いた計測だが actor 名と subject の request id を持つ ∴ 同じ扱い。
+# 置き場を足したら必ずここに root-anchored で足す — examples/*/observations/ の
+# fixture は追跡したままにするため (/observations/ であって observations/ ではない)。
+/observations/
