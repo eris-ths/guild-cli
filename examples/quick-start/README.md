@@ -107,7 +107,7 @@ example directories show richer shapes:
   the gate / agora / devil framing.
 
 For doctrine, `lore/principles/` (in the package root, not this
-directory) holds the 14 principles every passage is built
+directory) holds the principles every passage is built
 against. `gate lore list` reads them without leaving the CLI.
 
 ## What is NOT in this reading path

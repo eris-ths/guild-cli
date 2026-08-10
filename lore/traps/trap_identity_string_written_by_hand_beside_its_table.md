@@ -175,6 +175,13 @@ and it was produced by *auditing a claim this file had just made*. The
 trap survives being written down. What catches it is asking, every
 time, "checked against what?" 
 
+**Promoted 2026-08-10** to
+`lore/principles/17-restatement-binds-to-structure.md`. This file
+stays: the principle carries the stance, this carries the mechanism
+and the trigger conditions a reviewer flags on. Retirement here is
+graduation, not expiry — `relevant_until: indefinite` is correct and
+unchanged.
+
 Four independent observations, all felt rather than read. Per
 `lore/README.md` this clears the promotion bar; whether it merges with
 the existing "ledgers rot" stance into one principle about

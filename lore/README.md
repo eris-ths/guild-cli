@@ -136,6 +136,21 @@ of her own (PR #296) before promoting the insight from trap memory
 to lore. Two independent observations (the other Claude's
 retrospective + eris's own) cleared the dogfood-trigger bar.
 
+Principle 17 (restatement binds to structure) was named on
+2026-08-10 by eris, graduating
+`trap_identity_string_written_by_hand_beside_its_table` after a fourth
+independent sighting. The first three were copies that drifted; the
+fourth was a *check* that was itself a copy —
+`verbs-consistency.test.ts` comparing one hand-written list against
+another, green while a read-only verb took a write lock. The trap file
+had cited that test, hours earlier, as the reassuring counter-example.
+Being written down did not protect the writer from it, which is the
+argument for a principle rather than a longer trap.
+
+This paragraph's own file was an instance: the sentence above used to
+say "read all fourteen" while sixteen principles shipped. It now asks
+the directory.
+
 They are not timeless truths — they are stances, named, so a
 future reader can engage with them rather than re-derive them.
 
@@ -148,7 +163,8 @@ If you have 5 minutes:
 Those two carry the most weight for how agents interact with the
 tool.
 
-If you have 20 minutes, read all fourteen in order. They compose:
+If you have 20 minutes, read them all in order (`gate lore list
+--type principle`, or `ls principles/`). They compose:
 each builds on the previous, and the most recent ones are the
 foundations the earlier ones implicitly lean on.
 
