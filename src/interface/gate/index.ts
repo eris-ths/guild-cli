@@ -107,6 +107,15 @@ const KNOWN_COMMANDS = [
   'review-context',
   'decisions',
   'self-pattern',
+  // 2026-08-10: these four had accumulated unnoticed, each costing its
+  // verb a did-you-mean entry. The comment above calls a miss here
+  // "obvious-when-broken" — four misses say otherwise, so
+  // verbs-consistency now derives the dispatcher's verb set from the
+  // switch and pins this list against it.
+  'lore',
+  'next',
+  'rom',
+  'voice',
 ] as const;
 
 export async function main(argv: readonly string[]): Promise<number> {

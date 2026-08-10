@@ -8,13 +8,32 @@
 // would silently slip through. This test pins both sides so a new
 // verb either lands in verbs.ts or fails CI loud.
 //
-// We use a hand-curated ALL_VERBS per passage (mirrored against the
-// switch / KNOWN_COMMANDS arrays in each index.ts). AST-walking would
-// be more clever but brittle; hand enumeration is obvious-when-broken
-// in the same spirit as the index-level KNOWN_COMMANDS arrays.
-
+// ## Why the expectation is parsed out of index.ts (2026-08-10)
+//
+// It used to be a hand-curated list per passage, and the header here
+// argued for that: "AST-walking would be more clever but brittle; hand
+// enumeration is obvious-when-broken."
+//
+// It was not obvious when broken. `gate swarm-status` shipped, was
+// dispatched, appeared in `gate --help` and in `gate schema` — and was
+// absent from BOTH verbs.ts and the hand-curated list here. The two
+// sides agreed, so this test stayed green while the middleware took a
+// write lock for a read-only command. Two hand-written lists that
+// forget the same verb agree about nothing.
+//
+// The expectation now comes from the same structure the runtime uses:
+// the `case '<verb>':` labels in each entry's index.ts. That is the
+// dispatcher, so "the dispatcher accepts it" can no longer be true
+// while this test is green. `assertNonEmpty` guards the parse — a
+// regex that silently matches nothing would turn every assertion below
+// into a vacuous pass (`reachability-audit`'s empty green).
+//
+// See lore/traps/trap_identity_string_written_by_hand_beside_its_table.md
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import * as gateVerbs from '../../src/interface/gate/verbs.js';
 import * as agoraVerbs from '../../src/passages/agora/interface/verbs.js';
@@ -33,31 +52,50 @@ interface Case {
   all: readonly string[];
 }
 
-// Mirrors of the switch cases in each entry's index.ts. If a new verb
-// lands, add it here too — the test will fail loud at CI otherwise.
-const GATE_ALL = [
-  'request', 'pending', 'board', 'list', 'show', 'voices', 'tail',
-  'whoami', 'register', 'chain', 'approve', 'deny', 'execute',
-  'complete', 'fail', 'review', 'claim', 'witness', 'unwitness',
-  'thank', 'fast-track', 'issues',
-  'message', 'broadcast', 'inbox', 'doctor', 'repair', 'status',
-  'boot', 'next', 'voice', 'suggest', 'flow-suggest', 'transcript', 'summarize', 'why', 'resume',
-  'schema', 'unresponded', 'templates', 'lore', 'rom', 'rest', 'wake', 'farewell',
-  'wave-status', 'lense-stats', 'review-context',
-  'decisions', 'self-pattern',
-] as const;
+const here = dirname(fileURLToPath(import.meta.url));
+const SRC = resolve(here, '../../../src');
 
-const AGORA_ALL = [
-  'new', 'play', 'move', 'suspend', 'resume', 'conclude',
-  'list', 'show', 'last', 'cliff', 'schema',
-] as const;
+/**
+ * The verbs an entry's dispatcher actually accepts: every `case '<v>':`
+ * label in its index.ts. This is the structure the runtime switches on,
+ * so it cannot drift from itself.
+ */
+function dispatchedVerbs(indexRelPath: string): string[] {
+  const text = readFileSync(resolve(SRC, indexRelPath), 'utf8');
+  const out = new Set<string>();
+  for (const m of text.matchAll(/^\s*case '([a-z][a-z0-9-]*)':/gm)) {
+    out.add(m[1] as string);
+  }
+  return [...out].sort();
+}
 
-const DEVIL_ALL = [
-  'open', 'entry', 'list', 'show', 'dismiss', 'resolve',
-  'suspend', 'resume', 'ingest', 'conclude', 'schema',
-] as const;
+/**
+ * A derived expectation that comes back empty makes every assertion
+ * built on it a no-op, and the suite goes green having checked nothing.
+ * Pin the floor before using it.
+ */
+function assertNonEmpty(verbs: readonly string[], label: string): readonly string[] {
+  assert.ok(
+    verbs.length > 5,
+    `${label}: derived only ${verbs.length} verbs from the dispatcher — ` +
+      `the parse is broken and every check below would pass vacuously`,
+  );
+  return verbs;
+}
 
-const CTX_ALL = ['record', 'supersede', 'list', 'show', 'chain', 'export', 'import'] as const;
+const GATE_ALL = assertNonEmpty(dispatchedVerbs('interface/gate/index.ts'), 'gate');
+const AGORA_ALL = assertNonEmpty(
+  dispatchedVerbs('passages/agora/interface/index.ts'),
+  'agora',
+);
+const DEVIL_ALL = assertNonEmpty(
+  dispatchedVerbs('passages/devil/interface/index.ts'),
+  'devil',
+);
+const CTX_ALL = assertNonEmpty(
+  dispatchedVerbs('passages/ctx/interface/index.ts'),
+  'ctx',
+);
 
 const CASES: Case[] = [
   { passage: 'gate', verbs: gateVerbs, all: GATE_ALL },

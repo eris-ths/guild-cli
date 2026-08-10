@@ -19,10 +19,31 @@ End-to-end examples for the three extension surfaces:
 > first hook — the value-object footgun (`ctx.request.from === 'alice'`
 > is always false) is the #1 source of silent policy bugs.
 
-Both surfaces share one consent gate (`plugins.trusted: true`) and
-one trust model (in-process, full Node capabilities, no sandbox).
-See `SECURITY.md` § "Plugin trust model" before loading any plugin
-you didn't author.
+All three share one consent gate (`plugins.trusted: true`) and one
+trust model (in-process, full Node capabilities, no sandbox). See
+`SECURITY.md` § "Plugin trust model" before loading any plugin you
+didn't author.
+
+> **Not a fourth surface: `RomPlugin`.**
+> [`docs/design/rom-plugin.md`](../../docs/design/rom-plugin.md)
+> calls it "a fourth plugin shape", which reads here as if a
+> `plugins.roms:` key were coming. There is none, and none is
+> planned. A `RomPlugin` is an artifact executed by an **external
+> engine**; guild-cli ships no engine, loads nothing, and takes no
+> runtime dependency. What it owns is the *report* such an engine
+> emits — validated by `gate rom verify`, recorded by
+> `gate rom record` into `observations/`. Nothing in this directory
+> applies to it: no `plugins.trusted` gate, no in-process execution,
+> no `run` function. See [`AGENT.md`](../../AGENT.md) § ROM reports.
+
+## What's in here
+
+| Directory | Contents |
+|-----------|----------|
+| [`verbs/`](verbs/) | verb plugin examples |
+| [`hooks/`](hooks/) | hook plugin examples (`after:` and vetoing `before:`) |
+| [`voices/`](voices/) | a voice plugin exercising all four sections |
+| [`harness-wirings/`](harness-wirings/) | **not plugins** — worked examples of bridging an *external* agent harness to gate verbs. [`claude-code/`](harness-wirings/claude-code/) wires Claude Code's `PostToolUse` hook to `gate witness` so a SubAgent in worktree isolation shows up in `gate wave-status` / `gate swarm-status`. Harness-specific wiring lives in `examples/`, never in core (#308) |
 
 ## Quick start
 
@@ -188,7 +209,12 @@ from a pipeline loses zero information.
 ```js
 // plugins/voices/mine.mjs
 export default {
-  name: 'mine',                                  // [a-z][a-z0-9-]*
+  name: 'mine',                                  // [a-z][a-z0-9-]* — the only required field
+  // Every section below is optional and independent; a plugin may
+  // carry any subset. `verbs` used to be required in practice — the
+  // loader rejected a plugin without it, and the `--essentials` path
+  // swallowed the rejection, so a curation-only voice silently
+  // rendered the plain profile help instead. Fixed 2026-08-10.
   verbs: {
     complete: [
       { when: 'cliff_present', template: '{action} 閉じた。 次の手: 「{cliff}」' },
@@ -200,7 +226,6 @@ export default {
       { when: 'verdict_reject',  template: '{lense} 通せない — {comment}' },
     ],
   },
-  // Optional sections — each independent. A plugin may carry any subset.
   essentials: {
     verbs: ['boot', 'next', 'voice', 'fast-track', 'complete', 'review'],
     note: 'my daily',
@@ -324,8 +349,14 @@ fire points is breaking. See [`docs/POLICY.md`](../../docs/POLICY.md)
 
 ## Roadmap
 
-Phase 1 ships **verb plugins** (#36 step 4, PR #258) and **hook
-plugins** (#36 step 5, PR #259). The remaining Phase 1 surface —
-**content transforms** (`on:save` / `on:load` around YAML I/O,
-step 6) — is deferred. Phase 2 (time-aware verbs) and Phase 3
-(federation) are tracked in [#36](https://github.com/eris-ths/guild-cli/issues/36).
+Phase 1 ships **verb plugins** (#36 step 4, PR #258), **hook
+plugins** (#36 step 5, PR #259), and **voice plugins** (#345 cluster,
+which is why this file documents three surfaces rather than the two it
+was written for). The remaining Phase 1 surface — **content
+transforms** (`on:save` / `on:load` around YAML I/O, step 6) — is
+still deferred: there is no `on:save` / `on:load` fire point in `src/`
+as of 2026-08-10. Phase 2 (time-aware verbs) and Phase 3 (federation)
+are tracked in [#36](https://github.com/eris-ths/guild-cli/issues/36).
+
+Which surfaces exist is answerable without trusting this paragraph:
+`ls src/infrastructure/plugin/` lists one loader per kind.

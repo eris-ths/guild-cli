@@ -108,7 +108,7 @@ swarm の詳細は docs/swarm.md。
 | `.changelog/next/` | per-PR changelog fragment (release 時に折り込み) | ✅ git |
 | `members/` | gate member 登録 | ✅ git — ただし **sample の `alice.yaml` だけ** |
 | `substrate/` | agora plays/games の作業領域 | ❌ local-only via `/substrate/` |
-| `requests/` `issues/` `agora/` `ctx/` | 4 substrate store の dogfood 記録 (actor 名 + セッション内容) | ❌ local-only via root-anchored `/requests/` 等 |
+| `requests/` `issues/` `agora/` `ctx/` `observations/` | substrate store の dogfood 記録 (actor 名 + セッション内容)。件数は `.gitignore` の root-anchored 行が正 — ここに数を書くと足すたび腐る | ❌ local-only via root-anchored `/requests/` 等 |
 
 ⚠️ **`members/` と `guild.config.yaml` は ignore されていない** (2026-08-01 実測)。
 自分の actor を `members/` に足すと**そのまま追跡対象になる**ので、

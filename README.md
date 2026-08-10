@@ -93,6 +93,7 @@ Pick a route. Each works on its own.
 | Substrate-craft showcase (eris play) | [`docs/eris-playbook.md`](./docs/eris-playbook.md) |
 | Real long sessions | [`examples/dogfood-session/`](./examples/dogfood-session/) |
 | Stability / on-disk shape contracts | [`docs/POLICY.md`](./docs/POLICY.md) + [`docs/storage-format.md`](./docs/storage-format.md) |
+| Bounded extensions that report their own cost | [`docs/design/rom-plugin.md`](./docs/design/rom-plugin.md) |
 
 For AI agents: **read `AGENT.md` first**, not this README. It's the
 quick reference — every verb, every state machine, in one file. The

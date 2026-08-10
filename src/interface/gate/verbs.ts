@@ -43,6 +43,13 @@ export const READ_VERBS: ReadonlySet<string> = new Set([
   'rom',
   'lense-stats',
   'wave-status',
+  // 2026-08-10: absent since it shipped. Dispatched and schema'd, but
+  // missing here, so withEntryLock's fail-safe treated a read-only
+  // command as a WRITE and took a write lock for it. Invisible because
+  // the guard compared this file against a hand-written mirror in the
+  // test that had forgotten the same verb — two lists agreeing about
+  // nothing. The test now derives from the dispatcher.
+  'swarm-status',
   'review-context',
   'decisions',
   'self-pattern',
