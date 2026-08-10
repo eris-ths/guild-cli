@@ -136,17 +136,46 @@ derivation is impossible across a repository boundary, the substitute
 is to validate the restatement against the thing itself at least once,
 and to say in the file which one you did.
 
-A distinction the same day also made concrete, from the opposite
-direction: `tests/interface/verbs-consistency.test.ts` keeps a
-hand-enumerated `GATE_ALL` on purpose, and its header argues the case
-("AST-walking would be more clever but brittle; hand enumeration is
-obvious-when-broken"). That is not a violation of this trap, and the
-difference is exactly the point — the list is *checked against the
-dispatcher*, so it fails loudly the moment it drifts. It did, on the
-verb added that day. A hand-written list that is checked is a fixture;
-a hand-written list that is merely adjacent is a rumor.
+**Correction, hours later, to the paragraph that used to sit here.**
+This file claimed `tests/interface/verbs-consistency.test.ts` was the
+instructive counter-example — a hand-enumerated list that was *checked
+against the dispatcher*, and therefore a fixture rather than a rumor.
+That was wrong, and wrong in the trap's own signature way: the claim
+was read off the test's header comment rather than off what the test
+actually compared.
 
-Three independent observations, all felt rather than read. Per
+It compared two hand-written lists to each other. `GATE_ALL` in the
+test was checked against `verbs.ts` — a second hand-maintained
+enumeration — and never against the `switch` that does the
+dispatching. When `gate swarm-status` shipped it was added to neither,
+so the two sides agreed, the test stayed green, and the entry
+middleware took a **write lock for a read-only verb** for as long as
+nobody looked. A third list (`KNOWN_COMMANDS`, for did-you-mean
+suggestions) had quietly lost four verbs by the same mechanism.
+
+Only `gate schema` matched the dispatcher, because it is the one
+surface with a test that reaches the runtime.
+
+So the corrected distinction is sharper than the one it replaces:
+
+> A hand-written list is a fixture only if it is checked against the
+> **structure**, not against another hand-written list. Two
+> enumerations that agree prove nothing — they can agree by both
+> forgetting the same thing, and that is the *likely* failure, because
+> whoever forgets one is the same person updating the other.
+
+The repair derives the expectation from the `case '<verb>':` labels in
+each entry's index.ts, with an `assertNonEmpty` floor so a regex that
+matches nothing cannot turn the checks into vacuous passes. The same
+day also added `tests/docs/agentVerbCoverage.test.ts`, because AGENT.md
+claimed in prose to carry every verb and was missing four.
+
+Worth keeping in view: this correction is itself the fourth sighting,
+and it was produced by *auditing a claim this file had just made*. The
+trap survives being written down. What catches it is asking, every
+time, "checked against what?" 
+
+Four independent observations, all felt rather than read. Per
 `lore/README.md` this clears the promotion bar; whether it merges with
 the existing "ledgers rot" stance into one principle about
 derived-vs-declared surfaces is a doctrine call, deliberately left to a

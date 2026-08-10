@@ -211,6 +211,9 @@ gate flow-suggest --severity <s> --area <a> [--scope <s>]      # advisory: which
 gate lense-stats [--for <m>] [--since <d>]                     # lense rotation diagnostic (#305)
 gate decisions [--for <m>] [--since <d>]                       # authored state transitions (#336; defaults --for to GUILD_ACTOR)
 gate self-pattern [--for <m>] [--since <d>]                    # behavioral bias surface — decision + verdict ratio (#336)
+gate next [--for <m>] [--format json|text]                     # the single next action, not the whole board
+gate lore list [--type principle|trap] [--applies-to <s>] [--relevant-until <s>]
+gate lore show <name>                                          # package-shipped doctrine, read from inside the substrate
 ```
 
 The last four — `flow-suggest`, `lense-stats`, `decisions`,
@@ -251,8 +254,13 @@ gate unwitness <id> --by <m>                   # remove your own witness
 ### Wave visibility (#295, freshness #309)
 
 ```bash
-gate wave-status <id> [--format text|json]
+gate wave-status <id> [--format text|json]          # one wave, per-executor
+gate swarm-status [--orchestrating <m>] [--for <m>] # every wave at once
 ```
+
+`wave-status` zooms into one wave; `swarm-status` is the wide shot —
+active waves, distinct executors, and alerts across the whole board.
+Read-only, both of them.
 
 Per-executor in-flight slice view for a multi-executor wave.
 Composes executors + per-witness fields + status_log timestamps to
@@ -692,6 +700,46 @@ gate doctor --format json | gate repair --apply  # quarantine malformed
 gate repair [--from-doctor <path>] [--apply] [--format json|text]
 ```
 
+## ROM reports (`observations/`)
+
+```bash
+gate rom verify <file|->                              # validate, record nothing
+gate rom record <file|-> [--for <id>] [--by <m>] [--source <tool>]
+gate rom list [--for <id>] [--format json|text]
+gate rom show <o-id>
+```
+
+A **ROM report** is a v1 `RomPlugin` envelope — what a bounded engine
+emits about one run: the capability surface it granted, the subset the
+run actually touched, a deterministic instruction count, and a
+fingerprint of the output. Contract:
+[`docs/design/rom-plugin.md`](./docs/design/rom-plugin.md).
+
+`verify` checks shape *and* the envelope's internal consistency. The
+check that matters is `declared ⊇ used` **by window name**, not by
+count — comparing counts alone would accept a run that touched windows
+the engine never offered, which is the claim the envelope exists to
+make checkable. A violation exits non-zero and names the window.
+
+Input may be a bare JSON document or a run log with the envelope on one
+line; no engine-specific prefix is assumed, so any engine that emits
+the envelope qualifies. guild-cli ships **no engine** and takes no
+runtime dependency on one.
+
+`record` runs the same checks and then appends an **observation** —
+`observations/` is an append-only store with no state machine, because
+an observation is a machine fact about a run that already happened.
+Records are re-validated on read, so "recorded" means "verified" for a
+later reader, not only at the moment of writing. Envelope keys outside
+the v1 contract (the reference engine's `policy` block, which carries
+the windows a ROM *tried* to reach and was refused) are preserved
+verbatim.
+
+The link to a wave is one-directional: an observation names its
+`subject`, the request does not list its observations, so a completed
+wave stays terminal. Join from this side with
+`gate rom list --for <request-id>`.
+
 ## Voice plugin (#345 cluster)
 
 Deployment-local personality layer. Doctrinal voice (handler prose,
@@ -802,9 +850,11 @@ for the end-to-end shape.
   requests/{pending,approved,executing,completed,failed,denied}/<id>.yaml
   issues/<id>.yaml
   inbox/<name>.yaml
+  observations/<id>.yaml
 ```
 
 Request IDs: `YYYY-MM-DD-NNNN`. Issue IDs: `i-YYYY-MM-DD-NNNN`.
+Observation IDs: `o-YYYY-MM-DD-NNNN`.
 
 The agora / devil / ctx subtrees layer on top — see
 [`docs/storage-format.md`](./docs/storage-format.md) for the full
