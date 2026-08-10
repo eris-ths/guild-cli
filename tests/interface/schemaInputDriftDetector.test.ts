@@ -82,6 +82,10 @@ const SUBCOMMAND_UMBRELLAS: ReadonlySet<string> = new Set([
   // separate KNOWN_FLAGS sets, but the schema collapses them into a
   // single `lore` entry with a `subcommand` discriminator.
   'lore',
+  // rom: same shape again — the schema collapses `rom verify` into one
+  // `rom` entry with a `subcommand` discriminator, while the runtime
+  // declares ROM_VERIFY_KNOWN_FLAGS under the label 'rom verify'.
+  'rom',
 ]);
 
 // `gate help` and the very top-level positional verb dispatcher

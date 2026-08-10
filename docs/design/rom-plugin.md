@@ -1,9 +1,18 @@
 # Design — `RomPlugin`: a bounded extension shape that declares its cost and its capabilities
 
-Status: **Design proposal, contract-only.** No implementation is
-proposed in this document and no engine is proposed for vendoring. The
-deliverable being argued for is a *wire contract* that `guild-cli`
-owns, plus the discipline that makes it worth owning.
+Status: **Contract implemented; recording still open.** No engine is
+proposed for vendoring, and none is shipped. The deliverable argued for
+here is a *wire contract* that `guild-cli` owns, plus the discipline
+that makes it worth owning.
+
+Since 2026-08-10 the contract is executable rather than prose:
+`src/domain/rom/RomEnvelope.ts` parses and validates a v1 envelope, and
+`gate rom verify <file|->` is its entry point. That closes the gap
+between this document's central argument — "a `v` field with a
+specified meaning can be violated **loudly** instead of silently" — and
+what the repository could actually do, which was nothing: prose cannot
+fail. What remains open is § How a wave records it, deliberately (see
+that section).
 
 ## Problem recap
 
@@ -89,6 +98,20 @@ sides of it, and its stability has been measured (see § Provenance).
 recorded runs — the remaining numbers are placeholders shaped like real
 ones, and should not be read as measurements.
 
+Two corrections landed 2026-08-10, both found by validating this
+document against the engine's emitter rather than against itself:
+
+- `io.out_fnv1a` was printed here with a `0x` prefix the engine does not
+  emit. Fixed below. A placeholder may have an invented *value*; it must
+  not have an invented *shape*.
+- The engine also emits a **`policy`** block (`enforced`, and when
+  enforcement is on, `granted` / `denied` / `stopped_at`) that this
+  document does not describe. The wire has therefore grown past the
+  documented key set. `gate rom verify` ignores undocumented keys rather
+  than rejecting them, so conforming envelopes keep validating, but the
+  contract here is a *subset* of what the reference engine sends and
+  should not be read as exhaustive until that block is specified.
+
 ```jsonc
 {
   "v": 1,
@@ -105,7 +128,8 @@ ones, and should not be read as measurements.
   },
   "io": {
     "out_bytes": 230415,                 // (illustrative)
-    "out_fnv1a": "0x8f2ad431"            // determinism anchor for the output itself
+    "out_fnv1a": "8f2ad431"              // determinism anchor: 32-bit FNV-1a,
+                                         // bare zero-padded hex, no 0x prefix
   },
   "capabilities": {
     "declared": 20,                      // what the engine offered
@@ -153,6 +177,10 @@ participation is invisible, and gives principle 16's self-optimization
 axis its first genuinely typed observation — the `s_t` tuple that
 section asks for is much closer to hand when cost and capability are
 already numbers.
+
+**Status: this is the open half.** `gate rom verify` establishes that an
+envelope conforms; it records nothing. A wave that involved a bounded
+extension still carries no typed evidence of it.
 
 Deliberately left open: whether the envelope is stored inline on the
 request record, referenced by digest, or emitted as a distinct

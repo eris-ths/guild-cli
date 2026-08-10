@@ -589,6 +589,18 @@ const SECTIONS: readonly Section[] = [
           '                       inside the substrate. <name> is the filename\n' +
           '                       without .md (e.g. 11-ai-first-human-as-projection).',
       },
+      {
+        tier: 'extra',
+        text:
+          '  gate rom verify <file|-> [--format json|text]\n' +
+          '                       Validate a v1 RomPlugin report envelope\n' +
+          '                       (docs/design/rom-plugin.md). Checks shape and\n' +
+          '                       the envelope\'s internal consistency, including\n' +
+          '                       used ⊆ declared by window NAME, not by count.\n' +
+          '                       Accepts a bare JSON document or a run log with\n' +
+          '                       the envelope on one line. Read-only: it does\n' +
+          '                       not record anything on a wave.',
+      },
     ],
   },
   {

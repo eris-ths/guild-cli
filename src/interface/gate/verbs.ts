@@ -40,6 +40,7 @@ export const READ_VERBS: ReadonlySet<string> = new Set([
   'unresponded',
   'templates',
   'lore',
+  'rom',
   'lense-stats',
   'wave-status',
   'review-context',

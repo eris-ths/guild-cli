@@ -42,7 +42,7 @@ const GATE_ALL = [
   'thank', 'fast-track', 'issues',
   'message', 'broadcast', 'inbox', 'doctor', 'repair', 'status',
   'boot', 'next', 'voice', 'suggest', 'flow-suggest', 'transcript', 'summarize', 'why', 'resume',
-  'schema', 'unresponded', 'templates', 'lore', 'rest', 'wake', 'farewell',
+  'schema', 'unresponded', 'templates', 'lore', 'rom', 'rest', 'wake', 'farewell',
   'wave-status', 'lense-stats', 'review-context',
   'decisions', 'self-pattern',
 ] as const;

@@ -1767,6 +1767,36 @@ const VERBS: readonly VerbSchema[] = [
     output: { type: 'object' },
   },
   {
+    name: 'rom',
+    category: 'read',
+    summary:
+      'validate a v1 RomPlugin report envelope (docs/design/rom-plugin.md). ' +
+      'Subcommand: verify <file|->. Beyond shape, it checks the invariants ' +
+      'where the envelope restates a fact twice and the copies can drift: ' +
+      'engine.names.length === engine.windows, capabilities.declared === ' +
+      'engine.windows, capabilities.used === used_names.length, and every ' +
+      'used window NAME present in engine.names (the real `declared ⊇ used` — ' +
+      'comparing counts alone would accept a run that touched windows the ' +
+      'engine never offered). Read-only: guild-cli owns the contract, not an ' +
+      'engine, and this verb records nothing on a wave — where a verified ' +
+      'envelope lands is still open by design.',
+    input: {
+      type: 'object',
+      properties: {
+        subcommand: {
+          type: 'string',
+          enum: ['verify'],
+        },
+        source: strOpt(
+          'path to the envelope (positional), or `-` to read stdin. Accepts a bare JSON document, or a run log in which one line carries the JSON object (the first `{` on the line begins it) — no engine-specific prefix is assumed.',
+        ),
+        format: formatField,
+      },
+      required: ['subcommand', 'source'],
+    },
+    output: { type: 'object' },
+  },
+  {
     name: 'approve',
     category: 'write',
     summary:

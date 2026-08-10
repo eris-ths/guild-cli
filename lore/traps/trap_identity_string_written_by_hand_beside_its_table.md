@@ -115,7 +115,38 @@ nothing — the failure mode `reachability-audit` calls an empty green.
 The tests now pin the derived sets as non-empty and disjoint before
 using them.
 
-Two independent observations, both felt rather than read. Per
+Third sighting, same day (2026-08-10), while implementing
+`gate rom verify`: `docs/design/rom-plugin.md` printed the envelope's
+`io.out_fnv1a` as `"0x8f2ad431"`. The reference engine emits it bare and
+zero-padded (`{x:0>8}` → `8f2ad431`); a validator written from the
+document would have rejected every real envelope. The document also
+omits a `policy` block the engine does emit, so the documented key set
+is a strict subset of the wire.
+
+This one is worth separating from the two above because the distance is
+different. Those were summaries sitting *next to* their subject; this
+was a summary of a structure that lives **in another repository
+entirely** — so there was no proximity to create even the illusion of
+binding, and every reader who checked the example checked it against the
+same prose. What caught it was writing the checker from the *emitter*
+rather than from the document. The rule generalizes accordingly:
+proximity is not a binding, and neither is a shared author, a shared
+project, or a shared reading. Only derivation binds — and where
+derivation is impossible across a repository boundary, the substitute
+is to validate the restatement against the thing itself at least once,
+and to say in the file which one you did.
+
+A distinction the same day also made concrete, from the opposite
+direction: `tests/interface/verbs-consistency.test.ts` keeps a
+hand-enumerated `GATE_ALL` on purpose, and its header argues the case
+("AST-walking would be more clever but brittle; hand enumeration is
+obvious-when-broken"). That is not a violation of this trap, and the
+difference is exactly the point — the list is *checked against the
+dispatcher*, so it fails loudly the moment it drifts. It did, on the
+verb added that day. A hand-written list that is checked is a fixture;
+a hand-written list that is merely adjacent is a rumor.
+
+Three independent observations, all felt rather than read. Per
 `lore/README.md` this clears the promotion bar; whether it merges with
 the existing "ledgers rot" stance into one principle about
 derived-vs-declared surfaces is a doctrine call, deliberately left to a
