@@ -16,6 +16,7 @@ import {
   mkdtempSync,
   writeFileSync,
   readFileSync,
+  readdirSync,
   rmSync,
   mkdirSync,
 } from 'node:fs';
@@ -59,9 +60,13 @@ function runGate(
 
 function issueFilename(root: string): string {
   // Issues are stored under issues/<id>.yaml; find the first one.
+  //
+  // This used to call `require('node:fs')`, which throws in an ES
+  // module. Nothing called it, so nothing noticed: the helper shipped
+  // broken and stayed that way until the first test that reached for
+  // it. Unreached code carries no signal about whether it works.
   const issuesDir = join(root, 'issues');
-  const dir = require('node:fs').readdirSync(issuesDir);
-  const yml = dir.find((f: string) => f.endsWith('.yaml'));
+  const yml = readdirSync(issuesDir).find((f) => f.endsWith('.yaml'));
   return yml ? join(issuesDir, yml) : '';
 }
 
@@ -210,4 +215,62 @@ test('legacy issue YAML without state_log still loads (backward compat)', (t) =>
   assert.equal(parsed.state_log.length, 1, 'one entry: the resolve we just did');
   assert.equal(parsed.state_log[0].state, 'resolved');
   assert.equal(parsed.state_log[0].by, 'alice');
+});
+
+// ── note-flag symmetry across the issues sub-verbs (2026-08-10) ─────
+//
+// `issues note` took `--text`; `issues resolve|defer|start|reopen`
+// took `--note`. Both attach free-form prose to an issue, so whichever
+// one you learned first bounced on the other with "unknown flag".
+// Measured twice in one dogfood session. Each sub-verb now accepts the
+// sibling's spelling; the canonical name is unchanged.
+
+test('issues note accepts --note as an alias of --text', (t) => {
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  const add = runGate(root, [
+    'issues', 'add', '--from', 'alice',
+    '--severity', 'low', '--area', 'test', '--text', 'body',
+  ]);
+  assert.equal(add.status, 0, add.stderr);
+  const id = add.stdout.match(/i-\d{4}-\d{2}-\d{2}-\d{4}/)?.[0] ?? '';
+  assert.ok(id, `no issue id in: ${add.stdout}`);
+
+  const r = runGate(root, [
+    'issues', 'note', id, '--by', 'alice', '--note', 'via the alias',
+  ]);
+  assert.equal(r.status, 0, r.stderr);
+  const doc = YAML.parse(readFileSync(issueFilename(root), 'utf8')) as {
+    notes?: { text: string }[];
+  };
+  assert.ok(
+    (doc.notes ?? []).some((n) => n.text === 'via the alias'),
+    `note text not persisted; got ${JSON.stringify(doc.notes)}`,
+  );
+});
+
+test('issues resolve accepts --text as an alias of --note', (t) => {
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  const add = runGate(root, [
+    'issues', 'add', '--from', 'alice',
+    '--severity', 'low', '--area', 'test', '--text', 'body',
+  ]);
+  assert.equal(add.status, 0, add.stderr);
+  const id = add.stdout.match(/i-\d{4}-\d{2}-\d{2}-\d{4}/)?.[0] ?? '';
+  assert.ok(id, `no issue id in: ${add.stdout}`);
+
+  const r = runGate(root, [
+    'issues', 'resolve', id, '--by', 'alice', '--text', 'closed via alias',
+  ]);
+  assert.equal(r.status, 0, r.stderr);
+  const doc = YAML.parse(readFileSync(issueFilename(root), 'utf8')) as {
+    state_log?: { state: string; note?: string }[];
+  };
+  const entry = (doc.state_log ?? []).find((e) => e.state === 'resolved');
+  assert.equal(
+    entry?.note,
+    'closed via alias',
+    `state_log note not persisted; got ${JSON.stringify(doc.state_log)}`,
+  );
 });

@@ -76,10 +76,23 @@ function validatePluginShape(raw: unknown): { ok: true; plugin: VoicePlugin } | 
       reason: `name "${obj['name']}" is not valid (lowercase, digits, hyphens; must start with a letter)`,
     };
   }
-  if (obj['verbs'] === null || typeof obj['verbs'] !== 'object') {
-    return { ok: false, reason: 'verbs must be an object keyed by verb name' };
+  // `verbs` is optional, like every other section. A voice that only
+  // curates `essentials` (or only overlays `schema`) adds no narration
+  // and has no reason to carry an empty object just to pass validation.
+  // Before this it was mandatory, which contradicted the documented
+  // contract ("all four sections optional") and — because the
+  // `--essentials` render path swallowed loader rejections — failed by
+  // silently printing the plain profile help.
+  if (
+    obj['verbs'] !== undefined &&
+    (obj['verbs'] === null || typeof obj['verbs'] !== 'object')
+  ) {
+    return {
+      ok: false,
+      reason: 'verbs must be an object keyed by verb name when present',
+    };
   }
-  const verbsObj = obj['verbs'] as Record<string, unknown>;
+  const verbsObj = (obj['verbs'] ?? {}) as Record<string, unknown>;
   const verbs: Record<string, VoiceTemplate[]> = {};
   for (const [verbName, entries] of Object.entries(verbsObj)) {
     const r = validateTemplates(entries);
