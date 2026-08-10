@@ -50,6 +50,7 @@ redesign target. Format changes require a minor bump per
 | Agora Play | `<content_root>/agora/plays/<game-slug>/<play-id>.yaml` |
 | Devil Review | `<content_root>/devil/reviews/<rev-id>.yaml` |
 | Ctx | `<content_root>/ctx/<id>.yaml` |
+| Observation | `<paths.observations>/<id>.yaml` |
 
 `paths.*` are configurable via `guild.config.yaml`; the table shows
 the configured path for each. Defaults: `members/`, `requests/`,
@@ -328,6 +329,57 @@ in v0.7; consumers should migrate to `executors`.
 (top-level + log entries) parses through `parseIssueState`; unknown
 enum values are skipped from `state_log` with a warning rather than
 failing the whole record.
+
+---
+
+### Observation
+
+`<paths.observations>/<id>.yaml`. **Append-only.** There is no state
+field, no state log, and no version counter — an observation is a
+machine-emitted fact about a run that already happened, so there is
+nothing to transition and nothing for two writers to race over. The
+repository port exposes `saveNew` and no `save`; the absence is the
+invariant.
+
+Everything in this directory is machine-origin *by construction*. That
+is the point of it being a separate store rather than a flavour of
+request: a projection asking "what did a person decide?" reads
+`requests/` and is done, with no prefix matching and no discriminator
+field anyone has to remember to set.
+
+| Field | Type | Required | Default on hydrate |
+|---|---|---|---|
+| `id` | string (`o-YYYY-MM-DD-NNNN`) | required | — |
+| `kind` | string (`rom`) | required | — |
+| `by` | string (member name) | required | — |
+| `at` | ISO-8601 | required | — |
+| `subject` | string (request id) | optional | absent |
+| `source` | string (emitting tool, e.g. `rom-stamp`) | optional | absent |
+| `envelope` | mapping (kind-specific body) | required | — |
+
+For `kind: rom` the `envelope` is a v1 `RomPlugin` report — see
+`docs/design/rom-plugin.md` for the contract and
+`src/domain/rom/RomEnvelope.ts` for the checks.
+
+**Hydrate tolerance.** Deliberately low. `kind`, `id`, `by` and the
+envelope all error out rather than falling back, and the envelope is
+re-validated in full on every read — a record hand-edited into an
+inconsistent state must fail when it is read, not be trusted because it
+passed once on write. Unknown top-level keys are ignored, so an engine
+whose wire format is ahead of this table keeps validating.
+
+**Size.** The envelope is bounded by the engine's declared window count
+(`engine.names` is the largest field) and is small in practice — the
+reference engine's is under 2 KB. `docs/storage-format.md` still states
+no general per-record size discipline; this record does not establish
+one, and a future kind with an unbounded body should be pushed to a
+digest reference instead of inlined here.
+
+**One-directional link.** `subject` names the wave an observation
+belongs to; the request record does **not** list its observations. A
+completed wave is terminal, and letting later machine output mutate it
+would make it not so. Readers join from this side
+(`gate rom list --for <request-id>`).
 
 ---
 

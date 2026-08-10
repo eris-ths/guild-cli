@@ -2,6 +2,8 @@ import { GuildConfig } from '../../infrastructure/config/GuildConfig.js';
 import { YamlMemberRepository } from '../../infrastructure/persistence/YamlMemberRepository.js';
 import { YamlRequestRepository } from '../../infrastructure/persistence/YamlRequestRepository.js';
 import { YamlIssueRepository } from '../../infrastructure/persistence/YamlIssueRepository.js';
+import { YamlObservationRepository } from '../../infrastructure/persistence/YamlObservationRepository.js';
+import { ObservationRepository } from '../../application/ports/ObservationRepository.js';
 import { FsInboxNotification } from '../../infrastructure/persistence/FsInboxNotification.js';
 import { systemClock } from '../../application/ports/Clock.js';
 import { MemberUseCases } from '../../application/member/MemberUseCases.js';
@@ -48,6 +50,13 @@ export interface Container {
   memberUC: MemberUseCases;
   requestUC: RequestUseCases;
   issueUC: IssueUseCases;
+  /**
+   * Append-only machine observations (`gate rom record`). Exposed as
+   * the repository itself, not behind a use-case: there is no policy
+   * to enforce past the domain's own validation, and inventing a
+   * pass-through layer would be ceremony.
+   */
+  observations: ObservationRepository;
   messageUC: MessageUseCases;
   diagnosticUC: DiagnosticUseCases;
   repairUC: RepairUseCases;
@@ -190,6 +199,7 @@ export function buildContainer(opts: BuildContainerOpts = {}): Container {
   const members = new YamlMemberRepository(config);
   const requests = new YamlRequestRepository(config);
   const issues = new YamlIssueRepository(config);
+  const observations = new YamlObservationRepository(config);
   const notifier = new FsInboxNotification(config);
   const clock = systemClock;
   // Diagnostic uses a fresh config per area so its collecting
@@ -227,6 +237,10 @@ export function buildContainer(opts: BuildContainerOpts = {}): Container {
         : config.lenses,
     }),
     issueUC: new IssueUseCases(issues, members, clock),
+    // Observations are append-only machine facts — no use-case layer
+    // wraps them because there is no policy to enforce beyond what the
+    // domain already validates. The repository is the whole story.
+    observations,
     messageUC: new MessageUseCases({ members, notifier, clock }),
     diagnosticUC: new DiagnosticUseCases(
       buildDiagRepos,

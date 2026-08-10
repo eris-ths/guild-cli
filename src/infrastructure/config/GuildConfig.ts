@@ -115,6 +115,13 @@ export interface GuildConfigProps {
      * per event under `<content_root>/sessions/<id>.yaml`.
      */
     sessions: string;
+    /**
+     * Machine-emitted observations (`gate rom record`). Append-only,
+     * no state machine — the store is the discriminator that keeps
+     * measurements out of the judgment surface. One YAML file per
+     * observation under `<content_root>/observations/<id>.yaml`.
+     */
+    observations: string;
   };
   hostNames: readonly string[];
   lenses: readonly string[];
@@ -277,6 +284,7 @@ export class GuildConfig implements GuildConfigProps {
       issues: resolveUnder(contentRoot, p.issues ?? 'issues'),
       inbox: resolveUnder(contentRoot, p.inbox ?? 'inbox'),
       sessions: resolveUnder(contentRoot, p.sessions ?? 'sessions'),
+      observations: resolveUnder(contentRoot, p.observations ?? 'observations'),
     };
     const hostNames = Array.isArray(raw.host_names)
       ? raw.host_names
@@ -463,6 +471,7 @@ export class GuildConfig implements GuildConfigProps {
         issues: join(abs, 'issues'),
         inbox: join(abs, 'inbox'),
         sessions: join(abs, 'sessions'),
+        observations: join(abs, 'observations'),
       },
       [...DEFAULT_HOSTS],
       [...DEFAULT_LENSES],

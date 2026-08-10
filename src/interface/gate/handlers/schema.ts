@@ -1767,6 +1767,51 @@ const VERBS: readonly VerbSchema[] = [
     output: { type: 'object' },
   },
   {
+    name: 'rom',
+    category: 'read',
+    summary:
+      'v1 RomPlugin report envelopes (docs/design/rom-plugin.md). ' +
+      'Subcommands: verify <file|-> (check only), record <file|-> (check then ' +
+      'append an observation), list [--for <request-id>], show <o-id>. ' +
+      'Beyond shape, verification checks the invariants ' +
+      'where the envelope restates a fact twice and the copies can drift: ' +
+      'engine.names.length === engine.windows, capabilities.declared === ' +
+      'engine.windows, capabilities.used === used_names.length, and every ' +
+      'used window NAME present in engine.names (the real `declared ⊇ used` — ' +
+      'comparing counts alone would accept a run that touched windows the ' +
+      'engine never offered). guild-cli owns the contract, not an engine. ' +
+      'A recorded envelope lands in observations/ — its own append-only ' +
+      'substrate kind with no state machine, NOT inline on the request ' +
+      'record: an observation is a machine fact about a run that already ' +
+      'happened, so the store itself is the machine/human discriminator and ' +
+      'no projection needs to filter measurements back out of the judgment ' +
+      'surface. The link is one-directional (observation names its subject; ' +
+      'the request does not list its observations, so a terminal wave stays ' +
+      'terminal).',
+    input: {
+      type: 'object',
+      properties: {
+        subcommand: {
+          type: 'string',
+          enum: ['verify', 'record', 'list', 'show'],
+        },
+        by: strOpt('recording actor (`record` only; defaults to $GUILD_ACTOR)'),
+        for: strOpt(
+          'request id this observation belongs to (`record` writes it, `list` filters by it)',
+        ),
+        input: strOpt(
+          'path to the envelope (positional), or `-` to read stdin. Accepts a bare JSON document, or a run log in which one line carries the JSON object (the first `{` on the line begins it) — no engine-specific prefix is assumed. `show` takes an observation id here instead.',
+        ),
+        source: strOpt(
+          'emitting tool name recorded on the observation (`record` only, flag --source, e.g. rom-stamp). Distinct from the positional above, which is where the envelope is READ from.',
+        ),
+        format: formatField,
+      },
+      required: ['subcommand'],
+    },
+    output: { type: 'object' },
+  },
+  {
     name: 'approve',
     category: 'write',
     summary:
