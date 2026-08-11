@@ -721,6 +721,26 @@ count — comparing counts alone would accept a run that touched windows
 the engine never offered, which is the claim the envelope exists to
 make checkable. A violation exits non-zero and names the window.
 
+Three optional blocks carry the rest of what an engine can say, and are
+validated the same way when present (specified 2026-08-11):
+
+- `policy` — what the run was *allowed* to touch, versus what it
+  touched. Under `enforced: true` the binding surface is
+  `policy.granted`, which is narrower than `engine.names`: a used
+  window outside the grant set means the engine's own enforcement
+  leaked, and no count comparison can see it. `denied` records the
+  windows a ROM *tried* to reach and was refused; `stopped_at` says
+  where the first refusal happened.
+- `timeline` — first touch of each window, in order. **Complete or
+  absent**: a truncated timeline is indistinguishable from a whole one,
+  so a prefix is rejected rather than accepted.
+- `exit` — `trapped` / `exited` / `code`.
+
+All three are optional; an engine that observes without enforcing
+conforms. What is refused is a *present but hollow* block. `gate rom
+verify` says which case it saw, so an absent `policy` reads as "no
+enforcement claim" rather than as "no denials".
+
 Input may be a bare JSON document or a run log with the envelope on one
 line; no engine-specific prefix is assumed, so any engine that emits
 the envelope qualifies. guild-cli ships **no engine** and takes no
@@ -731,9 +751,11 @@ runtime dependency on one.
 an observation is a machine fact about a run that already happened.
 Records are re-validated on read, so "recorded" means "verified" for a
 later reader, not only at the moment of writing. Envelope keys outside
-the v1 contract (the reference engine's `policy` block, which carries
-the windows a ROM *tried* to reach and was refused) are preserved
-verbatim.
+the v1 contract are preserved verbatim — the wire is allowed to run
+ahead of the spec, and a fact dropped on write cannot be recovered.
+That is not hypothetical: `policy`, `timeline` and `exit` were stored
+this way for as long as they were unspecified, which is why they could
+later be specified from recorded runs rather than from prose.
 
 The link to a wave is one-directional: an observation names its
 `subject`, the request does not list its observations, so a completed

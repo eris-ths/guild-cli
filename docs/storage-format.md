@@ -368,8 +368,11 @@ inconsistent state must fail when it is read, not be trusted because it
 passed once on write. Unknown top-level keys are ignored, so an engine
 whose wire format is ahead of this table keeps validating.
 
-**Size.** The envelope is bounded by the engine's declared window count
-(`engine.names` is the largest field) and is small in practice — the
+**Size.** The envelope is bounded by the engine's declared window
+count: every variable-length field (`engine.names`, `capabilities.
+used_names`, `policy.granted`, `policy.denied`, `timeline`) holds at
+most one entry per declared window, so the whole record grows linearly
+in that one number and in nothing else. Small in practice — the
 reference engine's is under 2 KB. `docs/storage-format.md` still states
 no general per-record size discipline; this record does not establish
 one, and a future kind with an unbounded body should be pushed to a

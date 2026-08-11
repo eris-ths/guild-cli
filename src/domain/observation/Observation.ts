@@ -1,7 +1,11 @@
 import { DomainError } from '../shared/DomainError.js';
 import { MemberName } from '../member/MemberName.js';
 import { RequestId } from '../request/RequestId.js';
-import { RomEnvelope, parseRomEnvelope } from '../rom/RomEnvelope.js';
+import {
+  RomEnvelope,
+  parseRomEnvelope,
+  ROM_CONTRACT_KEYS,
+} from '../rom/RomEnvelope.js';
 
 /**
  * An **Observation** — a machine-emitted fact about a run that already
@@ -62,28 +66,26 @@ export type ObservationBody = {
    * Top-level envelope keys outside the v1 contract, preserved
    * verbatim.
    *
-   * Not a nicety. The reference engine emits a `policy` block the
-   * contract does not describe, and that block carries `denied` — the
-   * windows a ROM *tried* to reach and was refused. Storing only the
-   * contract fields would discard the single most security-relevant
-   * thing the engine has to say, in the name of tidiness.
+   * Not a nicety, and not hypothetical: this is how the reference
+   * engine's `policy` / `timeline` / `exit` blocks were preserved for
+   * the weeks between shipping the v1 parser and specifying them. Had
+   * they been dropped as unknown, the record of which windows a ROM
+   * *tried* to reach and was refused would have been gone by the time
+   * anyone thought to describe it, and the spec would have been
+   * written from the document instead of from stored runs.
    *
-   * An observation is a record of what the engine actually reported.
-   * The typed half is what we can check; this is the rest of what we
-   * were told, kept because the wire is allowed to be ahead of the
-   * spec and a fact dropped on write cannot be recovered later.
+   * The wire is allowed to be ahead of the spec. An observation records
+   * what the engine actually reported: the typed half is what we can
+   * check, this is the rest of what we were told, and a fact dropped on
+   * write cannot be recovered later.
    */
   readonly extra?: Readonly<Record<string, unknown>>;
 };
 
-/** Contract-owned top-level keys; everything else is carried in `extra`. */
-const ROM_CONTRACT_KEYS: ReadonlySet<string> = new Set([
-  'v',
-  'engine',
-  'cost',
-  'io',
-  'capabilities',
-]);
+// Contract-owned top-level keys come from the module that owns the
+// contract (`ROM_CONTRACT_KEYS`), not from a copy kept here. A copy
+// would keep filing a newly-specified block as `extra` — silently, and
+// forever, because nothing compares the two lists.
 
 /** Split a raw envelope document into its contract part and the rest. */
 export function extractRomExtra(
@@ -92,10 +94,23 @@ export function extractRomExtra(
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
     return undefined;
   }
-  const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
-    if (!ROM_CONTRACT_KEYS.has(k)) out[k] = v;
-  }
+  // `Object.fromEntries`, not `out[k] = v`. Assignment routes a key
+  // named `__proto__` through the prototype setter: the value becomes
+  // this object's prototype instead of one of its keys, `Object.keys`
+  // then reports nothing, and the whole block is discarded as empty.
+  // Silent loss — in the one place built to prevent silent loss.
+  //
+  // `fromEntries` defines own properties instead, so the key survives
+  // as a key. (`JSON.parse` does produce an own `__proto__`, so this is
+  // reachable from engine output, not only from a hand-written object.)
+  // No global prototype was ever at risk here — the target is a fresh
+  // literal — but a dropped fact cannot be recovered later, which is
+  // the whole reason this function exists.
+  const out = Object.fromEntries(
+    Object.entries(raw as Record<string, unknown>).filter(
+      ([k]) => !ROM_CONTRACT_KEYS.has(k),
+    ),
+  );
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
@@ -225,9 +240,24 @@ export class Observation {
   }
 }
 
-/** snake_case is already the envelope's wire shape — pass it through. */
+/**
+ * snake_case is already the envelope's wire shape — pass it through.
+ *
+ * This function is a third statement of the envelope's shape, after the
+ * `RomEnvelope` type and `parseRomEnvelope`. It cannot be derived from
+ * either (the type is erased; the parser runs the other direction), so
+ * it is *bound* instead: `RomEnvelope.test.ts` asserts that
+ * `romEnvelopeToJSON(parseRomEnvelope(x))` deep-equals `x` for a
+ * fully-populated `x`. A field dropped here fails that round-trip
+ * rather than silently vanishing from the store.
+ *
+ * That guard was written because this function had in fact already
+ * dropped three blocks — `policy`, `timeline` and `exit` reached the
+ * parser but never the disk, so a recorded observation was quietly
+ * poorer than the run it recorded.
+ */
 export function romEnvelopeToJSON(e: RomEnvelope): Record<string, unknown> {
-  return {
+  const out: Record<string, unknown> = {
     v: e.v,
     engine: {
       windows: e.engine.windows,
@@ -250,6 +280,42 @@ export function romEnvelopeToJSON(e: RomEnvelope): Record<string, unknown> {
       })),
     },
   };
+  // Omit-when-absent: the store's byte-stability invariant. An engine
+  // that sent no `policy` must not read back as one that sent an empty
+  // one — absence and emptiness are different claims here.
+  if (e.policy !== undefined) {
+    const p: Record<string, unknown> = { enforced: e.policy.enforced };
+    if (e.policy.granted !== undefined) p['granted'] = [...e.policy.granted];
+    if (e.policy.denied !== undefined) {
+      p['denied'] = e.policy.denied.map((d) => ({
+        name: d.name,
+        count: d.count,
+      }));
+    }
+    if (e.policy.stopped_at !== undefined) {
+      p['stopped_at'] = {
+        window: e.policy.stopped_at.window,
+        instr: e.policy.stopped_at.instr,
+        hostcall: e.policy.stopped_at.hostcall,
+      };
+    }
+    out['policy'] = p;
+  }
+  if (e.timeline !== undefined) {
+    out['timeline'] = e.timeline.map((t) => ({
+      seq: t.seq,
+      window: t.window,
+      denied: t.denied,
+    }));
+  }
+  if (e.exit !== undefined) {
+    out['exit'] = {
+      trapped: e.exit.trapped,
+      exited: e.exit.exited,
+      code: e.exit.code,
+    };
+  }
+  return out;
 }
 
 /**

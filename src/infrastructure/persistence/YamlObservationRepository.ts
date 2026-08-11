@@ -85,6 +85,18 @@ export class YamlObservationRepository implements ObservationRepository {
     return all.filter((o) => o.kind === kind);
   }
 
+  async countRecordFiles(): Promise<number> {
+    // Counts by filename shape only — deliberately the same predicate
+    // the list paths use to decide what to *try*, so the difference
+    // between this number and a list's length is exactly "attempted
+    // and failed", with nothing else folded in.
+    let n = 0;
+    for (const entry of listDirSafe(this.dir, '.')) {
+      if (FILE_PATTERN.test(entry)) n += 1;
+    }
+    return n;
+  }
+
   async listUnrecognizedFiles(): Promise<UnrecognizedRecordEntry[]> {
     const out: UnrecognizedRecordEntry[] = [];
     for (const entry of listDirSafe(this.dir, '.')) {

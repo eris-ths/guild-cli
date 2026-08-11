@@ -170,10 +170,53 @@ async function romVerify(args: ParsedArgs): Promise<number> {
       (used.length > 0 ? ` (${used})` : '') +
       '\n',
   );
-  // `used ⊆ declared` is an invariant of the parse above, not a thing
-  // the reader has to check by eye — it is stated here so the text
-  // surface says what was actually established, not just what was seen.
-  process.stdout.write('  used ⊆ declared, verified by name\n');
+  const policy = envelope.policy;
+  if (policy === undefined) {
+    // An absent policy block is not "no denials" — it is "no claim".
+    // Saying so keeps a reader from reading silence as an all-clear,
+    // which is the whole reason the block was specified.
+    process.stdout.write(
+      '  policy    not reported — this run makes no enforcement claim\n',
+    );
+  } else if (!policy.enforced) {
+    process.stdout.write(
+      '  policy    enforced=false — every declared window was permitted\n',
+    );
+  } else {
+    const denied = (policy.denied ?? [])
+      .map((d) => `${d.name}×${d.count}`)
+      .join(' ');
+    const stop = policy.stopped_at;
+    process.stdout.write(
+      `  policy    enforced granted=${(policy.granted ?? []).length} ` +
+        `denied=${(policy.denied ?? []).length}` +
+        (denied.length > 0 ? ` (${denied})` : '') +
+        '\n' +
+        (stop
+          ? `  stopped   ${stop.window} @ instr=${stop.instr} hostcall=${stop.hostcall}\n`
+          : ''),
+    );
+  }
+
+  if (envelope.exit) {
+    const how = envelope.exit.trapped
+      ? 'trapped'
+      : envelope.exit.exited
+        ? 'exited'
+        : 'ran to completion';
+    process.stdout.write(`  exit      ${how} code=${envelope.exit.code}\n`);
+  }
+
+  // The set relations are invariants of the parse above, not something
+  // the reader has to check by eye — stated here so the text surface
+  // reports what was actually established, not just what was seen.
+  // Under enforcement the binding surface is the grant set, which is
+  // narrower than the declared one, so name the stronger claim.
+  process.stdout.write(
+    policy?.enforced
+      ? '  used ⊆ granted ⊆ declared, verified by name\n'
+      : '  used ⊆ declared, verified by name\n',
+  );
   return 0;
 }
 
@@ -302,18 +345,44 @@ async function romList(c: C, args: ParsedArgs): Promise<number> {
   if (format === 'json') {
     process.stdout.write(
       JSON.stringify(
-        { count: all.length, observations: all.map((o) => o.toJSON()) },
+        {
+          count: all.length,
+          // Machine readers get the same distinction, not a softer one:
+          // a non-zero `unreadable` means this list is incomplete.
+          unreadable:
+            (await c.observations.countRecordFiles()) -
+            (await c.observations.listAll()).length,
+          observations: all.map((o) => o.toJSON()),
+        },
         null,
         2,
       ) + '\n',
     );
     return 0;
   }
+  // "nothing recorded" and "recorded, but unreadable" must not print the
+  // same sentence. A record that fails hydrate is dropped by design —
+  // one corrupt file should not take down a read — but the drop warns
+  // on stderr and then the summary below asserts emptiness on stdout,
+  // so a reader piping stdout learns the opposite of the truth.
+  const onDisk = await c.observations.countRecordFiles();
+  const unreadable = onDisk - (await c.observations.listAll()).length;
+  if (unreadable > 0) {
+    process.stdout.write(
+      `⚠ ${unreadable} observation file(s) on disk could not be read and ` +
+        `are missing from this list.\n` +
+        `  Details were written to stderr. Inspect with: ` +
+        `gate rom show <o-id>\n`,
+    );
+  }
+
   if (all.length === 0) {
     process.stdout.write(
-      forId === undefined
-        ? 'no rom observations recorded yet.\n  gate rom record <file|->\n'
-        : `no rom observations for ${forId}.\n`,
+      unreadable > 0
+        ? 'no rom observations could be listed.\n'
+        : forId === undefined
+          ? 'no rom observations recorded yet.\n  gate rom record <file|->\n'
+          : `no rom observations for ${forId}.\n`,
     );
     return 0;
   }

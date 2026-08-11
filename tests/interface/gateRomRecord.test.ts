@@ -155,15 +155,25 @@ test('an invalid envelope is rejected AND writes nothing', () => {
   }
 });
 
-test('keys outside the v1 contract survive write and read (policy.denied)', () => {
+test('a specified block round-trips through the typed contract (policy)', () => {
+  // `policy` used to be the example of an *unknown* key here: it was on
+  // the wire, outside the contract, and preserved only because
+  // `ObservationBody.extra` keeps what it does not understand. That
+  // preservation is what later made it specifiable from stored runs
+  // instead of from prose.
+  //
+  // Now that it is specified, it must arrive through the typed half —
+  // and, because the parser checks it, an envelope whose enforcement
+  // claim contradicts its own usage must be refused rather than stored.
   const { root, cleanup } = bootstrap();
   try {
     const withPolicy = {
       ...structuredClone(VALID),
       policy: {
         enforced: true,
-        granted: ['fd_write'],
-        denied: [{ name: 'path_open', count: 4 }],
+        granted: ['fd_write', 'proc_exit'],
+        denied: [{ name: 'fd_read', count: 4 }],
+        stopped_at: { window: 'fd_read', instr: 91, hostcall: 7 },
       },
     };
     const p = writeEnvelope(root, 'rep.json', withPolicy);
@@ -173,9 +183,12 @@ test('keys outside the v1 contract survive write and read (policy.denied)', () =
     // On disk...
     const files = observationFiles(root);
     assert.equal(files.length, 1);
-    const onDisk = readFileSync(join(root, 'observations', files[0] as string), 'utf8');
+    const onDisk = readFileSync(
+      join(root, 'observations', files[0] as string),
+      'utf8',
+    );
     assert.match(onDisk, /denied/);
-    assert.match(onDisk, /path_open/);
+    assert.match(onDisk, /fd_read/);
 
     // ...and back through hydrate.
     const listed = JSON.parse(
@@ -183,7 +196,71 @@ test('keys outside the v1 contract survive write and read (policy.denied)', () =
     );
     const policy = listed.observations[0].envelope.policy;
     assert.equal(policy.enforced, true);
-    assert.deepEqual(policy.denied, [{ name: 'path_open', count: 4 }]);
+    assert.deepEqual(policy.denied, [{ name: 'fd_read', count: 4 }]);
+    assert.equal(policy.stopped_at.window, 'fd_read');
+  } finally {
+    cleanup();
+  }
+});
+
+test('an enforcement claim contradicted by usage is refused, not stored', () => {
+  // The check that makes specifying the block worth anything: the
+  // engine says it enforced a grant set and then reports using a window
+  // outside it. Before `policy` was specified this envelope recorded
+  // cleanly, because nothing read the block it was stored in.
+  const { root, cleanup } = bootstrap();
+  try {
+    const leaky = {
+      ...structuredClone(VALID),
+      policy: {
+        enforced: true,
+        granted: ['fd_write'],
+        denied: [],
+      },
+    };
+    const p = writeEnvelope(root, 'leaky.json', leaky);
+    const rec = runGate(root, ['rom', 'record', p]);
+    assert.notEqual(rec.status, 0, 'a leaked grant set was accepted');
+    assert.match(rec.stderr, /proc_exit/);
+    // Nothing may be left behind by a refused record.
+    assert.equal(
+      existsSync(join(root, 'observations')) ? observationFiles(root).length : 0,
+      0,
+      'a refused envelope still wrote an observation',
+    );
+  } finally {
+    cleanup();
+  }
+});
+
+test('keys still outside the contract survive write and read', () => {
+  // The `extra` half, retested with a key that is genuinely unknown
+  // today. The wire is allowed to run ahead of the spec; what must not
+  // happen is a fact being dropped on write, because it cannot be
+  // recovered afterwards.
+  const { root, cleanup } = bootstrap();
+  try {
+    const ahead = {
+      ...structuredClone(VALID),
+      coverage: { edges: 128, blocks: 44 },
+    };
+    const p = writeEnvelope(root, 'rep.json', ahead);
+    assert.equal(runGate(root, ['rom', 'record', p]).status, 0);
+
+    const onDisk = readFileSync(
+      join(root, 'observations', observationFiles(root)[0] as string),
+      'utf8',
+    );
+    assert.match(onDisk, /coverage/);
+    assert.match(onDisk, /128/);
+
+    const listed = JSON.parse(
+      runGate(root, ['rom', 'list', '--format', 'json']).stdout,
+    );
+    assert.deepEqual(listed.observations[0].envelope.coverage, {
+      edges: 128,
+      blocks: 44,
+    });
   } finally {
     cleanup();
   }
@@ -228,6 +305,72 @@ test('rom record needs an actor when GUILD_ACTOR is unset', () => {
     });
     assert.notEqual(r.status, 0);
     assert.match(r.stderr, /--by|GUILD_ACTOR/);
+  } finally {
+    cleanup();
+  }
+});
+
+test('a record that cannot be read is reported, not counted as absence', () => {
+  // "nothing recorded" and "recorded but unreadable" used to print the
+  // same sentence on stdout, with the difference only on stderr — so a
+  // reader piping stdout was told the opposite of the truth.
+  //
+  // This became reachable rather than theoretical when `policy` moved
+  // from `extra` into the contract. Hydrate re-validates, so a record
+  // written while a block was unspecified can stop being readable the
+  // day it is specified. The file below is exactly that: an envelope
+  // whose enforcement claim contradicts its own usage, which no
+  // pre-spec write path would have refused.
+  const { root, cleanup } = bootstrap();
+  try {
+    mkdirSync(join(root, 'observations'), { recursive: true });
+    writeFileSync(
+      join(root, 'observations', 'o-2026-08-01-0001.yaml'),
+      [
+        'id: o-2026-08-01-0001',
+        'kind: rom',
+        'by: alice',
+        'at: 2026-08-01T00:00:00.000Z',
+        'envelope:',
+        '  v: 1',
+        '  engine:',
+        '    windows: 3',
+        '    names: [fd_write, fd_read, proc_exit]',
+        '    feat: sandbox',
+        '  cost: {instrs: 10, hostcalls: 2, mempeak_pages: 1, mode: verify}',
+        '  io: {out_bytes: 4, out_fnv1a: "8f2ad431"}',
+        '  capabilities:',
+        '    declared: 3',
+        '    used: 2',
+        '    used_names:',
+        '      - {name: fd_write, count: 1}',
+        '      - {name: proc_exit, count: 1}',
+        '  policy:',
+        '    enforced: true',
+        '    granted: [fd_write]',
+        '',
+      ].join('\n'),
+    );
+
+    const listed = runGate(root, ['rom', 'list']);
+    assert.equal(listed.status, 0, 'one bad record must not take down the read');
+    assert.match(
+      listed.stdout,
+      /could not be read/,
+      'stdout claimed emptiness while a record was being skipped',
+    );
+    assert.doesNotMatch(
+      listed.stdout,
+      /no rom observations recorded yet/,
+      'stdout asserted "nothing recorded" over an unreadable record',
+    );
+
+    // Machine readers get the same distinction, not a softer one.
+    const json = JSON.parse(
+      runGate(root, ['rom', 'list', '--format', 'json']).stdout,
+    );
+    assert.equal(json.count, 0);
+    assert.equal(json.unreadable, 1);
   } finally {
     cleanup();
   }

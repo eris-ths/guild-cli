@@ -48,7 +48,7 @@ const ENTRY_KNOWN_FLAGS: ReadonlySet<string> = new Set([
  * Usage:
  *   devil entry <rev-id> --persona <p> --lense <l> --kind <k>
  *                        --text "<prose>"
- *                        [--severity <c|h|m|l|info>]
+ *                        [--severity <critical|high|medium|low|info>]
  *                        [--severity-rationale "<prose>"]
  *                        [--addresses <entry-id>]
  *                        [--by <m>] [--format json|text]
