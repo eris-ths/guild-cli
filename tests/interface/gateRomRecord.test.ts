@@ -155,15 +155,25 @@ test('an invalid envelope is rejected AND writes nothing', () => {
   }
 });
 
-test('keys outside the v1 contract survive write and read (policy.denied)', () => {
+test('a specified block round-trips through the typed contract (policy)', () => {
+  // `policy` used to be the example of an *unknown* key here: it was on
+  // the wire, outside the contract, and preserved only because
+  // `ObservationBody.extra` keeps what it does not understand. That
+  // preservation is what later made it specifiable from stored runs
+  // instead of from prose.
+  //
+  // Now that it is specified, it must arrive through the typed half —
+  // and, because the parser checks it, an envelope whose enforcement
+  // claim contradicts its own usage must be refused rather than stored.
   const { root, cleanup } = bootstrap();
   try {
     const withPolicy = {
       ...structuredClone(VALID),
       policy: {
         enforced: true,
-        granted: ['fd_write'],
-        denied: [{ name: 'path_open', count: 4 }],
+        granted: ['fd_write', 'proc_exit'],
+        denied: [{ name: 'fd_read', count: 4 }],
+        stopped_at: { window: 'fd_read', instr: 91, hostcall: 7 },
       },
     };
     const p = writeEnvelope(root, 'rep.json', withPolicy);
@@ -173,9 +183,12 @@ test('keys outside the v1 contract survive write and read (policy.denied)', () =
     // On disk...
     const files = observationFiles(root);
     assert.equal(files.length, 1);
-    const onDisk = readFileSync(join(root, 'observations', files[0] as string), 'utf8');
+    const onDisk = readFileSync(
+      join(root, 'observations', files[0] as string),
+      'utf8',
+    );
     assert.match(onDisk, /denied/);
-    assert.match(onDisk, /path_open/);
+    assert.match(onDisk, /fd_read/);
 
     // ...and back through hydrate.
     const listed = JSON.parse(
@@ -183,7 +196,71 @@ test('keys outside the v1 contract survive write and read (policy.denied)', () =
     );
     const policy = listed.observations[0].envelope.policy;
     assert.equal(policy.enforced, true);
-    assert.deepEqual(policy.denied, [{ name: 'path_open', count: 4 }]);
+    assert.deepEqual(policy.denied, [{ name: 'fd_read', count: 4 }]);
+    assert.equal(policy.stopped_at.window, 'fd_read');
+  } finally {
+    cleanup();
+  }
+});
+
+test('an enforcement claim contradicted by usage is refused, not stored', () => {
+  // The check that makes specifying the block worth anything: the
+  // engine says it enforced a grant set and then reports using a window
+  // outside it. Before `policy` was specified this envelope recorded
+  // cleanly, because nothing read the block it was stored in.
+  const { root, cleanup } = bootstrap();
+  try {
+    const leaky = {
+      ...structuredClone(VALID),
+      policy: {
+        enforced: true,
+        granted: ['fd_write'],
+        denied: [],
+      },
+    };
+    const p = writeEnvelope(root, 'leaky.json', leaky);
+    const rec = runGate(root, ['rom', 'record', p]);
+    assert.notEqual(rec.status, 0, 'a leaked grant set was accepted');
+    assert.match(rec.stderr, /proc_exit/);
+    // Nothing may be left behind by a refused record.
+    assert.equal(
+      existsSync(join(root, 'observations')) ? observationFiles(root).length : 0,
+      0,
+      'a refused envelope still wrote an observation',
+    );
+  } finally {
+    cleanup();
+  }
+});
+
+test('keys still outside the contract survive write and read', () => {
+  // The `extra` half, retested with a key that is genuinely unknown
+  // today. The wire is allowed to run ahead of the spec; what must not
+  // happen is a fact being dropped on write, because it cannot be
+  // recovered afterwards.
+  const { root, cleanup } = bootstrap();
+  try {
+    const ahead = {
+      ...structuredClone(VALID),
+      coverage: { edges: 128, blocks: 44 },
+    };
+    const p = writeEnvelope(root, 'rep.json', ahead);
+    assert.equal(runGate(root, ['rom', 'record', p]).status, 0);
+
+    const onDisk = readFileSync(
+      join(root, 'observations', observationFiles(root)[0] as string),
+      'utf8',
+    );
+    assert.match(onDisk, /coverage/);
+    assert.match(onDisk, /128/);
+
+    const listed = JSON.parse(
+      runGate(root, ['rom', 'list', '--format', 'json']).stdout,
+    );
+    assert.deepEqual(listed.observations[0].envelope.coverage, {
+      edges: 128,
+      blocks: 44,
+    });
   } finally {
     cleanup();
   }

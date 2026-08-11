@@ -170,10 +170,53 @@ async function romVerify(args: ParsedArgs): Promise<number> {
       (used.length > 0 ? ` (${used})` : '') +
       '\n',
   );
-  // `used ⊆ declared` is an invariant of the parse above, not a thing
-  // the reader has to check by eye — it is stated here so the text
-  // surface says what was actually established, not just what was seen.
-  process.stdout.write('  used ⊆ declared, verified by name\n');
+  const policy = envelope.policy;
+  if (policy === undefined) {
+    // An absent policy block is not "no denials" — it is "no claim".
+    // Saying so keeps a reader from reading silence as an all-clear,
+    // which is the whole reason the block was specified.
+    process.stdout.write(
+      '  policy    not reported — this run makes no enforcement claim\n',
+    );
+  } else if (!policy.enforced) {
+    process.stdout.write(
+      '  policy    enforced=false — every declared window was permitted\n',
+    );
+  } else {
+    const denied = (policy.denied ?? [])
+      .map((d) => `${d.name}×${d.count}`)
+      .join(' ');
+    const stop = policy.stopped_at;
+    process.stdout.write(
+      `  policy    enforced granted=${(policy.granted ?? []).length} ` +
+        `denied=${(policy.denied ?? []).length}` +
+        (denied.length > 0 ? ` (${denied})` : '') +
+        '\n' +
+        (stop
+          ? `  stopped   ${stop.window} @ instr=${stop.instr} hostcall=${stop.hostcall}\n`
+          : ''),
+    );
+  }
+
+  if (envelope.exit) {
+    const how = envelope.exit.trapped
+      ? 'trapped'
+      : envelope.exit.exited
+        ? 'exited'
+        : 'ran to completion';
+    process.stdout.write(`  exit      ${how} code=${envelope.exit.code}\n`);
+  }
+
+  // The set relations are invariants of the parse above, not something
+  // the reader has to check by eye — stated here so the text surface
+  // reports what was actually established, not just what was seen.
+  // Under enforcement the binding surface is the grant set, which is
+  // narrower than the declared one, so name the stronger claim.
+  process.stdout.write(
+    policy?.enforced
+      ? '  used ⊆ granted ⊆ declared, verified by name\n'
+      : '  used ⊆ declared, verified by name\n',
+  );
   return 0;
 }
 

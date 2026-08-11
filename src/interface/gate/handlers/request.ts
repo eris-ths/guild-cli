@@ -251,8 +251,17 @@ export async function reqCreate(c: C, args: ParsedArgs): Promise<number> {
     // when missing; we re-call it here so the error message stays
     // identical to the historical one.
     action = requireOption(args, 'action', '"..."');
-    reason = requireOption(args, 'reason', '"..."');
-    if (reason === '-') reason = (await readStdin()).trim();
+    // `reasonRaw` above already resolved `-` by draining stdin. Reading
+    // it a second time here returns "" from the exhausted stream, and
+    // the wave dies as "reason required" with the author's text already
+    // consumed and gone — the failure looked like a missing flag while
+    // the real cause was a duplicated read. Reuse the resolved value;
+    // fall through to requireOption only to keep the historical error
+    // message when the flag is genuinely absent.
+    reason =
+      reasonRaw !== undefined
+        ? reasonRaw
+        : requireOption(args, 'reason', '"..."');
   }
   const input: Parameters<typeof c.requestUC.create>[0] = {
     from,

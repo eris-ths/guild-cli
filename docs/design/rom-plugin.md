@@ -1,18 +1,23 @@
 # Design — `RomPlugin`: a bounded extension shape that declares its cost and its capabilities
 
-Status: **Contract implemented; recording still open.** No engine is
-proposed for vendoring, and none is shipped. The deliverable argued for
-here is a *wire contract* that `guild-cli` owns, plus the discipline
-that makes it worth owning.
+Status: **Contract implemented and recorded; v1 fully specified.** No
+engine is proposed for vendoring, and none is shipped. The deliverable
+argued for here is a *wire contract* that `guild-cli` owns, plus the
+discipline that makes it worth owning.
 
 Since 2026-08-10 the contract is executable rather than prose:
-`src/domain/rom/RomEnvelope.ts` parses and validates a v1 envelope, and
-`gate rom verify <file|->` is its entry point. That closes the gap
-between this document's central argument — "a `v` field with a
-specified meaning can be violated **loudly** instead of silently" — and
-what the repository could actually do, which was nothing: prose cannot
-fail. What remains open is § How a wave records it, deliberately (see
-that section).
+`src/domain/rom/RomEnvelope.ts` parses and validates a v1 envelope,
+`gate rom verify <file|->` is its entry point, and `gate rom record`
+appends the result to `observations/` — a substrate kind of its own
+(§ How a wave records it). That closes the gap between this document's
+central argument — "a `v` field with a specified meaning can be
+violated **loudly** instead of silently" — and what the repository
+could actually do, which was nothing: prose cannot fail.
+
+On 2026-08-11 the three blocks the reference engine emits beyond the
+originally documented key set — `policy`, `timeline`, `exit` — were
+specified from stored runs (§ Enforcement, causality and outcome). The
+documented key set and the wire now agree.
 
 ## Problem recap
 
@@ -104,13 +109,12 @@ document against the engine's emitter rather than against itself:
 - `io.out_fnv1a` was printed here with a `0x` prefix the engine does not
   emit. Fixed below. A placeholder may have an invented *value*; it must
   not have an invented *shape*.
-- The engine also emits a **`policy`** block (`enforced`, and when
-  enforcement is on, `granted` / `denied` / `stopped_at`) that this
-  document does not describe. The wire has therefore grown past the
-  documented key set. `gate rom verify` ignores undocumented keys rather
-  than rejecting them, so conforming envelopes keep validating, but the
-  contract here is a *subset* of what the reference engine sends and
-  should not be read as exhaustive until that block is specified.
+- The engine also emits blocks this document did not describe. That gap
+  is now closed — see § Enforcement, causality and outcome below. It
+  was wider than the note that used to sit here claimed: the note named
+  `policy` alone, and the wire carries **`policy`, `timeline` and
+  `exit`**. A summary of an undocumented surface is itself an
+  undocumented surface.
 
 ```jsonc
 {
@@ -139,9 +143,40 @@ document against the engine's emitter rather than against itself:
       { "name": "fd_read",  "count":  1 },
       { "name": "proc_exit","count":  1 }
     ]
-  }
+  },
+
+  // ── optional blocks ──────────────────────────────────────────────
+  // Absent means "not reported", never "reported as nothing". An
+  // engine that observes without enforcing omits `policy` entirely.
+  "policy": {
+    "enforced": true,                    // false ⇒ granted/denied/stopped_at MUST be absent
+    "granted": ["fd_write", "fd_read", "proc_exit"],
+    "denied":  [{ "name": "path_open", "count": 1 }],
+    "stopped_at": { "window": "path_open", "instr": 41221, "hostcall": 42 }
+  },
+  "timeline": [                          // first touch of each window, in order
+    { "seq": 1, "window": "fd_write",  "denied": false },
+    { "seq": 2, "window": "fd_read",   "denied": false },
+    { "seq": 3, "window": "proc_exit", "denied": false },
+    { "seq": 4, "window": "path_open", "denied": true  }
+  ],
+  "exit": { "trapped": true, "exited": false, "code": 0 }
 }
 ```
+
+The optional blocks above are internally consistent with the rest of
+the example — `granted` covers exactly `used_names`, `timeline` covers
+every used and denied window, and the stop is one of the denials —
+because the invariants in § Enforcement below would reject them
+otherwise. The one deliberate looseness is the `"…"` elision in
+`engine.names`: with it, this document's example is illustrative and
+not literally parseable.
+
+**The parseable example is `validFull()` in
+`tests/domain/RomEnvelope.test.ts`.** Copy from there, not from here.
+A reader who needs a conforming envelope should take one that a parser
+accepts on every run, rather than one a human kept true by hand — this
+document's `0x8f2ad431` was wrong for months by exactly that mechanism.
 
 Three properties of this envelope are what make it worth adopting, and
 each answers one of the pressures above.
@@ -168,6 +203,97 @@ than at a timeout that differs per host.
 checkable without a human comparing bytes, which is what lets a wave
 record carry the claim rather than the payload.
 
+### Enforcement, causality and outcome
+
+Specified 2026-08-11. These three blocks were on the wire from the
+start and outside the contract until now — accepted as unknown keys by
+`gate rom verify`, and preserved verbatim by `gate rom record` in
+`ObservationBody.extra`. That preservation is why they could be
+specified from **stored runs** rather than from prose, which is the
+right direction and the one this document got wrong twice before.
+
+All three are **optional**. `guild-cli` owns the contract and no
+engine, so an engine that observes without enforcing conforms. What is
+refused is a *present but hollow* block: absence is a legible silence,
+a partial block is a silence shaped like an answer.
+
+#### `policy` — what the run was allowed to touch
+
+`capabilities` is an observation: what this run touched, out of what
+the engine offers. `policy` is a claim of a different kind — what the
+run was *permitted* to touch, and whether it tried to go further.
+
+| field | when | meaning |
+|---|---|---|
+| `enforced` | always | whether a grant set was in force |
+| `granted` | iff `enforced` | window names the run was permitted to call |
+| `denied` | iff `enforced` | `{name, count}` for each window called and refused |
+| `stopped_at` | optional | `{window, instr, hostcall}` of the **first** refusal |
+
+**The granted set is fixed for the run.** A single list cannot describe
+an authority that changes mid-run, so an engine that revokes
+dynamically is outside this contract rather than quietly
+under-describing itself with it. Several invariants depend on this.
+
+Checked (`parsePolicy`):
+
+- `granted` and every `denied[].name` appear in `engine.names` — an
+  engine cannot grant or refuse what it does not offer.
+- `granted ∩ denied = ∅` — being refused a window you hold is a
+  contradiction, not a rare event.
+- **`capabilities.used_names ⊆ granted`.** This is the block's reason
+  to exist. `used ⊆ declared` is already checked against
+  `engine.names`; under enforcement the binding surface is the grant
+  set, which is *narrower*. An engine reporting a used window it never
+  granted is reporting that its own enforcement leaked — and that is
+  invisible to every count comparison, because the arithmetic stays
+  consistent throughout.
+- `stopped_at.window` appears in `denied` — a run cannot stop on a
+  refusal it did not report.
+- `enforced: false` ⇒ `granted` / `denied` / `stopped_at` **absent**. A
+  grant list under no enforcement describes a restriction that is not
+  in force, and a reader would take the narrower surface as the true
+  one.
+
+`denied[].count` of `0` is refused, on the same rule `used_names`
+follows: a thing that did not happen has no entry.
+
+#### `timeline` — first touch, in order
+
+`[{seq, window, denied}]`, where `seq` runs `1..N` with no gaps. This
+is causality where `capabilities` is a tally: *which window first, and
+where did it stop*.
+
+**Emit it complete or omit it.** A truncated timeline is
+indistinguishable from a complete one at the reading end, which is the
+exact silence this envelope exists to remove. An engine with a bounded
+buffer it might overflow should send no `timeline` rather than a
+prefix. The parser enforces the choice: every window in `used_names`
+and in `policy.denied` must appear, and a well-formed prefix — valid
+names, contiguous `seq`, no duplicates — is rejected on completeness.
+
+The `denied` flag restates `policy.denied`; the two are checked against
+each other rather than left for a reader to pick whichever they saw
+first.
+
+#### `exit` — how the run ended
+
+`{trapped, exited, code}`. `trapped` and `exited` are mutually
+exclusive by the meaning of the words; both false means the run
+returned normally. `code` is non-negative, `0` by WASI convention for
+anything that did not call `proc_exit`.
+
+#### Why the invariants and not just the shape
+
+Shape checking is the cheap half. Everything above is a place where the
+envelope states the same fact twice and the two copies can disagree —
+`granted` against `used_names`, `timeline` against `policy.denied`,
+`stopped_at` against `denied`. The redundancy is the engine's, and it
+is useful precisely because it is redundant: **a self-report whose two
+halves disagree is a self-report to distrust.** An engine that wanted
+to lie would have to lie consistently across all of them, which is a
+higher bar than emitting one flattering number.
+
 ### How a wave records it
 
 The natural landing site is the existing lifecycle trace: an
@@ -178,17 +304,51 @@ axis its first genuinely typed observation — the `s_t` tuple that
 section asks for is much closer to hand when cost and capability are
 already numbers.
 
-**Status: this is the open half.** `gate rom verify` establishes that an
-envelope conforms; it records nothing. A wave that involved a bounded
-extension still carries no typed evidence of it.
+**Status: settled 2026-08-10.** Of the three options that used to be
+listed here — inline on the request record, referenced by digest, or a
+distinct substrate kind — the third was taken.
 
-Deliberately left open: whether the envelope is stored inline on the
-request record, referenced by digest, or emitted as a distinct
-substrate kind. `docs/storage-format.md` does not currently state a
-general per-record size discipline — the only bound it names is the
-inbox FIFO cap (`MAX_INBOX_SIZE`) — so this choice would be *setting* a
-precedent rather than following one. That is a reason to settle it with
-a dogfood observation rather than in advance.
+`observations/` is a substrate kind of its own, alongside `requests/`,
+`issues/`, `agora/` and `ctx/`:
+
+```
+gate rom record <file|-> [--for <request-id>]   # validate, then append
+gate rom list [--for <request-id>]              # oldest first
+gate rom show <o-id>                            # one observation in full
+```
+
+Records are `observations/o-YYYY-MM-DD-NNNN.yaml`, append-only, with
+**no state machine and no `save`** — only `saveNew`. The absence is the
+invariant: an observation is a report of something that already
+happened, and nothing that already happened changes later. Because
+there is no update path there is no write race, and therefore no
+version field and no compare-and-swap. The store's shape *is* the
+machine/human distinction rather than a flag inside a shared one.
+
+The link to a wave is one-directional. `subject` names the request an
+observation belongs to; the request does not list its observations. A
+wave record is closed when it completes, and letting later machine
+output mutate it would make a terminal record non-terminal. Readers
+join from the observation side.
+
+Two consequences worth stating, because both were reasons to prefer
+this over inline storage:
+
+- **Size discipline stays unset, and stops mattering here.** The
+  concern that motivated the digest-reference option was per-record
+  growth on the request. A separate kind sidesteps it: an envelope is
+  as large as it is, in its own file, and `docs/storage-format.md` did
+  not have to invent a general bound to accommodate it.
+- **Hydrate re-validates.** The envelope goes back through
+  `parseRomEnvelope` on read, so a record hand-edited on disk into an
+  inconsistent state fails when someone reads it, not merely when it
+  was written. Validation on write is not a property of the file.
+
+What is still open is narrower than the section it replaces: nothing
+consumes observations yet beyond `list` / `show`. `gate transcript`
+does not join them into the wave's story, and principle 16's `s_t`
+tuple remains a thing the data would support rather than a thing the
+code emits.
 
 ## Provenance of the reference implementation
 
