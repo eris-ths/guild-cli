@@ -37,8 +37,21 @@ import { ingestSource } from './handlers/ingest.js';
 import { withEntryLock } from '../../../infrastructure/lock/withEntryLock.js';
 import { resolveGuildActor } from '../../../interface/shared/resolveGuildActor.js';
 import { READ_VERBS, WRITE_VERBS, LOCK_EXEMPT_VERBS } from './verbs.js';
+import { VALID_SEVERITIES } from '../domain/Entry.js';
 
-const HELP = `devil-review — security-backstop review passage (alpha, 11 verbs)
+// Both of these used to be typed into the usage text by hand, and one
+// of them was wrong in a way that rejected a real command: the severity
+// line read `<c|h|m|l|info>`, four initials and one full word, which
+// reads as a literal list and is not one. Derive instead — the help
+// cannot disagree with what the parser accepts (principle 17).
+const SEVERITY_CHOICES = [...VALID_SEVERITIES].join('|');
+const VERB_COUNT = new Set([
+  ...READ_VERBS,
+  ...WRITE_VERBS,
+  ...LOCK_EXEMPT_VERBS,
+]).size;
+
+const HELP = `devil-review — security-backstop review passage (alpha, ${VERB_COUNT} verbs)
 
 Usage:
   devil open <target-ref> --type <pr|file|function|commit|system>
@@ -53,7 +66,7 @@ Usage:
 
   devil entry <rev-id> --persona <p> --lense <l> --kind <k>
                        --text "<prose>"
-                       [--severity <c|h|m|l|info>]
+                       [--severity <${SEVERITY_CHOICES}>]
                        [--severity-rationale "<prose>"]
                        [--addresses <entry-id>]
                        [--by <m>] [--format json|text]

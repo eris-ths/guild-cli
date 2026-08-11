@@ -309,3 +309,69 @@ test('rom record needs an actor when GUILD_ACTOR is unset', () => {
     cleanup();
   }
 });
+
+test('a record that cannot be read is reported, not counted as absence', () => {
+  // "nothing recorded" and "recorded but unreadable" used to print the
+  // same sentence on stdout, with the difference only on stderr — so a
+  // reader piping stdout was told the opposite of the truth.
+  //
+  // This became reachable rather than theoretical when `policy` moved
+  // from `extra` into the contract. Hydrate re-validates, so a record
+  // written while a block was unspecified can stop being readable the
+  // day it is specified. The file below is exactly that: an envelope
+  // whose enforcement claim contradicts its own usage, which no
+  // pre-spec write path would have refused.
+  const { root, cleanup } = bootstrap();
+  try {
+    mkdirSync(join(root, 'observations'), { recursive: true });
+    writeFileSync(
+      join(root, 'observations', 'o-2026-08-01-0001.yaml'),
+      [
+        'id: o-2026-08-01-0001',
+        'kind: rom',
+        'by: alice',
+        'at: 2026-08-01T00:00:00.000Z',
+        'envelope:',
+        '  v: 1',
+        '  engine:',
+        '    windows: 3',
+        '    names: [fd_write, fd_read, proc_exit]',
+        '    feat: sandbox',
+        '  cost: {instrs: 10, hostcalls: 2, mempeak_pages: 1, mode: verify}',
+        '  io: {out_bytes: 4, out_fnv1a: "8f2ad431"}',
+        '  capabilities:',
+        '    declared: 3',
+        '    used: 2',
+        '    used_names:',
+        '      - {name: fd_write, count: 1}',
+        '      - {name: proc_exit, count: 1}',
+        '  policy:',
+        '    enforced: true',
+        '    granted: [fd_write]',
+        '',
+      ].join('\n'),
+    );
+
+    const listed = runGate(root, ['rom', 'list']);
+    assert.equal(listed.status, 0, 'one bad record must not take down the read');
+    assert.match(
+      listed.stdout,
+      /could not be read/,
+      'stdout claimed emptiness while a record was being skipped',
+    );
+    assert.doesNotMatch(
+      listed.stdout,
+      /no rom observations recorded yet/,
+      'stdout asserted "nothing recorded" over an unreadable record',
+    );
+
+    // Machine readers get the same distinction, not a softer one.
+    const json = JSON.parse(
+      runGate(root, ['rom', 'list', '--format', 'json']).stdout,
+    );
+    assert.equal(json.count, 0);
+    assert.equal(json.unreadable, 1);
+  } finally {
+    cleanup();
+  }
+});

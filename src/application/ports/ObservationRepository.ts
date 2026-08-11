@@ -28,6 +28,23 @@ export interface ObservationRepository {
    */
   listUnrecognizedFiles(): Promise<UnrecognizedRecordEntry[]>;
   /**
+   * How many files on disk are *shaped* like observation records,
+   * whether or not they hydrate.
+   *
+   * The list methods drop a record that fails hydrate — correctly, so
+   * one corrupt file cannot take down a read — but that leaves "no
+   * records" and "records I could not read" producing the same answer,
+   * and the second one silently. A caller that reports emptiness needs
+   * to be able to tell those apart.
+   *
+   * This became reachable rather than theoretical when `policy` moved
+   * from `extra` into the contract: hydrate re-validates, so a record
+   * written while a block was unspecified can stop being readable the
+   * day it is specified. Zero such records exist today; the next block
+   * promoted will not have that luxury.
+   */
+  countRecordFiles(): Promise<number>;
+  /**
    * Create a brand-new observation file. Must fail with
    * `ObservationIdCollision` if a file for this id already exists —
    * callers rely on the error to drive sequence-allocation retry.

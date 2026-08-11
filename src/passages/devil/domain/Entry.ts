@@ -55,7 +55,15 @@ export function parseEntryKind(raw: unknown): EntryKind {
 
 export type Severity = 'critical' | 'high' | 'medium' | 'low' | 'info';
 
-const VALID_SEVERITIES: ReadonlySet<Severity> = new Set([
+/**
+ * Exported so the CLI's usage text can be *derived* from the accepted
+ * set rather than restate it. The help line used to read
+ * `<c|h|m|l|info>` — initials for four values, the fifth spelled out,
+ * which reads as a literal list and is not one. It cost a real user a
+ * rejected command (2026-08-11, dogfooding the rom spec wave). A
+ * summary of an enum, kept by hand beside the enum: principle 17.
+ */
+export const VALID_SEVERITIES: ReadonlySet<Severity> = new Set([
   'critical',
   'high',
   'medium',

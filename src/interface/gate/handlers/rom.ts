@@ -345,18 +345,44 @@ async function romList(c: C, args: ParsedArgs): Promise<number> {
   if (format === 'json') {
     process.stdout.write(
       JSON.stringify(
-        { count: all.length, observations: all.map((o) => o.toJSON()) },
+        {
+          count: all.length,
+          // Machine readers get the same distinction, not a softer one:
+          // a non-zero `unreadable` means this list is incomplete.
+          unreadable:
+            (await c.observations.countRecordFiles()) -
+            (await c.observations.listAll()).length,
+          observations: all.map((o) => o.toJSON()),
+        },
         null,
         2,
       ) + '\n',
     );
     return 0;
   }
+  // "nothing recorded" and "recorded, but unreadable" must not print the
+  // same sentence. A record that fails hydrate is dropped by design —
+  // one corrupt file should not take down a read — but the drop warns
+  // on stderr and then the summary below asserts emptiness on stdout,
+  // so a reader piping stdout learns the opposite of the truth.
+  const onDisk = await c.observations.countRecordFiles();
+  const unreadable = onDisk - (await c.observations.listAll()).length;
+  if (unreadable > 0) {
+    process.stdout.write(
+      `⚠ ${unreadable} observation file(s) on disk could not be read and ` +
+        `are missing from this list.\n` +
+        `  Details were written to stderr. Inspect with: ` +
+        `gate rom show <o-id>\n`,
+    );
+  }
+
   if (all.length === 0) {
     process.stdout.write(
-      forId === undefined
-        ? 'no rom observations recorded yet.\n  gate rom record <file|->\n'
-        : `no rom observations for ${forId}.\n`,
+      unreadable > 0
+        ? 'no rom observations could be listed.\n'
+        : forId === undefined
+          ? 'no rom observations recorded yet.\n  gate rom record <file|->\n'
+          : `no rom observations for ${forId}.\n`,
     );
     return 0;
   }
