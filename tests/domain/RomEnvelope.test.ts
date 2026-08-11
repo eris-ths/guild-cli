@@ -506,3 +506,32 @@ test('the serializer omits absent blocks rather than emitting empty ones', () =>
   assert.ok(!('timeline' in out), 'an absent timeline was serialized anyway');
   assert.ok(!('exit' in out), 'an absent exit was serialized anyway');
 });
+
+test('a non-contract key named __proto__ survives as a key', () => {
+  // `out[k] = v` routes `__proto__` through the prototype setter: the
+  // value becomes the object's prototype rather than one of its keys,
+  // `Object.keys` reports nothing, and `extractRomExtra` returns
+  // undefined — the block is discarded as empty. Silent loss, in the
+  // function whose entire purpose is to not lose things.
+  //
+  // Reachable from engine output: `JSON.parse` produces an own
+  // `__proto__` property, so this does not require a hand-built object.
+  const raw = JSON.parse(
+    '{"v":1,"__proto__":{"hostile":"yes"},"coverage":{"edges":3}}',
+  ) as Record<string, unknown>;
+  const extra = extractRomExtra(raw);
+  assert.ok(extra !== undefined, 'the non-contract keys were dropped entirely');
+  assert.deepEqual(
+    Object.keys(extra).sort(),
+    ['__proto__', 'coverage'],
+    '__proto__ did not survive as a key',
+  );
+  // The global prototype was never at risk — the target is a fresh
+  // literal — but assert it, because a future refactor to a shared
+  // accumulator would change that and nothing else would notice.
+  assert.equal(
+    (Object.prototype as Record<string, unknown>)['hostile'],
+    undefined,
+    'Object.prototype was polluted',
+  );
+});

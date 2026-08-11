@@ -74,14 +74,10 @@ export type ObservationBody = {
    * anyone thought to describe it, and the spec would have been
    * written from the document instead of from stored runs.
    *
-   * The wire is allowed to be ahead of the spec. A fact dropped on
-   * write cannot be recovered later, so the rule is to keep what we
-   * were told and check what we can.
-   *
-   * An observation is a record of what the engine actually reported.
-   * The typed half is what we can check; this is the rest of what we
-   * were told, kept because the wire is allowed to be ahead of the
-   * spec and a fact dropped on write cannot be recovered later.
+   * The wire is allowed to be ahead of the spec. An observation records
+   * what the engine actually reported: the typed half is what we can
+   * check, this is the rest of what we were told, and a fact dropped on
+   * write cannot be recovered later.
    */
   readonly extra?: Readonly<Record<string, unknown>>;
 };
@@ -98,10 +94,23 @@ export function extractRomExtra(
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
     return undefined;
   }
-  const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
-    if (!ROM_CONTRACT_KEYS.has(k)) out[k] = v;
-  }
+  // `Object.fromEntries`, not `out[k] = v`. Assignment routes a key
+  // named `__proto__` through the prototype setter: the value becomes
+  // this object's prototype instead of one of its keys, `Object.keys`
+  // then reports nothing, and the whole block is discarded as empty.
+  // Silent loss — in the one place built to prevent silent loss.
+  //
+  // `fromEntries` defines own properties instead, so the key survives
+  // as a key. (`JSON.parse` does produce an own `__proto__`, so this is
+  // reachable from engine output, not only from a hand-written object.)
+  // No global prototype was ever at risk here — the target is a fresh
+  // literal — but a dropped fact cannot be recovered later, which is
+  // the whole reason this function exists.
+  const out = Object.fromEntries(
+    Object.entries(raw as Record<string, unknown>).filter(
+      ([k]) => !ROM_CONTRACT_KEYS.has(k),
+    ),
+  );
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
