@@ -203,6 +203,17 @@ than at a timeout that differs per host.
 checkable without a human comparing bytes, which is what lets a wave
 record carry the claim rather than the payload.
 
+**It is not tamper-evidence.** FNV-1a is a 32-bit non-cryptographic
+hash: collisions are findable by construction, and a birthday collision
+is reachable in tens of thousands of samples. It answers "did this run
+produce the same output as that run", against an engine that is honest
+but possibly buggy. It does not answer "has this been altered", and a
+reader who takes a matching anchor as proof of integrity has read a
+determinism check as a signature. The boundary matters because these
+envelopes are meant to be carried in wave records, where a later reader
+has only the claim. What detects a ROM reaching past its authority is
+`policy.denied` — not this field.
+
 ### Enforcement, causality and outcome
 
 Specified 2026-08-11. These three blocks were on the wire from the
