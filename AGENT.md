@@ -922,6 +922,34 @@ of malformed ids). Unlike `GUILD_ACTOR`, there is no
 per-shell concept, and committing one would re-export a single
 name across collaborators.
 
+`GUILD_DELTA_LEDGER=<path>` — keep `delta` deposits in one
+human-editable markdown ledger instead of one YAML file per deposit.
+Unset (default) uses the YAML store; the two adapters never read each
+other's substrate, so a deployment cannot end up with two ledgers that
+both look authoritative.
+
+The point of the markdown ledger is that **depositing stays a shell
+append** — `printf -- '- [%s] %s\n' "$(date '+%m-%d %H:%M')" "..." >>
+ledger.md` — with no process start, no id allocation, and no
+destination decision; the CLI takes the read and `deliver` side, where
+state transitions need recording. Ledger shape:
+
+```markdown
+## Delivered
+- [08-08 21:45] text ⟵ source → candidate ⟹ 08-09 flush: reflect(note)
+
+## Deposit            <- the LAST '## ' section holds outstanding deposits
+- [08-12 13:31] 🧭 an operator-authored deposit ⟵ source → candidate
+```
+
+Sections are found structurally, not by heading text: appends land at
+the end of a file, so the outstanding section must be last. An inverted
+ledger is refused rather than read — it would swallow every future
+deposit into history while still parsing and printing plausible counts.
+Ids are derived from `(date, time, text)` rather than stored, so a
+delivery (which annotates the line and moves it) renumbers nothing;
+editing a deposit's prose does renumber that day.
+
 ## Output format
 
 `gate show`, `gate voices`, `gate status` default to **JSON**.
