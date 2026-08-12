@@ -355,11 +355,55 @@ this over inline storage:
   inconsistent state fails when someone reads it, not merely when it
   was written. Validation on write is not a property of the file.
 
+The first real observations were recorded 2026-08-12 (§ Measured
+against the running engine): two runs of the reference engine, one of
+them a refused capability, both attached to the wave that specified the
+blocks they carry.
+
 What is still open is narrower than the section it replaces: nothing
 consumes observations yet beyond `list` / `show`. `gate transcript`
 does not join them into the wave's story, and principle 16's `s_t`
 tuple remains a thing the data would support rather than a thing the
 code emits.
+
+### Measured against the running engine (2026-08-12)
+
+The spec above was written from the emitter's source. It has since been
+checked against the emitter's *output* — a different thing, and the one
+principle 17 asks for when it says to name which side was actually
+consulted.
+
+Two runs of the reference engine, both harnesses, same 163-byte ROM:
+
+| harness | policy | result |
+|---|---|---|
+| `agent-harness` | not enforced | `used: [print×1]`, ran to completion |
+| `confine-harness` | granted `fd_write,proc_exit` | `print` **denied**, trapped at `instr=3` |
+
+The second is the case the `policy` block exists for. Its envelope
+arrived exactly as specified: `granted` and `denied` disjoint,
+`stopped_at.window` present in `denied`, `timeline` carrying the denied
+window with `denied: true`, `capabilities.used_names` **empty** — the
+refused window was never counted as used, which is the observed form of
+`used ∩ denied = ∅`.
+
+The measurement that settles the question this document got wrong
+twice: **`ObservationBody.extra` was empty for both records.** Every
+top-level key the engine emitted is now owned by the contract. The
+documented key set and the wire agree — measured, not asserted, and
+re-measurable by re-recording.
+
+```bash
+# reproduce (engine sources: eris-ths/cartridge, engine/)
+zig build-exe confine-harness.zig -O ReleaseSafe
+{ printf 'fd_write,proc_exit\n'; cat program.wasm; } | ./confine-harness 2>&1 >/dev/null \
+  | gate rom record - --source confine-harness
+```
+
+Worth stating plainly, because it is the limit of what was shown: this
+confirms the contract describes *this* engine's output. It is not
+evidence that another engine's would fit, and nothing here checks that
+the engine's self-report is true — only that it is self-consistent.
 
 ## Provenance of the reference implementation
 
