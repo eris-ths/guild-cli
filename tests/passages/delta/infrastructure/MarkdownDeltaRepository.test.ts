@@ -40,7 +40,7 @@ const LEDGER = `# delta
 
 ## Deposit
 
-- [08-09 22:38] first outstanding ⟵ gate:2026-08-09-0004 → dev-flow
+- [08-09 22:38] first outstanding ⟵ gate:2026-01-02-0003 → dev-flow
 - [08-12 13:31] 🧭 operator note ⟵ external review → agora
 `;
 
@@ -138,14 +138,14 @@ test('a round-trip through the ledger preserves every field', async () => {
       id: 'delta-2026-08-12-009',
       text: 'round trip',
       created_by: 'eris',
-      source: 'gate:2026-08-12-0002',
+      source: 'gate:2026-01-02-0007',
       candidate: 'cultivate',
       now: NOW,
     }),
   );
   const back = (await repo.listAll()).find((d) => d.text === 'round trip');
   assert.ok(back);
-  assert.equal(back.source, 'gate:2026-08-12-0002');
+  assert.equal(back.source, 'gate:2026-01-02-0007');
   assert.equal(back.candidate, 'cultivate');
 });
 
