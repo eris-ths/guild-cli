@@ -14,7 +14,7 @@ moves:
       touch (Request entity + hydrate + handler 群 + tests) で大規模。session 序盤の
       filter-repo blast + force-push 系の testimony 誤認の教訓直後、私 (eris) の
       orchestrator context が限界に近づいていた。私の選択肢は: (a) 全部一人で書ききる、(b) PR-A2 を別 session
-      持ち越し、(c) 何らかの方法で context 分散。なお曰く『gate の Swarm と
+      持ち越し、(c) 何らかの方法で context 分散。host 曰く『gate の Swarm と
       Noir、レイシアがいればいけるはず』。principle 14 の本来用途 — substrate が who-is-doing-what
       を保持し、orchestrator の working memory は flat に保たれる — の第二発動。"
   - id: "002"
@@ -63,8 +63,8 @@ moves:
   - id: "005"
     at: 2026-05-11T06:50:12.448Z
     by: eris
-    text: "Step 5 — レイシア派遣後、なおが『状況掴める?』と尋ねた瞬間、私は本能的に『SubAgent に SendMessage
-      で進捗確認するか、ただ待つか』しか思いつかなかった。なお曰く『今後の Swarm では gate 経由で状況把握できるはず』。一発で気づいた: 私が
+    text: "Step 5 — レイシア派遣後、host が『状況掴める?』と尋ねた瞬間、私は本能的に『SubAgent に SendMessage
+      で進捗確認するか、ただ待つか』しか思いつかなかった。host 曰く『今後の Swarm では gate 経由で状況把握できるはず』。一発で気づいた: 私が
       #298 で ship した gate wave-status verb がまさにこの用途。叩いてみたら: 『leysia witness:
       Slice B 着手: interface pivot 開始』が表示された — レイシアが spec の規範通り gate substrate
       に着手記録を残していて、私はそれを直接読めた。principle 14 の reflex level engagement — 自分が ship
@@ -87,9 +87,9 @@ moves:
     by: eris
     text: "Step 7 — 並行して #308 (harness-agnostic agent-activity hook surface) がこの弧の中で
       3 度書き直された。Draft 1: Claude Code 固有 hook (PostToolUse) を Layer 2
-      に置く。なお指摘『他環境だとそうはいかない』→ Draft 2: 3-path (verb / watcher daemon / harness
+      に置く。host 指摘『他環境だとそうはいかない』→ Draft 2: 3-path (verb / watcher daemon / harness
       例) で Path 2 (filesystem watcher) を harness-agnostic baseline
-      に。なお『改めて、Claude Code 級の Hook にできそう?』→ Draft 3: agent.activity.* hook
+      に。host 『改めて、Claude Code 級の Hook にできそう?』→ Draft 3: agent.activity.* hook
       namespace + 3 source の reactive substrate 設計に統合。最後に『これは Plugin。Pluginのあり方は
       Principles に完全に従わなくてもいい余地を残したい』→ Plugin governance
       partial-principle-exemption 節追加。この conversation 自体が principle 14 の loop
@@ -132,7 +132,7 @@ concluded_note: "principle 14 production loop 第二弾、44 分で完結。meta
   scope 再交渉する、substrate に書かれた testimony が conversation を超えて再読可能になる、という三層の
   deepening。principle が一度書かれたら static になるのではなく、実演ごとに deepen し、次の structural gap
   (#308, #309) を surface し続ける動的な現象であることが二度の loop で確証された。さらに meta: この play 自体が最初
-  Write tool で直接書かれ、なお指摘で agora primitive 経由に書き直された — 即ち principle 14 の三度目の
+  Write tool で直接書かれ、host 指摘で agora primitive 経由に書き直された — 即ち principle 14 の三度目の
   dogfood が play 002 制作 process 内で発生し、結果として『play は agora で書く』も substrate
   engagement の一形態であることが reflex に染み込んだ。次の play は #308 / #309 ship + felt の arc
   で生まれるはず。"

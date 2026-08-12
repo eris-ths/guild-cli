@@ -94,7 +94,7 @@ The envelope below is not invented for this document. It is the report
 a working engine already emits, in the field, today — the `[agent]`
 line from the engine published inside
 [`eris-ths/cartridge`](https://github.com/eris-ths/cartridge)
-(`engine/`, public). Standardizing an existing wire format rather than
+(`engine/`). Standardizing an existing wire format rather than
 designing a new one is deliberate: the format has running code on both
 sides of it, and its stability has been measured (see § Provenance).
 
@@ -410,7 +410,8 @@ the engine's self-report is true — only that it is self-consistent.
 Honesty about the reference matters more than usual here, because the
 argument above leans on "this already works."
 
-- The engine is public: `eris-ths/cartridge`, `engine/`. It ships with
+- The reference implementation is published separately, in
+  `eris-ths/cartridge` (`engine/`). It ships with
   a `PROVENANCE.md` that names its origin and pins SHA-256 fingerprints
   of the files it was copied from, and its build script **checks those
   fingerprints and says so when they no longer match** — without
