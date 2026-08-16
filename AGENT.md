@@ -116,6 +116,15 @@ gate farewell            # "until next session"        — pairs with `gate resu
 - `--format json` on every write verb (`request/approve/deny/execute/complete/fail/review/thank/fast-track`)
   returns `{ok, id, state, message, suggested_next:{verb, args, reason}}`
 - `gate schema` — JSON Schema for all verbs (LLM tool-layer input)
+- **`--flag -` reads that flag's value from stdin.** Use it for every
+  prose body — reason, move text, cliff, invitation, note, fact. Passing
+  long prose inline is what gets it mangled: an agent-composed body with
+  a backtick in it is command substitution the moment it lands inside a
+  double-quoted shell argument. Available on all of
+  `gate request/fast-track/review/thank/message/broadcast/issues`,
+  `agora move/suspend/conclude/resume`, `ctx record/supersede`.
+  One stdin per invocation, so at most one flag may be `-`; an empty
+  stdin is refused rather than stored.
 
 ## Request lifecycle
 

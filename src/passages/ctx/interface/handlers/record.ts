@@ -1,6 +1,7 @@
 import { CtxUseCases } from '../../application/CtxUseCases.js';
 import { GuildConfig } from '../../../../infrastructure/config/GuildConfig.js';
 import { parseFormat } from '../../../../interface/shared/parseFormat.js';
+import { resolveStdinSentinels } from '../../../../interface/shared/stdinSentinel.js';
 import {
   ParsedArgs,
   optionalOption,
@@ -38,7 +39,9 @@ export async function recordCtx(
 ): Promise<number> {
   rejectUnknownFlags(args, RECORD_KNOWN_FLAGS, 'record');
 
-  const fact = requireOption(args, 'fact', '"..."');
+  const { fact } = await resolveStdinSentinels({
+    fact: requireOption(args, 'fact', '"..."'),
+  });
   const tags = parseTagList(optionalOption(args, 'tag'));
   const by = requireOption(args, 'by', '<m>', 'GUILD_ACTOR');
   const format = parseFormat(args);

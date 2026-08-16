@@ -13,6 +13,7 @@ import {
 import { GuildConfig } from '../../../../infrastructure/config/GuildConfig.js';
 import { resolvePlayForVerb } from './resolvePlay.js';
 import { parseFormat } from '../../../../interface/shared/parseFormat.js';
+import { resolveStdinSentinels } from '../../../../interface/shared/stdinSentinel.js';
 
 const SUSPEND_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'cliff',
@@ -60,8 +61,10 @@ export async function suspendPlay(
     );
     return 1;
   }
-  const cliff = requireOption(args, 'cliff', '"<what just happened>"');
-  const invitation = requireOption(args, 'invitation', '"<next opener\'s move>"');
+  const { cliff, invitation } = await resolveStdinSentinels({
+    cliff: requireOption(args, 'cliff', '"<what just happened>"'),
+    invitation: requireOption(args, 'invitation', '"<next opener\'s move>"'),
+  });
   const by = requireOption(args, 'by', '<m>', 'GUILD_ACTOR');
   const format = parseFormat(args);
 
