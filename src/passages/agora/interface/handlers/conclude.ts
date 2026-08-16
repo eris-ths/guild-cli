@@ -12,6 +12,7 @@ import {
 import { GuildConfig } from '../../../../infrastructure/config/GuildConfig.js';
 import { resolvePlayForVerb } from './resolvePlay.js';
 import { parseFormat } from '../../../../interface/shared/parseFormat.js';
+import { resolveStdinSentinels } from '../../../../interface/shared/stdinSentinel.js';
 
 const CONCLUDE_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'note',
@@ -58,7 +59,9 @@ export async function concludePlay(
     );
     return 1;
   }
-  const note = optionalOption(args, 'note');
+  const { note } = await resolveStdinSentinels({
+    note: optionalOption(args, 'note'),
+  });
   const by = requireOption(args, 'by', '<m>', 'GUILD_ACTOR');
   const format = parseFormat(args);
 

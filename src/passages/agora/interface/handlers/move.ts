@@ -13,6 +13,7 @@ import {
 import { GuildConfig } from '../../../../infrastructure/config/GuildConfig.js';
 import { resolvePlayForVerb } from './resolvePlay.js';
 import { parseFormat } from '../../../../interface/shared/parseFormat.js';
+import { resolveStdinSentinels } from '../../../../interface/shared/stdinSentinel.js';
 
 const MOVE_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'by',
@@ -50,7 +51,9 @@ export async function moveOnPlay(deps: MoveDeps, args: ParsedArgs): Promise<numb
     );
     return 1;
   }
-  const text = requireOption(args, 'text', '"..."');
+  const { text } = await resolveStdinSentinels({
+    text: requireOption(args, 'text', '"..."'),
+  });
   const by = requireOption(args, 'by', '<m>', 'GUILD_ACTOR');
   const format = parseFormat(args);
 
