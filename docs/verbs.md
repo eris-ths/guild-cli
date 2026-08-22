@@ -909,6 +909,14 @@ $ gate doctor --format json | gate repair          # dry-run: show plan
 $ gate doctor --format json | gate repair --apply  # execute: quarantine
 ```
 
+The JSON envelope is `{summary, findings, plugins_loaded}` plus two
+orientation fields: `content_root` (the resolved root that produced
+these counts) and `config_file` (the `guild.config.yaml` that was
+read, or `null` when none was found and cwd was used as the fallback
+root). Unlike the text surface — which discloses the root only when
+the resolution is surprising — both fields are always present, so a
+structured consumer never has to branch on presence.
+
 Repair quarantines malformed files to `<content_root>/quarantine/`
 with a timestamp directory. `duplicate_id` and `unknown` findings
 are no-op (data safety: automatic resolution risks data loss).
