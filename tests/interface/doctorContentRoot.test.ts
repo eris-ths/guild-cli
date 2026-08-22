@@ -17,8 +17,9 @@
 //     disclosure surface at a time per
 //     lore/principles/09-orientation-disclosure.md)
 //   - --summary mode also discloses
-//   - --format json is unaffected (text-only disclosure;
-//     JSON contract unchanged on doctor side per the principle)
+//   - --format json carries content_root / config_file
+//     unconditionally (structured consumers have no notion of
+//     "surprising" — they need the root every time)
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -164,14 +165,13 @@ test('doctor --summary: subdir case also discloses', (t) => {
   );
 });
 
-test('doctor --format json: JSON envelope unaffected by the new disclosure', (t) => {
-  // Principle 09: where a verb's JSON envelope doesn't have
-  // natural room for the structured boolean, text-only is
-  // acceptable. Doctor JSON is `{summary, findings}` — pinning
-  // that no `content_root` / `cwd_outside_content_root` field
-  // sneaks in here means the JSON consumers' contract stays
-  // backwards-compatible. (Future: if a structured field is
-  // wanted, it gets its own PR with a CHANGELOG entry.)
+test('doctor --format json: envelope carries content_root + config_file', (t) => {
+  // Principle 09 says text disclosure is conditional (quiet when the
+  // resolution is unsurprising). JSON has no such notion: an
+  // orchestrator reading the envelope needs to know WHICH root
+  // produced these numbers on every run, so the two fields are
+  // unconditional. Pinned from a subdir so the value is provably the
+  // parent guild's root, not cwd.
   const { root, cleanup } = bootstrap();
   t.after(cleanup);
   const sub = join(root, 'sub');
@@ -179,12 +179,47 @@ test('doctor --format json: JSON envelope unaffected by the new disclosure', (t)
   const r = runGate(sub, ['doctor', '--format', 'json']);
   assert.equal(r.status, 0);
   const payload = JSON.parse(r.stdout);
-  // No content_root field on the JSON side.
-  assert.equal(payload.content_root, undefined);
-  assert.equal(payload.cwd_outside_content_root, undefined);
-  // The JSON shape stays the same as before — summary + findings.
+  assert.equal(payload.content_root, root);
+  assert.equal(payload.config_file, join(root, 'guild.config.yaml'));
+  // The pre-existing shape is untouched — additive only, so
+  // `gate doctor --format json | gate repair` keeps working.
   assert.ok(payload.summary);
   assert.ok(Array.isArray(payload.findings));
+});
+
+test('doctor --format json: aligned cwd still carries both fields', (t) => {
+  // The case where the text surface stays silent. JSON does not:
+  // unconditional means unconditional, so a consumer never has to
+  // branch on field presence.
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  const r = runGate(root, ['doctor', '--format', 'json']);
+  assert.equal(r.status, 0);
+  const payload = JSON.parse(r.stdout);
+  assert.equal(payload.content_root, root);
+  assert.equal(payload.config_file, join(root, 'guild.config.yaml'));
+});
+
+test('doctor --format json: config_file is null on the cwd-fallback path', (t) => {
+  // No guild.config.yaml anywhere up the tree — cwd is used as the
+  // implicit root. `null` (not an empty string, not omitted) is the
+  // signal for that, matching boot's `hints.config_file`.
+  const root = makeTempRoot('guild-doc-cr-json-nocfg-');
+  try {
+    mkdirSync(join(root, 'members'));
+    writeFileSync(
+      join(root, 'members', 'solo.yaml'),
+      'name: solo\ncategory: professional\nactive: true\n',
+    );
+    const r = runGate(root, ['doctor', '--format', 'json']);
+    assert.equal(r.status, 0);
+    const payload = JSON.parse(r.stdout);
+    assert.equal(payload.content_root, root);
+    assert.equal(payload.config_file, null);
+    assert.ok('config_file' in payload);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 function escapeRegex(s: string): string {

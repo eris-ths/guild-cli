@@ -99,7 +99,26 @@ export async function doctorCmd(c: C, args: ParsedArgs): Promise<number> {
   warnIfMisconfiguredCwd(c, totals === 0);
 
   if (format === 'json') {
-    process.stdout.write(JSON.stringify(report.toJSON(), null, 2) + '\n');
+    // The text/summary surfaces disclose the resolved content root
+    // conditionally (only when surprising — see
+    // formatContentRootDisclosure below). JSON consumers have no such
+    // notion of "surprising": an orchestrator reading the envelope
+    // needs to know WHICH root produced these numbers every time, so
+    // both fields are unconditional here. `config_file` is null when
+    // no guild.config.yaml was found and cwd was used as the fallback
+    // root. Additive — `gate repair` and other consumers ignore
+    // unknown keys (POLICY.md json compatibility).
+    process.stdout.write(
+      JSON.stringify(
+        {
+          ...(report.toJSON() as object),
+          content_root: c.config.contentRoot,
+          config_file: c.config.configFile,
+        },
+        null,
+        2,
+      ) + '\n',
+    );
     return report.isClean ? 0 : 1;
   }
 
