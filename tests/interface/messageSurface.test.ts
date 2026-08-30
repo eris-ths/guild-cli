@@ -263,3 +263,26 @@ test('gate inbox --format bogus errors with format validation', (t) => {
   assert.notEqual(r.status, 0);
   assert.match(r.stderr, /--format must be 'json' or 'text'/);
 });
+
+// A positional where a member was meant. Before 2026-08-30 the word was
+// dropped and the command answered with GUILD_ACTOR's own inbox, exit 0 —
+// so reading another body's inbox and reading a typo both looked like
+// "nothing unread". Measured with GUILD_ACTOR=noir: `gate inbox asteria`
+// returned noir's 5 messages while asteria had 6.
+test('gate inbox refuses a positional member and names --for', (t) => {
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  const r = runGate(root, ['inbox', 'bob'], { GUILD_ACTOR: 'alice' });
+  assert.notEqual(r.status, 0);
+  assert.match(r.stderr, /not a member selector/);
+  assert.match(r.stderr, /--for bob/);
+});
+
+// The refusal must not reach through to the subverb that legitimately owns
+// the first positional; `mark-read` is dispatched before the guard.
+test('gate inbox mark-read still takes its positional', (t) => {
+  const { root, cleanup } = bootstrap();
+  t.after(cleanup);
+  const r = runGate(root, ['inbox', 'mark-read'], { GUILD_ACTOR: 'alice' });
+  assert.equal(r.status, 0);
+});

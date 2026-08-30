@@ -173,6 +173,28 @@ export async function msgInbox(c: C, args: ParsedArgs): Promise<number> {
   }
 
   rejectUnknownFlags(args, INBOX_KNOWN_FLAGS, 'inbox');
+
+  // A bare positional is refused, not adopted. `gate inbox asteria` used to
+  // read *your own* inbox and exit 0: the word was dropped and GUILD_ACTOR
+  // stood in for it. Measured 2026-08-26 with GUILD_ACTOR=noir — `gate inbox
+  // asteria` returned noir's 5 messages while asteria had 6, and a member
+  // name that does not exist behaved the same way. Two failures wear one
+  // face there: reading another body's inbox as your own, and reading an
+  // empty result as "nothing unread".
+  //
+  // Refusing beats adopting it as a member selector. If a positional meant
+  // the member, then a mistyped subverb (`mark-red`) becomes a lookup for a
+  // member of that name, and the answer to a typo is an empty inbox — the
+  // same silent shape, moved one step along. The one spelling is --for.
+  const stray = args.positional[0];
+  if (stray !== undefined) {
+    throw new Error(
+      `gate inbox: '${stray}' is not a member selector. Use --for ${stray}. ` +
+        `(A positional here was silently dropped before 2026-08-30, and the ` +
+        `command answered with GUILD_ACTOR's inbox instead.)`,
+    );
+  }
+
   const forName = requireOption(args, 'for', '<m>', 'GUILD_ACTOR');
   const unreadOnly = args.options['unread'] === true;
   const format = parseFormat(args);
