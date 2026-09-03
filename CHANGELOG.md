@@ -29,6 +29,362 @@ versioned block alongside collected fragments.
 
 _Add entries by dropping a file under `.changelog/next/` (see `.changelog/README.md`). The release script collects them into a versioned block at `npm run changelog:release -- <ver>`._
 
+## [0.8.0] - 2026-09-03
+
+### Migration
+
+**No action required.** This is a minor bump because the stable `domain/`
+surface changed (`docs/POLICY.md` § *Stable surface*): `Request` gained an
+optional readonly `supersedes` field (#462). The change is additive:
+
+- Records written before 0.8.0 load unchanged — the field is simply absent.
+- A record written by 0.8.0 *without* `--supersedes` serializes exactly as
+  0.7.x wrote it: the key is omitted, not emitted as `null`. Verified against
+  a 2213-record content_root, where the 2146 records that carry no correction
+  link round-trip byte-identical.
+- Embedders building against `domain/` gain one new optional property on
+  `Request`. No existing field changed shape or meaning, and no state
+  transition was added or removed.
+
+### Changed
+
+- `gate --help` on `profile: standard` now lists `issues` and `why`. Both had
+  been `--all`-only: `gate boot` advertises `open_issues` on the default
+  surface while the verb that acts on it was hidden, and `review` was BASE
+  while the verb that renders review outcomes was not. Measured on a
+  single-operator content root, `issues` was the most-invoked verb in the
+  session and reachable only through the full catalog.
+
+- `gate issues note` accepts `--note`, and `gate issues resolve|defer|start|
+  reopen` accept `--text`. Both sub-verbs attach free-form prose to an issue
+  under two different flag names, so the spelling learned from one bounced off
+  the other with `unknown flag`. Canonical names are unchanged; each now takes
+  its sibling's as an alias.
+
+- `GUILD_MAX_DIR_ENTRIES` now overrides the per-directory scan cap (default
+  1000, ceiling 100000). A long-lived `content_root` outgrows the default
+  legitimately — one dogfood instance passed 1096 completed requests — and the
+  choice used to be "list blind" or "archive today". Malformed values throw
+  rather than falling back to the default, so a typo cannot silently restore
+  the truncated listing this cap was already fixed for once. The overflow
+  warning now names the effective cap and the env var. OKF bundle import reads
+  the same effective value, so import can never be stricter than the store.
+
+**The ROM envelope contract has been checked against the running
+engine, not only against its source.**
+
+`policy` / `timeline` / `exit` were specified by reading the reference
+engine's emitter. They have now been validated against its *output*:
+two runs, both harnesses, including a run under enforcement where a
+window was refused and the ROM trapped.
+
+The measurement that matters: `ObservationBody.extra` was **empty** for
+both records. Every top-level key the engine emits is owned by the
+contract — the documented key set and the wire agree, measured rather
+than asserted. This document had been wrong about that twice before.
+
+Recorded in `docs/design/rom-plugin.md` § Measured against the running
+engine, with the reproduction command and an explicit statement of what
+the measurement does *not* show.
+
+### Added
+
+`tests/docs/agentVerbCoverage.test.ts` — pins AGENT.md against
+`gate schema`.
+
+Both `README.md` and `docs/verbs.md` tell readers that AGENT.md carries
+every verb, and `docs/verbs.md` is explicitly partial *because* of that
+promise. The promise was prose, and prose cannot fail: AGENT.md was
+missing four verbs (`next`, `swarm-status`, `lore`, `rom`), three of
+them long-standing.
+
+All four are now documented, including a new § ROM reports section, and
+the check derives its expectation from the CLI rather than from a
+checked-in list.
+
+Direction is one-way on purpose — every schema verb must appear in
+AGENT.md, but a `gate foo` string in AGENT.md with no schema entry is
+not flagged, since the file legitimately shows composed shell examples.
+
+- **`gate doctor --format json` now carries `content_root` and
+  `config_file`.** The text and `--summary` surfaces disclose the
+  resolved root only when it is surprising (cwd outside the root, or
+  no config found); a structured consumer has no such notion and
+  needs to know which root produced the counts on every run. Both
+  fields are unconditional; `config_file` is `null` on the
+  cwd-as-fallback path, matching `gate boot`'s `hints.config_file`.
+  Additive — `gate doctor --format json | gate repair` is unaffected.
+
+**`observations/` — a fifth substrate kind, for machine-emitted facts.**
+
+`gate rom record <file|->` validates a v1 `RomPlugin` envelope and
+appends an Observation; `gate rom list [--for <request-id>]` and
+`gate rom show <o-id>` read them back.
+
+Why a separate store rather than a field on the request record: the
+four existing kinds all record something a *person* did or decided, and
+all are built around transitions. An observation has no author's intent
+and no state machine — it is a fact about a run that already happened,
+so it cannot be reviewed, superseded, or transitioned. Keeping
+measurements in `requests/` (as `fast-track` records, which is what was
+happening) forced every projection of "what was decided" to filter them
+back out by prefix-matching the action string — a hand-written literal
+in the projection layer. With a separate store the machine/human
+discriminator is **structural**: everything under
+`<paths.observations>/` is machine-origin by construction.
+
+Details worth knowing:
+
+- **Append-only by port shape.** `ObservationRepository` exposes
+  `saveNew` and no `save`; with no update path there is nothing to race
+  over, so no version/CAS machinery exists either.
+- **Envelope keys outside the v1 contract are preserved verbatim.** The
+  reference engine emits a `policy` block the contract does not
+  describe, carrying `denied` — the windows a ROM *tried* to reach and
+  was refused. Storing only the contract fields would discard the most
+  security-relevant thing in the report.
+- **Re-validated on read.** A record hand-edited on disk into an
+  inconsistent state fails when it is read, not merely when it was
+  written — "recorded means verified" has to be true for the reader.
+- **One-directional link.** An observation names its `subject` request;
+  the request does not list its observations, so a completed wave stays
+  terminal. Join from this side with `--for`.
+
+Config: `paths.observations` (default `observations/`).
+Format: `docs/storage-format.md` § Observation.
+
+**Principle 17 — restatement binds to structure, or it rots.**
+
+Graduates `trap_identity_string_written_by_hand_beside_its_table` after
+a fourth independent sighting. The trap file stays in place with the
+mechanism and reviewer trigger conditions; the principle carries the
+stance.
+
+The first three sightings were copies that drifted. The fourth is why
+this is a principle rather than a longer trap: the **check** was itself
+a copy. `verbs-consistency.test.ts` compared `verbs.ts` against a
+hand-written mirror inside the test, both had forgotten
+`gate swarm-status`, and the suite stayed green while the entry
+middleware took a write lock for a read-only verb.
+
+> Two restatements that agree prove nothing. They can agree by both
+> omitting the same thing — the likely failure, not the unlucky one,
+> since whoever forgets the first copy is the same person updating the
+> second.
+
+The obligation: every restatement is derived, bound by a check against
+the structure itself, or explicitly named as unbound. The deciding
+question when a check passes is **"checked against what?"**
+
+Principle 10 (schema as contract) is now framed as one instance of 17 —
+which is why `gate schema` matched the dispatcher exactly on the day
+all three hand-maintained lists did not.
+
+Stale counts removed rather than incremented, per the principle itself:
+`lore/README.md` said "read all fourteen" with sixteen shipped, and
+`examples/quick-start/README.md` said "the 14 principles". Both now
+point at the directory.
+
+**ROM envelope v1: `policy`, `timeline` and `exit` are now specified.**
+
+The reference engine emitted all three from the start; the contract
+described none of them. They were accepted as unknown keys and stored
+verbatim in `ObservationBody.extra`, which is why they could be
+specified from **recorded runs** rather than from the design document —
+the document named only `policy`, and had already been wrong once about
+a field it did restate.
+
+All three are optional (`guild-cli` owns the contract and no engine, so
+an engine that observes without enforcing conforms). What is refused is
+a *present but hollow* block.
+
+The invariant worth the work is `capabilities.used_names ⊆
+policy.granted` under `enforced: true`. `used ⊆ declared` was already
+checked against `engine.names`; under enforcement the binding surface
+is the grant set, which is narrower. An engine reporting a used window
+it never granted is reporting that its own enforcement leaked — and the
+arithmetic stays consistent throughout, so no count comparison can see
+it. `timeline` must be complete or absent: a truncated one is
+indistinguishable from a whole one at the reading end.
+
+`gate rom verify` now reports enforcement state, denials and the stop
+location, and distinguishes an absent `policy` ("no enforcement claim")
+from `enforced: false` ("every declared window was permitted").
+
+Two shape restatements were bound rather than updated, per principle
+17. `ROM_CONTRACT_KEYS` moved to the module that owns the contract and
+is checked against the keys the parser returns; `romEnvelopeToJSON` is
+checked by round-trip. The second guard was written because that
+serializer had *already* been dropping the three blocks — they parsed,
+they validated, and then they did not reach disk.
+
+`gate rom verify <file|->` — validates a v1 `RomPlugin` report envelope
+(`docs/design/rom-plugin.md`), which until now existed only as prose.
+
+Beyond shape, it checks the places where the envelope restates a fact
+twice and the two copies can drift: `engine.names.length ===
+engine.windows`, `capabilities.declared === engine.windows`,
+`capabilities.used === used_names.length`, and — the one that matters —
+every used window **by name** present in `engine.names`. Comparing only
+counts would accept a run that touched windows the engine never
+offered, which is the exact claim the envelope exists to make checkable.
+
+Accepts a bare JSON document or a run log carrying the envelope on one
+line; no engine-specific prefix is assumed, so the substrate stays
+independent of any one engine. Read-only — where a verified envelope
+should be *recorded* on a wave is still deliberately open.
+
+Hidden from default help (`extra` tier); present in `gate schema`.
+
+`--supersedes <id>` on `gate request` / `gate fast-track` — a
+forward-only link to an older request this one corrects.
+
+Principle 04 has stated the shape since it was written ("a correction is
+a new record that references the old"), and the `ctx` passage has
+shipped `ctx supersede` for a while. `gate` never had it, so corrections
+lived in `action` prose: measured against a 2213-record content_root,
+67 records (3.0%) name an older id in prose that no reader can traverse
+mechanically. That is principle 17 — a restatement bound to nothing.
+
+The old record is never mutated; both stay in the ledger. A target that
+does not exist is refused at the write boundary, before any id is
+allocated, so a bad link never leaves a half-written record behind.
+
+Deliberately absent: an inverse `superseded_by` field (it would mutate
+an immutable record) and any taxonomy of correction kinds (`--reason`
+carries which of the four shapes applies). `gate show <old-id>` stays
+silent about corrections that point at it — closing that costs a full
+scan, 0.11s to 0.91s on the measured root, and belongs on `gate chain`.
+
+### Fixed
+
+**`devil entry --severity` no longer advertises values it rejects.**
+
+The usage line read `<c|h|m|l|info>`: four initials and one full word,
+which reads as a literal list and is not one. The parser accepts
+`critical|high|medium|low|info`. Found by being rejected while
+recording a devil review with `--severity med`.
+
+Fixed by derivation rather than by rewriting the string —
+`VALID_SEVERITIES` is exported and the help joins it, so the two cannot
+disagree again. The passage's "11 verbs" headline is now derived from
+the verb sets for the same reason; that one happened to be correct,
+which is exactly why it was worth binding before it stopped being.
+
+**A non-contract envelope key named `__proto__` is no longer silently
+discarded.**
+
+`extractRomExtra` built its result with `out[k] = v`. For `k ===
+"__proto__"` that routes through the prototype setter: the value became
+the object's prototype instead of one of its keys, `Object.keys`
+reported nothing, and the function returned `undefined` — dropping
+every non-contract key in the envelope, not just that one.
+
+Reachable from engine output rather than only from a hand-built object:
+`JSON.parse` produces an own `__proto__` property. No global prototype
+was ever at risk (the target is a fresh literal), so this is silent
+data loss rather than prototype pollution — in the one function whose
+purpose is to not lose things. Now built with `Object.fromEntries`,
+which defines own properties.
+
+- `gate --help` documents `gate review --note`. It had shown only `--comment`,
+  which the runtime already reports as a deprecated alias — following the help
+  guaranteed a deprecation notice. The deprecated spelling is still accepted and
+  is now labelled as such in the help body.
+
+**`gate request --reason -` no longer loses the reason.**
+
+The stdin read was written twice: once while resolving the optional
+`--reason` for the `--template` / `--from-agora` paths, and again
+inside the plain-request branch. The first drained the stream, the
+second returned `""`, and the wave failed as `reason required` with the
+author's text already consumed. The failure looked like a missing flag.
+
+`gate fast-track --reason -` reads once and always worked, which is
+what let this survive: the two verbs share the flag, the docs and the
+wrapper's advice, and only one of them was ever exercised. Both are now
+pinned by a test that round-trips the reason through the store.
+
+**`gate rom list` no longer reports unreadable records as absence.**
+
+A record that fails hydrate is skipped by design — one corrupt file
+must not take down a read — but the skip warned on stderr while stdout
+said "no rom observations recorded yet." A reader piping stdout was
+told the opposite of the truth.
+
+`rom list` now reports how many files on disk could not be read, and
+withholds the emptiness claim when any were. `--format json` carries an
+`unreadable` count, so machine readers get the same distinction rather
+than a softer one.
+
+This became reachable when `policy` moved from `extra` into the
+contract: hydrate re-validates on every read, so a record written while
+a block was unspecified can stop being readable the day it is
+specified. No such records exist yet — the next block promoted will not
+have that luxury.
+
+`--flag -` (read the value from stdin) now works on every prose flag in
+`agora` and `ctx`, not just on `gate`.
+
+The sentinel was wired handler-by-handler on `gate` — round 3 of the
+dogfood sweep closed `gate message` and `gate broadcast`, which had been
+accepting the token and storing the literal `-`. The same gap was still
+open everywhere outside `gate`: `agora move --text -`,
+`agora suspend --cliff -/--invitation -`, `agora conclude/resume
+--note -`, and `ctx record/supersede --fact -` all wrote a one-character
+body and exited 0.
+
+That failure mode is expensive in proportion to how much the record
+mattered. A downstream house used the convention for a day and lost 18
+`agora` moves and 9 `ctx` facts — including the handoff move written for
+a context compaction, i.e. the one record that existed *because* no
+other copy would survive. Nothing surfaced at write time; `agora last`
+after the compaction was the first signal.
+
+`src/interface/shared/stdinSentinel.ts` now holds the shared resolver,
+so a passage that grows a prose flag inherits the behaviour instead of
+re-deriving it. It adds two guards over the plain `if (v === '-')`
+shape:
+
+- **at most one sentinel per invocation** — there is one stdin, and
+  `agora suspend --cliff - --invitation -` cannot be satisfied; feeding
+  the same bytes to both would be worse than refusing;
+- **a blank body is refused** — an empty pipe would otherwise reproduce
+  the silent-empty record the wiring exists to prevent.
+
+`gate` is deliberately untouched in this change: `gate rom` and
+`gate repair` already treat `-` as a *JSON* input they read themselves,
+so they are not prose-flag surfaces. Their empty-stdin behaviour is a
+separate question from this fix.
+
+`gate swarm-status` was missing from `src/interface/gate/verbs.ts`, so
+the entry middleware's fail-safe classified this read-only verb as a
+WRITE and took a write lock for it. Added to `READ_VERBS`.
+
+It was invisible because `tests/interface/verbs-consistency.test.ts`
+compared `verbs.ts` against a **hand-curated mirror** rather than
+against the dispatcher, and the verb was absent from both — two lists
+agreeing by forgetting the same thing. The test now derives each
+passage's verb set from the `case '<verb>':` labels in its `index.ts`,
+with a non-empty floor so a broken parse cannot turn the checks into
+vacuous passes.
+
+Four verbs (`lore`, `next`, `rom`, `voice`) had also fallen out of
+`KNOWN_COMMANDS`, each losing its did-you-mean suggestion. Restored,
+and now pinned by the same derived check.
+
+- A voice plugin may now omit `verbs`. The loader had required it, contradicting
+  the documented contract that all four sections are optional, so a voice that
+  only curated `essentials` was rejected. `gate --help --essentials` also
+  swallowed that rejection and rendered the plain profile help, leaving no way
+  to see the reason short of importing the loader by hand — loader rejections
+  are now reported on stderr, naming the file and the cause. Help still renders
+  either way: a broken voice degrades the surface, it never blocks it.
+
+<!-- carried over from pre-fragment [Unreleased] -->
+
+_Add entries by dropping a file under `.changelog/next/` (see `.changelog/README.md`). The release script collects them into a versioned block at `npm run changelog:release -- <ver>`._
+
 ## [0.7.2] - 2026-08-01
 
 ### Changed
