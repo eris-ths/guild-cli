@@ -36,6 +36,22 @@ function dateKey(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
+/**
+ * Thrown when `--supersedes` names a request that does not exist.
+ *
+ * A correction must point at something real: a dangling link is worse
+ * than no link, because a reader who follows it cannot distinguish
+ * "the record was deleted" from "the id was mistyped". Rejected loudly
+ * at the write boundary rather than persisted (principle 04 —
+ * records-outlive-writers means a written link is forever).
+ */
+export class SupersedeTargetMissing extends Error {
+  constructor(public readonly id: string) {
+    super(`supersede target not found: ${id}`);
+    this.name = 'SupersedeTargetMissing';
+  }
+}
+
 export class RequestUseCases {
   constructor(private readonly deps: RequestUseCasesDeps) {}
 
@@ -67,6 +83,11 @@ export class RequestUseCases {
      *  derived from an agora play's invitation/cliff. Persisted only
      *  when set (absence is the common case). */
     sourceAgoraPlay?: string;
+    /** Id of an older request this one corrects (`--supersedes`).
+     *  Unlike promotedFrom / sourceAgoraPlay this is operator-typed,
+     *  so the target's *existence* is verified here before any record
+     *  is allocated. Throws SupersedeTargetMissing when absent. */
+    supersedes?: string;
     /** Wave-brief template stamp (#235). Threads through from the
      *  interface layer's `--template` flag. The trio (template name,
      *  version, gate_required acknowledgement) moves together; if the
@@ -100,6 +121,16 @@ export class RequestUseCases {
       }
     }
 
+    // Verify the supersede target BEFORE allocating an id. Order is
+    // load-bearing: validating after saveNew would leave a real record
+    // behind on a bad link, and the caller's error would then be a lie
+    // about what the substrate contains.
+    if (input.supersedes !== undefined) {
+      const targetId = RequestId.of(input.supersedes);
+      const target = await requests.findById(targetId);
+      if (target === null) throw new SupersedeTargetMissing(targetId.value);
+    }
+
     // Sequence allocation + create is TOCTOU: two concurrent calls may
     // race to the same number. saveNew uses an O_EXCL create under the
     // hood; on RequestIdCollision we bump the sequence and retry.
@@ -129,6 +160,8 @@ export class RequestUseCases {
       createArgs.requiresWorktreeIsolation = true;
     if (input.sourceAgoraPlay !== undefined)
       createArgs.sourceAgoraPlay = input.sourceAgoraPlay;
+    if (input.supersedes !== undefined)
+      createArgs.supersedes = input.supersedes;
     if (input.template !== undefined) {
       createArgs.template = input.template;
       if (input.templateVersion !== undefined)

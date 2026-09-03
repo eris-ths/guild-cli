@@ -149,6 +149,7 @@ primitives. The table below tells you which.
 | `request.depth`       | `'standard'\|'deep' \| undefined` | `'deep'` or undef |
 | `request.promotedFrom`| `string \| undefined`     | issue id like `'i-2026-04-15-0007'` or undef |
 | `request.sourceAgoraPlay` | `string \| undefined` | play id or undef |
+| `request.supersedes`  | `string \| undefined`     | id of an older request this one corrects, or undef |
 | `request.template`    | `string \| undefined`     | template name or undef |
 | `request.templateVersion` | `number \| undefined` | `1` or undef |
 | `request.gateRequiredAcknowledged` | `boolean \| undefined` | true/false/undef |

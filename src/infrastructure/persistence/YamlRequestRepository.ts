@@ -649,6 +649,14 @@ function hydrate(
     if (typeof obj['source_agora_play'] === 'string') {
       props.sourceAgoraPlay = obj['source_agora_play'] as string;
     }
+    // supersedes. Same permissive read as the two links above: a
+    // string is trusted as-is (shape was validated at the write
+    // boundary by RequestId.of), anything else is ignored rather than
+    // rejected. Principle 04 — a malformed field must not make an
+    // otherwise-readable record unreadable to a cold reader.
+    if (typeof obj['supersedes'] === 'string') {
+      props.supersedes = obj['supersedes'] as string;
+    }
     // opened_by_session (#249). Tolerated as a non-empty string. Same
     // permissive read pattern as source_agora_play / claim_note —
     // we never reject, only ignore malformed values. Format

@@ -55,6 +55,7 @@ export type RequestJSON = {
   // request came from `gate issues promote`. Used by chain as a
   // text-independent forward/inbound ref path.
   readonly promoted_from?: string;
+  readonly supersedes?: string;
 };
 
 export type ReviewJSON = {

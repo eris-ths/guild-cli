@@ -724,3 +724,93 @@ test('Request.restore preserves promotedFrom on round-trip', () => {
   assert.equal(r.toJSON()['promoted_from'], 'i-2026-04-14-0007');
 });
 
+// ── supersedes: forward link to the older request this one corrects ──
+//
+// Unlike promoted_from / source_agora_play these are operator-typed,
+// so the domain owns two refusals: shape, and self-reference.
+
+test('Request.create with supersedes stores the id on the aggregate', () => {
+  const r = Request.create({
+    id: RequestId.generate(d, 2),
+    from: 'alice',
+    action: 'correcting the earlier claim',
+    reason: 'the measurement was wrong',
+    supersedes: '2026-04-14-0001',
+  });
+  assert.equal(r.supersedes, '2026-04-14-0001');
+  assert.equal(r.toJSON()['supersedes'], '2026-04-14-0001');
+});
+
+test('Request.toJSON omits supersedes when not set (ordinary records byte-identical)', () => {
+  const r = Request.create({
+    id: RequestId.generate(d, 1),
+    from: 'alice',
+    action: 'a',
+    reason: 'r',
+  });
+  assert.equal('supersedes' in r.toJSON(), false);
+});
+
+test('Request.create refuses a self-supersession', () => {
+  // A record cannot correct itself: the link would be a cycle of one
+  // and a reader following it would never reach a prior claim.
+  const id = RequestId.generate(d, 3);
+  assert.throws(
+    () =>
+      Request.create({
+        id,
+        from: 'alice',
+        action: 'a',
+        reason: 'r',
+        supersedes: id.value,
+      }),
+    /cannot supersede itself/,
+  );
+});
+
+test('Request.create refuses a malformed supersedes id', () => {
+  assert.throws(
+    () =>
+      Request.create({
+        id: RequestId.generate(d, 4),
+        from: 'alice',
+        action: 'a',
+        reason: 'r',
+        supersedes: 'not-an-id',
+      }),
+    /Invalid request id/,
+  );
+});
+
+test('Request.create accepts a legacy 3-digit supersedes target', () => {
+  // Pre-0.2.0 content roots wrote 3-digit sequences. A correction must
+  // be able to point at one, or the oldest records become uncorrectable
+  // (principle 04 — cold readers of old YAML keep working).
+  const r = Request.create({
+    id: RequestId.generate(d, 5),
+    from: 'alice',
+    action: 'a',
+    reason: 'r',
+    supersedes: '2026-01-02-007',
+  });
+  assert.equal(r.supersedes, '2026-01-02-007');
+});
+
+test('Request.restore preserves supersedes on round-trip', () => {
+  const r = Request.restore({
+    id: RequestId.generate(d, 6),
+    from: MemberName.of('alice'),
+    action: 'custom title (no id mention)',
+    reason: 'custom reason (no id mention)',
+    state: 'pending',
+    createdAt: '2026-04-14T00:00:00.000Z',
+    statusLog: [
+      { state: 'pending', by: 'alice', at: '2026-04-14T00:00:00.000Z' },
+    ],
+    reviews: [],
+    supersedes: '2026-04-14-0009',
+  });
+  assert.equal(r.supersedes, '2026-04-14-0009');
+  assert.equal(r.toJSON()['supersedes'], '2026-04-14-0009');
+});
+

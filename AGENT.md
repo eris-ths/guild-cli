@@ -146,7 +146,7 @@ gate execute <id> --by <m> [--cwd <path>]                  # cwd stamped on the 
 gate complete <id> --by <m> [--note "..."] [--cliff "<hint for next agent>"]
 gate fail <id> --by <m> --reason "..."
 gate fast-track --from <m> --action "..." --reason "..." \
-                [--executors a[,b,c]] [--with ...]
+                [--executors a[,b,c]] [--with ...] [--supersedes <id>]
 gate thank <to> --for <id> [--by <m>] [--reason <s>]       # gratitude (no verdict, no calibration)
 ```
 
