@@ -24,9 +24,17 @@ export {
 } from '../../domain/shared/extractReferences.js';
 
 /**
- * Collect every piece of searchable free text belonging to a request,
- * so extractReferences can see cross-references buried in reviews
- * and closure notes as well as the action/reason headers.
+ * Collect every piece of searchable text belonging to a request, so
+ * extractReferences can see cross-references buried in reviews and
+ * closure notes as well as the action/reason headers.
+ *
+ * `supersedes` is included even though it is a structured field rather
+ * than prose. Corrections used to name the older id in `action` text,
+ * which chain picked up for free; moving that mention into a field
+ * would otherwise make chain blind to exactly the links the field was
+ * added to make traversable — the structure would be more precise and
+ * less reachable at the same time. Feeding it back through the same
+ * scanner keeps one traversal path instead of two.
  */
 export function gatherRequestText(r: {
   action: string;
@@ -34,9 +42,11 @@ export function gatherRequestText(r: {
   completion_note?: string;
   deny_reason?: string;
   failure_reason?: string;
+  supersedes?: string;
   reviews?: ReadonlyArray<{ comment: string }>;
 }): string {
   const parts: string[] = [r.action, r.reason];
+  if (r.supersedes) parts.push(r.supersedes);
   if (r.completion_note) parts.push(r.completion_note);
   if (r.deny_reason) parts.push(r.deny_reason);
   if (r.failure_reason) parts.push(r.failure_reason);

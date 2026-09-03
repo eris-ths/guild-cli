@@ -217,6 +217,33 @@ export interface RequestProps {
    */
   sourceAgoraPlay?: string;
   /**
+   * Operator-supplied structured link to an older request this one
+   * corrects (via `gate request --supersedes` / `gate fast-track
+   * --supersedes`). Forward-only: the *correcting* record carries the
+   * link and the superseded record is never mutated, so the ledger
+   * keeps both and the supersession is reconstructable from the link
+   * alone (principle 04 — "a correction is a new record that
+   * references the old").
+   *
+   * Distinct from `promotedFrom` / `sourceAgoraPlay` in one way that
+   * matters: those are tool-generated, this one is *typed by the
+   * operator*. It therefore appears in KNOWN_FLAGS and must appear in
+   * `schema.input.properties` (principle 10).
+   *
+   * Why structured rather than prose: correcting requests already name
+   * the old id in `action` prose today (67 of 2213 records in the THS
+   * content_root, measured 2026-09-03). A prose mention is a
+   * restatement no reader can traverse mechanically — principle 17
+   * asks that it be bound to structure instead.
+   *
+   * Deliberately NOT the inverse direction: there is no
+   * `superseded_by` field on the old record, because writing one would
+   * mutate a record that is supposed to be immutable. Readers derive
+   * the inverse by scanning for requests whose `supersedes` names a
+   * given id.
+   */
+  supersedes?: string;
+  /**
    * Worktree-isolation requirement (issue #231). When true, parallel
    * `gate execute` invocations on the same target from the SAME
    * filesystem cwd are refused — the second `execute` errors out so
@@ -493,6 +520,12 @@ export class Request {
      *  was bridged from (via `gate request --from-agora <play_id>`).
      *  Populated by the --from-agora orchestration only. Issue #232. */
     sourceAgoraPlay?: string;
+    /** See RequestProps.supersedes — id of an older request this one
+     *  corrects. Operator-supplied via `--supersedes`. Rejected at
+     *  create time when it names this request's own id (a record
+     *  cannot correct itself); target *existence* is an application
+     *  concern (the domain holds no repository). */
+    supersedes?: string;
     /** See RequestProps.requiresWorktreeIsolation — set by the
      *  interface layer when profile=swarm + executors.length > 1.
      *  Persisted as `requires_worktree_isolation: true` only when
@@ -602,6 +635,27 @@ export class Request {
       // layer pre-validates with parsePlayId, so this is the second
       // line of defence.
       props.sourceAgoraPlay = sanitizeText(input.sourceAgoraPlay, 'sourceAgoraPlay');
+    }
+    if (input.supersedes !== undefined) {
+      // RequestId.of validates the shape (and accepts the legacy
+      // 3-digit form, so a correction can point at a pre-0.2.0
+      // record — principle 04: cold readers of old YAML keep working).
+      const target = RequestId.of(input.supersedes).value;
+      // Self-supersession guard. NOTE (measured 2026-09-03): this branch
+      // is unreachable from the CLI — the use case verifies the target
+      // exists before allocating this id, and a not-yet-written id never
+      // resolves, so a self-referencing --supersedes always fails earlier
+      // with "target not found". The guard is kept for non-CLI callers
+      // (tests, plugins, a future MCP surface) that construct a Request
+      // directly with an id in hand. Its red is reachable from the domain
+      // suite, so it is a guard and not decoration.
+      if (target === input.id.value) {
+        throw new DomainError(
+          'a request cannot supersede itself',
+          'supersedes',
+        );
+      }
+      props.supersedes = target;
     }
     // Worktree-isolation: persist only when explicitly true. The
     // false case is represented by field absence on disk so the YAML
@@ -746,6 +800,13 @@ export class Request {
    *  `source_agora_play` directly. */
   get sourceAgoraPlay(): string | undefined {
     return this.props.sourceAgoraPlay;
+  }
+  /** Id of an older request this one corrects (`--supersedes`).
+   *  Undefined for the ordinary case. The inverse direction is not
+   *  stored — a reader derives "superseded by" by scanning for
+   *  requests whose `supersedes` names a given id. */
+  get supersedes(): string | undefined {
+    return this.props.supersedes;
   }
   get with(): readonly MemberName[] {
     return this.props.with ?? [];
@@ -1645,6 +1706,10 @@ export class Request {
     // hydrate "absent ⇒ undefined" branch below.
     if (this.props.sourceAgoraPlay !== undefined)
       out['source_agora_play'] = this.props.sourceAgoraPlay;
+    // supersedes — omit when absent so every non-correcting record
+    // (2146 of 2213 in the THS content_root) round-trips byte-identical.
+    if (this.props.supersedes !== undefined)
+      out['supersedes'] = this.props.supersedes;
     // Session_id stamped at request creation (issue #249). Surface
     // only when set — pre-#249 records and same-body single-session
     // requests both emit byte-identical YAML on round-trip. Slice 1

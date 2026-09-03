@@ -291,3 +291,27 @@ test('chain: one-way reference shows no ↔ marker', () => {
     cleanup();
   }
 });
+
+// ── supersedes reaches the id-scanner ──
+//
+// Guard against a specific regression: the correction link used to live
+// in `action` prose, where chain saw it for free. Once it became a
+// structured field, omitting it here would make `gate chain <old-id>`
+// silently stop finding corrections — more precise storage, less
+// reachable record. Red is reachable: drop the `parts.push` in
+// gatherRequestText and this test fails.
+test('gatherRequestText: includes the structured supersedes link', () => {
+  const text = gatherRequestText({
+    action: 'a correction with no id in its prose',
+    reason: 'the earlier figure was wrong',
+    supersedes: '2026-04-15-0007',
+  });
+  assert.ok(text.includes('2026-04-15-0007'));
+  const refs = extractReferences(text);
+  assert.ok(refs.requestIds.includes('2026-04-15-0007'));
+});
+
+test('gatherRequestText: omits supersedes when absent', () => {
+  const text = gatherRequestText({ action: 'a', reason: 'r' });
+  assert.equal(text, 'a\nr');
+});

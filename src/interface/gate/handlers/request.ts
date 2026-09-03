@@ -37,6 +37,8 @@ import {
 import { emitWriteResponse } from './writeFormat.js';
 import { parseFormat } from '../../shared/parseFormat.js';
 import { renderVoice } from '../../shared/voiceRender.js';
+import { RecoverableError } from '../../shared/errorEnvelope.js';
+import { SupersedeTargetMissing } from '../../../application/request/RequestUseCases.js';
 
 // Known flags per write-verb. Silent-ignore of unknown flags (e.g.
 // `--executr noir` instead of `--executor noir`) would let a typo
@@ -66,6 +68,7 @@ const REQUEST_CREATE_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   // schemaInputDriftDetector.test.ts.)
   'from-agora',
   'game',
+  'supersedes',
   // #235 wave-brief template registry: --template name expands a brief
   // skeleton; explicit --action and --reason override the defaults.
   // Mutually exclusive with --from-agora (both supply action/reason
@@ -81,7 +84,34 @@ const FAST_TRACK_KNOWN_FLAGS: ReadonlySet<string> = new Set([
   'note',
   'with',
   'format',
+  'supersedes',
 ]);
+
+
+/**
+ * Translate a missing supersede target into the recoverable envelope.
+ *
+ * A dangling correction link is refused at the write boundary rather
+ * than persisted: a reader who follows one cannot tell a mistyped id
+ * from a deleted record, and principle 04 means whatever gets written
+ * outlives the writer who could have explained it.
+ */
+function rethrowSupersedeTargetMissing(e: unknown): never {
+  if (e instanceof SupersedeTargetMissing) {
+    throw new RecoverableError(
+      `supersede target ${e.id} not found — a correction must point at a ` +
+        `real request.\n` +
+        `    gate list --state all`,
+      {
+        verb: 'list',
+        args: {},
+        reason: `list the recorded requests to find the id being corrected.`,
+      },
+      'not_found',
+    );
+  }
+  throw e;
+}
 
 export async function reqCreate(c: C, args: ParsedArgs): Promise<number> {
   rejectUnknownFlags(args, REQUEST_CREATE_KNOWN_FLAGS, 'request');
@@ -288,6 +318,11 @@ export async function reqCreate(c: C, args: ParsedArgs): Promise<number> {
     if (parsed.list.length > 0) input.executors = parsed.list;
   }
   if (target !== undefined) input.target = target;
+  // supersedes: id of an older request this one corrects. Existence is
+  // verified in the use case before any id is allocated, so a bad link
+  // never leaves a half-written record behind.
+  const supersedes = optionalOption(args, 'supersedes');
+  if (supersedes !== undefined) input.supersedes = supersedes;
   // Worktree-isolation gating (#231). Two effects, both keyed on
   // "is this a parallel wave?" (executors.length > 1):
   //   - profile=swarm  → stamp `requires_worktree_isolation: true`
@@ -361,7 +396,12 @@ export async function reqCreate(c: C, args: ParsedArgs): Promise<number> {
   // round-trip byte-identical YAML.
   const sessionId = resolveGuildSessionId();
   if (sessionId !== undefined) input.openedBySession = sessionId;
-  const r = await c.requestUC.create(input);
+  let r;
+  try {
+    r = await c.requestUC.create(input);
+  } catch (e) {
+    rethrowSupersedeTargetMissing(e);
+  }
   if (invokedBy !== undefined) {
     emitInvokedByNotice(from, invokedBy, 'request', r.id.value);
   }
@@ -502,6 +542,8 @@ export async function reqFastTrack(c: C, args: ParsedArgs): Promise<number> {
   };
   if (autoReview !== undefined) createInput.autoReview = autoReview;
   if (withPartners.length > 0) createInput.with = withPartners;
+  const ftSupersedes = optionalOption(args, 'supersedes');
+  if (ftSupersedes !== undefined) createInput.supersedes = ftSupersedes;
   // Same env-driven session stamp as `gate request` — fast-track is a
   // single user-facing verb that compresses request → approve →
   // execute → complete, but the create step is the legitimate carrier
@@ -509,7 +551,12 @@ export async function reqFastTrack(c: C, args: ParsedArgs): Promise<number> {
   const fastTrackSessionId = resolveGuildSessionId();
   if (fastTrackSessionId !== undefined)
     createInput.openedBySession = fastTrackSessionId;
-  const created = await c.requestUC.create(createInput);
+  let created;
+  try {
+    created = await c.requestUC.create(createInput);
+  } catch (e) {
+    rethrowSupersedeTargetMissing(e);
+  }
   const id = created.id.value;
 
   // Fast-track is one user-facing command even though it executes

@@ -323,6 +323,22 @@ function formatRequestText(r: Request): string {
   if (Array.isArray(j['with']) && j['with'].length > 0) {
     lines.push(`  with:     ${(j['with'] as string[]).join(', ')}`);
   }
+  // supersedes — rendered ABOVE the promoted_from / source_agora_play
+  // cluster on purpose. Those two answer "where did this come from";
+  // this one answers "what does this overturn", which a reader needs
+  // before they read the action prose, not after.
+  //
+  // The inverse direction is deliberately NOT rendered here. Showing
+  // "superseded by <new-id>" on the old record would require scanning
+  // every request: measured 2026-09-03 against the THS content_root
+  // (2213 records), `gate show` costs 0.11s and a full scan 0.91s —
+  // 8x on the hottest read verb. So the gap is named rather than
+  // paid for (principle 03: label what is silenced): a reader who
+  // opens a superseded record directly still sees nothing. Closing it
+  // belongs on `gate chain`, which already walks multiple records.
+  if (j['supersedes']) {
+    lines.push(`  supersedes: ${j['supersedes']}`);
+  }
   if (j['promoted_from']) {
     lines.push(`  promoted_from: ${j['promoted_from']}`);
   }

@@ -37,6 +37,62 @@ entries (`pending`, `approved`, `executing`, `completed`) with
 distinguish them from full-cycle transitions. `--auto-review` still
 works — it just moves the review from "blocking" to "after-the-fact."
 
+### Corrections: `--supersedes`
+
+`--supersedes <id>` on `gate request` / `gate fast-track` records a
+forward link to an older request this one corrects.
+
+```bash
+gate fast-track --from eris --supersedes 2026-04-15-0007 \
+  --action "the ratio was wrong" --reason "re-measured: 67, not 407"
+```
+
+The old record is **never mutated**. Both stay in the ledger, and the
+supersession is reconstructable from the link alone — principle 04:
+*a correction is a new record that references the old, which preserves
+the trail of thinking, not just the latest conclusion.*
+
+Refused when the target does not exist. A dangling correction link is
+worse than no link: a reader who follows one cannot distinguish a
+mistyped id from a deleted record, and whatever gets written outlives
+the writer who could have explained it.
+
+**Why a flag and not a `gate supersede` verb.** The sibling `ctx`
+passage ships `ctx supersede <old-id>` as its own verb, because ctx has
+exactly one record-creating shape. `gate` has two entry verbs
+(`request` for the full lifecycle, `fast-track` for the one-shot), so a
+correction-only verb would have to pick one and leave the other unable
+to correct anything.
+
+**What it does not do.**
+
+- There is no inverse `superseded_by` field on the old record. Writing
+  one would mutate a record that is meant to be immutable. Readers
+  derive the inverse by scanning for records whose `supersedes` names a
+  given id.
+- Consequently `gate show <old-id>` does **not** announce that a
+  correction exists. Rendering it would cost a full scan: measured
+  2026-09-03 against one 2213-record content_root (the THS guild, outside
+  this repository — an unbound figure, cited for its order of magnitude,
+  not as a property of guild-cli), `gate show` runs in
+  0.11s and a full scan in 0.91s — 8x on the hottest read verb. The gap
+  is named rather than paid for (principle 03: label what is silenced).
+
+  `gate chain <old-id>` **does** surface it, under "referenced by
+  requests" — chain already scans every record, so the link costs
+  nothing extra there. The structured field is fed back through the
+  same id-scanner as prose (see `gatherRequestText`); without that,
+  moving the mention out of `action` text would have made chain blind
+  to the very links this flag exists to create.
+- It carries no taxonomy. Corrections in practice come in at least four
+  shapes — the claim was wrong; the *grounds* were wrong but the
+  judgment stands; the record was merely incomplete; the judgment is
+  withdrawn. One link plus a `--reason` covers all four; splitting the
+  flag would put a vocabulary choice in front of every use, and the
+  measured population is small enough (67 of 2213 records, 3.0%, in that
+  same content_root) that
+  the friction would likely cost more than the precision buys.
+
 ### Pair-mode: who were you with?
 
 `--with <n1>[,<n2>...]` on `gate request` / `gate fast-track`

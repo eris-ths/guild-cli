@@ -1697,6 +1697,18 @@ const VERBS: readonly VerbSchema[] = [
             'gate_required_acknowledged). Use `gate templates list` to ' +
             'see the catalogue.',
         ),
+        supersedes: strOpt(
+          'id of an older request this one corrects. Records a ' +
+            'forward-only link (supersedes) on the NEW record; the ' +
+            'superseded record is never mutated, so the ledger keeps ' +
+            'both and a reader can reconstruct the correction from the ' +
+            'link alone (principle 04). Refused when the target does ' +
+            'not exist or names this request itself. There is no ' +
+            'inverse superseded_by field: readers derive it by scanning ' +
+            'for records whose supersedes names a given id. Use it when ' +
+            'the new record corrects, amends, or withdraws an earlier ' +
+            'one - the reason field carries which of the three.',
+        ),
       },
       // action/reason are conditionally required: required unless one
       // of `--from-agora` (#232) or `--template` (#235) is supplied,
@@ -2067,6 +2079,18 @@ const VERBS: readonly VerbSchema[] = [
         with: strOpt('comma-separated dialogue partners (pair-mode)'),
         note: str,
         format: formatField,
+        supersedes: strOpt(
+          'id of an older request this one corrects. Records a ' +
+            'forward-only link (supersedes) on the NEW record; the ' +
+            'superseded record is never mutated, so the ledger keeps ' +
+            'both and a reader can reconstruct the correction from the ' +
+            'link alone (principle 04). Refused when the target does ' +
+            'not exist or names this request itself. There is no ' +
+            'inverse superseded_by field: readers derive it by scanning ' +
+            'for records whose supersedes names a given id. Use it when ' +
+            'the new record corrects, amends, or withdraws an earlier ' +
+            'one - the reason field carries which of the three.',
+        ),
       },
       required: ['action', 'reason'],
     },

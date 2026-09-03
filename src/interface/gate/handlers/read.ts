@@ -547,6 +547,7 @@ export async function reqChain(c: C, args: ParsedArgs): Promise<number> {
       ...(j.failure_reason !== undefined
         ? { failure_reason: j.failure_reason }
         : {}),
+      ...(j.supersedes !== undefined ? { supersedes: j.supersedes } : {}),
       ...(j.reviews !== undefined
         ? { reviews: j.reviews.map((r) => ({ comment: r.comment })) }
         : {}),
@@ -602,6 +603,7 @@ export async function reqChain(c: C, args: ParsedArgs): Promise<number> {
       ...(rj.failure_reason !== undefined
         ? { failure_reason: rj.failure_reason }
         : {}),
+      ...(rj.supersedes !== undefined ? { supersedes: rj.supersedes } : {}),
       ...(rj.reviews !== undefined
         ? { reviews: rj.reviews.map((rv) => ({ comment: rv.comment })) }
         : {}),

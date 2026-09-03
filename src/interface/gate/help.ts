@@ -85,7 +85,14 @@ const SECTIONS: readonly Section[] = [
         text:
           '  gate request --from <m> --action <a> --reason <r>\n' +
           '                 [--executors a[,b,...]] [--target <s>] [--auto-review <m>]\n' +
-          '                 [--with <n1>[,<n2>...]] [--depth shallow|standard|deep]',
+          '                 [--with <n1>[,<n2>...]] [--depth shallow|standard|deep]\n' +
+          '                 [--supersedes <id>]\n' +
+          '                       --supersedes records a forward link to an\n' +
+          '                       older request this one corrects. The old\n' +
+          '                       record is never mutated; both stay in the\n' +
+          '                       ledger and the correction is traversable\n' +
+          '                       from the link. Refused if the target does\n' +
+          '                       not exist.',
       },
       {
         tier: 'extra',
@@ -196,7 +203,8 @@ const SECTIONS: readonly Section[] = [
         text:
           '  gate fast-track --from <m> --action <a> --reason <r>\n' +
           '                  [--executors a[,b,...]] [--auto-review <m>] [--note <s>]\n' +
-          '                  [--with <n1>[,<n2>...]]',
+          '                  [--with <n1>[,<n2>...]] [--supersedes <id>]\n' +
+          '                       --supersedes: see gate request above.',
       },
     ],
   },
