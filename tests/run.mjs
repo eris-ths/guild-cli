@@ -85,10 +85,25 @@ const concurrency =
     ? concurrencyEnv
     : '8';
 
+// Isolate the suite from the developer's own guild environment.
+// Nearly every test asserts against a *bare* invocation — no actor,
+// no room — and reads the verdict back from the child's exit code.
+// A `GUILD_ACTOR` exported in the parent shell (Claude Code injects
+// one through settings.json `env`) is inherited by every
+// `spawnSync(gate.mjs)` further down, so paths that are supposed to
+// fail with a "missing actor" error quietly succeed instead. That
+// turned 26 of 1962 tests red on a local machine while CI — which
+// has no such variable — stayed green (measured 2026-09-11). Tests
+// that need an actor set one explicitly in their own `env`, so
+// stripping the whole `GUILD_` prefix here is safe.
+const childEnv = Object.fromEntries(
+  Object.entries(process.env).filter(([key]) => !key.startsWith('GUILD_')),
+);
+
 const result = spawnSync(
   process.execPath,
   ['--test', `--test-concurrency=${concurrency}`, ...files],
-  { stdio: 'inherit' },
+  { stdio: 'inherit', env: childEnv },
 );
 
 if (result.error) {
